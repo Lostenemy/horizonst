@@ -4,7 +4,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 
 - **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2` y `devices/MK3`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
 - **Portal web HTML5 + JavaScript** accesible a través de `www.horizonst.com.es` con funcionalidades diferenciadas para administradores y usuarios finales.
-- **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4, EMQX y un proxy inverso Nginx que centraliza el acceso HTTP y MQTT (puerto 1887).
+- **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y EMQX. El proxy inverso Nginx se despliega fuera de los contenedores y lo administra el equipo de sistemas.
 
 ## Requisitos
 
@@ -25,19 +25,18 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      cp backend/.env.example backend/.env
      ```
 
-3. **Construir e iniciar todos los servicios:**
+3. **Construir e iniciar todos los servicios de aplicación y datos:**
    ```bash
    docker compose up --build
    ```
    Esto levantará:
    - `app`: API y portal web (puerto interno 3000).
    - `postgres`: base de datos PostgreSQL inicializada con `db/schema.sql` y `db/seed.sql`.
-   - `pgadmin`: consola de administración disponible en `http://localhost:80/pgadmin4` (usuario: `admin@horizonst.com.es`, contraseña: `admin`).
-   - `emqx`: broker MQTT accesible mediante Nginx por el puerto `1887`.
-   - `nginx`: proxy inverso que expone la web en `http://localhost/` y el broker MQTT en `mqtt://localhost:1887`.
+   - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (usuario: `admin@horizonst.com.es`, contraseña: `admin`).
+   - `emqx`: broker MQTT expuesto en el puerto `1887` del host.
 
 4. **Acceder al portal:**
-   - Navegar a `http://localhost/` (o al dominio configurado) e iniciar sesión con:
+   - Navegar a `http://localhost:3000/` durante el desarrollo (o al dominio configurado tras el proxy Nginx externo) e iniciar sesión con:
      - Usuario: `admin@horizonst.com.es`
      - Contraseña: `Admin@2024`
    - Cambie la contraseña del administrador tras el primer inicio de sesión.
@@ -47,7 +46,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 ```
 backend/          # Servidor Node.js + TypeScript
 frontend/public/  # Portal HTML5 + JS servido de forma estática
-nginx/            # Configuración del proxy inverso
+nginx/            # Configuración de referencia para el proxy inverso externo
 db/               # Definiciones SQL de esquema y datos iniciales
 docker-compose.yml
 ```
@@ -78,7 +77,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 
 ## MQTT Broker (EMQX)
 
-El proxy Nginx expone el broker en `mqtt://<host>:1887`. Para conectar clientes externos utilice las variables definidas en `.env`:
+El contenedor de EMQX publica el puerto `1887` directamente en el host. Para conectar clientes externos utilice las variables definidas en `.env`:
 
 ```
 Host: <dominio o IP del servidor>
@@ -87,6 +86,14 @@ Usuario: Horizon@user2024
 Contraseña: Chanel_horizon@2024
 Cliente: acces_control_server_<aleatorio>
 ```
+
+## Proxy inverso Nginx externo
+
+El equipo de sistemas gestiona el servidor Nginx. La carpeta `nginx/` contiene un fichero `nginx.conf` de ejemplo que puede servir como base para su despliegue. Ajuste las rutas upstream para que:
+
+- El tráfico HTTP (puertos 80/443) se redirija al servicio `app` en el puerto 3000.
+- El tráfico MQTT se encamine al broker EMQX en el puerto 1883, exponiéndolo externamente como `mqtt://<host>:1887` si se mantiene la convención actual.
+- Se apliquen cabeceras de seguridad, certificados TLS y reglas de cortafuegos acordes a la política corporativa.
 
 ## Scripts útiles
 
