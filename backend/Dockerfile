@@ -1,16 +1,22 @@
 FROM node:20-alpine AS build
 WORKDIR /usr/src/app
-COPY package.json tsconfig.json ./
-RUN npm install
+
+COPY package*.json tsconfig.json ./
+RUN npm ci
+
 COPY src ./src
 COPY public ./public
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:20-alpine AS production
 WORKDIR /usr/src/app
-COPY --from=build /usr/src/app/package.json ./package.json
-COPY --from=build /usr/src/app/node_modules ./node_modules
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
 COPY --from=build /usr/src/app/dist ./dist
 COPY --from=build /usr/src/app/public ./public
-COPY .env.example .env
+
+EXPOSE 3000
 CMD ["node", "dist/index.js"]

@@ -29,6 +29,10 @@ app.use('/api/messages', messageRouter);
 const publicDir = path.join(__dirname, '..', 'public');
 app.use(express.static(publicDir));
 
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.get('/', (_req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
 });

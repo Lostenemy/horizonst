@@ -87,6 +87,8 @@ Contraseña: Chanel_horizon@2024
 Cliente: acces_control_server_<aleatorio>
 ```
 
+Dentro del orquestado Docker, la aplicación se conecta automáticamente a `mqtt://emqx:1883` reutilizando las mismas credenciales.
+
 ## Proxy inverso Nginx externo
 
 El equipo de sistemas gestiona el servidor Nginx. La carpeta `nginx/` contiene un fichero `nginx.conf` de ejemplo que puede servir como base para su despliegue. Ajuste las rutas upstream para que:
@@ -100,7 +102,8 @@ El equipo de sistemas gestiona el servidor Nginx. La carpeta `nginx/` contiene u
 - **Compilar backend localmente:**
   ```bash
   cd backend
-  npm install
+  npm ci
+  npm run typecheck
   npm run build
   npm run start
   ```

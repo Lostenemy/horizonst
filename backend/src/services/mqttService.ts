@@ -1,4 +1,4 @@
-import mqtt, { MqttClient } from 'mqtt';
+import mqtt, { IClientOptions, MqttClient } from 'mqtt';
 import { config } from '../config';
 import { decodeMk1 } from './decoders/mk1Decoder';
 import { decodeMk2 } from './decoders/mk2Decoder';
@@ -17,10 +17,9 @@ export const initMqtt = async (): Promise<void> => {
   }
 
   return new Promise((resolve, reject) => {
-    const clientId = `${config.mqtt.clientPrefix}${Math.floor(Math.random() * 1_000_000)}`;
-    client = mqtt.connect({
-      host: config.mqtt.host,
-      port: config.mqtt.port,
+    const clientId = `${config.mqtt.clientPrefix}${Math.random().toString(16).slice(2)}`;
+    const url = `mqtt://${config.mqtt.host}:${config.mqtt.port}`;
+    const options: IClientOptions = {
       username: config.mqtt.username,
       password: config.mqtt.password,
       keepalive: config.mqtt.keepalive,
@@ -28,14 +27,14 @@ export const initMqtt = async (): Promise<void> => {
       protocolId: config.mqtt.protocolId,
       protocolVersion: config.mqtt.protocolVersion,
       clean: config.mqtt.clean,
-      encoding: config.mqtt.encoding,
       connectTimeout: config.mqtt.connectTimeout,
       clientId
-    });
+    };
+    client = mqtt.connect(url, options);
 
     client.on('connect', () => {
       console.log('Connected to MQTT broker');
-      client?.subscribe(TOPICS, (error) => {
+      client?.subscribe(TOPICS, (error?: Error) => {
         if (error) {
           console.error('Failed to subscribe to topics', error);
           reject(error);
@@ -46,11 +45,11 @@ export const initMqtt = async (): Promise<void> => {
       });
     });
 
-    client.on('error', (error) => {
+    client.on('error', (error: Error) => {
       console.error('MQTT error', error);
     });
 
-    client.on('message', async (topic, messageBuffer) => {
+    client.on('message', async (topic: string, messageBuffer: Buffer) => {
       const payload = messageBuffer.toString();
       let records: ProcessedDeviceRecord[] = [];
       try {
