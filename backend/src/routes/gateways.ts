@@ -32,7 +32,7 @@ router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
   }
   try {
     const existing = await pool.query('SELECT id FROM gateways WHERE mac_address = $1', [macAddress]);
-    if (existing.rowCount > 0) {
+    if ((existing.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'Gateway already exists' });
     }
     const result = await pool.query(

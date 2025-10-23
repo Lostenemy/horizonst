@@ -39,7 +39,7 @@ router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
 
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existing.rowCount > 0) {
+    if ((existing.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'Email already registered' });
     }
 

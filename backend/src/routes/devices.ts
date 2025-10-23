@@ -64,7 +64,7 @@ router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
   }
   try {
     const existing = await pool.query('SELECT id FROM devices WHERE ble_mac = $1', [bleMac]);
-    if (existing.rowCount > 0) {
+    if ((existing.rowCount ?? 0) > 0) {
       return res.status(409).json({ message: 'Device already exists' });
     }
     const result = await pool.query(
