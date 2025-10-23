@@ -130,7 +130,8 @@ router.post('/:alarmId/acknowledge', authenticate, async (req: AuthenticatedRequ
           `SELECT 1 FROM user_group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1`,
           [alarm.handler_group_id, req.user!.id]
         );
-        allowed = (membership.rowCount || 0) > 0;
+        const membershipCount = membership.rowCount ?? 0;
+        allowed = membershipCount > 0;
       }
     if (!allowed) {
       return res.status(403).json({ message: 'Forbidden' });
@@ -174,7 +175,8 @@ router.post('/:alarmId/resolve', authenticate, async (req: AuthenticatedRequest,
           `SELECT 1 FROM user_group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1`,
           [alarm.handler_group_id, req.user!.id]
         );
-        allowed = (membership.rowCount || 0) > 0;
+        const membershipCount = membership.rowCount ?? 0;
+        allowed = membershipCount > 0;
       }
     if (!allowed) {
       return res.status(403).json({ message: 'Forbidden' });
