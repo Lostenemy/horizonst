@@ -1,0 +1,75 @@
+version: '3.9'
+services:
+  app:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env.example
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=horizonst
+      - DB_PASSWORD=horizonst
+      - DB_NAME=horizonst
+      - MQTT_HOST=emqx
+      - MQTT_PORT=1883
+      - MQTT_USER=${MQTT_USER:-Horizon@user2024}
+      - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+    depends_on:
+      - postgres
+      - emqx
+    networks:
+      - horizonst
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=horizonst
+      - POSTGRES_PASSWORD=horizonst
+      - POSTGRES_DB=horizonst
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    networks:
+      - horizonst
+
+  pgadmin:
+    image: dpage/pgadmin4:8.10
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@horizonst.com.es
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    depends_on:
+      - postgres
+    networks:
+      - horizonst
+
+  emqx:
+    image: emqx/emqx:5.5.0
+    environment:
+      - EMQX_NODE__NAME=emqx@127.0.0.1
+      - EMQX_LISTENERS__TCP__DEFAULT__BIND=0.0.0.0:1883
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+    networks:
+      - horizonst
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - app
+      - emqx
+    ports:
+      - "80:80"
+      - "1887:1887"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - horizonst
+
+networks:
+  horizonst:
+    driver: bridge
+
+volumes:
+  postgres_data:

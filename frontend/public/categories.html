@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Categorías de dispositivos | HorizonST</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Categorías</h1>
+      <nav>
+        <a href="/dashboard.html">Resumen</a>
+        <a href="/devices.html">Dispositivos</a>
+        <a href="/places.html">Lugares</a>
+        <a href="/categories.html" class="active">Categorías</a>
+        <a href="/gateways.html">Gateways</a>
+        <a href="/messages.html">Mensajes</a>
+        <a href="/history.html">Históricos</a>
+        <a href="/alarms.html">Alarmas</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Nueva categoría</h2>
+        <form id="categoryForm" class="form-grid">
+          <div>
+            <label for="categoryName">Nombre</label>
+            <input type="text" id="categoryName" required />
+          </div>
+          <div>
+            <label for="categoryDescription">Descripción</label>
+            <input type="text" id="categoryDescription" />
+          </div>
+          <div>
+            <label for="categoryPhoto">URL de foto</label>
+            <input type="url" id="categoryPhoto" placeholder="https://" />
+          </div>
+          <div class="actions">
+            <button type="submit">Crear</button>
+          </div>
+        </form>
+        <div class="alert info" id="categoryMessage" style="display:none"></div>
+      </section>
+      <section class="card">
+        <h2>Categorías creadas</h2>
+        <div id="categoriesList" class="grid-two"></div>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script type="module" src="/js/categories.js"></script>
+  </body>
+</html>

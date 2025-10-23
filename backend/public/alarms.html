@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alarmas | HorizonST</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Alarmas</h1>
+      <nav>
+        <a href="/dashboard.html">Resumen</a>
+        <a href="/devices.html">Dispositivos</a>
+        <a href="/places.html">Lugares</a>
+        <a href="/categories.html">Categorías</a>
+        <a href="/gateways.html">Gateways</a>
+        <a href="/messages.html">Mensajes</a>
+        <a href="/history.html">Históricos</a>
+        <a href="/alarms.html" class="active">Alarmas</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Nueva configuración de alarma</h2>
+        <form id="alarmConfigForm" class="form-grid">
+          <div>
+            <label for="alarmName">Nombre</label>
+            <input type="text" id="alarmName" required />
+          </div>
+          <div>
+            <label for="alarmThreshold">Tiempo máximo sin señales (segundos)</label>
+            <input type="number" id="alarmThreshold" min="30" value="300" required />
+          </div>
+          <div>
+            <label for="alarmDevice">Dispositivo específico</label>
+            <select id="alarmDevice">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="alarmCategory">Categoría</label>
+            <select id="alarmCategory">
+              <option value="">Ninguna</option>
+            </select>
+          </div>
+          <div>
+            <label for="alarmPlace">Lugar</label>
+            <select id="alarmPlace">
+              <option value="">Cualquiera</option>
+            </select>
+          </div>
+          <div>
+            <label for="alarmGroup">Grupo gestor</label>
+            <select id="alarmGroup">
+              <option value="">Sin asignar</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button type="submit">Crear alarma</button>
+          </div>
+        </form>
+        <div class="alert info" id="alarmMessage" style="display:none"></div>
+      </section>
+      <section class="card">
+        <h2>Configuraciones actuales</h2>
+        <div class="table-wrapper">
+          <table id="configsTable">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Umbral</th>
+                <th>Ámbito</th>
+                <th>Grupo</th>
+                <th>Activo</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-empty" id="configsEmpty">No hay alarmas configuradas.</div>
+      </section>
+      <section class="card">
+        <h2>Alarmas activas</h2>
+        <div class="table-wrapper">
+          <table id="alarmsTable">
+            <thead>
+              <tr>
+                <th>Dispositivo</th>
+                <th>Configuración</th>
+                <th>Estado</th>
+                <th>Inicio</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-empty" id="alarmsEmpty">Sin alarmas activas.</div>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script type="module" src="/js/alarms.js"></script>
+  </body>
+</html>

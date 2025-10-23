@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Históricos de dispositivos | HorizonST</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Históricos</h1>
+      <nav>
+        <a href="/dashboard.html">Resumen</a>
+        <a href="/devices.html">Dispositivos</a>
+        <a href="/places.html">Lugares</a>
+        <a href="/categories.html">Categorías</a>
+        <a href="/gateways.html">Gateways</a>
+        <a href="/messages.html">Mensajes</a>
+        <a href="/history.html" class="active">Históricos</a>
+        <a href="/alarms.html">Alarmas</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Selecciona un dispositivo</h2>
+        <div class="form-grid">
+          <div>
+            <label for="deviceSelect">Dispositivo</label>
+            <select id="deviceSelect"></select>
+          </div>
+          <div class="actions">
+            <button id="loadHistory">Cargar histórico</button>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Histórico de lecturas</h2>
+        <div class="table-wrapper">
+          <table id="historyTable">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Lugar</th>
+                <th>Gateway</th>
+                <th>RSSI</th>
+                <th>Batería</th>
+                <th>Payload</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-empty" id="historyEmpty">Selecciona un dispositivo para ver sus registros.</div>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script type="module" src="/js/history.js"></script>
+  </body>
+</html>
