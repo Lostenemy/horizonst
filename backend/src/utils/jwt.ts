@@ -2,15 +2,20 @@ import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { config } from '../config';
 import { JwtPayload } from '../types';
 
-const secret: Secret = config.jwtSecret;
-const parseExpiresIn = (value: string): SignOptions['expiresIn'] => {
-  if (/^\d+$/.test(value)) {
-    return Number(value);
+type Expires = NonNullable<SignOptions['expiresIn']>;
+
+const normalizeExpires = (value: string): Expires => {
+  const normalized = value.trim();
+  if (/^\d+$/.test(normalized)) {
+    return Number(normalized) as Expires;
   }
-  return value;
+  return normalized as Expires;
 };
 
-const signOptions: SignOptions = { expiresIn: parseExpiresIn(config.jwtExpiresIn) };
+const secret: Secret = config.jwtSecret;
+const signOptions: SignOptions = {
+  expiresIn: normalizeExpires(config.jwtExpiresIn)
+};
 
 export const signToken = (payload: JwtPayload): string => {
   return jwt.sign(payload, secret, signOptions);
