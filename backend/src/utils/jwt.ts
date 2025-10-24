@@ -1,13 +1,13 @@
-import jwt, { Secret, SignOptions, StringValue } from 'jsonwebtoken';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { config } from '../config';
 import { JwtPayload } from '../types';
 
 const secret: Secret = config.jwtSecret;
-const parseExpiresIn = (value: string): number | StringValue => {
+const parseExpiresIn = (value: string): SignOptions['expiresIn'] => {
   if (/^\d+$/.test(value)) {
     return Number(value);
   }
-  return value as StringValue;
+  return value;
 };
 
 const signOptions: SignOptions = { expiresIn: parseExpiresIn(config.jwtExpiresIn) };
