@@ -22,12 +22,9 @@ export const initAuthPage = () => {
   }
 
   if (user.role === 'ADMIN') {
-    document.querySelectorAll('.admin-only').forEach((element) => {
-      const el = element;
-      if (el instanceof HTMLElement) {
-        el.style.display = '';
-      }
-    });
+    document.body.classList.add('is-admin');
+  } else {
+    document.body.classList.remove('is-admin');
   }
 
   return { user, isAdmin: user.role === 'ADMIN' };
