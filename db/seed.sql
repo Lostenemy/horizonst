@@ -4,4 +4,6 @@ VALUES ('admin@horizonst.com.es',
         'f67d1d59d6b821d6f3e9d6333af175db',
         'ADMIN',
         'Administrador inicial')
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE
+    SET role = EXCLUDED.role,
+        display_name = EXCLUDED.display_name;

@@ -75,6 +75,19 @@ main {
   color: var(--primary-color);
 }
 
+.card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.card-header h2 {
+  margin: 0;
+}
+
 .table-wrapper {
   overflow-x: auto;
 }
@@ -130,6 +143,30 @@ button:hover {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.tag-admin {
+  background-color: rgba(172, 59, 97, 0.15);
+  color: #ac3b61;
+}
+
+.tag-user {
+  background-color: rgba(18, 60, 105, 0.15);
+  color: #123c69;
 }
 
 .alert {
