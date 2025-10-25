@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dispositivos | HorizonST</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Dispositivos</h1>
+      <nav>
+        <a href="/dashboard.html">Resumen</a>
+        <a href="/devices.html" class="active">Dispositivos</a>
+        <a href="/places.html">Lugares</a>
+        <a href="/categories.html">Categorías</a>
+        <a href="/gateways.html">Gateways</a>
+        <a href="/messages.html">Mensajes</a>
+        <a href="/history.html">Históricos</a>
+        <a href="/alarms.html">Alarmas</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Reclamar dispositivo</h2>
+        <form id="claimForm" class="form-grid">
+          <div>
+            <label for="claimMac">MAC del dispositivo</label>
+            <input type="text" id="claimMac" required placeholder="AA11BB22CC33" />
+          </div>
+          <div>
+            <label for="claimName">Nombre descriptivo</label>
+            <input type="text" id="claimName" placeholder="Pulsador entrada" />
+          </div>
+          <div class="actions">
+            <button type="submit">Reclamar</button>
+          </div>
+        </form>
+        <div class="alert info" id="claimMessage" style="display: none"></div>
+      </section>
+      <section class="card">
+        <h2>Listado de dispositivos</h2>
+        <div class="table-wrapper">
+          <table id="devicesTable">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>MAC</th>
+                <th>Categoría</th>
+                <th>Último lugar</th>
+                <th>Último RSSI</th>
+                <th>Último registro</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-empty" id="devicesEmpty">No hay dispositivos disponibles.</div>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script type="module" src="/js/devices.js"></script>
+  </body>
+</html>

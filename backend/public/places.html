@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lugares | HorizonST</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Lugares</h1>
+      <nav>
+        <a href="/dashboard.html">Resumen</a>
+        <a href="/devices.html">Dispositivos</a>
+        <a href="/places.html" class="active">Lugares</a>
+        <a href="/categories.html">Categorías</a>
+        <a href="/gateways.html">Gateways</a>
+        <a href="/messages.html">Mensajes</a>
+        <a href="/history.html">Históricos</a>
+        <a href="/alarms.html">Alarmas</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Crear nuevo lugar</h2>
+        <form id="placeForm" class="form-grid">
+          <div>
+            <label for="placeName">Nombre</label>
+            <input type="text" id="placeName" required />
+          </div>
+          <div>
+            <label for="placeDescription">Descripción</label>
+            <input type="text" id="placeDescription" placeholder="Zona o departamento" />
+          </div>
+          <div>
+            <label for="placePhoto">URL de foto (opcional)</label>
+            <input type="url" id="placePhoto" placeholder="https://" />
+          </div>
+          <div class="actions">
+            <button type="submit">Guardar</button>
+          </div>
+        </form>
+        <div class="alert info" id="placeMessage" style="display:none"></div>
+      </section>
+      <section class="card">
+        <h2>Listado de lugares</h2>
+        <div id="placesList" class="grid-two"></div>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script type="module" src="/js/places.js"></script>
+  </body>
+</html>

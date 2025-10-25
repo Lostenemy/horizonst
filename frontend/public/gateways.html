@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gateways | HorizonST</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Gateways</h1>
+      <nav>
+        <a href="/dashboard.html">Resumen</a>
+        <a href="/devices.html">Dispositivos</a>
+        <a href="/places.html">Lugares</a>
+        <a href="/categories.html">Categorías</a>
+        <a href="/gateways.html" class="active">Gateways</a>
+        <a href="/messages.html">Mensajes</a>
+        <a href="/history.html">Históricos</a>
+        <a href="/alarms.html">Alarmas</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card" id="adminGatewaySection" style="display:none">
+        <h2>Registrar nueva gateway</h2>
+        <form id="gatewayForm" class="form-grid">
+          <div>
+            <label for="gatewayName">Nombre</label>
+            <input type="text" id="gatewayName" />
+          </div>
+          <div>
+            <label for="gatewayMac">MAC address</label>
+            <input type="text" id="gatewayMac" required placeholder="AA11BB22CC33" />
+          </div>
+          <div>
+            <label for="gatewayDescription">Descripción</label>
+            <input type="text" id="gatewayDescription" />
+          </div>
+          <div class="actions">
+            <button type="submit">Registrar</button>
+          </div>
+        </form>
+        <div class="alert info" id="gatewayMessage" style="display:none"></div>
+      </section>
+      <section class="card">
+        <h2>Gateways configuradas</h2>
+        <div class="table-wrapper">
+          <table id="gatewaysTable">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>MAC</th>
+                <th>Lugar</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-empty" id="gatewaysEmpty">No hay gateways registradas.</div>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script type="module" src="/js/gateways.js"></script>
+  </body>
+</html>
