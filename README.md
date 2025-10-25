@@ -4,7 +4,8 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 
 - **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2` y `devices/MK3`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
 - **Portal web HTML5 + JavaScript** accesible a través de `www.horizonst.com.es` con funcionalidades diferenciadas para administradores y usuarios finales.
-- **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y EMQX. El proxy inverso Nginx se despliega fuera de los contenedores y lo administra el equipo de sistemas.
+- **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y EMQX. El proxy inverso Nginx se despliega
+  **fuera** de Docker y expone la web en HTTPS junto con los paneles de EMQX y pgAdmin.
 
 ## Requisitos
 
@@ -20,23 +21,26 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    ```
 
 2. **Configurar variables opcionales:**
-   - Por defecto se utiliza el fichero `backend/.env.example`. Si es necesario personalizar credenciales, copie el archivo y ajuste los valores:
-     ```bash
-     cp backend/.env.example backend/.env
+   - El contenedor de la app consume el fichero `backend/.env`. Incluye la configuración mínima para enlazar con EMQX dentro de la red de Docker:
+     ```env
+     MQTT_HOST=emqx
+     MQTT_PORT=1883
      ```
+     Si necesita anular valores, edite este archivo antes de levantar los servicios.
 
 3. **Construir e iniciar todos los servicios de aplicación y datos:**
    ```bash
-   docker compose up --build
+   docker compose up --build -d
    ```
    Esto levantará:
    - `app`: API y portal web (puerto interno 3000).
    - `postgres`: base de datos PostgreSQL inicializada con `db/schema.sql` y `db/seed.sql`.
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (usuario: `admin@horizonst.com.es`, contraseña: `admin`).
-   - `emqx`: broker MQTT expuesto en el puerto `1887` del host.
+   - `emqx`: broker MQTT expuesto en el puerto `1887` del host (sin TLS) y con dashboard interno en `http://127.0.0.1:18083/`.
 
 4. **Acceder al portal:**
-   - Navegar a `http://localhost:3000/` durante el desarrollo (o al dominio configurado tras el proxy Nginx externo) e iniciar sesión con:
+   - Durante el desarrollo puede acceder a `http://127.0.0.1:3000/`. En producción debe hacerlo a través de Nginx por `https://horizonst.com.es/`.
+   - Inicie sesión con:
      - Usuario: `admin@horizonst.com.es`
      - Contraseña: `Admin@2024`
    - Cambie la contraseña del administrador tras el primer inicio de sesión.
@@ -75,27 +79,28 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 - Monitor de alarmas en segundo plano que genera y resuelve alertas automáticamente.
 - Gestión de grupos de usuarios que pueden reconocer y cerrar alarmas.
 
+## Arquitectura de despliegue
+
+- **Nginx (host):** sirve la aplicación en HTTPS y publica los paneles de EMQX (`/emqx`) y pgAdmin (`/pgadmin`). Redirige automáticamente las peticiones HTTP (80) a HTTPS (443).
+- **Docker Compose (loopback):** la app, PostgreSQL y pgAdmin solo escuchan en `127.0.0.1`. EMQX expone el puerto `1887` hacia el exterior sin TLS y mantiene el dashboard ligado al loopback (`127.0.0.1:18083`).
+- **Supervisión:** la API expone `GET /health` y los servicios incluyen healthchecks y rotación de logs (`json-file`, 50 MB × 3).
+
 ## MQTT Broker (EMQX)
 
-El contenedor de EMQX publica el puerto `1887` directamente en el host. Para conectar clientes externos utilice las variables definidas en `.env`:
-
-```
-Host: <dominio o IP del servidor>
-Puerto: 1887
-Usuario: Horizon@user2024
-Contraseña: Chanel_horizon@2024
-Cliente: acces_control_server_<aleatorio>
-```
-
-Dentro del orquestado Docker, la aplicación se conecta automáticamente a `mqtt://emqx:1883` reutilizando las mismas credenciales.
+- **Acceso externo:** `mqtt://<dominio-o-ip>:1887` (sin TLS). Cree usuarios/contraseñas específicos para clientes finales.
+- **Acceso interno (app → EMQX):** `mqtt://emqx:1883` gracias al fichero `backend/.env`.
+- **Panel de control:** disponible en `https://horizonst.com.es/emqx/` tras Nginx. No abra el puerto 18083 de manera directa.
+- **Pruebas rápidas (Windows):**
+  - *MQTTX:* configure un perfil con host `<dominio>` y puerto `1887`, suscríbase a `test/#` y publique en `test/ping`.
+  - *Mosquitto CLI:*
+    ```powershell
+    mosquitto_sub -h <dominio> -p 1887 -t test/# -u <usuario> -P <contraseña>
+    mosquitto_pub -h <dominio> -p 1887 -t test/ping -m "hello" -u <usuario> -P <contraseña>
+    ```
 
 ## Proxy inverso Nginx externo
 
-El equipo de sistemas gestiona el servidor Nginx. La carpeta `nginx/` contiene un fichero `nginx.conf` de ejemplo que puede servir como base para su despliegue. Ajuste las rutas upstream para que:
-
-- El tráfico HTTP (puertos 80/443) se redirija al servicio `app` en el puerto 3000.
-- El tráfico MQTT se encamine al broker EMQX en el puerto 1883, exponiéndolo externamente como `mqtt://<host>:1887` si se mantiene la convención actual.
-- Se apliquen cabeceras de seguridad, certificados TLS y reglas de cortafuegos acordes a la política corporativa.
+La carpeta `nginx/` contiene `horizonst.example.conf` como referencia. El bloque aplica redirección HTTP→HTTPS, cabeceras de seguridad y publica la app (`127.0.0.1:3000`) junto con `/emqx/` y `/pgadmin/`. Adapte certificados y rutas a su entorno y mantenga la configuración MQTT por TCP/1887 en el host.
 
 ## Scripts útiles
 
@@ -112,8 +117,10 @@ El equipo de sistemas gestiona el servidor Nginx. La carpeta `nginx/` contiene u
 
 ## Seguridad
 
-- Cambie el secreto JWT (`JWT_SECRET`) y las credenciales predeterminadas antes de desplegar en producción.
-- Proteja el acceso a pgAdmin y al dashboard de EMQX restringiendo los puertos o actualizando usuarios/contraseñas.
+- Cambie el secreto JWT (`JWT_SECRET`), los usuarios/contraseñas por defecto de la app, EMQX (panel y cuentas MQTT) y pgAdmin antes de llegar a producción.
+- Mantenga expuestos únicamente los puertos 80/443/1887. El resto de servicios permanecen en `127.0.0.1` y detrás de Docker.
+- Añada el endpoint `/health` a sus comprobaciones y monitorice los healthchecks configurados en `docker-compose.yml`.
+- Revise periódicamente los logs rotados (`json-file`, 50 MB × 3) y establezca alertas según sus políticas corporativas.
 
 ## Licencia
 
