@@ -12,6 +12,7 @@
       <nav>
         <a href="/dashboard.html">Resumen</a>
         <a href="/devices.html">Dispositivos</a>
+        <a href="/device-create.html" class="admin-only">Alta dispositivos</a>
         <a href="/places.html">Lugares</a>
         <a href="/categories.html">Categorías</a>
         <a href="/gateways.html" class="active">Gateways</a>
@@ -36,6 +37,10 @@
           <div>
             <label for="gatewayDescription">Descripción</label>
             <input type="text" id="gatewayDescription" />
+          </div>
+          <div>
+            <label for="gatewayOwner">Propietario</label>
+            <select id="gatewayOwner"></select>
           </div>
           <div class="actions">
             <button type="submit">Registrar</button>

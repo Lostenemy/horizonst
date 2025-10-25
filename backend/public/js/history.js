@@ -1,16 +1,9 @@
-import { apiGet, clearSession, getCurrentUser } from './api.js';
+import { apiGet } from './api.js';
+import { initAuthPage } from './ui.js';
 
-document.getElementById('logoutLink').addEventListener('click', (event) => {
-  event.preventDefault();
-  clearSession();
-  window.location.href = '/';
-});
-
-document.getElementById('year').textContent = new Date().getFullYear();
-
-const user = getCurrentUser();
+const { user } = initAuthPage();
 if (!user) {
-  window.location.href = '/';
+  throw new Error('Usuario no autenticado');
 }
 
 const deviceSelect = document.getElementById('deviceSelect');

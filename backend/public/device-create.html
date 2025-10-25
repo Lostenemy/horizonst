@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alta de dispositivos | HorizonST</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Alta de dispositivos</h1>
+      <nav>
+        <a href="/dashboard.html">Resumen</a>
+        <a href="/devices.html">Dispositivos</a>
+        <a href="/device-create.html" class="admin-only active">Alta dispositivos</a>
+        <a href="/places.html">Lugares</a>
+        <a href="/categories.html">Categorías</a>
+        <a href="/gateways.html">Gateways</a>
+        <a href="/messages.html">Mensajes</a>
+        <a href="/history.html">Históricos</a>
+        <a href="/alarms.html">Alarmas</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Registrar nuevo dispositivo</h2>
+        <p>Introduce los datos del dispositivo para dejarlo disponible en el inventario y que pueda ser reclamado por los usuarios autorizados.</p>
+        <form id="deviceCreateForm" class="form-grid">
+          <div>
+            <label for="deviceName">Nombre</label>
+            <input type="text" id="deviceName" placeholder="Sensor oficina" />
+          </div>
+          <div>
+            <label for="deviceMac">MAC (12 hex, sin separadores)</label>
+            <input type="text" id="deviceMac" required placeholder="AA11BB22CC33" maxlength="17" />
+          </div>
+          <div>
+            <label for="deviceDescription">Descripción</label>
+            <input type="text" id="deviceDescription" placeholder="Notas opcionales" />
+          </div>
+          <div>
+            <label for="deviceOwner">Propietario</label>
+            <select id="deviceOwner"></select>
+          </div>
+          <div>
+            <label for="deviceCategory">Categoría</label>
+            <select id="deviceCategory"></select>
+          </div>
+          <div class="actions">
+            <button type="submit">Registrar</button>
+          </div>
+        </form>
+        <div class="alert info" id="deviceCreateMessage" style="display:none"></div>
+      </section>
+      <section class="card">
+        <h2>Ayuda</h2>
+        <ul>
+          <li>La dirección MAC debe introducirse sin separadores. Se aceptan letras de la A a la F y números.</li>
+          <li>El campo propietario es opcional; puedes dejarlo vacío para permitir que cualquier usuario lo reclame.</li>
+          <li>Una vez creado, el dispositivo aparecerá en el listado general y podrá gestionarse desde la vista de dispositivos.</li>
+        </ul>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script type="module" src="/js/device-create.js"></script>
+  </body>
+</html>

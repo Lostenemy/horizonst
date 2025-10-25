@@ -43,6 +43,9 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
 
 router.put('/:categoryId', authenticate, async (req: AuthenticatedRequest, res) => {
   const categoryId = Number(req.params.categoryId);
+  if (Number.isNaN(categoryId)) {
+    return res.status(400).json({ message: 'Invalid category id' });
+  }
   const { name, description, photoUrl } = req.body;
   try {
     const categoryResult = await pool.query('SELECT owner_id FROM device_categories WHERE id = $1', [categoryId]);
@@ -53,20 +56,70 @@ router.put('/:categoryId', authenticate, async (req: AuthenticatedRequest, res) 
     if (req.user!.role !== 'ADMIN' && category.owner_id !== req.user!.id) {
       return res.status(403).json({ message: 'Forbidden' });
     }
+
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    let index = 1;
+
+    if (name !== undefined) {
+      const trimmed = typeof name === 'string' ? name.trim() : '';
+      if (!trimmed.length) {
+        return res.status(400).json({ message: 'Name cannot be empty' });
+      }
+      fields.push(`name = $${index++}`);
+      values.push(trimmed);
+    }
+    if (description !== undefined) {
+      const trimmed = typeof description === 'string' ? description.trim() : '';
+      fields.push(`description = $${index++}`);
+      values.push(trimmed.length ? trimmed : null);
+    }
+    if (photoUrl !== undefined) {
+      const trimmed = typeof photoUrl === 'string' ? photoUrl.trim() : '';
+      fields.push(`photo_url = $${index++}`);
+      values.push(trimmed.length ? trimmed : null);
+    }
+
+    if (!fields.length) {
+      return res.status(400).json({ message: 'No updates provided' });
+    }
+
+    const setClause = [...fields, 'updated_at = NOW()'].join(', ');
     const result = await pool.query(
       `UPDATE device_categories
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           photo_url = COALESCE($3, photo_url),
-           updated_at = NOW()
-       WHERE id = $4
+       SET ${setClause}
+       WHERE id = $${index}
        RETURNING id, owner_id, name, description, photo_url, updated_at`,
-      [name ?? null, description ?? null, photoUrl ?? null, categoryId]
+      [...values, categoryId]
     );
     return res.json(result.rows[0]);
   } catch (error) {
     console.error('Failed to update category', error);
     return res.status(500).json({ message: 'Failed to update category' });
+  }
+});
+
+router.delete('/:categoryId', authenticate, async (req: AuthenticatedRequest, res) => {
+  const categoryId = Number(req.params.categoryId);
+  if (Number.isNaN(categoryId)) {
+    return res.status(400).json({ message: 'Invalid category id' });
+  }
+
+  try {
+    const categoryResult = await pool.query('SELECT owner_id FROM device_categories WHERE id = $1', [categoryId]);
+    const category = categoryResult.rows[0];
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+    if (req.user!.role !== 'ADMIN' && category.owner_id !== req.user!.id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    await pool.query('DELETE FROM device_categories WHERE id = $1', [categoryId]);
+    return res.status(204).send();
+  } catch (error) {
+    console.error('Failed to delete category', error);
+    return res.status(500).json({ message: 'Failed to delete category' });
   }
 });
 

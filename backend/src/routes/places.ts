@@ -43,6 +43,9 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
 
 router.put('/:placeId', authenticate, async (req: AuthenticatedRequest, res) => {
   const placeId = Number(req.params.placeId);
+  if (Number.isNaN(placeId)) {
+    return res.status(400).json({ message: 'Invalid place id' });
+  }
   const { name, description, photoUrl } = req.body;
   try {
     const placeResult = await pool.query('SELECT owner_id FROM places WHERE id = $1', [placeId]);
@@ -53,20 +56,70 @@ router.put('/:placeId', authenticate, async (req: AuthenticatedRequest, res) => 
     if (req.user!.role !== 'ADMIN' && place.owner_id !== req.user!.id) {
       return res.status(403).json({ message: 'Forbidden' });
     }
+
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    let index = 1;
+
+    if (name !== undefined) {
+      const trimmed = typeof name === 'string' ? name.trim() : '';
+      if (!trimmed.length) {
+        return res.status(400).json({ message: 'Name cannot be empty' });
+      }
+      fields.push(`name = $${index++}`);
+      values.push(trimmed);
+    }
+    if (description !== undefined) {
+      const trimmed = typeof description === 'string' ? description.trim() : '';
+      fields.push(`description = $${index++}`);
+      values.push(trimmed.length ? trimmed : null);
+    }
+    if (photoUrl !== undefined) {
+      const trimmed = typeof photoUrl === 'string' ? photoUrl.trim() : '';
+      fields.push(`photo_url = $${index++}`);
+      values.push(trimmed.length ? trimmed : null);
+    }
+
+    if (!fields.length) {
+      return res.status(400).json({ message: 'No updates provided' });
+    }
+
+    const setClause = [...fields, 'updated_at = NOW()'].join(', ');
     const result = await pool.query(
       `UPDATE places
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           photo_url = COALESCE($3, photo_url),
-           updated_at = NOW()
-       WHERE id = $4
+       SET ${setClause}
+       WHERE id = $${index}
        RETURNING id, owner_id, name, description, photo_url, updated_at`,
-      [name ?? null, description ?? null, photoUrl ?? null, placeId]
+      [...values, placeId]
     );
     return res.json(result.rows[0]);
   } catch (error) {
     console.error('Failed to update place', error);
     return res.status(500).json({ message: 'Failed to update place' });
+  }
+});
+
+router.delete('/:placeId', authenticate, async (req: AuthenticatedRequest, res) => {
+  const placeId = Number(req.params.placeId);
+  if (Number.isNaN(placeId)) {
+    return res.status(400).json({ message: 'Invalid place id' });
+  }
+
+  try {
+    const placeResult = await pool.query('SELECT owner_id FROM places WHERE id = $1', [placeId]);
+    const place = placeResult.rows[0];
+    if (!place) {
+      return res.status(404).json({ message: 'Place not found' });
+    }
+    if (req.user!.role !== 'ADMIN' && place.owner_id !== req.user!.id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    await pool.query('DELETE FROM places WHERE id = $1', [placeId]);
+    return res.status(204).send();
+  } catch (error) {
+    console.error('Failed to delete place', error);
+    return res.status(500).json({ message: 'Failed to delete place' });
   }
 });
 

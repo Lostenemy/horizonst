@@ -1,16 +1,9 @@
-import { apiGet, clearSession, getCurrentUser } from './api.js';
+import { apiGet } from './api.js';
+import { initAuthPage } from './ui.js';
 
-document.getElementById('logoutLink').addEventListener('click', (event) => {
-  event.preventDefault();
-  clearSession();
-  window.location.href = '/';
-});
-
-document.getElementById('year').textContent = new Date().getFullYear();
-
-const currentUser = getCurrentUser();
-if (!currentUser) {
-  window.location.href = '/';
+const { user } = initAuthPage();
+if (!user) {
+  throw new Error('Usuario no autenticado');
 }
 
 const summaryCards = document.getElementById('summaryCards');
