@@ -18,7 +18,7 @@ services:
       - postgres
       - emqx
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     networks:
       - horizonst
 
@@ -33,7 +33,7 @@ services:
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     networks:
       - horizonst
 
@@ -45,7 +45,7 @@ services:
     depends_on:
       - postgres
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     networks:
       - horizonst
 
@@ -57,6 +57,7 @@ services:
       - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
       - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
     ports:
+      - "127.0.0.1:18083:18083"
       - "1887:1883"
     networks:
       - horizonst
