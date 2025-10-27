@@ -6,15 +6,11 @@ if (!user) {
   throw new Error('Usuario no autenticado');
 }
 
-const categoryForm = document.getElementById('categoryForm');
-const categoryMessage = document.getElementById('categoryMessage');
 const categoriesList = document.getElementById('categoriesList');
-const categoryNameInput = document.getElementById('categoryName');
-const categoryDescriptionInput = document.getElementById('categoryDescription');
-const categoryPhotoFileInput = document.getElementById('categoryPhotoFile');
-const categoryPhotoTitleInput = document.getElementById('categoryPhotoTitle');
+const createCategoryButton = document.getElementById('createCategoryButton');
 
 let categories = [];
+let categoryPhotoLibrary = [];
 
 const formatPhotoLabel = (photo) => {
   if (photo.title) {
@@ -27,6 +23,23 @@ const formatPhotoLabel = (photo) => {
     }
   }
   return `Imagen #${photo.id}`;
+};
+
+const extractBase64 = (dataUrl) => {
+  if (typeof dataUrl !== 'string') {
+    return '';
+  }
+  const commaIndex = dataUrl.indexOf(',');
+  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+};
+
+const refreshCategoryLibrary = async () => {
+  try {
+    categoryPhotoLibrary = await apiGet('/categories/photos/library');
+  } catch (error) {
+    console.error('No se pudo cargar la biblioteca de imágenes de categorías', error);
+    categoryPhotoLibrary = [];
+  }
 };
 
 const uploadCategoryPhoto = async (categoryId, file, title) => {
@@ -43,43 +56,61 @@ const loadCategories = async () => {
   renderCategories();
 };
 
-const handleCreateCategory = async (event) => {
-  event.preventDefault();
-  categoryMessage.style.display = 'none';
-  const name = categoryNameInput.value.trim();
-  const description = categoryDescriptionInput.value.trim();
-  const photoFile = categoryPhotoFileInput?.files?.[0] ?? null;
-  const photoTitle = categoryPhotoTitleInput.value.trim();
+const openCreateCategoryModal = async () => {
+  await refreshCategoryLibrary();
+  const photoOptions = [
+    { value: '', label: 'Sin imagen' },
+    ...categoryPhotoLibrary.map((photo) => ({ value: String(photo.id), label: formatPhotoLabel(photo) }))
+  ];
 
-  if (!name) {
-    categoryMessage.textContent = 'El nombre es obligatorio';
-    categoryMessage.className = 'alert error';
-    categoryMessage.style.display = 'block';
-    return;
-  }
-  try {
-    const category = await apiPost('/categories', {
-      name,
-      description
-    });
-    if (photoFile instanceof File) {
-      await uploadCategoryPhoto(
-        category.id,
-        photoFile,
-        photoTitle ? photoTitle : photoFile.name
-      );
+  await openFormModal({
+    title: 'Nueva categoría',
+    submitText: 'Crear',
+    fields: [
+      { name: 'name', label: 'Nombre', type: 'text', required: true },
+      { name: 'description', label: 'Descripción', type: 'textarea', rows: 3 },
+      { name: 'photoChoice', label: 'Seleccionar imagen existente', type: 'select', options: photoOptions },
+      { name: 'newPhotoTitle', label: 'Título para nueva imagen', type: 'text', placeholder: 'Descripción (opcional)' },
+      { name: 'newPhoto', label: 'Subir nueva imagen', type: 'file', accept: 'image/*' }
+    ],
+    initialValues: {},
+    onSubmit: async (values) => {
+      const nameValue = values.name ? String(values.name).trim() : '';
+      if (!nameValue) {
+        throw new Error('El nombre es obligatorio');
+      }
+      const descriptionValue = values.description ? String(values.description).trim() : '';
+      const selectedValue = values.photoChoice ? String(values.photoChoice) : '';
+      const selectedPhoto = selectedValue
+        ? categoryPhotoLibrary.find((photo) => String(photo.id) === selectedValue)
+        : null;
+
+      const category = await apiPost('/categories', {
+        name: nameValue,
+        description: descriptionValue
+      });
+
+      const newPhotoFile = values.newPhoto;
+      if (newPhotoFile instanceof File && newPhotoFile.size > 0) {
+        await uploadCategoryPhoto(
+          category.id,
+          newPhotoFile,
+          values.newPhotoTitle ? String(values.newPhotoTitle).trim() || newPhotoFile.name : newPhotoFile.name
+        );
+      } else if (selectedPhoto) {
+        const base64 = extractBase64(selectedPhoto.image_url);
+        if (base64) {
+          await apiPost(`/categories/${category.id}/photos`, {
+            title: selectedPhoto.title ?? null,
+            imageData: base64,
+            mimeType: selectedPhoto.mime_type || 'image/jpeg'
+          });
+        }
+      }
+
+      await Promise.all([loadCategories(), refreshCategoryLibrary()]);
     }
-    categoryMessage.textContent = 'Categoría creada correctamente';
-    categoryMessage.className = 'alert success';
-    categoryMessage.style.display = 'block';
-    categoryForm.reset();
-    categoryNameInput.focus();
-    await loadCategories();
-  } catch (error) {
-    categoryMessage.textContent = error.message;
-    categoryMessage.className = 'alert error';
-    categoryMessage.style.display = 'block';
-  }
+  });
 };
 
 const handleEditCategory = async (category) => {
@@ -135,7 +166,7 @@ const handleEditCategory = async (category) => {
         }
       }
 
-      await loadCategories();
+      await Promise.all([loadCategories(), refreshCategoryLibrary()]);
     }
   });
 };
@@ -159,7 +190,7 @@ const handleUploadPhoto = async (category) => {
         file,
         values.title ? String(values.title).trim() || file.name : file.name
       );
-      await loadCategories();
+      await Promise.all([loadCategories(), refreshCategoryLibrary()]);
     }
   });
 };
@@ -172,7 +203,7 @@ const handleDeleteCategory = async (category) => {
   });
   if (!confirmed) return;
   await apiDelete(`/categories/${category.id}`);
-  await loadCategories();
+  await Promise.all([loadCategories(), refreshCategoryLibrary()]);
 };
 
 const renderCategories = () => {
@@ -199,7 +230,9 @@ const renderCategories = () => {
   });
 };
 
-categoryForm.addEventListener('submit', handleCreateCategory);
+if (createCategoryButton) {
+  createCategoryButton.addEventListener('click', openCreateCategoryModal);
+}
 
 categoriesList.addEventListener('click', async (event) => {
   if (!(event.target instanceof HTMLElement)) return;
@@ -218,4 +251,12 @@ categoriesList.addEventListener('click', async (event) => {
   }
 });
 
-loadCategories();
+const init = async () => {
+  try {
+    await Promise.all([loadCategories(), refreshCategoryLibrary()]);
+  } catch (error) {
+    console.error('No se pudieron cargar las categorías', error);
+  }
+};
+
+void init();

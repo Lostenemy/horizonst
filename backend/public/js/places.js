@@ -6,15 +6,11 @@ if (!user) {
   throw new Error('Usuario no autenticado');
 }
 
-const placeForm = document.getElementById('placeForm');
-const placeMessage = document.getElementById('placeMessage');
 const placesList = document.getElementById('placesList');
-const placeNameInput = document.getElementById('placeName');
-const placeDescriptionInput = document.getElementById('placeDescription');
-const placePhotoFileInput = document.getElementById('placePhotoFile');
-const placePhotoTitleInput = document.getElementById('placePhotoTitle');
+const createPlaceButton = document.getElementById('createPlaceButton');
 
 let places = [];
+let placePhotoLibrary = [];
 
 const formatPhotoLabel = (photo) => {
   if (photo.title) {
@@ -27,6 +23,23 @@ const formatPhotoLabel = (photo) => {
     }
   }
   return `Imagen #${photo.id}`;
+};
+
+const extractBase64 = (dataUrl) => {
+  if (typeof dataUrl !== 'string') {
+    return '';
+  }
+  const commaIndex = dataUrl.indexOf(',');
+  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+};
+
+const refreshPlaceLibrary = async () => {
+  try {
+    placePhotoLibrary = await apiGet('/places/photos/library');
+  } catch (error) {
+    console.error('No se pudo cargar la biblioteca de imágenes de lugares', error);
+    placePhotoLibrary = [];
+  }
 };
 
 const uploadPlacePhoto = async (placeId, file, title) => {
@@ -43,43 +56,61 @@ const loadPlaces = async () => {
   renderPlaces();
 };
 
-const handleCreatePlace = async (event) => {
-  event.preventDefault();
-  placeMessage.style.display = 'none';
-  const name = placeNameInput.value.trim();
-  const description = placeDescriptionInput.value.trim();
-  const photoFile = placePhotoFileInput?.files?.[0] ?? null;
-  const photoTitle = placePhotoTitleInput.value.trim();
+const openCreatePlaceModal = async () => {
+  await refreshPlaceLibrary();
+  const photoOptions = [
+    { value: '', label: 'Sin imagen' },
+    ...placePhotoLibrary.map((photo) => ({ value: String(photo.id), label: formatPhotoLabel(photo) }))
+  ];
 
-  if (!name) {
-    placeMessage.textContent = 'El nombre es obligatorio';
-    placeMessage.className = 'alert error';
-    placeMessage.style.display = 'block';
-    return;
-  }
-  try {
-    const place = await apiPost('/places', {
-      name,
-      description
-    });
-    if (photoFile instanceof File) {
-      await uploadPlacePhoto(
-        place.id,
-        photoFile,
-        photoTitle ? photoTitle : photoFile.name
-      );
+  await openFormModal({
+    title: 'Nuevo lugar',
+    submitText: 'Crear',
+    fields: [
+      { name: 'name', label: 'Nombre', type: 'text', required: true },
+      { name: 'description', label: 'Descripción', type: 'textarea', rows: 3 },
+      { name: 'photoChoice', label: 'Seleccionar imagen existente', type: 'select', options: photoOptions },
+      { name: 'newPhotoTitle', label: 'Título para nueva imagen', type: 'text', placeholder: 'Descripción (opcional)' },
+      { name: 'newPhoto', label: 'Subir nueva imagen', type: 'file', accept: 'image/*' }
+    ],
+    initialValues: {},
+    onSubmit: async (values) => {
+      const nameValue = values.name ? String(values.name).trim() : '';
+      if (!nameValue) {
+        throw new Error('El nombre es obligatorio');
+      }
+      const descriptionValue = values.description ? String(values.description).trim() : '';
+      const selectedValue = values.photoChoice ? String(values.photoChoice) : '';
+      const selectedPhoto = selectedValue
+        ? placePhotoLibrary.find((photo) => String(photo.id) === selectedValue)
+        : null;
+
+      const place = await apiPost('/places', {
+        name: nameValue,
+        description: descriptionValue
+      });
+
+      const newPhotoFile = values.newPhoto;
+      if (newPhotoFile instanceof File && newPhotoFile.size > 0) {
+        await uploadPlacePhoto(
+          place.id,
+          newPhotoFile,
+          values.newPhotoTitle ? String(values.newPhotoTitle).trim() || newPhotoFile.name : newPhotoFile.name
+        );
+      } else if (selectedPhoto) {
+        const base64 = extractBase64(selectedPhoto.image_url);
+        if (base64) {
+          await apiPost(`/places/${place.id}/photos`, {
+            title: selectedPhoto.title ?? null,
+            imageData: base64,
+            mimeType: selectedPhoto.mime_type || 'image/jpeg'
+          });
+        }
+      }
+
+      await Promise.all([loadPlaces(), refreshPlaceLibrary()]);
     }
-    placeMessage.textContent = 'Lugar creado correctamente';
-    placeMessage.className = 'alert success';
-    placeMessage.style.display = 'block';
-    placeForm.reset();
-    placeNameInput.focus();
-    await loadPlaces();
-  } catch (error) {
-    placeMessage.textContent = error.message;
-    placeMessage.className = 'alert error';
-    placeMessage.style.display = 'block';
-  }
+  });
 };
 
 const handleEditPlace = async (place) => {
@@ -135,7 +166,7 @@ const handleEditPlace = async (place) => {
         }
       }
 
-      await loadPlaces();
+      await Promise.all([loadPlaces(), refreshPlaceLibrary()]);
     }
   });
 };
@@ -159,7 +190,7 @@ const handleUploadPhoto = async (place) => {
         file,
         values.title ? String(values.title).trim() || file.name : file.name
       );
-      await loadPlaces();
+      await Promise.all([loadPlaces(), refreshPlaceLibrary()]);
     }
   });
 };
@@ -172,7 +203,7 @@ const handleDeletePlace = async (place) => {
   });
   if (!confirmed) return;
   await apiDelete(`/places/${place.id}`);
-  await loadPlaces();
+  await Promise.all([loadPlaces(), refreshPlaceLibrary()]);
 };
 
 const renderPlaces = () => {
@@ -199,7 +230,9 @@ const renderPlaces = () => {
   });
 };
 
-placeForm.addEventListener('submit', handleCreatePlace);
+if (createPlaceButton) {
+  createPlaceButton.addEventListener('click', openCreatePlaceModal);
+}
 
 placesList.addEventListener('click', async (event) => {
   if (!(event.target instanceof HTMLElement)) return;
@@ -218,4 +251,12 @@ placesList.addEventListener('click', async (event) => {
   }
 });
 
-loadPlaces();
+const init = async () => {
+  try {
+    await Promise.all([loadPlaces(), refreshPlaceLibrary()]);
+  } catch (error) {
+    console.error('No se pudieron cargar los lugares', error);
+  }
+};
+
+void init();

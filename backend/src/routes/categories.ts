@@ -22,6 +22,15 @@ type CategoryPhotoRow = {
   created_at: string;
 };
 
+const mapCategoryPhoto = (row: CategoryPhotoRow) => ({
+  id: row.id,
+  category_id: row.category_id,
+  title: row.title,
+  created_at: row.created_at,
+  mime_type: row.mime_type,
+  image_url: buildDataUrl(row.image_data, row.mime_type)
+});
+
 router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
   try {
     let query = `SELECT id, owner_id, name, description, photo_url, created_at, updated_at
@@ -141,6 +150,32 @@ router.delete('/:categoryId', authenticate, async (req: AuthenticatedRequest, re
   }
 });
 
+router.get('/photos/library', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    let filter = '';
+    const params: unknown[] = [];
+    if (req.user!.role !== 'ADMIN') {
+      filter = 'WHERE dc.owner_id = $1';
+      params.push(req.user!.id);
+    }
+
+    const result = await pool.query<CategoryPhotoRow>(
+      `SELECT cp.id, cp.category_id, cp.title, cp.image_data, cp.mime_type, cp.created_at
+       FROM category_photos cp
+       JOIN device_categories dc ON dc.id = cp.category_id
+       ${filter}
+       ORDER BY cp.created_at DESC`,
+      params
+    );
+
+    const photos = result.rows.map(mapCategoryPhoto);
+    return res.json(photos);
+  } catch (error) {
+    console.error('Failed to list category photo library', error);
+    return res.status(500).json({ message: 'Failed to list category photos' });
+  }
+});
+
 router.get('/:categoryId/photos', authenticate, async (req: AuthenticatedRequest, res) => {
   const categoryId = Number(req.params.categoryId);
   try {
@@ -160,14 +195,7 @@ router.get('/:categoryId/photos', authenticate, async (req: AuthenticatedRequest
        ORDER BY created_at DESC`,
       [categoryId]
     );
-    const photos = result.rows.map((row) => ({
-      id: row.id,
-      category_id: row.category_id,
-      title: row.title,
-      created_at: row.created_at,
-      mime_type: row.mime_type,
-      image_url: buildDataUrl(row.image_data, row.mime_type)
-    }));
+    const photos = result.rows.map(mapCategoryPhoto);
     return res.json(photos);
   } catch (error) {
     console.error('Failed to list category photos', error);

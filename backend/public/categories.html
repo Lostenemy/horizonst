@@ -25,29 +25,11 @@
     </header>
     <main>
       <section class="card">
-        <h2>Nueva categoría</h2>
-        <form id="categoryForm" class="form-grid">
-          <div>
-            <label for="categoryName">Nombre</label>
-            <input type="text" id="categoryName" name="categoryName" required />
-          </div>
-          <div>
-            <label for="categoryDescription">Descripción</label>
-            <input type="text" id="categoryDescription" name="categoryDescription" />
-          </div>
-          <div>
-            <label for="categoryPhotoFile">Imagen (opcional)</label>
-            <input type="file" id="categoryPhotoFile" name="categoryPhotoFile" accept="image/*" />
-          </div>
-          <div>
-            <label for="categoryPhotoTitle">Título de la imagen</label>
-            <input type="text" id="categoryPhotoTitle" name="categoryPhotoTitle" placeholder="Descripción (opcional)" />
-          </div>
-          <div class="actions">
-            <button type="submit">Crear</button>
-          </div>
-        </form>
-        <div class="alert info" id="categoryMessage" style="display:none"></div>
+        <div class="card-header">
+          <h2>Categorías</h2>
+          <button id="createCategoryButton">Crear categoría</button>
+        </div>
+        <p>Organiza los dispositivos en categorías y asocia una imagen representativa.</p>
       </section>
       <section class="card">
         <h2>Categorías creadas</h2>

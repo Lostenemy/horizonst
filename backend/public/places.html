@@ -25,29 +25,11 @@
     </header>
     <main>
       <section class="card">
-        <h2>Crear nuevo lugar</h2>
-        <form id="placeForm" class="form-grid">
-          <div>
-            <label for="placeName">Nombre</label>
-            <input type="text" id="placeName" name="placeName" required />
-          </div>
-          <div>
-            <label for="placeDescription">Descripción</label>
-            <input type="text" id="placeDescription" name="placeDescription" placeholder="Zona o departamento" />
-          </div>
-          <div>
-            <label for="placePhotoFile">Imagen (opcional)</label>
-            <input type="file" id="placePhotoFile" name="placePhotoFile" accept="image/*" />
-          </div>
-          <div>
-            <label for="placePhotoTitle">Título de la imagen</label>
-            <input type="text" id="placePhotoTitle" name="placePhotoTitle" placeholder="Descripción (opcional)" />
-          </div>
-          <div class="actions">
-            <button type="submit">Guardar</button>
-          </div>
-        </form>
-        <div class="alert info" id="placeMessage" style="display:none"></div>
+        <div class="card-header">
+          <h2>Lugares</h2>
+          <button id="createPlaceButton">Crear lugar</button>
+        </div>
+        <p>Registra espacios físicos y vincula una fotografía para identificarlos fácilmente.</p>
       </section>
       <section class="card">
         <h2>Listado de lugares</h2>

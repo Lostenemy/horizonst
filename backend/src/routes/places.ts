@@ -22,6 +22,15 @@ type PlacePhotoRow = {
   created_at: string;
 };
 
+const mapPlacePhoto = (row: PlacePhotoRow) => ({
+  id: row.id,
+  place_id: row.place_id,
+  title: row.title,
+  created_at: row.created_at,
+  mime_type: row.mime_type,
+  image_url: buildDataUrl(row.image_data, row.mime_type)
+});
+
 router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
   try {
     let query = `SELECT id, owner_id, name, description, photo_url, created_at, updated_at
@@ -141,6 +150,32 @@ router.delete('/:placeId', authenticate, async (req: AuthenticatedRequest, res) 
   }
 });
 
+router.get('/photos/library', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    let filter = '';
+    const params: unknown[] = [];
+    if (req.user!.role !== 'ADMIN') {
+      filter = 'WHERE p.owner_id = $1';
+      params.push(req.user!.id);
+    }
+
+    const result = await pool.query<PlacePhotoRow>(
+      `SELECT pp.id, pp.place_id, pp.title, pp.image_data, pp.mime_type, pp.created_at
+       FROM place_photos pp
+       JOIN places p ON p.id = pp.place_id
+       ${filter}
+       ORDER BY pp.created_at DESC`,
+      params
+    );
+
+    const photos = result.rows.map(mapPlacePhoto);
+    return res.json(photos);
+  } catch (error) {
+    console.error('Failed to list place photo library', error);
+    return res.status(500).json({ message: 'Failed to list place photos' });
+  }
+});
+
 router.get('/:placeId/photos', authenticate, async (req: AuthenticatedRequest, res) => {
   const placeId = Number(req.params.placeId);
   try {
@@ -160,14 +195,7 @@ router.get('/:placeId/photos', authenticate, async (req: AuthenticatedRequest, r
        ORDER BY created_at DESC`,
       [placeId]
     );
-    const photos = result.rows.map((row) => ({
-      id: row.id,
-      place_id: row.place_id,
-      title: row.title,
-      created_at: row.created_at,
-      mime_type: row.mime_type,
-      image_url: buildDataUrl(row.image_data, row.mime_type)
-    }));
+    const photos = result.rows.map(mapPlacePhoto);
     return res.json(photos);
   } catch (error) {
     console.error('Failed to list place photos', error);
