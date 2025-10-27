@@ -150,6 +150,11 @@ button:hover {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+.form-grid .actions {
+  align-self: end;
+  justify-content: flex-end;
+  margin-top: auto;
+}
 
 .table-actions {
   display: flex;
@@ -173,6 +178,10 @@ button:hover {
 .tag-user {
   background-color: rgba(18, 60, 105, 0.15);
   color: #123c69;
+}
+
+.nowrap {
+  white-space: nowrap;
 }
 
 .alert {
