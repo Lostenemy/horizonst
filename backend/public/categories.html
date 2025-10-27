@@ -36,8 +36,12 @@
             <input type="text" id="categoryDescription" />
           </div>
           <div>
-            <label for="categoryPhoto">URL de foto</label>
-            <input type="url" id="categoryPhoto" placeholder="https://" />
+            <label for="categoryPhotoFile">Imagen (opcional)</label>
+            <input type="file" id="categoryPhotoFile" accept="image/*" />
+          </div>
+          <div>
+            <label for="categoryPhotoTitle">Título de la imagen</label>
+            <input type="text" id="categoryPhotoTitle" placeholder="Descripción (opcional)" />
           </div>
           <div class="actions">
             <button type="submit">Crear</button>

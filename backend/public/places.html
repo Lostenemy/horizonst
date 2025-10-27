@@ -36,8 +36,12 @@
             <input type="text" id="placeDescription" placeholder="Zona o departamento" />
           </div>
           <div>
-            <label for="placePhoto">URL de foto (opcional)</label>
-            <input type="url" id="placePhoto" placeholder="https://" />
+            <label for="placePhotoFile">Imagen (opcional)</label>
+            <input type="file" id="placePhotoFile" accept="image/*" />
+          </div>
+          <div>
+            <label for="placePhotoTitle">Título de la imagen</label>
+            <input type="text" id="placePhotoTitle" placeholder="Descripción (opcional)" />
           </div>
           <div class="actions">
             <button type="submit">Guardar</button>

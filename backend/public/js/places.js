@@ -12,6 +12,28 @@ const placesList = document.getElementById('placesList');
 
 let places = [];
 
+const formatPhotoLabel = (photo) => {
+  if (photo.title) {
+    return photo.title;
+  }
+  if (photo.created_at) {
+    const date = new Date(photo.created_at);
+    if (!Number.isNaN(date.getTime())) {
+      return `Imagen subida ${date.toLocaleString()}`;
+    }
+  }
+  return `Imagen #${photo.id}`;
+};
+
+const uploadPlacePhoto = async (placeId, file, title) => {
+  const imageData = await fileToBase64(file);
+  return apiPost(`/places/${placeId}/photos`, {
+    title: title || file.name,
+    imageData,
+    mimeType: file.type || 'image/jpeg'
+  });
+};
+
 const loadPlaces = async () => {
   places = await apiGet('/places');
   renderPlaces();
@@ -20,19 +42,29 @@ const loadPlaces = async () => {
 const handleCreatePlace = async (event) => {
   event.preventDefault();
   placeMessage.style.display = 'none';
-  const payload = {
-    name: placeForm.placeName.value.trim(),
-    description: placeForm.placeDescription.value.trim(),
-    photoUrl: placeForm.placePhoto.value.trim()
-  };
-  if (!payload.name) {
+  const name = placeForm.placeName.value.trim();
+  const description = placeForm.placeDescription.value.trim();
+  const photoFile = placeForm.placePhotoFile?.files?.[0] ?? null;
+  const photoTitle = placeForm.placePhotoTitle.value.trim();
+
+  if (!name) {
     placeMessage.textContent = 'El nombre es obligatorio';
     placeMessage.className = 'alert error';
     placeMessage.style.display = 'block';
     return;
   }
   try {
-    await apiPost('/places', payload);
+    const place = await apiPost('/places', {
+      name,
+      description
+    });
+    if (photoFile instanceof File) {
+      await uploadPlacePhoto(
+        place.id,
+        photoFile,
+        photoTitle ? photoTitle : photoFile.name
+      );
+    }
     placeMessage.textContent = 'Lugar creado correctamente';
     placeMessage.className = 'alert success';
     placeMessage.style.display = 'block';
@@ -46,29 +78,58 @@ const handleCreatePlace = async (event) => {
 };
 
 const handleEditPlace = async (place) => {
+  const photos = await apiGet(`/places/${place.id}/photos`);
+  const currentPhoto = place.photo_url
+    ? photos.find((photo) => photo.image_url === place.photo_url)
+    : null;
+  const photoOptions = [
+    { value: '', label: 'Sin imagen' },
+    ...photos.map((photo) => ({ value: String(photo.id), label: formatPhotoLabel(photo) }))
+  ];
+
   await openFormModal({
     title: `Editar lugar ${place.name}`,
     submitText: 'Guardar cambios',
     fields: [
       { name: 'name', label: 'Nombre', type: 'text', required: true },
       { name: 'description', label: 'Descripción', type: 'textarea', rows: 3 },
-      { name: 'photoUrl', label: 'URL de foto', type: 'text', placeholder: 'https://' }
+      { name: 'photoChoice', label: 'Seleccionar imagen existente', type: 'select', options: photoOptions },
+      { name: 'newPhotoTitle', label: 'Título para nueva imagen', type: 'text', placeholder: 'Descripción (opcional)' },
+      { name: 'newPhoto', label: 'Subir nueva imagen', type: 'file', accept: 'image/*' }
     ],
     initialValues: {
       name: place.name,
       description: place.description || '',
-      photoUrl: place.photo_url || ''
+      photoChoice: currentPhoto ? String(currentPhoto.id) : ''
     },
     onSubmit: async (values) => {
-      const payload = {
-        name: values.name ? String(values.name).trim() : '',
-        description: values.description ? String(values.description).trim() : '',
-        photoUrl: values.photoUrl ? String(values.photoUrl).trim() : ''
-      };
-      if (!payload.name) {
+      const nameValue = values.name ? String(values.name).trim() : '';
+      if (!nameValue) {
         throw new Error('El nombre es obligatorio');
       }
-      await apiPut(`/places/${place.id}`, payload);
+      const descriptionValue = values.description ? String(values.description).trim() : '';
+
+      await apiPut(`/places/${place.id}`, {
+        name: nameValue,
+        description: descriptionValue
+      });
+
+      const newPhotoFile = values.newPhoto;
+      if (newPhotoFile instanceof File && newPhotoFile.size > 0) {
+        await uploadPlacePhoto(
+          place.id,
+          newPhotoFile,
+          values.newPhotoTitle ? String(values.newPhotoTitle).trim() || newPhotoFile.name : newPhotoFile.name
+        );
+      } else {
+        const selectedValue = values.photoChoice ? String(values.photoChoice) : '';
+        const selectedId = selectedValue ? Number(selectedValue) : null;
+        const currentId = currentPhoto ? currentPhoto.id : null;
+        if (selectedId !== currentId) {
+          await apiPut(`/places/${place.id}/photo`, { photoId: selectedId });
+        }
+      }
+
       await loadPlaces();
     }
   });
@@ -88,11 +149,12 @@ const handleUploadPhoto = async (place) => {
       if (!(file instanceof File)) {
         throw new Error('Selecciona un archivo de imagen');
       }
-      const imageData = await fileToBase64(file);
-      await apiPost(`/places/${place.id}/photos`, {
-        title: values.title ? String(values.title).trim() || file.name : file.name,
-        imageData
-      });
+      await uploadPlacePhoto(
+        place.id,
+        file,
+        values.title ? String(values.title).trim() || file.name : file.name
+      );
+      await loadPlaces();
     }
   });
 };

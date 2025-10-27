@@ -12,6 +12,28 @@ const categoriesList = document.getElementById('categoriesList');
 
 let categories = [];
 
+const formatPhotoLabel = (photo) => {
+  if (photo.title) {
+    return photo.title;
+  }
+  if (photo.created_at) {
+    const date = new Date(photo.created_at);
+    if (!Number.isNaN(date.getTime())) {
+      return `Imagen subida ${date.toLocaleString()}`;
+    }
+  }
+  return `Imagen #${photo.id}`;
+};
+
+const uploadCategoryPhoto = async (categoryId, file, title) => {
+  const imageData = await fileToBase64(file);
+  return apiPost(`/categories/${categoryId}/photos`, {
+    title: title || file.name,
+    imageData,
+    mimeType: file.type || 'image/jpeg'
+  });
+};
+
 const loadCategories = async () => {
   categories = await apiGet('/categories');
   renderCategories();
@@ -20,19 +42,29 @@ const loadCategories = async () => {
 const handleCreateCategory = async (event) => {
   event.preventDefault();
   categoryMessage.style.display = 'none';
-  const payload = {
-    name: categoryForm.categoryName.value.trim(),
-    description: categoryForm.categoryDescription.value.trim(),
-    photoUrl: categoryForm.categoryPhoto.value.trim()
-  };
-  if (!payload.name) {
+  const name = categoryForm.categoryName.value.trim();
+  const description = categoryForm.categoryDescription.value.trim();
+  const photoFile = categoryForm.categoryPhotoFile?.files?.[0] ?? null;
+  const photoTitle = categoryForm.categoryPhotoTitle.value.trim();
+
+  if (!name) {
     categoryMessage.textContent = 'El nombre es obligatorio';
     categoryMessage.className = 'alert error';
     categoryMessage.style.display = 'block';
     return;
   }
   try {
-    await apiPost('/categories', payload);
+    const category = await apiPost('/categories', {
+      name,
+      description
+    });
+    if (photoFile instanceof File) {
+      await uploadCategoryPhoto(
+        category.id,
+        photoFile,
+        photoTitle ? photoTitle : photoFile.name
+      );
+    }
     categoryMessage.textContent = 'Categoría creada correctamente';
     categoryMessage.className = 'alert success';
     categoryMessage.style.display = 'block';
@@ -46,29 +78,58 @@ const handleCreateCategory = async (event) => {
 };
 
 const handleEditCategory = async (category) => {
+  const photos = await apiGet(`/categories/${category.id}/photos`);
+  const currentPhoto = category.photo_url
+    ? photos.find((photo) => photo.image_url === category.photo_url)
+    : null;
+  const photoOptions = [
+    { value: '', label: 'Sin imagen' },
+    ...photos.map((photo) => ({ value: String(photo.id), label: formatPhotoLabel(photo) }))
+  ];
+
   await openFormModal({
     title: `Editar categoría ${category.name}`,
     submitText: 'Guardar cambios',
     fields: [
       { name: 'name', label: 'Nombre', type: 'text', required: true },
       { name: 'description', label: 'Descripción', type: 'textarea', rows: 3 },
-      { name: 'photoUrl', label: 'URL de foto', type: 'text', placeholder: 'https://' }
+      { name: 'photoChoice', label: 'Seleccionar imagen existente', type: 'select', options: photoOptions },
+      { name: 'newPhotoTitle', label: 'Título para nueva imagen', type: 'text', placeholder: 'Descripción (opcional)' },
+      { name: 'newPhoto', label: 'Subir nueva imagen', type: 'file', accept: 'image/*' }
     ],
     initialValues: {
       name: category.name,
       description: category.description || '',
-      photoUrl: category.photo_url || ''
+      photoChoice: currentPhoto ? String(currentPhoto.id) : ''
     },
     onSubmit: async (values) => {
-      const payload = {
-        name: values.name ? String(values.name).trim() : '',
-        description: values.description ? String(values.description).trim() : '',
-        photoUrl: values.photoUrl ? String(values.photoUrl).trim() : ''
-      };
-      if (!payload.name) {
+      const nameValue = values.name ? String(values.name).trim() : '';
+      if (!nameValue) {
         throw new Error('El nombre es obligatorio');
       }
-      await apiPut(`/categories/${category.id}`, payload);
+      const descriptionValue = values.description ? String(values.description).trim() : '';
+
+      await apiPut(`/categories/${category.id}`, {
+        name: nameValue,
+        description: descriptionValue
+      });
+
+      const newPhotoFile = values.newPhoto;
+      if (newPhotoFile instanceof File && newPhotoFile.size > 0) {
+        await uploadCategoryPhoto(
+          category.id,
+          newPhotoFile,
+          values.newPhotoTitle ? String(values.newPhotoTitle).trim() || newPhotoFile.name : newPhotoFile.name
+        );
+      } else {
+        const selectedValue = values.photoChoice ? String(values.photoChoice) : '';
+        const selectedId = selectedValue ? Number(selectedValue) : null;
+        const currentId = currentPhoto ? currentPhoto.id : null;
+        if (selectedId !== currentId) {
+          await apiPut(`/categories/${category.id}/photo`, { photoId: selectedId });
+        }
+      }
+
       await loadCategories();
     }
   });
@@ -88,11 +149,12 @@ const handleUploadPhoto = async (category) => {
       if (!(file instanceof File)) {
         throw new Error('Selecciona un archivo de imagen');
       }
-      const imageData = await fileToBase64(file);
-      await apiPost(`/categories/${category.id}/photos`, {
-        title: values.title ? String(values.title).trim() || file.name : file.name,
-        imageData
-      });
+      await uploadCategoryPhoto(
+        category.id,
+        file,
+        values.title ? String(values.title).trim() || file.name : file.name
+      );
+      await loadCategories();
     }
   });
 };

@@ -4,6 +4,24 @@ import { pool } from '../db/pool';
 
 const router = Router();
 
+const DEFAULT_IMAGE_TYPE = 'image/jpeg';
+
+const buildDataUrl = (imageData: string, mimeType?: string | null) => {
+  const safeType = typeof mimeType === 'string' && mimeType.trim().startsWith('image/')
+    ? mimeType.trim()
+    : DEFAULT_IMAGE_TYPE;
+  return `data:${safeType};base64,${imageData}`;
+};
+
+type CategoryPhotoRow = {
+  id: number;
+  category_id: number;
+  title: string | null;
+  image_data: string;
+  mime_type: string | null;
+  created_at: string;
+};
+
 router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
   try {
     let query = `SELECT id, owner_id, name, description, photo_url, created_at, updated_at
@@ -126,14 +144,31 @@ router.delete('/:categoryId', authenticate, async (req: AuthenticatedRequest, re
 router.get('/:categoryId/photos', authenticate, async (req: AuthenticatedRequest, res) => {
   const categoryId = Number(req.params.categoryId);
   try {
-    const result = await pool.query(
-      `SELECT id, category_id, title, image_data, created_at
+    const categoryResult = await pool.query('SELECT owner_id FROM device_categories WHERE id = $1', [categoryId]);
+    const category = categoryResult.rows[0];
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+    if (req.user!.role !== 'ADMIN' && category.owner_id !== req.user!.id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const result = await pool.query<CategoryPhotoRow>(
+      `SELECT id, category_id, title, image_data, mime_type, created_at
        FROM category_photos
        WHERE category_id = $1
        ORDER BY created_at DESC`,
       [categoryId]
     );
-    return res.json(result.rows);
+    const photos = result.rows.map((row) => ({
+      id: row.id,
+      category_id: row.category_id,
+      title: row.title,
+      created_at: row.created_at,
+      mime_type: row.mime_type,
+      image_url: buildDataUrl(row.image_data, row.mime_type)
+    }));
+    return res.json(photos);
   } catch (error) {
     console.error('Failed to list category photos', error);
     return res.status(500).json({ message: 'Failed to list category photos' });
@@ -142,8 +177,12 @@ router.get('/:categoryId/photos', authenticate, async (req: AuthenticatedRequest
 
 router.post('/:categoryId/photos', authenticate, async (req: AuthenticatedRequest, res) => {
   const categoryId = Number(req.params.categoryId);
-  const { title, imageData } = req.body;
-  if (!imageData) {
+  const { title, imageData, mimeType } = req.body as {
+    title?: string;
+    imageData?: unknown;
+    mimeType?: unknown;
+  };
+  if (typeof imageData !== 'string' || !imageData.trim()) {
     return res.status(400).json({ message: 'imageData is required' });
   }
   try {
@@ -155,16 +194,87 @@ router.post('/:categoryId/photos', authenticate, async (req: AuthenticatedReques
     if (req.user!.role !== 'ADMIN' && category.owner_id !== req.user!.id) {
       return res.status(403).json({ message: 'Forbidden' });
     }
-    const result = await pool.query(
-      `INSERT INTO category_photos (category_id, title, image_data, uploaded_by)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, category_id, title, created_at`,
-      [categoryId, title ?? null, imageData, req.user!.id]
+
+    const safeMime = typeof mimeType === 'string' && mimeType.trim() ? mimeType.trim() : DEFAULT_IMAGE_TYPE;
+
+    const result = await pool.query<CategoryPhotoRow>(
+      `INSERT INTO category_photos (category_id, title, image_data, mime_type, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, category_id, title, created_at, mime_type`,
+      [categoryId, title ?? null, imageData, safeMime, req.user!.id]
     );
-    return res.status(201).json(result.rows[0]);
+
+    const photo = result.rows[0];
+    const photoUrl = buildDataUrl(imageData, photo.mime_type);
+
+    await pool.query(
+      `UPDATE device_categories
+       SET photo_url = $1,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [photoUrl, categoryId]
+    );
+
+    return res.status(201).json({
+      id: photo.id,
+      category_id: photo.category_id,
+      title: photo.title,
+      created_at: photo.created_at,
+      mime_type: photo.mime_type,
+      image_url: photoUrl
+    });
   } catch (error) {
     console.error('Failed to upload category photo', error);
     return res.status(500).json({ message: 'Failed to upload category photo' });
+  }
+});
+
+router.put('/:categoryId/photo', authenticate, async (req: AuthenticatedRequest, res) => {
+  const categoryId = Number(req.params.categoryId);
+  const { photoId } = req.body as { photoId?: unknown };
+
+  try {
+    const categoryResult = await pool.query('SELECT owner_id FROM device_categories WHERE id = $1', [categoryId]);
+    const category = categoryResult.rows[0];
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+    if (req.user!.role !== 'ADMIN' && category.owner_id !== req.user!.id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    let photoUrl: string | null = null;
+
+    if (photoId !== undefined && photoId !== null && photoId !== '') {
+      const parsedId = Number(photoId);
+      if (Number.isNaN(parsedId)) {
+        return res.status(400).json({ message: 'Invalid photoId' });
+      }
+      const photoResult = await pool.query<{ image_data: string; mime_type: string | null }>(
+        `SELECT image_data, mime_type
+         FROM category_photos
+         WHERE id = $1 AND category_id = $2`,
+        [parsedId, categoryId]
+      );
+      const photo = photoResult.rows[0];
+      if (!photo) {
+        return res.status(404).json({ message: 'Photo not found' });
+      }
+      photoUrl = buildDataUrl(photo.image_data, photo.mime_type);
+    }
+
+    await pool.query(
+      `UPDATE device_categories
+       SET photo_url = $1,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [photoUrl, categoryId]
+    );
+
+    return res.json({ categoryId, photoUrl });
+  } catch (error) {
+    console.error('Failed to set category photo', error);
+    return res.status(500).json({ message: 'Failed to set category photo' });
   }
 });
 

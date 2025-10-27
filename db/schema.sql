@@ -43,9 +43,13 @@ CREATE TABLE IF NOT EXISTS category_photos (
     category_id INTEGER REFERENCES device_categories(id) ON DELETE CASCADE,
     title VARCHAR(160),
     image_data TEXT NOT NULL,
+    mime_type TEXT,
     uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE category_photos
+    ADD COLUMN IF NOT EXISTS mime_type TEXT;
 
 CREATE TABLE IF NOT EXISTS places (
     id SERIAL PRIMARY KEY,
@@ -62,9 +66,13 @@ CREATE TABLE IF NOT EXISTS place_photos (
     place_id INTEGER REFERENCES places(id) ON DELETE CASCADE,
     title VARCHAR(160),
     image_data TEXT NOT NULL,
+    mime_type TEXT,
     uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE place_photos
+    ADD COLUMN IF NOT EXISTS mime_type TEXT;
 
 CREATE TABLE IF NOT EXISTS gateways (
     id SERIAL PRIMARY KEY,
