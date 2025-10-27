@@ -29,19 +29,19 @@
         <form id="categoryForm" class="form-grid">
           <div>
             <label for="categoryName">Nombre</label>
-            <input type="text" id="categoryName" required />
+            <input type="text" id="categoryName" name="categoryName" required />
           </div>
           <div>
             <label for="categoryDescription">Descripción</label>
-            <input type="text" id="categoryDescription" />
+            <input type="text" id="categoryDescription" name="categoryDescription" />
           </div>
           <div>
             <label for="categoryPhotoFile">Imagen (opcional)</label>
-            <input type="file" id="categoryPhotoFile" accept="image/*" />
+            <input type="file" id="categoryPhotoFile" name="categoryPhotoFile" accept="image/*" />
           </div>
           <div>
             <label for="categoryPhotoTitle">Título de la imagen</label>
-            <input type="text" id="categoryPhotoTitle" placeholder="Descripción (opcional)" />
+            <input type="text" id="categoryPhotoTitle" name="categoryPhotoTitle" placeholder="Descripción (opcional)" />
           </div>
           <div class="actions">
             <button type="submit">Crear</button>

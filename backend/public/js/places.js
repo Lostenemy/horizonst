@@ -9,6 +9,10 @@ if (!user) {
 const placeForm = document.getElementById('placeForm');
 const placeMessage = document.getElementById('placeMessage');
 const placesList = document.getElementById('placesList');
+const placeNameInput = document.getElementById('placeName');
+const placeDescriptionInput = document.getElementById('placeDescription');
+const placePhotoFileInput = document.getElementById('placePhotoFile');
+const placePhotoTitleInput = document.getElementById('placePhotoTitle');
 
 let places = [];
 
@@ -42,10 +46,10 @@ const loadPlaces = async () => {
 const handleCreatePlace = async (event) => {
   event.preventDefault();
   placeMessage.style.display = 'none';
-  const name = placeForm.placeName.value.trim();
-  const description = placeForm.placeDescription.value.trim();
-  const photoFile = placeForm.placePhotoFile?.files?.[0] ?? null;
-  const photoTitle = placeForm.placePhotoTitle.value.trim();
+  const name = placeNameInput.value.trim();
+  const description = placeDescriptionInput.value.trim();
+  const photoFile = placePhotoFileInput?.files?.[0] ?? null;
+  const photoTitle = placePhotoTitleInput.value.trim();
 
   if (!name) {
     placeMessage.textContent = 'El nombre es obligatorio';
@@ -69,6 +73,7 @@ const handleCreatePlace = async (event) => {
     placeMessage.className = 'alert success';
     placeMessage.style.display = 'block';
     placeForm.reset();
+    placeNameInput.focus();
     await loadPlaces();
   } catch (error) {
     placeMessage.textContent = error.message;

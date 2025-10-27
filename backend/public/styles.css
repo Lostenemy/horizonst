@@ -139,6 +139,12 @@ button:hover {
   gap: 1rem;
 }
 
+.form-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 .actions {
   display: flex;
   gap: 0.5rem;

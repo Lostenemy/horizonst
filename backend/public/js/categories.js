@@ -9,6 +9,10 @@ if (!user) {
 const categoryForm = document.getElementById('categoryForm');
 const categoryMessage = document.getElementById('categoryMessage');
 const categoriesList = document.getElementById('categoriesList');
+const categoryNameInput = document.getElementById('categoryName');
+const categoryDescriptionInput = document.getElementById('categoryDescription');
+const categoryPhotoFileInput = document.getElementById('categoryPhotoFile');
+const categoryPhotoTitleInput = document.getElementById('categoryPhotoTitle');
 
 let categories = [];
 
@@ -42,10 +46,10 @@ const loadCategories = async () => {
 const handleCreateCategory = async (event) => {
   event.preventDefault();
   categoryMessage.style.display = 'none';
-  const name = categoryForm.categoryName.value.trim();
-  const description = categoryForm.categoryDescription.value.trim();
-  const photoFile = categoryForm.categoryPhotoFile?.files?.[0] ?? null;
-  const photoTitle = categoryForm.categoryPhotoTitle.value.trim();
+  const name = categoryNameInput.value.trim();
+  const description = categoryDescriptionInput.value.trim();
+  const photoFile = categoryPhotoFileInput?.files?.[0] ?? null;
+  const photoTitle = categoryPhotoTitleInput.value.trim();
 
   if (!name) {
     categoryMessage.textContent = 'El nombre es obligatorio';
@@ -69,6 +73,7 @@ const handleCreateCategory = async (event) => {
     categoryMessage.className = 'alert success';
     categoryMessage.style.display = 'block';
     categoryForm.reset();
+    categoryNameInput.focus();
     await loadCategories();
   } catch (error) {
     categoryMessage.textContent = error.message;

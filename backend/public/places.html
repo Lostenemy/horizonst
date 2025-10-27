@@ -29,19 +29,19 @@
         <form id="placeForm" class="form-grid">
           <div>
             <label for="placeName">Nombre</label>
-            <input type="text" id="placeName" required />
+            <input type="text" id="placeName" name="placeName" required />
           </div>
           <div>
             <label for="placeDescription">Descripción</label>
-            <input type="text" id="placeDescription" placeholder="Zona o departamento" />
+            <input type="text" id="placeDescription" name="placeDescription" placeholder="Zona o departamento" />
           </div>
           <div>
             <label for="placePhotoFile">Imagen (opcional)</label>
-            <input type="file" id="placePhotoFile" accept="image/*" />
+            <input type="file" id="placePhotoFile" name="placePhotoFile" accept="image/*" />
           </div>
           <div>
             <label for="placePhotoTitle">Título de la imagen</label>
-            <input type="text" id="placePhotoTitle" placeholder="Descripción (opcional)" />
+            <input type="text" id="placePhotoTitle" name="placePhotoTitle" placeholder="Descripción (opcional)" />
           </div>
           <div class="actions">
             <button type="submit">Guardar</button>
