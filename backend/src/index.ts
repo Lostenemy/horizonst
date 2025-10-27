@@ -4,6 +4,7 @@ import { config } from './config';
 import { initMqtt } from './services/mqttService';
 import { startAlarmMonitor } from './services/alarmMonitor';
 import { pool } from './db/pool';
+import { runMigrations } from './db/migrations';
 
 const server = http.createServer(app);
 
@@ -12,6 +13,8 @@ const start = async () => {
     const client = await pool.connect();
     client.release();
     console.log('Connected to PostgreSQL');
+    await runMigrations();
+    console.log('Database migrations applied');
     await initMqtt();
     startAlarmMonitor();
     server.listen(config.port, config.host, () => {
