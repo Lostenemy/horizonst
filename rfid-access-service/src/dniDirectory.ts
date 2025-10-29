@@ -13,9 +13,12 @@ const parseKeyValueLines = (raw: string): MacDniMap => {
       .filter(Boolean)
       .map((entry) => {
         const [mac, dni] = entry.split('=');
-        return [normalizeMac(mac), (dni || '').trim()];
+        const normalizedMac = normalizeMac(mac);
+        return normalizedMac ? [normalizedMac, (dni || '').trim()] : null;
       })
-      .filter(([mac, dni]) => Boolean(mac) && Boolean(dni)) as [string, string][]
+      .filter((entry): entry is [string, string] => {
+        return Array.isArray(entry) && Boolean(entry[0]) && Boolean(entry[1]);
+      })
   );
 };
 
@@ -30,7 +33,10 @@ const coerceMapping = (value: unknown): MacDniMap => {
       if (typeof entry === 'string') {
         const [mac, dni] = entry.split('=');
         if (mac && dni) {
-          result.push([normalizeMac(mac), dni.trim()]);
+          const normalizedMac = normalizeMac(mac);
+          if (normalizedMac) {
+            result.push([normalizedMac, dni.trim()]);
+          }
         }
         continue;
       }
@@ -57,7 +63,10 @@ const coerceMapping = (value: unknown): MacDniMap => {
         const mac = macField;
         const dni = dniField;
         if (mac && dni) {
-          result.push([normalizeMac(mac), dni.trim()]);
+          const normalizedMac = normalizeMac(mac);
+          if (normalizedMac) {
+            result.push([normalizedMac, dni.trim()]);
+          }
         }
       }
     }

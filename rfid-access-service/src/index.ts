@@ -1,4 +1,10 @@
-import mqtt, { IClientOptions, IClientPublishOptions, MqttClient } from 'mqtt';
+import mqtt, {
+  type IClientOptions,
+  type IClientPublishOptions,
+  type ISubscriptionGrant,
+  type MqttClient,
+  type QoS
+} from 'mqtt';
 import axios, { AxiosError } from 'axios';
 import { config } from './config.js';
 import { DniDirectory } from './dniDirectory.js';
@@ -47,6 +53,29 @@ const axiosInstance = axios.create({
   timeout: config.authApi.timeoutMs
 });
 
+const parseQoS = (input: unknown, fallback: QoS = 0): QoS => {
+  if (input === undefined || input === null) {
+    return fallback;
+  }
+
+  if (typeof input === 'number') {
+    if (input === 0 || input === 1 || input === 2) {
+      return input;
+    }
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(String(input), 10);
+  if (parsed === 0 || parsed === 1 || parsed === 2) {
+    return parsed as QoS;
+  }
+
+  return fallback;
+};
+
+const subscriptionQoS: QoS = parseQoS(config.subscriptions.qos, 1);
+const publishingQoS: QoS = parseQoS(config.publishing.qos, 1);
+
 if (config.authApi.apiKey) {
   axiosInstance.defaults.headers.common.Authorization = `Bearer ${config.authApi.apiKey}`;
 }
@@ -85,7 +114,7 @@ const publishCommand = async (
   }
 
   const options: IClientPublishOptions = {
-    qos: config.publishing.qos,
+    qos: publishingQoS,
     retain: config.publishing.retain
   };
 
@@ -231,20 +260,24 @@ const start = async (): Promise<void> => {
 
   client.on('connect', () => {
     logger.info({ clientId }, 'Connected to MQTT broker');
-    client.subscribe(config.subscriptions.topic, { qos: config.subscriptions.qos }, (error, granted) => {
-      if (error) {
-        logger.error({ err: error }, 'Failed to subscribe to RFID topic');
-        return;
+    client.subscribe(
+      config.subscriptions.topic,
+      { qos: subscriptionQoS },
+      (error: Error | null, granted: ISubscriptionGrant[]) => {
+        if (error) {
+          logger.error({ err: error }, 'Failed to subscribe to RFID topic');
+          return;
+        }
+        logger.info({ granted }, 'Subscribed to RFID topic');
       }
-      logger.info({ granted }, 'Subscribed to RFID topic');
-    });
+    );
   });
 
-  client.on('error', (error) => {
+  client.on('error', (error: Error) => {
     logger.error({ err: error }, 'MQTT client error');
   });
 
-  client.on('message', (topic, message) => {
+  client.on('message', (topic: string, message: Buffer) => {
     processMessage(client, topic, message).catch((error) => {
       logger.error({ err: error, topic }, 'Unhandled error processing RFID message');
     });
