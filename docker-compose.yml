@@ -31,6 +31,27 @@ services:
     networks:
       - horizonst
 
+  rfid_access:
+    build:
+      context: ./rfid-access-service
+    env_file:
+      - ./rfid-access-service/.env
+    environment:
+      - MQTT_HOST=emqx
+      - MQTT_PORT=1883
+      - MQTT_USER=${MQTT_USER:-Horizon@user2024}
+      - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+    depends_on:
+      - emqx
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    networks:
+      - horizonst
+
   postgres:
     image: postgres:15-alpine
     environment:
