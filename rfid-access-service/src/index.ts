@@ -2,8 +2,7 @@ import mqtt, {
   type IClientOptions,
   type IClientPublishOptions,
   type ISubscriptionGrant,
-  type MqttClient,
-  type QoS
+  type MqttClient
 } from 'mqtt';
 import axios, { AxiosError } from 'axios';
 import { config } from './config.js';
@@ -52,6 +51,8 @@ const topicMatcher = buildTopicMatcher(config.subscriptions.topic);
 const axiosInstance = axios.create({
   timeout: config.authApi.timeoutMs
 });
+
+type QoS = 0 | 1 | 2;
 
 const parseQoS = (input: unknown, fallback: QoS = 0): QoS => {
   if (input === undefined || input === null) {
@@ -263,12 +264,17 @@ const start = async (): Promise<void> => {
     client.subscribe(
       config.subscriptions.topic,
       { qos: subscriptionQoS },
-      (error: Error | null, granted: ISubscriptionGrant[]) => {
+      (error: Error | null, granted?: ISubscriptionGrant[]) => {
         if (error) {
           logger.error({ err: error }, 'Failed to subscribe to RFID topic');
           return;
         }
-        logger.info({ granted }, 'Subscribed to RFID topic');
+
+        if (granted && granted.length > 0) {
+          logger.info({ granted }, 'Subscribed to RFID topic');
+        } else {
+          logger.warn('Subscribed to RFID topic without grant details');
+        }
       }
     );
   });
