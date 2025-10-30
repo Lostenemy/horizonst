@@ -9,12 +9,20 @@ services:
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USER=${MQTT_USER:-Horizon@user2024}
       - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+      - RFID_WEB_ENABLED=${RFID_WEB_ENABLED:-1}
+      - RFID_WEB_PORT=${RFID_WEB_PORT:-8080}
+      - RFID_WEB_SESSION_SECRET=${RFID_WEB_SESSION_SECRET:-rfid-access-secret}
+      - RFID_WEB_USERNAME=${RFID_WEB_USERNAME:-admin}
+      - RFID_WEB_PASSWORD=${RFID_WEB_PASSWORD:-admin}
+      - RFID_WEB_HISTORY_SIZE=${RFID_WEB_HISTORY_SIZE:-25}
     restart: unless-stopped
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
+    ports:
+      - "${RFID_WEB_PORT:-8080}:${RFID_WEB_PORT:-8080}"
     networks:
       - rfid_access_net
 

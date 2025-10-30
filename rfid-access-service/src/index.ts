@@ -9,7 +9,15 @@ import { config } from './config.js';
 import { DniDirectory } from './dniDirectory.js';
 import { logger } from './logger.js';
 import { normalizeMac, safeJsonParse } from './utils.js';
-import type { AuthApiResponse, RfidScanMessage } from './types.js';
+import { startWebInterface, type HistoryEvent, type WebInterfaceController } from './webServer.js';
+import type {
+  AccessDecision,
+  AccessEvaluationResult,
+  AuthApiResponse,
+  PublishedCommand,
+  RfidScanMessage,
+  SimulationRequest
+} from './types.js';
 
 const buildTopicMatcher = (pattern: string): { regex: RegExp; macGroupIndex: number | null } => {
   const escapeRegex = (segment: string): string => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -81,8 +89,6 @@ if (config.authApi.apiKey) {
   axiosInstance.defaults.headers.common.Authorization = `Bearer ${config.authApi.apiKey}`;
 }
 
-type AccessDecision = 'GRANTED' | 'DENIED';
-
 interface PublishContext {
   client: MqttClient;
   mac: string;
@@ -97,7 +103,7 @@ const publishCommand = async (
   decision: AccessDecision,
   context: PublishContext,
   extra?: Record<string, unknown>
-): Promise<void> => {
+): Promise<PublishedCommand> => {
   const payloadBase = {
     decision,
     cardId: context.cardId,
@@ -129,6 +135,12 @@ const publishCommand = async (
   });
 
   logger.info({ topic, decision, cardId: context.cardId, dni: context.dni }, 'Published actuator command');
+  return {
+    topic,
+    payload,
+    qos: options.qos as PublishedCommand['qos'],
+    retain: Boolean(options.retain)
+  };
 };
 
 const handleAccessDecision = async (
@@ -138,18 +150,23 @@ const handleAccessDecision = async (
   cardId: string,
   dni: string | null,
   reason?: string
-): Promise<void> => {
+): Promise<PublishedCommand[]> => {
   const topics = config.publishTopicsForMac(mac);
   const publishContext: PublishContext = { client, mac, cardId, dni, reason };
 
   if (decision === 'GRANTED') {
-    await publishCommand(client, topics.green, decision, publishContext, { signal: 'GREEN' });
-  } else {
-    await Promise.all([
-      publishCommand(client, topics.red, decision, publishContext, { signal: 'RED' }),
-      publishCommand(client, topics.alarm, decision, publishContext, { signal: 'ALARM' })
-    ]);
+    const publication = await publishCommand(client, topics.green, decision, publishContext, {
+      signal: 'GREEN'
+    });
+    return [publication];
   }
+
+  const [redPublication, alarmPublication] = await Promise.all([
+    publishCommand(client, topics.red, decision, publishContext, { signal: 'RED' }),
+    publishCommand(client, topics.alarm, decision, publishContext, { signal: 'ALARM' })
+  ]);
+
+  return [redPublication, alarmPublication];
 };
 
 const determineAcceptance = (responseData: Partial<AuthApiResponse> | undefined, _status: number): AccessDecision => {
@@ -181,6 +198,60 @@ const extractReason = (responseData: Partial<AuthApiResponse> | undefined): stri
 
 const dniDirectory = new DniDirectory(config.directory);
 
+let webInterfaceController: WebInterfaceController | null = null;
+
+interface EvaluationContext extends SimulationRequest {
+  source: 'mqtt' | 'web';
+}
+
+const evaluateScan = async (
+  client: MqttClient,
+  context: EvaluationContext
+): Promise<AccessEvaluationResult> => {
+  const { mac, cardId, timestamp, additional, source } = context;
+
+  const dni = await dniDirectory.getDni(mac);
+
+  if (!dni) {
+    logger.warn({ mac, cardId, source }, 'No DNI mapping for reader MAC');
+    const publications = await handleAccessDecision(client, 'DENIED', mac, cardId, null, 'UNKNOWN_DNI');
+    return { decision: 'DENIED', reason: 'UNKNOWN_DNI', dni: null, publications };
+  }
+
+  try {
+    logger.info({ mac, cardId, dni, source }, 'Requesting access validation');
+
+    const response = await axiosInstance.post<AuthApiResponse>(config.authApi.url, {
+      dni,
+      cardId,
+      readerMac: mac,
+      timestamp: timestamp || new Date().toISOString(),
+      additional
+    });
+
+    const decision = determineAcceptance(response.data, response.status);
+    const reason = extractReason(response.data);
+    const publications = await handleAccessDecision(client, decision, mac, cardId, dni, reason);
+    return { decision, reason, dni, publications };
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    logger.error(
+      {
+        err: axiosError,
+        mac,
+        cardId,
+        source,
+        status: axiosError.response?.status,
+        data: axiosError.response?.data
+      },
+      'Failed to validate access with external API'
+    );
+
+    const publications = await handleAccessDecision(client, 'DENIED', mac, cardId, dni, 'API_ERROR');
+    return { decision: 'DENIED', reason: 'API_ERROR', dni, publications };
+  }
+};
+
 const processMessage = async (client: MqttClient, topic: string, payloadBuffer: Buffer): Promise<void> => {
   const messageString = payloadBuffer.toString('utf-8').trim();
   const parsed = safeJsonParse<RfidScanMessage>(messageString);
@@ -203,43 +274,25 @@ const processMessage = async (client: MqttClient, topic: string, payloadBuffer: 
     return;
   }
 
-  const dni = await dniDirectory.getDni(mac);
+  const evaluation = await evaluateScan(client, {
+    mac,
+    cardId,
+    timestamp: parsed?.timestamp,
+    additional: parsed?.additional,
+    source: 'mqtt'
+  });
 
-  if (!dni) {
-    logger.warn({ mac, cardId }, 'No DNI mapping for reader MAC');
-    await handleAccessDecision(client, 'DENIED', mac, cardId, null, 'UNKNOWN_DNI');
-    return;
-  }
+  logger.info({ mac, cardId, decision: evaluation.decision, dni: evaluation.dni }, 'Processed RFID scan');
 
-  try {
-    logger.info({ mac, cardId, dni }, 'Requesting access validation');
-
-    const response = await axiosInstance.post<AuthApiResponse>(config.authApi.url, {
-      dni,
+  if (webInterfaceController) {
+    const event: HistoryEvent = {
+      ...evaluation,
+      mac,
       cardId,
-      readerMac: mac,
       timestamp: parsed?.timestamp || new Date().toISOString(),
-      additional: parsed?.additional
-    });
-
-    const decision = determineAcceptance(response.data, response.status);
-    const reason = extractReason(response.data);
-
-    await handleAccessDecision(client, decision, mac, cardId, dni, reason);
-  } catch (error) {
-    const axiosError = error as AxiosError;
-    logger.error(
-      {
-        err: axiosError,
-        mac,
-        cardId,
-        status: axiosError.response?.status,
-        data: axiosError.response?.data
-      },
-      'Failed to validate access with external API'
-    );
-
-    await handleAccessDecision(client, 'DENIED', mac, cardId, dni, 'API_ERROR');
+      source: 'mqtt'
+    };
+    webInterfaceController.recordEvent(event);
   }
 };
 
@@ -258,6 +311,17 @@ const start = async (): Promise<void> => {
   };
 
   const client = mqtt.connect(url, options);
+
+  try {
+    webInterfaceController = await startWebInterface({
+      config: config.webInterface,
+      simulateScan: async (payload: SimulationRequest) =>
+        evaluateScan(client, { ...payload, source: 'web' })
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to start web test interface');
+    throw error;
+  }
 
   client.on('connect', () => {
     logger.info({ clientId }, 'Connected to MQTT broker');
@@ -292,6 +356,13 @@ const start = async (): Promise<void> => {
   const gracefulShutdown = (): void => {
     logger.info('Shutting down RFID access service');
     dniDirectory.stop();
+    if (webInterfaceController) {
+      webInterfaceController
+        .close()
+        .catch((error) => {
+          logger.error({ err: error }, 'Error closing web test interface');
+        });
+    }
     client.end(false, {}, () => {
       process.exit(0);
     });

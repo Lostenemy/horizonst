@@ -158,6 +158,14 @@ export const config = {
     alarmTemplate: process.env.RFID_ALARM_TOPIC_TEMPLATE || 'rfid/{mac}/actuators/alarm',
     payloadFormat: process.env.RFID_COMMAND_PAYLOAD_FORMAT || 'json'
   },
+  webInterface: {
+    enabled: parseBoolean(process.env.RFID_WEB_ENABLED, false),
+    port: parsePort(process.env.RFID_WEB_PORT, 8080),
+    sessionSecret: process.env.RFID_WEB_SESSION_SECRET || 'rfid-access-secret',
+    username: process.env.RFID_WEB_USERNAME || 'admin',
+    password: process.env.RFID_WEB_PASSWORD || 'admin',
+    historySize: Math.max(1, parseNonNegativeInt(process.env.RFID_WEB_HISTORY_SIZE, 50))
+  },
   publishTopicsForMac(mac: string) {
     const normalizedMac = mac.trim().toLowerCase();
     return {
