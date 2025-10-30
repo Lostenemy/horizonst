@@ -33,12 +33,22 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    docker compose up --build -d
    ```
    Esto levantará:
-   - `app`: API y portal web (puerto interno 3000).
+  - `app`: API y portal web (puerto interno 3000).
+  - `rfid_access`: microservicio Node.js que valida lecturas RFID frente a una API externa y gobierna los actuadores MQTT.
    - `postgres`: base de datos PostgreSQL inicializada con `db/schema.sql` y `db/seed.sql`.
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (usuario: `admin@horizonst.com.es`, contraseña: `admin`).
    - `emqx`: broker MQTT expuesto en el puerto `1887` del host (sin TLS) y con dashboard interno en `http://127.0.0.1:18083/`.
 
-4. **Acceder al portal:**
+4. **(Opcional) Lanzar únicamente el microservicio RFID:**
+   Si solo necesita depurar el flujo de validación RFID, puede emplear el `docker-compose.rfid-access.yml` incluido en la raíz
+   del proyecto:
+   ```bash
+   docker compose -f docker-compose.rfid-access.yml up --build -d
+   ```
+   Este archivo genera un contenedor aislado `rfid_access` dentro de su propia red `rfid_access_net`. Ajuste las variables de
+   entorno `MQTT_HOST`, `MQTT_PORT`, `MQTT_USER` y `MQTT_PASS` si desea conectarse a un broker diferente al predeterminado.
+
+5. **Acceder al portal:**
    - Durante el desarrollo puede acceder a `http://127.0.0.1:3000/`. En producción debe hacerlo a través de Nginx por `https://horizonst.com.es/`.
    - Inicie sesión con:
      - Usuario: `admin@horizonst.com.es`
@@ -48,11 +58,13 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 ## Estructura del proyecto
 
 ```
-backend/          # Servidor Node.js + TypeScript
-frontend/public/  # Portal HTML5 + JS servido de forma estática
-nginx/            # Configuración de referencia para el proxy inverso externo
-db/               # Definiciones SQL de esquema y datos iniciales
+backend/             # Servidor Node.js + TypeScript
+frontend/public/     # Portal HTML5 + JS servido de forma estática
+nginx/               # Configuración de referencia para el proxy inverso externo
+rfid-access-service/ # Servicio independiente para control de accesos RFID mediante MQTT
+db/                  # Definiciones SQL de esquema y datos iniciales
 docker-compose.yml
+docker-compose.rfid-access.yml
 ```
 
 El portal web se mantiene en `frontend/public` y se copia a `backend/public` durante el empaquetado para que las páginas estáticas acompañen a la API.
@@ -97,6 +109,22 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
     mosquitto_sub -h <dominio> -p 1887 -t test/# -u <usuario> -P <contraseña>
     mosquitto_pub -h <dominio> -p 1887 -t test/ping -m "hello" -u <usuario> -P <contraseña>
     ```
+
+## Servicio de control de accesos RFID
+
+El contenedor `rfid_access` se encarga de procesar los eventos MQTT publicados por los lectores RFID y de consultar una API REST
+externa que confirmará o denegará el acceso. Según la respuesta, el servicio envía órdenes al actuador (luces verde/roja y
+alarma) mediante nuevos topics MQTT.
+
+- **Suscripción:** por defecto escucha `rfid/readers/+/scan` (configurable vía `RFID_READER_TOPIC`).
+- **Autenticación externa:** realice peticiones `POST` a `RFID_AUTH_API_URL` con los datos `{ dni, cardId, readerMac }`. El
+  servicio interpreta como aceptación un `accepted: true` o un `status`/`result` igual a `ACCEPTED`/`GRANTED`.
+- **Control de actuadores:** publica comandos en `rfid/{mac}/actuators/green`, `rfid/{mac}/actuators/red` y
+  `rfid/{mac}/actuators/alarm`. El formato puede ser `json` o `text` (`RFID_COMMAND_PAYLOAD_FORMAT`).
+- **Mapeo MAC ↔ DNI:** configure `RFID_MAC_DNI_MAP` con un JSON o lista `mac=dni`, y opcionalmente complemente con un fichero (`RFID_MAC_DNI_FILE`) o un directorio remoto (`RFID_MAC_DNI_DIRECTORY_URL`) que se recarga periódicamente (`RFID_MAC_DNI_REFRESH_MS`). El modo `RFID_MAC_DNI_LOOKUP_STRATEGY` permite precargar los datos o consultarlos bajo demanda.
+- **Interfaz de pruebas:** activando `RFID_WEB_ENABLED=1` se expone un panel protegido por usuario y contraseña (`RFID_WEB_USERNAME`/`RFID_WEB_PASSWORD`) en `http://127.0.0.1:${HTTP_PORT:-3001}${BASE_PATH:-/}`. Desde allí se pueden simular lecturas introduciendo el ID de tarjeta y la MAC del lector, revisar el histórico reciente y consultar los mensajes publicados a los actuadores para cada decisión. El endpoint `GET /health` facilita comprobar el estado del servicio desde el balanceador o los healthchecks de Docker.
+- **Variables adicionales:** revise `rfid-access-service/.env.example` para conocer todos los ajustes disponibles
+  (timeouts, credenciales MQTT, etc.).
 
 ## Proxy inverso Nginx externo
 
