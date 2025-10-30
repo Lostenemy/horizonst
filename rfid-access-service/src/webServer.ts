@@ -2,6 +2,7 @@ import express from 'express';
 import session from 'express-session';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 
 import { logger } from './logger.js';
 import type { AccessEvaluationResult, SimulationRequest } from './types.js';
@@ -9,6 +10,7 @@ import type { AccessEvaluationResult, SimulationRequest } from './types.js';
 export interface WebInterfaceConfig {
   enabled: boolean;
   port: number;
+  basePath: string;
   sessionSecret: string;
   username: string;
   password: string;
@@ -57,12 +59,22 @@ export const startWebInterface = async ({
   }
 
   const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
+
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok' });
+  });
+
+  const basePath = config.basePath;
   const history: HistoryEvent[] = [];
   const recordEvent = buildHistoryRecorder(history, config.historySize);
 
-  app.use(express.json({ limit: '1mb' }));
+  const router = express.Router();
 
-  app.use(
+  router.use(express.json({ limit: '1mb' }));
+
+  router.use(
     session({
       secret: config.sessionSecret,
       resave: false,
@@ -70,7 +82,8 @@ export const startWebInterface = async ({
       cookie: {
         httpOnly: true,
         sameSite: 'lax',
-        secure: false
+        secure: false,
+        path: basePath === '/' ? '/' : `${basePath}`
       }
     })
   );
@@ -84,7 +97,7 @@ export const startWebInterface = async ({
     res.status(401).json({ error: 'UNAUTHENTICATED' });
   };
 
-  app.post('/api/login', (req, res) => {
+  router.post('/api/login', (req, res) => {
     const { username, password } = req.body ?? {};
 
     if (typeof username !== 'string' || typeof password !== 'string') {
@@ -106,7 +119,7 @@ export const startWebInterface = async ({
     res.json({ authenticated: true, username });
   });
 
-  app.post('/api/logout', ensureAuthenticated, (req, res) => {
+  router.post('/api/logout', ensureAuthenticated, (req, res) => {
     if (req.session) {
       req.session.destroy((error) => {
         if (error) {
@@ -118,18 +131,18 @@ export const startWebInterface = async ({
     res.json({ authenticated: false });
   });
 
-  app.get('/api/session', (req, res) => {
+  router.get('/api/session', (req, res) => {
     res.json({
       authenticated: Boolean(req.session?.authenticated),
       username: req.session?.username ?? null
     });
   });
 
-  app.get('/api/history', ensureAuthenticated, (_req, res) => {
+  router.get('/api/history', ensureAuthenticated, (_req, res) => {
     res.json({ history });
   });
 
-  app.post('/api/simulate', ensureAuthenticated, async (req, res) => {
+  router.post('/api/simulate', ensureAuthenticated, async (req, res) => {
     const { cardId, mac, timestamp, additional } = req.body ?? {};
 
     if (typeof cardId !== 'string' || cardId.trim() === '') {
@@ -180,18 +193,48 @@ export const startWebInterface = async ({
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const publicDir = path.join(currentDir, '..', 'public');
 
-  app.use(express.static(publicDir));
+  const staticCacheControl = (filePath: string): string => {
+    const ext = path.extname(filePath);
+    if (ext === '.html') {
+      return 'no-store';
+    }
 
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(publicDir, 'index.html'));
+    if (ext === '.js') {
+      return 'public, max-age=300, immutable';
+    }
+
+    if (ext === '.css' || ext === '.png' || ext === '.svg' || ext === '.ico') {
+      return 'public, max-age=3600';
+    }
+
+    return 'public, max-age=300';
+  };
+
+  router.use(
+    express.static(publicDir, {
+      index: false,
+      setHeaders: (res, servedPath) => {
+        res.setHeader('Cache-Control', staticCacheControl(servedPath));
+      }
+    })
+  );
+
+  const indexTemplate = await readFile(path.join(publicDir, 'index.html'), 'utf8');
+  const basePathForClient = basePath === '/' ? '' : basePath;
+
+  router.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('html').send(indexTemplate.replace(/__BASE_PATH__/g, basePathForClient));
   });
+
+  app.use(basePath, router);
 
   let controllerClose: () => Promise<void> = async () => {};
 
   await new Promise<void>((resolve, reject) => {
     const server = app
-      .listen(config.port, () => {
-        logger.info({ port: config.port }, 'Web test interface listening');
+      .listen(config.port, '0.0.0.0', () => {
+        logger.info({ port: config.port, basePath }, 'Web test interface listening');
         resolve();
       })
       .on('error', (error) => {

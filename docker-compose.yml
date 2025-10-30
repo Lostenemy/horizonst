@@ -41,8 +41,9 @@ services:
       - MQTT_PORT=1883
       - MQTT_USER=${MQTT_USER:-Horizon@user2024}
       - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+      - HTTP_PORT=${HTTP_PORT:-3001}
+      - BASE_PATH=${BASE_PATH:-/elecnor}
       - RFID_WEB_ENABLED=${RFID_WEB_ENABLED:-1}
-      - RFID_WEB_PORT=${RFID_WEB_PORT:-8080}
       - RFID_WEB_SESSION_SECRET=${RFID_WEB_SESSION_SECRET:-rfid-access-secret}
       - RFID_WEB_USERNAME=${RFID_WEB_USERNAME:-admin}
       - RFID_WEB_PASSWORD=${RFID_WEB_PASSWORD:-admin}
@@ -56,7 +57,12 @@ services:
         max-size: "50m"
         max-file: "3"
     ports:
-      - "${RFID_WEB_PORT:-8080}:${RFID_WEB_PORT:-8080}"
+      - "127.0.0.1:${HTTP_PORT:-3001}:${HTTP_PORT:-3001}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${HTTP_PORT:-3001}/health"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
     networks:
       - horizonst
 

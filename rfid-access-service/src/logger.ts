@@ -1,5 +1,12 @@
-import pino, { type Logger, type LoggerOptions } from 'pino';
+import { createRequire } from 'node:module';
+import type { Logger, LoggerOptions } from 'pino';
 import { config } from './config.js';
+
+const require = createRequire(import.meta.url);
+const pinoModule = require('pino');
+const pinoFactory: (options?: LoggerOptions) => Logger = (
+  pinoModule && pinoModule.default ? pinoModule.default : pinoModule
+) as (options?: LoggerOptions) => Logger;
 
 const options: LoggerOptions = {
   level: config.logLevel,
@@ -16,4 +23,4 @@ const options: LoggerOptions = {
       : undefined
 };
 
-export const logger: Logger = pino(options);
+export const logger: Logger = pinoFactory(options);

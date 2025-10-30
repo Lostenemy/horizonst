@@ -21,6 +21,18 @@ const historyEmpty = document.getElementById('history-empty');
 
 let historyData = [];
 
+const RAW_BASE_PATH = window.__RFID_BASE_PATH__ || '';
+const BASE_PATH = !RAW_BASE_PATH || RAW_BASE_PATH === '/' ? '' : RAW_BASE_PATH;
+
+const withBasePath = (path) => {
+  if (!path) {
+    return BASE_PATH || '/';
+  }
+
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${BASE_PATH}${normalized}` || normalized;
+};
+
 const parseJsonSafely = (raw) => {
   if (!raw || raw.trim() === '') {
     return undefined;
@@ -156,7 +168,7 @@ const showResult = (event) => {
 
 const loadHistory = async () => {
   try {
-    const data = await fetchJson('/api/history');
+    const data = await fetchJson(withBasePath('/api/history'));
     historyData = Array.isArray(data?.history) ? data.history : [];
     renderHistory();
   } catch (error) {
@@ -166,7 +178,7 @@ const loadHistory = async () => {
 
 const checkSession = async () => {
   try {
-    const session = await fetchJson('/api/session', { method: 'GET' });
+    const session = await fetchJson(withBasePath('/api/session'), { method: 'GET' });
     if (session.authenticated) {
       sessionUsername.textContent = session.username ?? '';
       toggleViews(true);
@@ -188,7 +200,7 @@ loginForm.addEventListener('submit', async (event) => {
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
 
-    await fetchJson('/api/login', {
+    await fetchJson(withBasePath('/api/login'), {
       method: 'POST',
       body: JSON.stringify({ username, password })
     });
@@ -207,7 +219,7 @@ loginForm.addEventListener('submit', async (event) => {
 
 logoutButton.addEventListener('click', async () => {
   try {
-    await fetchJson('/api/logout', { method: 'POST' });
+    await fetchJson(withBasePath('/api/logout'), { method: 'POST' });
   } catch (error) {
     console.error('Error al cerrar sesión', error);
   } finally {
@@ -252,7 +264,7 @@ simulateForm.addEventListener('submit', async (event) => {
   }
 
   try {
-    const result = await fetchJson('/api/simulate', {
+    const result = await fetchJson(withBasePath('/api/simulate'), {
       method: 'POST',
       body: JSON.stringify({ cardId, mac, timestamp, additional })
     });

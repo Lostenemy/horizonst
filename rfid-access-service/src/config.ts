@@ -19,6 +19,27 @@ const parsePort = (value: string | undefined, fallback: number): number => {
   return parsed;
 };
 
+const normalizeBasePath = (value: string | undefined): string => {
+  if (!value) {
+    return '/';
+  }
+
+  let normalized = value.trim();
+  if (normalized === '') {
+    return '/';
+  }
+
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+
+  if (normalized.length > 1 && normalized.endsWith('/')) {
+    normalized = normalized.replace(/\/+$/, '');
+  }
+
+  return normalized;
+};
+
 const parseNonNegativeInt = (value: string | undefined, fallback: number): number => {
   if (value === undefined) {
     return fallback;
@@ -160,7 +181,8 @@ export const config = {
   },
   webInterface: {
     enabled: parseBoolean(process.env.RFID_WEB_ENABLED, false),
-    port: parsePort(process.env.RFID_WEB_PORT, 8080),
+    port: parsePort(process.env.HTTP_PORT ?? process.env.RFID_WEB_PORT, 3001),
+    basePath: normalizeBasePath(process.env.BASE_PATH),
     sessionSecret: process.env.RFID_WEB_SESSION_SECRET || 'rfid-access-secret',
     username: process.env.RFID_WEB_USERNAME || 'admin',
     password: process.env.RFID_WEB_PASSWORD || 'admin',

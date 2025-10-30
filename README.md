@@ -122,7 +122,7 @@ alarma) mediante nuevos topics MQTT.
 - **Control de actuadores:** publica comandos en `rfid/{mac}/actuators/green`, `rfid/{mac}/actuators/red` y
   `rfid/{mac}/actuators/alarm`. El formato puede ser `json` o `text` (`RFID_COMMAND_PAYLOAD_FORMAT`).
 - **Mapeo MAC ↔ DNI:** configure `RFID_MAC_DNI_MAP` con un JSON o lista `mac=dni`, y opcionalmente complemente con un fichero (`RFID_MAC_DNI_FILE`) o un directorio remoto (`RFID_MAC_DNI_DIRECTORY_URL`) que se recarga periódicamente (`RFID_MAC_DNI_REFRESH_MS`). El modo `RFID_MAC_DNI_LOOKUP_STRATEGY` permite precargar los datos o consultarlos bajo demanda.
-- **Interfaz de pruebas:** activando `RFID_WEB_ENABLED=1` se expone un panel en `http://127.0.0.1:${RFID_WEB_PORT:-8080}` (puerto reenviado por Docker) protegido por usuario y contraseña (`RFID_WEB_USERNAME`/`RFID_WEB_PASSWORD`). Desde allí se pueden simular lecturas introduciendo el ID de tarjeta y la MAC del lector, revisar el histórico reciente y consultar los mensajes publicados a los actuadores para cada decisión.
+- **Interfaz de pruebas:** activando `RFID_WEB_ENABLED=1` se expone un panel protegido por usuario y contraseña (`RFID_WEB_USERNAME`/`RFID_WEB_PASSWORD`) en `http://127.0.0.1:${HTTP_PORT:-3001}${BASE_PATH:-/}`. Desde allí se pueden simular lecturas introduciendo el ID de tarjeta y la MAC del lector, revisar el histórico reciente y consultar los mensajes publicados a los actuadores para cada decisión. El endpoint `GET /health` facilita comprobar el estado del servicio desde el balanceador o los healthchecks de Docker.
 - **Variables adicionales:** revise `rfid-access-service/.env.example` para conocer todos los ajustes disponibles
   (timeouts, credenciales MQTT, etc.).
 
