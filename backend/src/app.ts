@@ -13,6 +13,8 @@ import messageRouter from './routes/messages';
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(cors());
 app.use(json({ limit: '10mb' }));
 app.use(urlencoded({ extended: true, limit: '10mb' }));

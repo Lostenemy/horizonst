@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="./" />
     <title>HorizonST Access Control</title>
-    <link rel="stylesheet" href="/administracion/styles.css" />
+    <link rel="stylesheet" href="./styles.css" />
     <style>
       body {
         display: flex;
@@ -59,8 +60,9 @@
       </form>
       <div class="error-message" id="errorMessage"></div>
     </div>
+    <script src="./js/base.js"></script>
     <script type="module">
-      import { setToken, setCurrentUser } from './js/api.js';
+      import { apiPost, setCurrentUser, setToken } from './js/api.js';
 
       const form = document.getElementById('loginForm');
       const errorMessage = document.getElementById('errorMessage');
@@ -73,26 +75,17 @@
         const password = form.password.value;
 
         try {
-          const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-          });
-          if (!response.ok) {
-            const body = await response.json().catch(() => ({}));
-            throw new Error(body.message || 'No se pudo iniciar sesión');
-          }
-          const data = await response.json();
+          const data = await apiPost('/auth/login', { email, password });
           setToken(data.token);
           setCurrentUser(data.user);
-          window.location.href = '/dashboard.html';
+          window.location.href = 'dashboard.html';
         } catch (error) {
           errorMessage.textContent = error.message;
         }
       });
 
       if (localStorage.getItem('authToken')) {
-        window.location.href = '/dashboard.html';
+        window.location.href = 'dashboard.html';
       }
     </script>
   </body>
