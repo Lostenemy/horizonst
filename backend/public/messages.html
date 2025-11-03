@@ -3,23 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="./" />
     <title>Mensajes MQTT | HorizonST</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header>
       <h1>HorizonST · Mensajes</h1>
       <nav>
-        <a href="/dashboard.html">Resumen</a>
-        <a href="/devices.html">Dispositivos</a>
-        <a href="/device-create.html" class="admin-only">Alta dispositivos</a>
-        <a href="/users.html" class="admin-only">Usuarios</a>
-        <a href="/places.html">Lugares</a>
-        <a href="/categories.html">Categorías</a>
-        <a href="/gateways.html">Gateways</a>
-        <a href="/messages.html" class="active">Mensajes</a>
-        <a href="/history.html">Históricos</a>
-        <a href="/alarms.html">Alarmas</a>
+        <a href="dashboard.html">Resumen</a>
+        <a href="devices.html">Dispositivos</a>
+        <a href="device-create.html" class="admin-only">Alta dispositivos</a>
+        <a href="users.html" class="admin-only">Usuarios</a>
+        <a href="places.html">Lugares</a>
+        <a href="categories.html">Categorías</a>
+        <a href="gateways.html">Gateways</a>
+        <a href="messages.html" class="active">Mensajes</a>
+        <a href="history.html">Históricos</a>
+        <a href="alarms.html">Alarmas</a>
         <a href="#" id="logoutLink">Salir</a>
       </nav>
     </header>
@@ -43,6 +44,7 @@
       </section>
     </main>
     <footer>&copy; <span id="year"></span> HorizonST</footer>
-    <script type="module" src="/js/messages.js"></script>
+    <script src="./js/base.js"></script>
+    <script type="module" src="./js/messages.js"></script>
   </body>
 </html>

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HorizonST Indoor Positioning</title>
+    <meta
+      name="description"
+      content="Sistema de posicionamiento indoor scanless para almacenes. Precisión centimétrica, integración sencilla y visibilidad total de tus operaciones."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header" role="banner">
+      <div class="site-header__container">
+        <a class="brand" href="#hero" aria-label="Inicio HorizonST">
+          <span class="brand__logo" aria-hidden="true">HST</span>
+          <span class="brand__text">
+            <strong>HorizonST</strong>
+            <span>Indoor Positioning</span>
+          </span>
+        </a>
+        <nav class="site-header__nav" aria-label="Navegación principal">
+          <a class="nav-link" href="#beneficios">Beneficios</a>
+          <a class="nav-link" href="#tecnologia">Tecnología</a>
+          <a class="nav-link" href="#casos">Casos de uso</a>
+          <a class="nav-link" href="#faq">FAQ</a>
+        </nav>
+        <a class="btn btn--primary btn--small" href="#contacto">Agenda una demo</a>
+      </div>
+    </header>
+
+    <main>
+      <section id="hero" class="hero" aria-labelledby="hero-title">
+        <div class="hero__content">
+          <span class="badge">Nuevo</span>
+          <h1 id="hero-title">Posiciona cada activo en tu almacén sin escaneos ni fricciones</h1>
+          <p>
+            HorizonST Indoor Positioning digitaliza tu inventario en tiempo real.
+            Visualiza pallets, carretillas y operarios con precisión centimétrica,
+            anticipa incidencias y coordina los flujos de trabajo sin depender de
+            lecturas manuales.
+          </p>
+          <ul class="hero__highlights" aria-label="Principales beneficios">
+            <li>
+              <strong>Scanless total:</strong> seguimiento automático cada pocos segundos.
+            </li>
+            <li>
+              <strong>Implementación veloz:</strong> piloto operativo en menos de una semana.
+            </li>
+            <li>
+              <strong>Contenedores dedicados:</strong> cada empresa con su propia app personalizada.
+            </li>
+          </ul>
+          <div class="hero__cta">
+            <a class="btn btn--primary" href="#contacto">Solicita una demo</a>
+            <a class="btn btn--ghost" href="#tour">Explora la plataforma</a>
+          </div>
+        </div>
+        <div class="hero__media" aria-hidden="true">
+          <div class="glow"></div>
+          <img src="illustration-warehouse.svg" alt="Ilustración de almacén digital" />
+          <div class="hero__stats">
+            <article class="stat">
+              <span class="stat__value">&lt; 30 cm</span>
+              <span class="stat__label">Desviación promedio</span>
+            </article>
+            <article class="stat">
+              <span class="stat__value">99,9 %</span>
+              <span class="stat__label">Disponibilidad garantizada</span>
+            </article>
+            <article class="stat">
+              <span class="stat__value">24/7</span>
+              <span class="stat__label">Soporte especializado</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="beneficios" class="section section--light">
+        <div class="section__header">
+          <h2>Diseñado para la realidad de los almacenes modernos</h2>
+          <p>
+            Nuestro sistema combina beacons BLE de baja energía, algoritmos de
+            trilateración propios y analítica avanzada para entregarte datos
+            accionables en segundos.
+          </p>
+        </div>
+        <div class="grid grid--features">
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M32 14c-9.94 0-18 8.06-18 18a2 2 0 0 0 4 0c0-7.72 6.28-14 14-14s14 6.28 14 14a2 2 0 0 0 4 0c0-9.94-8.06-18-18-18Zm0-10C17.64 4 6 15.64 6 30a2 2 0 0 0 4 0C10 18.97 19.97 9 32 9s22 9.97 22 21a2 2 0 0 0 4 0C58 15.64 46.36 4 32 4Zm0 34a6 6 0 1 0 0 12 6 6 0 0 0 0-12Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Scanless de verdad</h3>
+            <p>
+              Los activos se localizan automáticamente cada pocos segundos. El sistema aprende y se adapta a la
+              distribución de tu almacén sin líneas de visión.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M32 10a22 22 0 1 0 22 22A22 22 0 0 0 32 10Zm0 40a18 18 0 1 1 18-18 18 18 0 0 1-18 18Zm0-30a12 12 0 1 0 12 12 12 12 0 0 0-12-12Zm0 16a4 4 0 1 1 4-4 4 4 0 0 1-4 4Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Precisión centimétrica</h3>
+            <p>
+              Sensores calibrados y filtros de datos inteligentes aseguran desviaciones inferiores a 30 cm incluso con
+              interferencias.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M12 50h40a2 2 0 0 0 0-4H12a2 2 0 0 0 0 4Zm40-32H36l4.24-4.24a2 2 0 0 0-2.83-2.83l-8 8A2 2 0 0 0 30 22h22a2 2 0 0 0 0-4Zm0 12H32l4.24-4.24a2 2 0 1 0-2.83-2.83l-8 8A2 2 0 0 0 26 34h26a2 2 0 0 0 0-4Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Despliegue rápido</h3>
+            <p>
+              Plantillas de instalación, etiquetas autoconfigurables y monitoreo remoto. Lanza un piloto en menos de una
+              semana.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M52 12H12a4 4 0 0 0-4 4v32a4 4 0 0 0 4 4h40a4 4 0 0 0 4-4V16a4 4 0 0 0-4-4Zm0 36H12V16h40Zm-7-22H35a3 3 0 0 0-3 3v10h6v-7h7Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Integraciones abiertas</h3>
+            <p>
+              APIs REST y MQTT listas para conectar con tu WMS, ERP o sistemas de mantenimiento. Lleva eventos críticos a
+              tus flujos actuales.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M18 10a2 2 0 0 0-2 2v40a2 2 0 0 0 3.24 1.53L32 43.1l12.76 10.43A2 2 0 0 0 48 52V12a2 2 0 0 0-2-2Zm2 5.65 10 8.17 10-8.17V48.2l-10-8.17-10 8.17Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Experiencia a medida</h3>
+            <p>
+              Cada empresa accede desde un contenedor dedicado con una app personalizada, alineada con sus procesos y
+              branding corporativo.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="tour" class="section section--muted">
+        <div class="section__header">
+          <h2>Visualiza la operación desde un único panel</h2>
+          <p>
+            Mapas dinámicos, flujos automatizados y analítica de rendimiento conviven en una interfaz intuitiva que tu
+            equipo adopta en minutos.
+          </p>
+        </div>
+        <div class="visual-grid">
+          <figure class="visual-card visual-card--map" role="presentation">
+            <figcaption>Mapa dinámico con zonas de seguridad y tracking en tiempo real.</figcaption>
+          </figure>
+          <figure class="visual-card visual-card--timeline" role="presentation">
+            <figcaption>Timeline de incidencias con contexto y recomendaciones de acción.</figcaption>
+          </figure>
+          <figure class="visual-card visual-card--kpi" role="presentation">
+            <figcaption>KPIs de eficiencia y SLA visibles para toda la organización.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="tecnologia" class="section section--accent">
+        <div class="section__content">
+          <h2>Capas tecnológicas que trabajan en sincronía</h2>
+          <ul class="stack">
+            <li>
+              <strong>Capta.</strong> Gateways inteligentes recogen señales BLE y las
+              envían de forma segura a la nube HorizonST.
+            </li>
+            <li>
+              <strong>Procesa.</strong> Motor de posicionamiento con algoritmos de
+              time-difference-of-arrival y filtros Kalman optimizados para entornos
+              industriales.
+            </li>
+            <li>
+              <strong>Actúa.</strong> Panel de control dedicado para tu empresa, desplegado en un contenedor privado con tu
+              branding, alertas en tiempo real, mapas dinámicos y workflows automáticos.
+            </li>
+          </ul>
+        </div>
+        <div class="section__visual">
+          <div class="pill">
+            <span class="pill__title">99,9% uptime</span>
+            <span class="pill__subtitle">Respaldo 24/7 y SLA garantizado</span>
+          </div>
+          <div class="pill">
+            <span class="pill__title">API segura</span>
+            <span class="pill__subtitle">OAuth2, TLS 1.3 y auditoría completa</span>
+          </div>
+          <div class="pill">
+            <span class="pill__title">Escala modular</span>
+            <span class="pill__subtitle">De 1 a 10M de eventos diarios</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="casos" class="section section--light">
+        <div class="section__header">
+          <h2>Casos de uso listos para desplegar</h2>
+          <p>
+            HorizonST está ayudando a operadores logísticos, fabricantes y retailers a
+            dominar sus flujos operativos.
+          </p>
+        </div>
+        <div class="grid grid--usecases">
+          <article class="case">
+            <h3>Inventario en tiempo real</h3>
+            <p>
+              Localiza pallets críticos y productos de alta rotación en segundos.
+              Reduce pérdidas y evita paradas por falta de stock.
+            </p>
+          </article>
+          <article class="case">
+            <h3>Optimización de picking</h3>
+            <p>
+              Mide recorridos, identifica cuellos de botella y asigna rutas óptimas
+              para cada operario.
+            </p>
+          </article>
+          <article class="case">
+            <h3>Seguridad laboral</h3>
+            <p>
+              Define zonas seguras, genera alertas por proximidad y conserva un
+              historial auditado de incidentes.
+            </p>
+          </article>
+          <article class="case">
+            <h3>Analytics avanzadas</h3>
+            <p>
+              Dashboards personalizados, exportación automática y predicciones
+              basadas en IA para planificar tu capacidad.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section--light section--testimonials" aria-labelledby="testimonios">
+        <div class="section__header">
+          <h2 id="testimonios">Historias de clientes</h2>
+          <p>
+            Empresas líderes ya gestionan almacenes complejos con HorizonST. Esto es lo que comentan tras los primeros
+            meses de adopción.
+          </p>
+        </div>
+        <div class="testimonials">
+          <article class="testimonial" aria-label="Testimonio de LogiTrans">
+            <div class="testimonial__logo" aria-hidden="true">LogiTrans</div>
+            <blockquote>
+              “Reducimos un 28% los tiempos de picking y tenemos trazabilidad total de operarios y mercancía crítica. El
+              panel dedicado para nuestra red de almacenes fue clave para la adopción.”
+            </blockquote>
+            <p class="testimonial__author">Laura Pérez · Directora de Operaciones</p>
+          </article>
+          <article class="testimonial" aria-label="Testimonio de IberRetail">
+            <div class="testimonial__logo" aria-hidden="true">IberRetail</div>
+            <blockquote>
+              “Las alertas proactivas y la precisión centimétrica nos permiten abastecer tiendas urbanas sin retrasos. La
+              integración con nuestro ERP se completó en días.”
+            </blockquote>
+            <p class="testimonial__author">Andrés Muñoz · Responsable Logístico</p>
+          </article>
+          <article class="testimonial" aria-label="Testimonio de PharmaLink">
+            <div class="testimonial__logo" aria-hidden="true">PharmaLink</div>
+            <blockquote>
+              “HorizonST superó los requisitos regulatorios y nos entregó evidencia automática para auditorías. El equipo
+              respondió 24/7 durante el despliegue.”
+            </blockquote>
+            <p class="testimonial__author">Marta Vives · Compliance & Calidad</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="faq" class="section section--muted" aria-labelledby="faq-title">
+        <div class="section__header">
+          <h2 id="faq-title">Preguntas frecuentes</h2>
+          <p>
+            Resolvemos dudas habituales antes de que agendes tu demo. Si necesitas más detalles, nuestro equipo estará
+            encantado de ayudarte.
+          </p>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>¿Necesito cableado o infraestructura nueva?</summary>
+            <p>
+              No. Nuestros beacons inalámbricos operan con baterías de larga duración y disponemos de gateways cableados o
+              inalámbricos según tu escenario. Ambos se integran con tu red existente de manera segura.
+            </p>
+          </details>
+          <details>
+            <summary>¿Cómo se personaliza el panel para cada empresa?</summary>
+            <p>
+              Desplegamos un contenedor dedicado con tu branding, usuarios y reglas de negocio. La configuración inicial
+              se realiza durante el onboarding y puede evolucionar con tu operación.
+            </p>
+          </details>
+          <details>
+            <summary>¿Qué pasa si ya tengo un WMS o ERP?</summary>
+            <p>
+              Contamos con conectores REST y MQTT. Nuestro equipo técnico te guía para sincronizar inventarios, órdenes y
+              alertas sin interrumpir tus sistemas actuales.
+            </p>
+          </details>
+          <details>
+            <summary>¿Cuál es el tiempo típico de retorno de inversión?</summary>
+            <p>
+              Dependiendo del tamaño de la operación, nuestros clientes recuperan la inversión entre los 6 y 9 meses
+              gracias a reducción de incidencias, mejora de productividad y control de stock.
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <section class="section section--dark" id="contacto">
+        <div class="section__content">
+          <h2>Agenda una sesión estratégica</h2>
+          <p>
+            Cuéntanos tus retos logísticos y te mostraremos cómo HorizonST puede
+            resolverlos en pocas semanas.
+          </p>
+          <form class="contact" aria-label="Formulario de contacto" novalidate>
+            <div class="contact__row">
+              <label for="nombre">Nombre</label>
+              <input id="nombre" name="nombre" type="text" placeholder="Nombre y apellidos" required />
+              <small class="field-hint">Cuéntanos quién liderará la iniciativa.</small>
+              <p class="field-error" id="error-nombre" role="alert"></p>
+            </div>
+            <div class="contact__row">
+              <label for="empresa">Empresa</label>
+              <input id="empresa" name="empresa" type="text" placeholder="Nombre de la empresa" required />
+              <small class="field-hint">Puedes añadir varias sedes o filiales.</small>
+              <p class="field-error" id="error-empresa" role="alert"></p>
+            </div>
+            <div class="contact__row">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" placeholder="tu@empresa.com" required />
+              <small class="field-hint">Usaremos este correo para agendar la demo.</small>
+              <p class="field-error" id="error-email" role="alert"></p>
+            </div>
+            <div class="contact__row">
+              <label for="mensaje">Mensaje</label>
+              <textarea
+                id="mensaje"
+                name="mensaje"
+                rows="4"
+                placeholder="Comparte tus retos logísticos o KPIs clave"
+                required
+              ></textarea>
+              <small class="field-hint">Así adaptamos la sesión a tu realidad operativa.</small>
+              <p class="field-error" id="error-mensaje" role="alert"></p>
+            </div>
+            <button class="btn btn--primary btn--full" type="submit">Reservar una demo personalizada</button>
+            <p class="contact__status" aria-live="polite"></p>
+          </form>
+        </div>
+        <aside class="section__sidebar">
+          <div class="card card--outline">
+            <h3>¿Por qué ahora?</h3>
+            <ul>
+              <li>Recupera la inversión en menos de 9 meses.</li>
+              <li>Reduce hasta un 35% las incidencias por errores de picking.</li>
+              <li>Datos preparados para tus auditorías y certificaciones.</li>
+            </ul>
+          </div>
+          <div class="contact-info">
+            <h4>También puedes escribirnos</h4>
+            <a href="mailto:horizonsmartracker@gmail.com" class="link">horizonsmartracker@gmail.com</a>
+            <p class="contact-info__phone">+34 900 000 123</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer__brand">
+        <span class="brand__logo" aria-hidden="true">HST</span>
+        <div>
+          <strong>HorizonST</strong>
+          <p>Indoor positioning scanless para almacenes.</p>
+        </div>
+      </div>
+      <nav class="footer__nav" aria-label="Navegación secundaria">
+        <a href="#beneficios" class="btn btn--nav">Plataforma</a>
+        <a href="#contacto" class="btn btn--nav">Contacto</a>
+        <a href="#contacto" class="btn btn--nav">Acceso clientes</a>
+      </nav>
+      <div class="footer__legal">
+        <p>&copy; <span id="year"></span> HorizonST. Todos los derechos reservados.</p>
+        <p>
+          <a class="link" href="mailto:horizonsmartracker@gmail.com">horizonsmartracker@gmail.com</a> · CIF B-12345678
+        </p>
+      </div>
+    </footer>
+
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      const form = document.querySelector(".contact");
+      const statusEl = form.querySelector(".contact__status");
+
+      const fields = [
+        { id: "nombre", message: "Indica un nombre para dirigirnos a la persona correcta." },
+        { id: "empresa", message: "Necesitamos saber la empresa o unidad que representas." },
+        { id: "email", message: "Introduce un email corporativo válido." },
+        { id: "mensaje", message: "Comparte el reto que quieres resolver." }
+      ];
+
+      const validateField = ({ id, message }) => {
+        const input = form.querySelector(`#${id}`);
+        const error = form.querySelector(`#error-${id}`);
+        if (!input.checkValidity()) {
+          input.classList.add("is-invalid");
+          input.classList.remove("is-valid");
+          error.textContent = message;
+          return false;
+        }
+        input.classList.remove("is-invalid");
+        input.classList.add("is-valid");
+        error.textContent = "";
+        return true;
+      };
+
+      fields.forEach((field) => {
+        const input = form.querySelector(`#${field.id}`);
+        input.addEventListener("input", () => {
+          validateField(field);
+          statusEl.textContent = "";
+        });
+        input.addEventListener("blur", () => validateField(field));
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const allValid = fields.every((field) => validateField(field));
+        if (!allValid) {
+          statusEl.textContent = "Revisa los campos marcados para completar la solicitud.";
+          statusEl.classList.add("contact__status--error");
+          return;
+        }
+
+        statusEl.classList.remove("contact__status--error");
+        statusEl.textContent = "¡Gracias! Te contactaremos en menos de 24 horas para coordinar la demo.";
+        form.reset();
+        fields.forEach(({ id }) => {
+          const input = form.querySelector(`#${id}`);
+          input.classList.remove("is-valid");
+        });
+      });
+    </script>
+  </body>
+</html>
