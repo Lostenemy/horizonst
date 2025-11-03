@@ -244,32 +244,36 @@ img {
 .hero__media {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 28px;
+  max-width: 460px;
+  margin: 0 auto;
 }
 
 .hero__media img {
-  width: min(420px, 90%);
+  width: min(420px, 100%);
   filter: drop-shadow(0 40px 60px rgba(15, 23, 42, 0.5));
   z-index: 1;
 }
 
 .glow {
   position: absolute;
-  width: 420px;
-  height: 420px;
-  background: radial-gradient(circle, rgba(94, 234, 212, 0.2), transparent 60%);
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(94, 234, 212, 0.18), transparent 60%);
   z-index: 0;
-  transform: translate(-20%, -10%);
+  transform: translate(-10%, -12%);
 }
 
 .hero__stats {
-  position: absolute;
+  position: static;
   display: grid;
   gap: 12px;
-  bottom: 24px;
-  right: 24px;
-  width: min(260px, 80%);
+  width: 100%;
+  max-width: 420px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
 .stat {
@@ -772,10 +776,7 @@ img {
   }
 
   .hero__stats {
-    position: static;
     width: 100%;
-    margin-top: 32px;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }
 
   .hero__highlights {
