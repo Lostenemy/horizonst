@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = window.API_BASE || '/api';
 
 const getToken = () => localStorage.getItem('authToken');
 
@@ -34,13 +34,29 @@ const defaultHeaders = () => {
   return headers;
 };
 
+const redirectToLogin = () => {
+  if (typeof window.joinBasePath === 'function') {
+    window.location.href = window.joinBasePath('index.html');
+    return;
+  }
+  window.location.href = 'index.html';
+};
+
+const callApi = (path, options) => {
+  if (typeof window.apiFetch === 'function') {
+    return window.apiFetch(path, options);
+  }
+  const url = typeof path === 'string' ? `${API_BASE}${path}` : path;
+  return fetch(url, options);
+};
+
 export const apiGet = async (path) => {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await callApi(path, {
     headers: defaultHeaders()
   });
   if (response.status === 401) {
     clearSession();
-    window.location.href = '/';
+    redirectToLogin();
     return;
   }
   if (!response.ok) {
@@ -50,14 +66,14 @@ export const apiGet = async (path) => {
 };
 
 export const apiPost = async (path, body) => {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await callApi(path, {
     method: 'POST',
     headers: defaultHeaders(),
     body: JSON.stringify(body)
   });
   if (response.status === 401) {
     clearSession();
-    window.location.href = '/';
+    redirectToLogin();
     return;
   }
   if (!response.ok) {
@@ -68,14 +84,14 @@ export const apiPost = async (path, body) => {
 };
 
 export const apiPut = async (path, body) => {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await callApi(path, {
     method: 'PUT',
     headers: defaultHeaders(),
     body: JSON.stringify(body)
   });
   if (response.status === 401) {
     clearSession();
-    window.location.href = '/';
+    redirectToLogin();
     return;
   }
   if (!response.ok) {
@@ -86,13 +102,13 @@ export const apiPut = async (path, body) => {
 };
 
 export const apiDelete = async (path) => {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await callApi(path, {
     method: 'DELETE',
     headers: defaultHeaders()
   });
   if (response.status === 401) {
     clearSession();
-    window.location.href = '/';
+    redirectToLogin();
     return;
   }
   if (!response.ok) {

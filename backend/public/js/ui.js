@@ -6,7 +6,11 @@ export const initAuthPage = () => {
     logoutLink.addEventListener('click', (event) => {
       event.preventDefault();
       clearSession();
-      window.location.href = '/';
+      if (typeof window.joinBasePath === 'function') {
+        window.location.href = window.joinBasePath('index.html');
+      } else {
+        window.location.href = 'index.html';
+      }
     });
   }
 
@@ -17,7 +21,11 @@ export const initAuthPage = () => {
 
   const user = getCurrentUser();
   if (!user) {
-    window.location.href = '/';
+    if (typeof window.joinBasePath === 'function') {
+      window.location.href = window.joinBasePath('index.html');
+    } else {
+      window.location.href = 'index.html';
+    }
     return { user: null, isAdmin: false };
   }
 
