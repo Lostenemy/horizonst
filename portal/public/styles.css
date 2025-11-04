@@ -442,11 +442,12 @@ main section {
 
 .brand-intro {
   max-width: var(--max-width);
+  width: min(100%, var(--max-width));
   margin: 0 auto;
   display: grid;
   gap: 32px;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  align-items: center;
+  align-items: start;
 }
 
 .brand-intro__content {
@@ -477,6 +478,7 @@ main section {
   gap: 12px;
   text-align: left;
   color: var(--text-muted);
+  justify-items: start;
 }
 
 .brand-intro__media figcaption {
@@ -542,6 +544,7 @@ main section {
 
 .stats-band {
   max-width: var(--max-width);
+  width: min(100%, var(--max-width));
   margin: 0 auto;
   display: grid;
   gap: 24px;
@@ -580,6 +583,7 @@ main section {
 .section__header,
 .section__content {
   max-width: var(--max-width);
+  width: min(100%, var(--max-width));
   margin: 0 auto;
   text-align: center;
 }
@@ -614,6 +618,7 @@ main section {
   gap: 24px;
   margin: 0 auto;
   max-width: var(--max-width);
+  width: min(100%, var(--max-width));
 }
 
 .grid--features {
@@ -1195,6 +1200,10 @@ main section {
 }
 
 @media (max-width: 768px) {
+  .brand-intro {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .hero {
     grid-template-columns: 1fr;
     text-align: left;
