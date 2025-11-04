@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Horizon Smartraker | Indoor positioning scanless para almacenes</title>
+    <meta
+      name="description"
+      content="Descubre Horizon Smartraker: posicionamiento indoor scanless para almacenes con soluciones IoT BLE y LoRaWAN, precisión centimétrica, contenedores personalizados, APIs abiertas y analítica avanzada."
+    />
+    <meta
+      name="keywords"
+      content="indoor positioning, scanless, almacenes, BLE, LoRaWAN, logística inteligente, localización activos, Horizon Smartraker"
+    />
+    <meta property="og:title" content="HorizonST Indoor Positioning" />
+    <meta
+      property="og:description"
+      content="Posiciona cada activo en tu almacén sin escaneos. Contenedores dedicados, precisión centimétrica y despliegue en días."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_ES" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header" role="banner">
+      <div class="site-header__container">
+        <a class="brand" href="#hero" aria-label="Inicio HorizonST">
+          <span class="brand__logo" aria-hidden="true">HST</span>
+          <span class="brand__text">
+            <strong>HorizonST</strong>
+            <span>Indoor Positioning</span>
+          </span>
+        </a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="principal-nav">
+          <span class="nav-toggle__label">Menú</span>
+        </button>
+        <nav class="site-header__nav" id="principal-nav" aria-label="Navegación principal">
+          <a class="nav-link" href="#empresa">Empresa</a>
+          <a class="nav-link" href="#servicios">Servicios</a>
+          <a class="nav-link" href="#soluciones">Soluciones</a>
+          <a class="nav-link" href="#beneficios">Beneficios</a>
+          <a class="nav-link" href="#tecnologia">Tecnología</a>
+          <a class="nav-link" href="#casos">Casos de uso</a>
+          <a class="nav-link" href="#faq">FAQ</a>
+          <a class="btn btn--ghost btn--small" href="#contacto">Agenda una demo</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section id="hero" class="hero" aria-labelledby="hero-title">
+        <div class="hero__content">
+          <span class="badge">Nuevo</span>
+          <h1 id="hero-title">Posiciona cada activo en tu almacén sin escaneos ni fricciones</h1>
+          <p>
+            Horizon Smartraker Indoor Positioning digitaliza tu inventario en tiempo real
+            combinando sensores BLE y gateways LoRaWAN. Visualiza pallets, carretillas y
+            operarios con precisión centimétrica, anticipa incidencias y coordina los
+            flujos de trabajo sin depender de lecturas manuales.
+          </p>
+          <ul class="hero__highlights" aria-label="Principales beneficios">
+            <li><strong>Scanless total:</strong> seguimiento automático cada pocos segundos.</li>
+            <li><strong>Implementación veloz:</strong> piloto operativo en menos de una semana.</li>
+            <li><strong>Contenedores dedicados:</strong> cada empresa con su propia app personalizada.</li>
+            <li><strong>Hardware IoT propio:</strong> sensores BLE y LoRaWAN listos para tus escenarios.</li>
+          </ul>
+          <div class="hero__cta">
+            <a class="btn btn--primary btn--pulse" href="#contacto">Solicita una demo</a>
+            <a class="btn btn--ghost" href="#tour">Explora la plataforma</a>
+          </div>
+          <div class="hero__logos" aria-label="Clientes que confían en HorizonST">
+            <span class="hero__logos-title">Confían en HorizonST</span>
+            <div class="hero__logo-strip">
+              <span class="logo-pill" aria-hidden="true">LogiTrans</span>
+              <span class="logo-pill" aria-hidden="true">IberRetail</span>
+              <span class="logo-pill" aria-hidden="true">PharmaLink</span>
+              <span class="logo-pill" aria-hidden="true">NordicParts</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero__media" aria-hidden="true">
+          <div class="glow"></div>
+          <div class="hero__screens">
+            <img class="hero__screen hero__screen--primary" src="assets/dashboard-preview.svg" alt="" loading="lazy" />
+            <img class="hero__screen hero__screen--secondary" src="assets/map-preview.svg" alt="" loading="lazy" />
+            <img class="hero__screen hero__screen--tertiary" src="assets/automation-preview.svg" alt="" loading="lazy" />
+          </div>
+          <div class="hero__stats">
+            <article class="stat">
+              <span class="stat__value">&lt; 30 cm</span>
+              <span class="stat__label">Desviación promedio</span>
+            </article>
+            <article class="stat">
+              <span class="stat__value">99,9 %</span>
+              <span class="stat__label">Disponibilidad garantizada</span>
+            </article>
+            <article class="stat">
+              <span class="stat__value">24/7</span>
+              <span class="stat__label">Soporte especializado</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="empresa" class="section section--brand" aria-labelledby="empresa-title">
+        <div class="brand-intro">
+          <div class="brand-intro__content">
+            <span class="badge badge--soft">Quiénes somos</span>
+            <h2 id="empresa-title">Horizon Smartraker</h2>
+            <p>
+              La opción inteligente para la innovación en IoT BLE y LoRaWAN. Nuestra experiencia y tecnología lideran el
+              camino para transformar almacenes, instalaciones y cadenas logísticas con datos fiables en tiempo real.
+            </p>
+            <p>
+              Años de experiencia combinados con una amplia base de conocimientos de IoT otorgan a Horizon Smartraker una gran
+              ventaja. Somos flexibles y eficientes y podemos ofrecer soluciones de dispositivos IoT BLE y LoRaWAN de extremo a
+              extremo en una variedad de campos.
+            </p>
+            <p>
+              Gracias a nuestra amplia gama de capacidades, tus productos IoT no solo son competitivos, sino que están
+              fabricados con la más alta calidad y preparados para integrarse con tus sistemas actuales.
+            </p>
+            <ul class="brand-intro__list">
+              <li>Despliegues llave en mano con sensores, gateways y software especializados.</li>
+              <li>Equipos multidisciplinares para automatización, telecontrol y seguimiento de activos.</li>
+              <li>Aplicaciones personalizadas servidas desde contenedores dedicados para cada empresa.</li>
+            </ul>
+          </div>
+          <figure class="brand-intro__media">
+            <img
+              src="illustration-warehouse.svg"
+              alt="Ilustración de un almacén conectado con el panel Horizon Smartraker"
+              loading="lazy"
+            />
+            <figcaption>Implementamos paneles de control privados para cada cliente y operación.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="servicios" class="section section--light section--services" aria-labelledby="servicios-title">
+        <div class="section__header">
+          <h2 id="servicios-title">Servicios IoT BLE y LoRaWAN</h2>
+          <p>
+            Qué soluciones de IoT BLE y LoRaWAN podemos ofrecer para digitalizar tus operaciones industriales y logísticas.
+          </p>
+        </div>
+        <div class="grid grid--services">
+          <article class="card card--service">
+            <svg class="card__icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M20 12h24a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4h-9l-3 6h6a4 4 0 1 1 0 8h-6l3 6h6a4 4 0 0 1 4 4v4H20v-4a4 4 0 0 1 4-4h6l-3-6h-6a4 4 0 0 1 0-8h6l-3-6h-6a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Automatización</h3>
+            <p>Implantación de sistemas de automatización y telecontrol adaptados a tus procesos críticos.</p>
+          </article>
+          <article class="card card--service">
+            <svg class="card__icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M32 8a10 10 0 1 1-10 10A10 10 0 0 1 32 8Zm0 20a18 18 0 0 0-18 18v4h36v-4A18 18 0 0 0 32 28Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Seguimiento de personal y activos</h3>
+            <p>Inspección y verificación continua de los recursos energéticos y operativos utilizados.</p>
+          </article>
+          <article class="card card--service">
+            <svg class="card__icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M32 6a22 22 0 0 1 22 22c0 10.67-10.62 21.19-18.19 27.44a6 6 0 0 1-7.62 0C20.62 49.19 10 38.67 10 28A22 22 0 0 1 32 6Zm0 30a8 8 0 1 0-8-8 8 8 0 0 0 8 8Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Seguimiento de ubicación</h3>
+            <p>Servicios de asesoramiento para mapear procesos y localizar recursos en entornos complejos.</p>
+          </article>
+          <article class="card card--service">
+            <svg class="card__icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M12 18a6 6 0 0 1 6-6h28a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6Zm10 8a4 4 0 1 0 4-4 4 4 0 0 0-4 4Zm14 0a4 4 0 1 0 4-4 4 4 0 0 0-4 4Zm-7 8a10 10 0 0 0-10 10h28a10 10 0 0 0-10-10Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Vigilancia de entorno</h3>
+            <p>Gestión medioambiental y control de condiciones cumpliendo la legislación aplicable.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="soluciones" class="section section--alt section--solutions" aria-labelledby="soluciones-title">
+        <div class="section__header">
+          <h2 id="soluciones-title">Soluciones adaptadas a tus industrias</h2>
+          <p>
+            Dispositivos de IoT especialmente construidos para resolver desafíos específicos. Nuestros desarrollos proporcionan
+            seguimiento confiable, vigilancia, notificación y satisfacción de tus necesidades con integración sencilla.
+          </p>
+        </div>
+        <div class="grid grid--solutions">
+          <article class="card card--solution">
+            <h3>Sensores IoT</h3>
+            <p>
+              Sensores inalámbricos multifunción BLE y LoRaWAN que permiten escalabilidad, recopilación eficiente y monitoreo
+              de activos con autonomía extrema.
+            </p>
+            <ul>
+              <li>Medición de temperatura, humedad, movimiento y más.</li>
+              <li>Validación de datos en tiempo real para decisiones fiables.</li>
+            </ul>
+          </article>
+          <article class="card card--solution">
+            <h3>Gateways IoT</h3>
+            <p>
+              Puertas de enlace inteligentes que cierran la brecha entre el campo y la nube, gestionando comunicaciones seguras
+              y procesamiento local.
+            </p>
+            <ul>
+              <li>Compatibles con despliegues cableados o inalámbricos.</li>
+              <li>Orquestación de datos para analítica y workflows.</li>
+            </ul>
+          </article>
+          <article class="card card--solution">
+            <h3>Balizas y rastreadores</h3>
+            <p>
+              Balizas Bluetooth y dispositivos de rastreo personalizables que aportan visibilidad total de personas, vehículos y
+              mercancías.
+            </p>
+            <ul>
+              <li>Transmisión constante con baterías de larga duración.</li>
+              <li>Identificación precisa incluso en entornos densos.</li>
+            </ul>
+          </article>
+          <article class="card card--solution">
+            <h3>Gestión de almacén</h3>
+            <p>
+              Soluciones específicas para almacenes que combinan tracking de activos, protección del personal y workflows
+              automatizados.
+            </p>
+            <ul>
+              <li>Mapas dinámicos, zonas seguras y alertas inmediatas.</li>
+              <li>Integración directa con tu WMS o ERP.</li>
+            </ul>
+          </article>
+          <article class="card card--solution">
+            <h3>Gestión de instalaciones</h3>
+            <p>
+              Sensores y dispositivos conectan tus instalaciones en una red unificada para optimizar recursos y energía.
+            </p>
+            <ul>
+              <li>Monitorización ambiental, ocupación y energía.</li>
+              <li>Alertas automáticas para mantenimiento predictivo.</li>
+            </ul>
+          </article>
+          <article class="card card--solution">
+            <h3>Transporte inteligente</h3>
+            <p>
+              Rastreo en tiempo real de vehículos, mercancías y flotas, garantizando entregas seguras y eficientes.
+            </p>
+            <ul>
+              <li>Control de temperatura y seguridad de conductores.</li>
+              <li>Modos celular, GPS y Bluetooth para cualquier ruta.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section--band" aria-label="Indicadores de Horizon Smartraker">
+        <div class="stats-band">
+          <article class="stats-band__item">
+            <span class="stats-band__value">25</span>
+            <span class="stats-band__label">Partners</span>
+          </article>
+          <article class="stats-band__item">
+            <span class="stats-band__value">105</span>
+            <span class="stats-band__label">Clientes</span>
+          </article>
+          <article class="stats-band__item">
+            <span class="stats-band__value">12</span>
+            <span class="stats-band__label">Especialistas</span>
+          </article>
+          <article class="stats-band__item">
+            <span class="stats-band__value">25</span>
+            <span class="stats-band__label">Proyectos</span>
+          </article>
+        </div>
+      </section>
+
+      <section id="beneficios" class="section section--light">
+        <div class="section__header">
+          <h2>Diseñado para la realidad de los almacenes modernos</h2>
+          <p>
+            Nuestro sistema combina beacons BLE de baja energía, algoritmos propios de posicionamiento y analítica avanzada
+            para entregarte datos accionables en segundos.
+          </p>
+        </div>
+        <div class="grid grid--features">
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M32 14c-9.94 0-18 8.06-18 18a2 2 0 0 0 4 0c0-7.72 6.28-14 14-14s14 6.28 14 14a2 2 0 0 0 4 0c0-9.94-8.06-18-18-18Zm0-10C17.64 4 6 15.64 6 30a2 2 0 0 0 4 0C10 18.97 19.97 9 32 9s22 9.97 22 21a2 2 0 0 0 4 0C58 15.64 46.36 4 32 4Zm0 34a6 6 0 1 0 0 12 6 6 0 0 0 0-12Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Scanless de verdad</h3>
+            <p>
+              Los activos se localizan automáticamente cada pocos segundos. El sistema aprende la distribución de tu almacén
+              sin líneas de visión.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M32 10a22 22 0 1 0 22 22A22 22 0 0 0 32 10Zm0 40a18 18 0 1 1 18-18 18 18 0 0 1-18 18Zm0-30a12 12 0 1 0 12 12 12 12 0 0 0-12-12Zm0 16a4 4 0 1 1 4-4 4 4 0 0 1-4 4Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Precisión centimétrica</h3>
+            <p>
+              Sensores calibrados y filtros de datos inteligentes aseguran desviaciones inferiores a 30 cm incluso con
+              interferencias.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M12 50h40a2 2 0 0 0 0-4H12a2 2 0 0 0 0 4Zm40-32H36l4.24-4.24a2 2 0 0 0-2.83-2.83l-8 8A2 2 0 0 0 30 22h22a2 2 0 0 0 0-4Zm0 12H32l4.24-4.24a2 2 0 1 0-2.83-2.83l-8 8A2 2 0 0 0 26 34h26a2 2 0 0 0 0-4Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Despliegue rápido</h3>
+            <p>
+              Plantillas de instalación, etiquetas autoconfigurables y monitoreo remoto. Lanza un piloto en menos de una
+              semana.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M52 12H12a4 4 0 0 0-4 4v32a4 4 0 0 0 4 4h40a4 4 0 0 0 4-4V16a4 4 0 0 0-4-4Zm0 36H12V16h40Zm-7-22H35a3 3 0 0 0-3 3v10h6v-7h7Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Integraciones abiertas</h3>
+            <p>
+              APIs REST y MQTT listas para conectar con tu WMS, ERP o sistemas de mantenimiento. Lleva eventos críticos a tus
+              flujos actuales.
+            </p>
+          </article>
+          <article class="card">
+            <svg class="icon" viewBox="0 0 64 64" aria-hidden="true">
+              <path
+                d="M18 10a2 2 0 0 0-2 2v40a2 2 0 0 0 3.24 1.53L32 43.1l12.76 10.43A2 2 0 0 0 48 52V12a2 2 0 0 0-2-2Zm2 5.65 10 8.17 10-8.17V48.2l-10-8.17-10 8.17Z"
+                fill="currentColor"
+              />
+            </svg>
+            <h3>Experiencia a medida</h3>
+            <p>
+              Cada empresa accede desde un contenedor dedicado con una app personalizada, alineada con sus procesos y branding
+              corporativo.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="tour" class="section section--muted section--showcase">
+        <div class="section__header">
+          <h2>Visualiza la operación desde un único panel</h2>
+          <p>
+            Mapas dinámicos, flujos automatizados y analítica de rendimiento conviven en una interfaz intuitiva que tu equipo
+            adopta en minutos.
+          </p>
+        </div>
+        <div class="showcase">
+          <figure class="showcase__item">
+            <img src="assets/map-preview.svg" loading="lazy" alt="Mapa dinámico con zonas de seguridad y tracking en tiempo real" />
+            <figcaption>Mapa dinámico con zonas de seguridad, densidad por colores y rutas sugeridas.</figcaption>
+          </figure>
+          <figure class="showcase__item">
+            <img
+              src="assets/dashboard-preview.svg"
+              loading="lazy"
+              alt="Panel de control de HorizonST con KPIs y comparativas"
+            />
+            <figcaption>KPIs de eficiencia y SLA visibles para toda la organización.</figcaption>
+          </figure>
+          <figure class="showcase__item">
+            <img
+              src="assets/automation-preview.svg"
+              loading="lazy"
+              alt="Flujos automáticos de HorizonST con reglas condicionales"
+            />
+            <figcaption>Flujos automáticos para alertas, auditorías y mantenimiento preventivo.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section section--alt" id="comparativa" aria-labelledby="comparativa-title">
+        <div class="section__header">
+          <h2 id="comparativa-title">Comparativa frente a sistemas tradicionales</h2>
+          <p>
+            HorizonST combina posicionamiento scanless y automatización. Reduce dependencias de hardware costoso, elimina
+            escaneos manuales y entrega analítica contextual desde el primer día.
+          </p>
+        </div>
+        <div class="comparison" role="list">
+          <article class="comparison__column comparison__column--modern" role="listitem">
+            <h3>HorizonST</h3>
+            <ul>
+              <li>Actualizaciones cada 2 segundos con precisión &lt; 30 cm.</li>
+              <li>Contenedores dedicados y branding personalizado por cliente.</li>
+              <li>Integración REST, MQTT, Webhooks y exportación CSV.</li>
+              <li>Alertas predictivas basadas en IA y workflows sin código.</li>
+              <li>Gateways cableados o inalámbricos, según el escenario operativo.</li>
+            </ul>
+          </article>
+          <article class="comparison__column comparison__column--legacy" role="listitem">
+            <h3>Sistemas tradicionales</h3>
+            <ul>
+              <li>Dependencia de escáneres y líneas de visión complejas.</li>
+              <li>Despliegues de meses con licencias rígidas.</li>
+              <li>Datos aislados y reportes manuales.</li>
+              <li>Alertas reactivas sin contexto operacional.</li>
+              <li>Infraestructura fija que limita la expansión.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="tecnologia" class="section section--accent">
+        <div class="section__content">
+          <h2>Capas tecnológicas que trabajan en sincronía</h2>
+          <p>
+            Desde la captura de señales BLE hasta la entrega de insights personalizados. Nuestro stack asegura seguridad,
+            resiliencia y escalabilidad.
+          </p>
+          <ul class="stack stack--rich">
+            <li><strong>Capta.</strong> Gateways inteligentes recogen señales BLE y las envían de forma segura a la nube HorizonST.</li>
+            <li>
+              <strong>Procesa.</strong> Motor de posicionamiento con algoritmos de time-difference-of-arrival y filtros Kalman
+              optimizados para entornos industriales.
+            </li>
+            <li>
+              <strong>Actúa.</strong> Panel de control dedicado para tu empresa, desplegado en un contenedor privado con tu branding,
+              alertas en tiempo real, mapas dinámicos y workflows automáticos.
+            </li>
+          </ul>
+          <div class="tech-badges" role="group" aria-label="Tecnologías soportadas">
+            <span class="badge-chip">REST</span>
+            <span class="badge-chip">MQTT</span>
+            <span class="badge-chip">Webhooks</span>
+            <span class="badge-chip">OAuth2</span>
+            <span class="badge-chip">TLS 1.3</span>
+            <span class="badge-chip">SAML</span>
+          </div>
+        </div>
+        <div class="section__visual">
+          <div class="pill">
+            <span class="pill__title">99,9% uptime</span>
+            <span class="pill__subtitle">Respaldo 24/7 y SLA garantizado</span>
+          </div>
+          <div class="pill">
+            <span class="pill__title">API segura</span>
+            <span class="pill__subtitle">OAuth2, TLS 1.3 y auditoría completa</span>
+          </div>
+          <div class="pill">
+            <span class="pill__title">Escala modular</span>
+            <span class="pill__subtitle">De 1 a 10M de eventos diarios</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section--muted section--tic" aria-labelledby="tic-title">
+        <div class="tic-grid">
+          <div class="tic-grid__content">
+            <h2 id="tic-title">Tecnologías de Información y Comunicaciones (TIC)</h2>
+            <p>
+              Los avances tecnológicos permiten implantar nuevas formas de producir que mejoran la competitividad y la
+              sostenibilidad. Con Horizon Smartraker desarrollamos dispositivos y aplicaciones a medida para cada cliente.
+            </p>
+            <p>
+              Somos tu socio en proyectos que combinan sensorización, conectividad y plataformas web. Puedes trasladarnos tus
+              consultas y recibirás acompañamiento especializado en cada fase del despliegue.
+            </p>
+            <a class="btn btn--ghost" href="#contacto">Contacta con nuestro equipo</a>
+          </div>
+          <div class="tic-grid__card card card--outline card--outline-light">
+            <h3>Lo que garantizamos</h3>
+            <ul>
+              <li>Ingeniería integral para automatización, monitoreo y telecontrol.</li>
+              <li>Paneles web intuitivos con datos en tiempo real y alarmas configurables.</li>
+              <li>Soporte cercano para integrar soluciones en múltiples industrias.</li>
+            </ul>
+            <p class="tic-grid__cta">¿Listo para innovar? <a class="link" href="#contacto">Solicita tu demo</a>.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="casos" class="section section--light section--usecases">
+        <div class="section__header">
+          <h2>Casos de uso listos para desplegar</h2>
+          <p>
+            HorizonST está ayudando a operadores logísticos, fabricantes y retailers a dominar sus flujos operativos con datos
+            confiables.
+          </p>
+        </div>
+        <div class="grid grid--usecases">
+          <article class="case">
+            <h3>Inventario en tiempo real</h3>
+            <p>
+              Localiza pallets críticos y productos de alta rotación en segundos. Reduce pérdidas y evita paradas por falta de
+              stock.
+            </p>
+          </article>
+          <article class="case">
+            <h3>Optimización de picking</h3>
+            <p>Mide recorridos, identifica cuellos de botella y asigna rutas óptimas para cada operario.</p>
+          </article>
+          <article class="case">
+            <h3>Seguridad laboral</h3>
+            <p>Define zonas seguras, genera alertas por proximidad y conserva un historial auditado de incidentes.</p>
+          </article>
+          <article class="case">
+            <h3>Analytics avanzadas</h3>
+            <p>Dashboards personalizados, exportación automática y predicciones basadas en IA para planificar tu capacidad.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section--light section--testimonials" aria-labelledby="testimonios">
+        <div class="section__header">
+          <h2 id="testimonios">Historias de clientes</h2>
+          <p>
+            Empresas líderes ya gestionan almacenes complejos con HorizonST. Esto es lo que comentan tras los primeros meses de
+            adopción.
+          </p>
+        </div>
+        <div class="testimonials">
+          <article class="testimonial" aria-label="Testimonio de LogiTrans">
+            <div class="testimonial__logo" aria-hidden="true">LogiTrans</div>
+            <blockquote>
+              “Reducimos un 28% los tiempos de picking y tenemos trazabilidad total de operarios y mercancía crítica. El panel
+              dedicado para nuestra red de almacenes fue clave para la adopción.”
+            </blockquote>
+            <p class="testimonial__author">Laura Pérez · Directora de Operaciones</p>
+          </article>
+          <article class="testimonial" aria-label="Testimonio de IberRetail">
+            <div class="testimonial__logo" aria-hidden="true">IberRetail</div>
+            <blockquote>
+              “Las alertas proactivas y la precisión centimétrica nos permiten abastecer tiendas urbanas sin retrasos. La
+              integración con nuestro ERP se completó en días.”
+            </blockquote>
+            <p class="testimonial__author">Andrés Muñoz · Responsable Logístico</p>
+          </article>
+          <article class="testimonial" aria-label="Testimonio de PharmaLink">
+            <div class="testimonial__logo" aria-hidden="true">PharmaLink</div>
+            <blockquote>
+              “HorizonST superó los requisitos regulatorios y nos entregó evidencia automática para auditorías. El equipo respondió
+              24/7 durante el despliegue.”
+            </blockquote>
+            <p class="testimonial__author">Marta Vives · Compliance &amp; Calidad</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="faq" class="section section--muted" aria-labelledby="faq-title">
+        <div class="section__header">
+          <h2 id="faq-title">Preguntas frecuentes</h2>
+          <p>
+            Resolvemos dudas habituales antes de que agendes tu demo. Si necesitas más detalles, nuestro equipo estará encantado
+            de ayudarte.
+          </p>
+        </div>
+        <div class="accordion" role="list">
+          <article class="accordion__item" role="listitem">
+            <button class="accordion__trigger" id="faq-trigger-1" aria-expanded="false" aria-controls="faq-panel-1">
+              ¿Necesito cableado o infraestructura nueva?
+              <span class="accordion__icon" aria-hidden="true"></span>
+            </button>
+            <div class="accordion__panel" id="faq-panel-1" role="region" aria-labelledby="faq-trigger-1" hidden>
+              <p>
+                No. Nuestros beacons operan con baterías de larga duración y disponemos de gateways cableados o inalámbricos
+                según tu escenario. Ambos se integran con tu red existente de manera segura.
+              </p>
+            </div>
+          </article>
+          <article class="accordion__item" role="listitem">
+            <button class="accordion__trigger" id="faq-trigger-2" aria-expanded="false" aria-controls="faq-panel-2">
+              ¿Cómo se personaliza el panel para cada empresa?
+              <span class="accordion__icon" aria-hidden="true"></span>
+            </button>
+            <div class="accordion__panel" id="faq-panel-2" role="region" aria-labelledby="faq-trigger-2" hidden>
+              <p>
+                Desplegamos un contenedor dedicado con tu branding, usuarios y reglas de negocio. La configuración inicial se
+                realiza durante el onboarding y evoluciona junto a tu operación.
+              </p>
+            </div>
+          </article>
+          <article class="accordion__item" role="listitem">
+            <button class="accordion__trigger" id="faq-trigger-3" aria-expanded="false" aria-controls="faq-panel-3">
+              ¿Qué pasa si ya tengo un WMS o ERP?
+              <span class="accordion__icon" aria-hidden="true"></span>
+            </button>
+            <div class="accordion__panel" id="faq-panel-3" role="region" aria-labelledby="faq-trigger-3" hidden>
+              <p>
+                Contamos con conectores REST, MQTT y Webhooks. Nuestro equipo técnico te guía para sincronizar inventarios, órdenes
+                y alertas sin interrumpir tus sistemas actuales.
+              </p>
+            </div>
+          </article>
+          <article class="accordion__item" role="listitem">
+            <button class="accordion__trigger" id="faq-trigger-4" aria-expanded="false" aria-controls="faq-panel-4">
+              ¿Cuál es el tiempo típico de retorno de inversión?
+              <span class="accordion__icon" aria-hidden="true"></span>
+            </button>
+            <div class="accordion__panel" id="faq-panel-4" role="region" aria-labelledby="faq-trigger-4" hidden>
+              <p>
+                Dependiendo del tamaño de la operación, nuestros clientes recuperan la inversión entre 6 y 9 meses gracias a la
+                reducción de incidencias, mejora de productividad y control de stock.
+              </p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section--dark" id="contacto">
+        <div class="section__content">
+          <h2>Agenda una sesión estratégica</h2>
+          <p>
+            Cuéntanos tus retos logísticos y te mostraremos cómo HorizonST puede resolverlos en pocas semanas. Usaremos tus datos
+            únicamente para coordinar la demo.
+          </p>
+          <form class="contact" aria-label="Formulario de contacto" novalidate>
+            <div class="contact__row">
+              <label for="nombre">Nombre</label>
+              <input id="nombre" name="nombre" type="text" placeholder="Nombre y apellidos" autocomplete="name" required />
+              <small class="field-hint">Cuéntanos quién liderará la iniciativa.</small>
+              <p class="field-error" id="error-nombre" role="alert"></p>
+            </div>
+            <div class="contact__row">
+              <label for="empresa">Empresa</label>
+              <input id="empresa" name="empresa" type="text" placeholder="Nombre de la empresa" autocomplete="organization" required />
+              <small class="field-hint">Puedes añadir varias sedes o filiales.</small>
+              <p class="field-error" id="error-empresa" role="alert"></p>
+            </div>
+            <div class="contact__row">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" placeholder="tu@empresa.com" autocomplete="email" required />
+              <small class="field-hint">Usaremos este correo solo para agendar la demo.</small>
+              <p class="field-error" id="error-email" role="alert"></p>
+            </div>
+            <div class="contact__row">
+              <label for="mensaje">Mensaje</label>
+              <textarea
+                id="mensaje"
+                name="mensaje"
+                rows="4"
+                placeholder="Comparte tus retos logísticos o KPIs clave"
+                required
+              ></textarea>
+              <small class="field-hint">Así adaptamos la sesión a tu realidad operativa.</small>
+              <p class="field-error" id="error-mensaje" role="alert"></p>
+            </div>
+            <button class="btn btn--primary btn--full" type="submit">
+              <span class="btn__label">Reservar una demo personalizada</span>
+              <span class="btn__spinner" aria-hidden="true"></span>
+            </button>
+            <p class="contact__status" aria-live="polite" role="status"></p>
+          </form>
+        </div>
+        <aside class="section__sidebar">
+          <div class="card card--outline">
+            <h3>¿Por qué ahora?</h3>
+            <ul>
+              <li>Recupera la inversión en menos de 9 meses.</li>
+              <li>Reduce hasta un 35% las incidencias por errores de picking.</li>
+              <li>Datos preparados para tus auditorías y certificaciones.</li>
+            </ul>
+          </div>
+          <div class="card card--outline card--contact">
+            <h3>También puedes escribirnos</h3>
+            <a href="mailto:horizonsmartracker@gmail.com" class="link">horizonsmartracker@gmail.com</a>
+            <p class="contact-info__phone">+34 900 000 123</p>
+            <p class="contact__privacy">Responderemos en menos de 24 horas.</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer__brand">
+        <span class="brand__logo" aria-hidden="true">HST</span>
+        <div>
+          <strong>HorizonST</strong>
+          <p>Indoor positioning scanless para almacenes.</p>
+        </div>
+      </div>
+      <nav class="footer__nav" aria-label="Navegación secundaria">
+        <a href="#beneficios" class="btn btn--nav">Plataforma</a>
+        <a href="#contacto" class="btn btn--nav">Contacto</a>
+        <a href="#contacto" class="btn btn--nav">Acceso clientes</a>
+      </nav>
+      <div class="footer__badges">
+        <span class="badge-chip">ISO 27001 Ready</span>
+        <span class="badge-chip">Compatible con WMS líderes</span>
+        <span class="badge-chip">Soporte 24/7</span>
+      </div>
+      <div class="footer__legal">
+        <p>&copy; <span id="year"></span> HorizonST. Todos los derechos reservados.</p>
+        <p>
+          <a class="link" href="mailto:horizonsmartracker@gmail.com">horizonsmartracker@gmail.com</a>
+          · CIF B-12345678 · <a class="link" href="#contacto">Aviso legal y privacidad</a>
+        </p>
+        <div class="footer__social" aria-label="Redes sociales">
+          <a class="link" href="https://www.linkedin.com/company/horizonst" target="_blank" rel="noreferrer">LinkedIn</a>
+          <span aria-hidden="true">·</span>
+          <a class="link" href="https://twitter.com/horizonst" target="_blank" rel="noreferrer">Twitter</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      const yearEl = document.getElementById("year");
+      if (yearEl) {
+        yearEl.textContent = new Date().getFullYear();
+      }
+
+      const form = document.querySelector(".contact");
+      const statusEl = form.querySelector(".contact__status");
+      const submitBtn = form.querySelector("button[type='submit']");
+
+      const fields = [
+        { id: "nombre", message: "Indica un nombre para dirigirnos a la persona correcta." },
+        { id: "empresa", message: "Necesitamos saber la empresa o unidad que representas." },
+        { id: "email", message: "Introduce un email corporativo válido." },
+        { id: "mensaje", message: "Comparte el reto que quieres resolver." }
+      ];
+
+      const validateField = ({ id, message }) => {
+        const input = form.querySelector(`#${id}`);
+        const error = form.querySelector(`#error-${id}`);
+        if (!input.checkValidity()) {
+          input.classList.add("is-invalid");
+          input.classList.remove("is-valid");
+          error.textContent = message;
+          return false;
+        }
+        input.classList.remove("is-invalid");
+        input.classList.add("is-valid");
+        error.textContent = "";
+        return true;
+      };
+
+      fields.forEach((field) => {
+        const input = form.querySelector(`#${field.id}`);
+        input.addEventListener("input", () => {
+          validateField(field);
+          statusEl.textContent = "";
+          statusEl.classList.remove("contact__status--error", "contact__status--success");
+        });
+        input.addEventListener("blur", () => validateField(field));
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const allValid = fields.every((field) => validateField(field));
+        if (!allValid) {
+          statusEl.textContent = "Revisa los campos marcados para completar la solicitud.";
+          statusEl.classList.add("contact__status--error");
+          return;
+        }
+
+        statusEl.classList.remove("contact__status--error", "contact__status--success");
+        statusEl.textContent = "Enviando solicitud...";
+        submitBtn.disabled = true;
+        submitBtn.classList.add("btn--loading");
+
+        window.setTimeout(() => {
+          statusEl.textContent = "¡Gracias! Te contactaremos en menos de 24 horas para coordinar la demo.";
+          statusEl.classList.add("contact__status--success");
+          form.reset();
+          fields.forEach(({ id }) => {
+            const input = form.querySelector(`#${id}`);
+            input.classList.remove("is-valid");
+          });
+          submitBtn.disabled = false;
+          submitBtn.classList.remove("btn--loading");
+        }, 900);
+      });
+
+      const navToggle = document.querySelector(".nav-toggle");
+      const nav = document.querySelector(".site-header__nav");
+      const navLinks = nav.querySelectorAll(".nav-link");
+      const navAnchors = nav.querySelectorAll("a[href^='#']");
+
+      navToggle.addEventListener("click", () => {
+        const isExpanded = navToggle.getAttribute("aria-expanded") === "true";
+        navToggle.setAttribute("aria-expanded", String(!isExpanded));
+        nav.classList.toggle("is-open");
+      });
+
+      navAnchors.forEach((link) => {
+        link.addEventListener("click", () => {
+          navToggle.setAttribute("aria-expanded", "false");
+          nav.classList.remove("is-open");
+        });
+      });
+
+      const sections = document.querySelectorAll("main section[id]");
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              navLinks.forEach((link) => {
+                link.classList.toggle(
+                  "nav-link--active",
+                  link.getAttribute("href").slice(1) === entry.target.id
+                );
+              });
+            }
+          });
+        },
+        { rootMargin: "-45% 0px -45% 0px" }
+      );
+
+      sections.forEach((section) => observer.observe(section));
+
+      const accordionTriggers = document.querySelectorAll(".accordion__trigger");
+      accordionTriggers.forEach((trigger) => {
+        trigger.addEventListener("click", () => {
+          const expanded = trigger.getAttribute("aria-expanded") === "true";
+
+          accordionTriggers.forEach((btn) => {
+            if (btn !== trigger) {
+              btn.setAttribute("aria-expanded", "false");
+              const panel = document.getElementById(btn.getAttribute("aria-controls"));
+              panel.hidden = true;
+            }
+          });
+
+          const panel = document.getElementById(trigger.getAttribute("aria-controls"));
+          trigger.setAttribute("aria-expanded", String(!expanded));
+          panel.hidden = expanded;
+        });
+      });
+    </script>
+  </body>
+</html>

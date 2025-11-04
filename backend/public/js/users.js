@@ -7,7 +7,11 @@ if (!currentUser) {
 }
 
 if (!isAdmin) {
-  window.location.href = '/dashboard.html';
+  if (typeof window.joinBasePath === 'function') {
+    window.location.href = window.joinBasePath('dashboard.html');
+  } else {
+    window.location.href = 'dashboard.html';
+  }
 }
 
 const createUserBtn = document.getElementById('createUserBtn');

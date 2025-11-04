@@ -1,0 +1,18 @@
+services:
+  portal:
+    build:
+      context: ./portal
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    ports:
+      - "127.0.0.1:3080:80"
+    networks:
+      - portal_net
+
+networks:
+  portal_net:
+    driver: bridge

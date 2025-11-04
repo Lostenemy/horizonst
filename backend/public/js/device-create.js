@@ -6,7 +6,11 @@ if (!user) {
   throw new Error('Usuario no autenticado');
 }
 if (!isAdmin) {
-  window.location.href = '/devices.html';
+  if (typeof window.joinBasePath === 'function') {
+    window.location.href = window.joinBasePath('devices.html');
+  } else {
+    window.location.href = 'devices.html';
+  }
 }
 
 const form = document.getElementById('deviceCreateForm');
