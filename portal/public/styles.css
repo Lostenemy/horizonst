@@ -510,6 +510,12 @@ main section {
   display: grid;
   gap: clamp(32px, 7vw, 56px);
   justify-content: center;
+  width: 100%;
+}
+
+.section > * {
+  width: min(100%, var(--max-width));
+  margin-inline: auto;
 }
 
 .section--light {
@@ -1200,8 +1206,37 @@ main section {
 }
 
 @media (max-width: 768px) {
+  .section {
+    padding: clamp(48px, 18vw, 72px) clamp(18px, 7vw, 28px);
+    gap: clamp(24px, 9vw, 36px);
+  }
+
+  .section > * {
+    width: 100%;
+    margin-inline: 0;
+  }
+
   .brand-intro {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .section__header,
+  .section__content {
+    text-align: left;
+  }
+
+  .section__header p,
+  .section__content p {
+    margin-inline: 0;
+  }
+
+  .grid,
+  .showcase,
+  .comparison,
+  .testimonials,
+  .stats-band {
+    width: 100%;
+    margin-inline: 0;
   }
 
   .hero {
@@ -1268,6 +1303,11 @@ main section {
 @media (max-width: 520px) {
   body {
     font-size: 16px;
+  }
+
+  .section {
+    padding: clamp(36px, 20vw, 56px) 16px clamp(28px, 18vw, 48px);
+    gap: clamp(20px, 10vw, 28px);
   }
 
   .hero {
