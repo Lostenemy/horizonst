@@ -1237,6 +1237,19 @@ main section {
   .stats-band {
     width: 100%;
     margin-inline: 0;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .grid--services,
+  .grid--solutions,
+  .grid--usecases,
+  .grid--features {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .section--dark {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .hero {
@@ -1278,8 +1291,18 @@ main section {
   }
 
   .hero__stats {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     max-width: none;
+  }
+
+  .stats-band {
+    justify-items: stretch;
+    text-align: left;
+    gap: 20px;
+  }
+
+  .stats-band__item {
+    text-align: left;
   }
 
   .glow {
