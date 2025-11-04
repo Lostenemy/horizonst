@@ -59,22 +59,6 @@ main section {
   scroll-margin-top: 96px;
 }
 
-.skip-link {
-  position: absolute;
-  top: -40px;
-  left: 16px;
-  background: var(--primary);
-  color: var(--text-inverse);
-  padding: 10px 16px;
-  border-radius: 999px;
-  transition: top 0.2s ease;
-  z-index: 20;
-}
-
-.skip-link:focus {
-  top: 16px;
-}
-
 .site-header {
   position: sticky;
   top: 0;
@@ -441,6 +425,64 @@ main section {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
+.badge--soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--primary);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.brand-intro {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: grid;
+  gap: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: center;
+}
+
+.brand-intro__content {
+  text-align: left;
+  display: grid;
+  gap: 16px;
+}
+
+.brand-intro__content p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.brand-intro__list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.brand-intro__list li {
+  list-style: disc;
+}
+
+.brand-intro__media {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.brand-intro__media figcaption {
+  margin: 0;
+  font-size: 14px;
+}
+
 .stat {
   background: rgba(15, 23, 42, 0.65);
   border-radius: 20px;
@@ -484,6 +526,45 @@ main section {
 
 .section--alt {
   background: linear-gradient(180deg, rgba(241, 245, 255, 0.9) 0%, rgba(226, 232, 240, 0.5) 100%);
+}
+
+.section--brand {
+  background: linear-gradient(135deg, rgba(226, 232, 240, 0.5) 0%, rgba(148, 163, 184, 0.1) 100%);
+  color: var(--text-main);
+}
+
+.section--band {
+  background: var(--bg-dark);
+  color: var(--text-inverse);
+  padding: 64px 24px;
+}
+
+.stats-band {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: center;
+  justify-items: center;
+}
+
+.stats-band__item {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+
+.stats-band__value {
+  font-size: clamp(32px, 4vw, 44px);
+  font-weight: 700;
+}
+
+.stats-band__label {
+  font-size: 16px;
+  color: rgba(226, 232, 240, 0.78);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .section--dark {
@@ -538,8 +619,16 @@ main section {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.grid--services {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
 .grid--usecases {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.grid--solutions {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .card {
@@ -567,6 +656,25 @@ main section {
 .card p {
   margin: 0;
   color: var(--text-muted);
+}
+
+.card__icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  color: var(--primary);
+}
+
+.card--solution ul {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  color: var(--text-muted);
+  display: grid;
+  gap: 8px;
+}
+
+.card--solution li {
+  list-style: disc;
 }
 
 .section--dark .card,
@@ -917,9 +1025,67 @@ main section {
   margin-top: 8px;
 }
 
+.card--outline-light {
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
+}
+
+.card--outline-light ul {
+  color: var(--text-muted);
+}
+
+.card--outline-light a {
+  color: var(--primary);
+}
+
 .card--contact {
   display: grid;
   gap: 12px;
+}
+
+.tic-grid {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: grid;
+  gap: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.tic-grid__content {
+  text-align: left;
+  display: grid;
+  gap: 16px;
+}
+
+.tic-grid__content p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.tic-grid__card {
+  display: grid;
+  gap: 16px;
+  text-align: left;
+}
+
+.tic-grid__card ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.tic-grid__card li {
+  list-style: disc;
+}
+
+.tic-grid__cta {
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .contact-info__phone {
