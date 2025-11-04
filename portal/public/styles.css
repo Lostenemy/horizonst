@@ -59,22 +59,6 @@ main section {
   scroll-margin-top: 96px;
 }
 
-.skip-link {
-  position: absolute;
-  top: -40px;
-  left: 16px;
-  background: var(--primary);
-  color: var(--text-inverse);
-  padding: 10px 16px;
-  border-radius: 999px;
-  transition: top 0.2s ease;
-  z-index: 20;
-}
-
-.skip-link:focus {
-  top: 16px;
-}
-
 .site-header {
   position: sticky;
   top: 0;
