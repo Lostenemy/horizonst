@@ -19,10 +19,147 @@ var otherRelationArray = ["A", "A&B", "A|B", "A&B&C", "(A&B)|C", "A|B|C"];
 var filterDuplicateDataRuleArray = ["None", "MAC", "MAC+Data type", "MAC+RAW Data"];
 var fixModeArray = ["OFF", "Periodic fix", "Motion fix"];
 
+function normaliseMk2Battery(record) {
+    if (!record || typeof record !== 'object') {
+        return undefined;
+    }
+    var batt = record.BattVoltage;
+    if (batt === undefined) {
+        batt = record.BaTtVol;
+    }
+    if (typeof batt === 'number') {
+        return Math.round(batt * (batt > 10 ? 1 : 1000));
+    }
+    if (typeof batt === 'string') {
+        var numeric = parseFloat(batt);
+        if (!isNaN(numeric)) {
+            return Math.round(numeric * (numeric > 10 ? 1 : 1000));
+        }
+    }
+    return undefined;
+}
+
+function convertMk2Record(record, gatewayMac) {
+    if (!record || typeof record !== 'object') {
+        return undefined;
+    }
+    var bleMac = record.BLEMAC || record.mac || record.tag;
+    var rssi = record.RSSI;
+    if (rssi === undefined) {
+        rssi = record.rssi;
+    }
+    if (!bleMac || typeof bleMac !== 'string' || typeof rssi !== 'number') {
+        return undefined;
+    }
+
+    var result = {
+        bleMac: bleMac.toUpperCase(),
+        rssi: rssi,
+        gatewayMac: gatewayMac,
+        topic: 'devices/MK2'
+    };
+
+    if (typeof record.AdvType === 'string') {
+        result.advType = record.AdvType;
+    }
+    if (typeof record.RawData === 'string') {
+        result.rawData = record.RawData;
+    }
+    if (typeof record.Format === 'string') {
+        result.format = record.Format;
+    }
+
+    var additionalData = {};
+    for (var key in record) {
+        if (Object.prototype.hasOwnProperty.call(record, key)) {
+            additionalData[key] = record[key];
+        }
+    }
+    result.additionalData = additionalData;
+
+    var batteryVoltageMv = normaliseMk2Battery(record);
+    if (batteryVoltageMv !== undefined) {
+        result.batteryVoltageMv = batteryVoltageMv;
+    }
+
+    return result;
+}
+
+function tryDecodeMk2Payload(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    var trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    var candidatePayloads = [];
+
+    if (trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[') {
+        candidatePayloads.push(trimmed);
+    }
+
+    try {
+        var base64 = Buffer.from(trimmed, 'base64').toString('utf8');
+        if (base64 && (base64.charAt(0) === '{' || base64.charAt(0) === '[')) {
+            candidatePayloads.push(base64);
+        }
+    } catch (e) {
+        // Ignore base64 decoding errors
+    }
+
+    var hex = trimmed.replace(/[^0-9a-fA-F]/g, '');
+    if (hex.length >= 2 && hex.length % 2 === 0) {
+        try {
+            var text = Buffer.from(hex, 'hex').toString('utf8');
+            if (text && (text.charAt(0) === '{' || text.charAt(0) === '[')) {
+                candidatePayloads.push(text);
+            }
+        } catch (err) {
+            // Ignore hex decoding errors
+        }
+    }
+
+    for (var i = 0; i < candidatePayloads.length; i++) {
+        var payload = candidatePayloads[i];
+        try {
+            var decoded = JSON.parse(payload);
+            if (decoded && typeof decoded === 'object' && decoded.gatewayMac && Array.isArray(decoded.records)) {
+                var gatewayMac = String(decoded.gatewayMac).toUpperCase();
+                var records = [];
+                for (var j = 0; j < decoded.records.length; j++) {
+                    var converted = convertMk2Record(decoded.records[j], gatewayMac);
+                    if (converted) {
+                        records.push(converted);
+                    }
+                }
+                return {
+                    flag: 'mk2-json',
+                    gatewayMac: gatewayMac,
+                    length: records.length,
+                    records: records,
+                    rawPayload: decoded
+                };
+            }
+        } catch (parseError) {
+            // Ignore JSON parsing errors for this candidate and continue
+        }
+    }
+
+    return null;
+}
+
 
 function handlePayload(value, msgType, index) {
     try {
-        
+
+        const mk2Json = tryDecodeMk2Payload(value);
+        if (mk2Json) {
+            return mk2Json;
+        }
+
         const hexStrArray = toHexStrArray(value);
         const len = hexStrArray.length;
         if (len > 11) {
