@@ -1248,6 +1248,15 @@ main section {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .tic-grid {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .tic-grid__card {
+    width: 100%;
+  }
+
   .section--dark {
     grid-template-columns: minmax(0, 1fr);
   }
