@@ -2,22 +2,11 @@ import { clearSession, getCurrentUser } from './api.js';
 
 export const initAuthPage = () => {
   const helpers = window.domHelpers || {};
-  const debugMissing = (action, id) => {
-    if (!id) {
-      return;
-    }
-    const stack = new Error(`ui.${action} missing #${id}`).stack;
-    if (console && typeof console.warn === 'function') {
-      console.warn(`[ui.${action}] Elemento no encontrado: #${id}`, { stack });
-    }
-  };
   const fallbackGet = (id) => (typeof id === 'string' && id ? document.getElementById(id) : null);
   const setText = typeof helpers.setText === 'function' ? helpers.setText : (id, text) => {
     const element = fallbackGet(id);
     if (element) {
       element.textContent = text;
-    } else {
-      debugMissing('setText', id);
     }
     return element;
   };
@@ -25,8 +14,6 @@ export const initAuthPage = () => {
     const element = fallbackGet(id);
     if (element && typeof handler === 'function') {
       element.addEventListener(eventName, handler);
-    } else if (!element) {
-      debugMissing(`addListener:${eventName}`, id);
     }
     return element;
   };

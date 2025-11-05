@@ -15,14 +15,12 @@ const startDashboard = () => {
   const summaryCards = getSummaryCards();
 
   if (!summaryCards || !recentTableBody || !recentEmpty || !messagesContainer) {
-    console.error('No se encontraron los contenedores del panel.');
     return;
   }
 
   const renderSummary = (stats) => {
     const container = getSummaryCards();
     if (!container) {
-      console.error('No se encontró el contenedor del resumen para renderizar las estadísticas.');
       return;
     }
     container.innerHTML = '';
@@ -100,7 +98,6 @@ const startDashboard = () => {
   const renderError = (message) => {
     const container = getSummaryCards();
     if (!container) {
-      console.error('No se pudo mostrar el error del resumen:', message);
       return;
     }
     container.innerHTML = `<div class="alert error">${message}</div>`;
@@ -133,10 +130,6 @@ const startDashboard = () => {
         (error && typeof error === 'object' && 'stack' in error && error.stack) ||
         (error && typeof error === 'object' && 'message' in error && error.message) ||
         'No se pudo cargar el resumen.';
-      console.error('No se pudo cargar el resumen del panel:', error);
-      if (error && error.stack) {
-        console.debug('[dashboard] Stack capturado:', error.stack);
-      }
       renderError(message);
     }
   };
