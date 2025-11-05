@@ -134,6 +134,9 @@ const startDashboard = () => {
         (error && typeof error === 'object' && 'message' in error && error.message) ||
         'No se pudo cargar el resumen.';
       console.error('No se pudo cargar el resumen del panel:', error);
+      if (error && error.stack) {
+        console.debug('[dashboard] Stack capturado:', error.stack);
+      }
       renderError(message);
     }
   };

@@ -46,6 +46,16 @@
   window.joinBasePath = (...segments) => join(BASE, ...segments);
   window.API_BASE = join(BASE, 'api');
 
+  const logMissing = (action, id) => {
+    if (!id) {
+      return;
+    }
+    const stack = new Error(`domHelpers.${action} missing #${id}`).stack;
+    if (console && typeof console.warn === 'function') {
+      console.warn(`[domHelpers.${action}] Elemento no encontrado: #${id}`, { stack });
+    }
+  };
+
   const byId = (id) => {
     if (typeof id !== 'string' || !id) {
       return null;
@@ -57,6 +67,8 @@
     const element = byId(id);
     if (element) {
       element.textContent = text;
+    } else {
+      logMissing('setText', id);
     }
     return element;
   };
@@ -65,6 +77,8 @@
     const element = byId(id);
     if (element) {
       element.innerHTML = html;
+    } else {
+      logMissing('setHTML', id);
     }
     return element;
   };
@@ -73,6 +87,8 @@
     const element = byId(id);
     if (element && typeof handler === 'function') {
       element.addEventListener(eventName, handler, options);
+    } else if (!element) {
+      logMissing(`addListener:${eventName}`, id);
     }
     return element;
   };
@@ -83,6 +99,53 @@
     setHTML,
     addListener
   };
+
+  if (!window.__GLOBAL_ERROR_LOGGER__) {
+    window.__GLOBAL_ERROR_LOGGER__ = true;
+
+    window.addEventListener('error', (event) => {
+      if (!event) {
+        return;
+      }
+      const details = {
+        message: event.message,
+        source: event.filename,
+        line: event.lineno,
+        column: event.colno,
+        stack: event.error && event.error.stack
+      };
+      if (console && typeof console.groupCollapsed === 'function') {
+        console.groupCollapsed('⚠️ Error global capturado');
+        console.error(details.message);
+        console.debug('Origen:', `${details.source || 'desconocido'}:${details.line || 0}:${details.column || 0}`);
+        if (details.stack) {
+          console.debug(details.stack);
+        }
+        console.groupEnd();
+      } else {
+        console.error('Error global capturado', details);
+      }
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      if (!event) {
+        return;
+      }
+      const reason = event.reason;
+      const message = reason && reason.message ? reason.message : 'Promesa rechazada sin manejar';
+      const stack = reason && reason.stack ? reason.stack : undefined;
+      if (console && typeof console.groupCollapsed === 'function') {
+        console.groupCollapsed('⚠️ Promesa sin manejar');
+        console.error(message);
+        if (stack) {
+          console.debug(stack);
+        }
+        console.groupEnd();
+      } else {
+        console.error('Promesa sin manejar', { message, stack });
+      }
+    });
+  }
 
   window.apiFetch = (path, options = {}) => {
     const target = typeof path === 'string' ? join(window.API_BASE, path) : path;
