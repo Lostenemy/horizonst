@@ -129,8 +129,12 @@ const startDashboard = () => {
 
       renderMessages(messages);
     } catch (error) {
+      const message =
+        (error && typeof error === 'object' && 'stack' in error && error.stack) ||
+        (error && typeof error === 'object' && 'message' in error && error.message) ||
+        'No se pudo cargar el resumen.';
       console.error('No se pudo cargar el resumen del panel:', error);
-      renderError(error.message || 'No se pudo cargar el resumen.');
+      renderError(message);
     }
   };
 

@@ -1,23 +1,34 @@
 import { clearSession, getCurrentUser } from './api.js';
 
 export const initAuthPage = () => {
-  const logoutLink = document.getElementById('logoutLink');
-  if (logoutLink) {
-    logoutLink.addEventListener('click', (event) => {
-      event.preventDefault();
-      clearSession();
-      if (typeof window.joinBasePath === 'function') {
-        window.location.href = window.joinBasePath('index.html');
-      } else {
-        window.location.href = 'index.html';
-      }
-    });
-  }
+  const helpers = window.domHelpers || {};
+  const fallbackGet = (id) => (typeof id === 'string' && id ? document.getElementById(id) : null);
+  const setText = typeof helpers.setText === 'function' ? helpers.setText : (id, text) => {
+    const element = fallbackGet(id);
+    if (element) {
+      element.textContent = text;
+    }
+    return element;
+  };
+  const addListener = typeof helpers.addListener === 'function' ? helpers.addListener : (id, eventName, handler) => {
+    const element = fallbackGet(id);
+    if (element && typeof handler === 'function') {
+      element.addEventListener(eventName, handler);
+    }
+    return element;
+  };
 
-  const year = document.getElementById('year');
-  if (year) {
-    year.textContent = new Date().getFullYear().toString();
-  }
+  addListener('logoutLink', 'click', (event) => {
+    event.preventDefault();
+    clearSession();
+    if (typeof window.joinBasePath === 'function') {
+      window.location.href = window.joinBasePath('index.html');
+    } else {
+      window.location.href = 'index.html';
+    }
+  });
+
+  setText('year', new Date().getFullYear().toString());
 
   const user = getCurrentUser();
   if (!user) {
@@ -29,10 +40,12 @@ export const initAuthPage = () => {
     return { user: null, isAdmin: false };
   }
 
-  if (user.role === 'ADMIN') {
-    document.body.classList.add('is-admin');
-  } else {
-    document.body.classList.remove('is-admin');
+  if (document.body) {
+    if (user.role === 'ADMIN') {
+      document.body.classList.add('is-admin');
+    } else {
+      document.body.classList.remove('is-admin');
+    }
   }
 
   return { user, isAdmin: user.role === 'ADMIN' };
