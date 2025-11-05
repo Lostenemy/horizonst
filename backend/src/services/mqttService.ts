@@ -50,15 +50,16 @@ export const initMqtt = async (): Promise<void> => {
     });
 
     client.on('message', async (topic: string, messageBuffer: Buffer) => {
-      const payload = messageBuffer.toString();
+      const payloadText = messageBuffer.toString();
+      const storedPayload = topic === 'devices/MK2' ? messageBuffer.toString('hex') : payloadText;
       let records: ProcessedDeviceRecord[] = [];
       try {
         if (topic === 'devices/MK1') {
-          records = decodeMk1(payload);
+          records = decodeMk1(payloadText);
         } else if (topic === 'devices/MK2') {
-          records = decodeMk2(payload);
+          records = decodeMk2(messageBuffer);
         } else if (topic === 'devices/MK3') {
-          records = decodeMk3(payload);
+          records = decodeMk3(payloadText);
         }
       } catch (error) {
         console.error('Failed to decode payload', error);
@@ -69,7 +70,7 @@ export const initMqtt = async (): Promise<void> => {
         await pool.query(
           `INSERT INTO mqtt_messages (topic, payload, gateway_mac, received_at)
            VALUES ($1, $2, $3, NOW())`,
-          [topic, payload, gatewayMac]
+          [topic, storedPayload, gatewayMac]
         );
       } catch (error) {
         console.error('Failed to persist MQTT message', error);
