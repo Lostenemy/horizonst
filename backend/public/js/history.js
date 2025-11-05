@@ -45,7 +45,6 @@ const loadHistory = async () => {
       const row = document.createElement('tr');
       row.innerHTML = `
         <td>${new Date(entry.recorded_at).toLocaleString()}</td>
-        <td>${entry.place_name || '—'}</td>
         <td>${entry.gateway_name || entry.mac_address || '—'}</td>
         <td>${entry.rssi ?? '—'}</td>
         <td>${entry.battery_voltage_mv ?? '—'}</td>
@@ -54,7 +53,7 @@ const loadHistory = async () => {
       tableBody.appendChild(row);
     });
   } catch (error) {
-    tableBody.innerHTML = `<tr><td colspan="6">${error.message}</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
   }
 };
 

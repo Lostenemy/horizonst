@@ -13,9 +13,7 @@
       <nav>
         <a href="dashboard.html">Resumen</a>
         <a href="devices.html" class="active">Dispositivos</a>
-        <a href="device-create.html" class="admin-only">Alta dispositivos</a>
         <a href="users.html" class="admin-only">Usuarios</a>
-        <a href="places.html">Lugares</a>
         <a href="categories.html">Categorías</a>
         <a href="gateways.html">Gateways</a>
         <a href="messages.html">Mensajes</a>
@@ -25,25 +23,41 @@
       </nav>
     </header>
     <main>
-      <section class="card">
-        <h2>Reclamar dispositivo</h2>
-        <form id="claimForm" class="form-grid">
+      <section class="card admin-only" id="deviceAdminSection">
+        <h2>Registrar nuevo dispositivo</h2>
+        <p>
+          Registra dispositivos BLE o RFID para habilitar sus pruebas de comunicación y la
+          decodificación en el servidor MQTT.
+        </p>
+        <form id="deviceCreateForm" class="form-grid">
           <div>
-            <label for="claimMac">MAC del dispositivo</label>
-            <input type="text" id="claimMac" required placeholder="AA11BB22CC33" />
+            <label for="deviceName">Nombre</label>
+            <input type="text" id="deviceName" placeholder="Sensor oficina" />
           </div>
           <div>
-            <label for="claimName">Nombre descriptivo</label>
-            <input type="text" id="claimName" placeholder="Pulsador entrada" />
+            <label for="deviceMac">MAC (12 hex, sin separadores)</label>
+            <input type="text" id="deviceMac" required placeholder="AA11BB22CC33" maxlength="17" />
+          </div>
+          <div>
+            <label for="deviceDescription">Descripción</label>
+            <input type="text" id="deviceDescription" placeholder="Notas opcionales" />
+          </div>
+          <div>
+            <label for="deviceOwner">Propietario</label>
+            <select id="deviceOwner"></select>
+          </div>
+          <div>
+            <label for="deviceCategory">Categoría</label>
+            <select id="deviceCategory"></select>
           </div>
           <div class="actions">
-            <button type="submit">Reclamar</button>
+            <button type="submit">Registrar</button>
           </div>
         </form>
-        <div class="alert info" id="claimMessage" style="display: none"></div>
+        <div class="alert info" id="deviceCreateMessage" style="display:none"></div>
       </section>
       <section class="card">
-        <h2>Listado de dispositivos</h2>
+        <h2>Inventario de dispositivos</h2>
         <div class="table-wrapper">
           <table id="devicesTable">
             <thead>
@@ -51,7 +65,7 @@
                 <th>Nombre</th>
                 <th>MAC</th>
                 <th>Categoría</th>
-                <th>Último lugar</th>
+                <th>Último gateway</th>
                 <th>Último RSSI</th>
                 <th>Último registro</th>
                 <th>Acciones</th>

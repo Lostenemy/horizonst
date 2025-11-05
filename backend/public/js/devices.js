@@ -6,15 +6,16 @@ if (!user) {
   throw new Error('Usuario no autenticado');
 }
 
+const form = document.getElementById('deviceCreateForm');
+const messageBox = document.getElementById('deviceCreateMessage');
+const ownerSelect = document.getElementById('deviceOwner');
+const categorySelect = document.getElementById('deviceCategory');
 const devicesTableBody = document.querySelector('#devicesTable tbody');
 const devicesEmpty = document.getElementById('devicesEmpty');
-const claimForm = document.getElementById('claimForm');
-const claimMessage = document.getElementById('claimMessage');
 
-let categories = [];
-let places = [];
-let owners = [];
 let devices = [];
+let categories = [];
+let owners = [];
 
 const normalizeMac = (value) => {
   if (!value) return '';
@@ -23,15 +24,36 @@ const normalizeMac = (value) => {
 
 const validateMac = (value) => /^[0-9A-F]{12}$/.test(normalizeMac(value));
 
-const loadDependencies = async () => {
-  const [categoriesResponse, placesResponse] = await Promise.all([
-    apiGet('/categories'),
-    apiGet('/places')
-  ]);
-  categories = categoriesResponse;
-  places = placesResponse;
-  if (isAdmin) {
+const setSelectOptions = (select, items, placeholder) => {
+  if (!select) return;
+  select.innerHTML = '';
+  const emptyOption = document.createElement('option');
+  emptyOption.value = '';
+  emptyOption.textContent = placeholder;
+  select.appendChild(emptyOption);
+  items.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label;
+    select.appendChild(option);
+  });
+};
+
+const loadMetadata = async () => {
+  categories = await apiGet('/categories');
+  setSelectOptions(
+    categorySelect,
+    categories.map((category) => ({ value: category.id, label: category.name })),
+    'Sin categoría'
+  );
+
+  if (isAdmin && ownerSelect) {
     owners = await apiGet('/users');
+    setSelectOptions(
+      ownerSelect,
+      owners.map((owner) => ({ value: owner.id, label: owner.display_name || owner.email })),
+      'Sin propietario'
+    );
   }
 };
 
@@ -48,14 +70,6 @@ const getCategoryOptions = () => {
   return options;
 };
 
-const getPlaceOptions = () => {
-  const options = [{ value: '', label: 'Sin lugar' }];
-  places.forEach((place) => {
-    options.push({ value: place.id, label: place.name });
-  });
-  return options;
-};
-
 const getOwnerOptions = () => {
   const options = [{ value: '', label: 'Sin propietario' }];
   owners.forEach((owner) => {
@@ -68,8 +82,7 @@ const handleEditDevice = async (device) => {
   const fields = [
     { name: 'name', label: 'Nombre', type: 'text', placeholder: 'Nombre descriptivo' },
     { name: 'description', label: 'Descripción', type: 'textarea', rows: 3, placeholder: 'Comentarios adicionales' },
-    { name: 'categoryId', label: 'Categoría', type: 'select', options: getCategoryOptions() },
-    { name: 'lastPlaceId', label: 'Lugar asignado', type: 'select', options: getPlaceOptions() }
+    { name: 'categoryId', label: 'Categoría', type: 'select', options: getCategoryOptions() }
   ];
 
   if (isAdmin) {
@@ -84,15 +97,13 @@ const handleEditDevice = async (device) => {
       name: device.name || '',
       description: device.description || '',
       categoryId: device.category_id ?? '',
-      lastPlaceId: device.last_place_id ?? '',
       ownerId: device.owner_id ?? ''
     },
     onSubmit: async (values) => {
       const payload = {
         name: values.name ? String(values.name).trim() : '',
         description: values.description ? String(values.description).trim() : '',
-        categoryId: values.categoryId ? Number(values.categoryId) : null,
-        lastPlaceId: values.lastPlaceId ? Number(values.lastPlaceId) : null
+        categoryId: values.categoryId ? Number(values.categoryId) : null
       };
 
       if (isAdmin) {
@@ -126,11 +137,16 @@ const renderDevices = () => {
 
   devices.forEach((device) => {
     const row = document.createElement('tr');
+    const lastGateway = device.gateway_name
+      ? device.gateway_name
+      : device.last_gateway_id
+      ? `ID ${device.last_gateway_id}`
+      : '—';
     row.innerHTML = `
       <td>${device.name || 'Sin nombre'}</td>
       <td>${device.ble_mac}</td>
       <td>${device.category_name || 'Sin categoría'}</td>
-      <td>${device.place_name || '—'}</td>
+      <td>${lastGateway}</td>
       <td>${device.last_rssi ?? '—'}</td>
       <td>${device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : '—'}</td>
       <td></td>
@@ -158,37 +174,46 @@ const renderDevices = () => {
   });
 };
 
-claimForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  claimMessage.style.display = 'none';
-  const macInput = claimForm.claimMac.value.trim();
-  const bleMac = normalizeMac(macInput);
-  const name = claimForm.claimName.value.trim();
+if (form && isAdmin) {
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    messageBox.style.display = 'none';
 
-  if (!validateMac(bleMac)) {
-    claimMessage.textContent = 'La MAC indicada no tiene un formato válido (12 caracteres hexadecimales).';
-    claimMessage.className = 'alert error';
-    claimMessage.style.display = 'block';
-    return;
-  }
+    const macInput = form.deviceMac.value.trim();
+    const bleMac = normalizeMac(macInput);
+    if (!validateMac(bleMac)) {
+      messageBox.textContent = 'La MAC indicada no tiene un formato válido (12 caracteres hexadecimales).';
+      messageBox.className = 'alert error';
+      messageBox.style.display = 'block';
+      return;
+    }
 
-  try {
-    const result = await apiPost('/devices/claim', { bleMac, name });
-    claimMessage.textContent = `Dispositivo ${result.ble_mac} asociado correctamente.`;
-    claimMessage.className = 'alert success';
-    claimMessage.style.display = 'block';
-    claimForm.reset();
-    await loadDevices();
-  } catch (error) {
-    claimMessage.textContent = error.message;
-    claimMessage.className = 'alert error';
-    claimMessage.style.display = 'block';
-  }
-});
+    const payload = {
+      name: form.deviceName.value.trim(),
+      bleMac,
+      description: form.deviceDescription.value.trim(),
+      ownerId: ownerSelect && ownerSelect.value ? Number(ownerSelect.value) : null,
+      categoryId: categorySelect && categorySelect.value ? Number(categorySelect.value) : null
+    };
+
+    try {
+      await apiPost('/devices', payload);
+      messageBox.textContent = 'Dispositivo registrado correctamente.';
+      messageBox.className = 'alert success';
+      messageBox.style.display = 'block';
+      form.reset();
+      await loadDevices();
+    } catch (error) {
+      messageBox.textContent = error.message;
+      messageBox.className = 'alert error';
+      messageBox.style.display = 'block';
+    }
+  });
+}
 
 const init = async () => {
   try {
-    await loadDependencies();
+    await loadMetadata();
     await loadDevices();
   } catch (error) {
     devicesTableBody.innerHTML = `<tr><td colspan="7">${error.message}</td></tr>`;
