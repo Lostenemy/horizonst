@@ -10,7 +10,6 @@ const alarmForm = document.getElementById('alarmConfigForm');
 const alarmMessage = document.getElementById('alarmMessage');
 const deviceSelect = document.getElementById('alarmDevice');
 const categorySelect = document.getElementById('alarmCategory');
-const placeSelect = document.getElementById('alarmPlace');
 const groupSelect = document.getElementById('alarmGroup');
 const configsTableBody = document.querySelector('#configsTable tbody');
 const configsEmpty = document.getElementById('configsEmpty');
@@ -27,16 +26,14 @@ const populateSelect = (select, data, textKey) => {
 };
 
 const loadMetadata = async () => {
-  const [devices, categories, places, groups] = await Promise.all([
+  const [devices, categories, groups] = await Promise.all([
     apiGet('/devices'),
     apiGet('/categories'),
-    apiGet('/places'),
     apiGet('/users/groups')
   ]);
 
   populateSelect(deviceSelect, devices, 'ble_mac');
   populateSelect(categorySelect, categories, 'name');
-  populateSelect(placeSelect, places, 'name');
   populateSelect(groupSelect, groups, 'name');
 };
 
@@ -53,7 +50,7 @@ const renderConfigs = (configs) => {
       : config.category_id
       ? `Categoría #${config.category_id}`
       : config.place_id
-      ? `Lugar #${config.place_id}`
+      ? `Lugar heredado #${config.place_id}`
       : 'Global';
     const row = document.createElement('tr');
     row.innerHTML = `
@@ -129,7 +126,6 @@ alarmForm.addEventListener('submit', async (event) => {
     thresholdSeconds: Number(alarmForm.alarmThreshold.value),
     deviceId: alarmForm.alarmDevice.value ? Number(alarmForm.alarmDevice.value) : null,
     categoryId: alarmForm.alarmCategory.value ? Number(alarmForm.alarmCategory.value) : null,
-    placeId: alarmForm.alarmPlace.value ? Number(alarmForm.alarmPlace.value) : null,
     handlerGroupId: alarmForm.alarmGroup.value ? Number(alarmForm.alarmGroup.value) : null
   };
   try {

@@ -13,9 +13,7 @@
       <nav>
         <a href="dashboard.html" class="active">Resumen</a>
         <a href="devices.html">Dispositivos</a>
-        <a href="device-create.html" class="admin-only">Alta dispositivos</a>
         <a href="users.html" class="admin-only">Usuarios</a>
-        <a href="places.html">Lugares</a>
         <a href="categories.html">Categorías</a>
         <a href="gateways.html">Gateways</a>
         <a href="messages.html">Mensajes</a>
@@ -37,7 +35,7 @@
               <tr>
                 <th>Nombre</th>
                 <th>MAC</th>
-                <th>Último lugar</th>
+                <th>Último gateway</th>
                 <th>Última señal</th>
                 <th>Batería (mV)</th>
                 <th>Último registro</th>
@@ -49,8 +47,8 @@
         <div class="table-empty" id="recentDevicesEmpty">No hay dispositivos registrados.</div>
       </section>
       <section class="card">
-        <h2>Dispositivos por lugar</h2>
-        <div id="placesContainer" class="grid-two"></div>
+        <h2>Mensajes MQTT recientes</h2>
+        <div id="messagesContainer"></div>
       </section>
     </main>
     <footer>

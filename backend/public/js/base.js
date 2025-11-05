@@ -46,6 +46,44 @@
   window.joinBasePath = (...segments) => join(BASE, ...segments);
   window.API_BASE = join(BASE, 'api');
 
+  const byId = (id) => {
+    if (typeof id !== 'string' || !id) {
+      return null;
+    }
+    return document.getElementById(id);
+  };
+
+  const setText = (id, text) => {
+    const element = byId(id);
+    if (element) {
+      element.textContent = text;
+    }
+    return element;
+  };
+
+  const setHTML = (id, html) => {
+    const element = byId(id);
+    if (element) {
+      element.innerHTML = html;
+    }
+    return element;
+  };
+
+  const addListener = (id, eventName, handler, options) => {
+    const element = byId(id);
+    if (element && typeof handler === 'function') {
+      element.addEventListener(eventName, handler, options);
+    }
+    return element;
+  };
+
+  window.domHelpers = {
+    byId,
+    setText,
+    setHTML,
+    addListener
+  };
+
   window.apiFetch = (path, options = {}) => {
     const target = typeof path === 'string' ? join(window.API_BASE, path) : path;
     return fetch(target, options);

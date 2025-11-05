@@ -110,6 +110,51 @@ table td {
   text-align: left;
 }
 
+.messages-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.messages-list li {
+  background: #f4f6fb;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e0e6f0;
+}
+
+.messages-list pre {
+  margin: 0.25rem 0 0;
+  background: rgba(18, 60, 105, 0.08);
+  padding: 0.5rem;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+
+.messages-list .topic {
+  display: inline-block;
+  margin-top: 0.25rem;
+  color: var(--secondary-color);
+  font-weight: 600;
+}
+
+.button-link {
+  display: inline-block;
+  margin-top: 1rem;
+  color: var(--secondary-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  text-decoration: underline;
+}
+
 button,
 input,
 select,

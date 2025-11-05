@@ -7,8 +7,8 @@ if (!user) {
 }
 
 const adminSection = document.getElementById('adminGatewaySection');
-if (isAdmin && adminSection) {
-  adminSection.style.display = 'block';
+if (adminSection) {
+  adminSection.style.display = isAdmin ? 'block' : 'none';
 }
 
 const gatewayForm = document.getElementById('gatewayForm');
@@ -18,7 +18,6 @@ const gatewaysTableBody = document.querySelector('#gatewaysTable tbody');
 const gatewaysEmpty = document.getElementById('gatewaysEmpty');
 
 let gateways = [];
-let places = [];
 let owners = [];
 
 const normalizeMac = (value) => {
@@ -28,26 +27,21 @@ const normalizeMac = (value) => {
 
 const validateMac = (value) => /^[0-9A-F]{12}$/.test(normalizeMac(value));
 
-const loadPlaces = async () => {
-  places = await apiGet('/places');
-};
-
 const loadOwners = async () => {
-  if (isAdmin) {
-    owners = await apiGet('/users');
-    if (gatewayOwnerSelect) {
-      gatewayOwnerSelect.innerHTML = '';
-      const emptyOption = document.createElement('option');
-      emptyOption.value = '';
-      emptyOption.textContent = '— Sin asignar —';
-      gatewayOwnerSelect.appendChild(emptyOption);
-      owners.forEach((owner) => {
-        const option = document.createElement('option');
-        option.value = owner.id;
-        option.textContent = owner.display_name || owner.email;
-        gatewayOwnerSelect.appendChild(option);
-      });
-    }
+  if (!isAdmin) return;
+  owners = await apiGet('/users');
+  if (gatewayOwnerSelect) {
+    gatewayOwnerSelect.innerHTML = '';
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = 'Sin propietario';
+    gatewayOwnerSelect.appendChild(emptyOption);
+    owners.forEach((owner) => {
+      const option = document.createElement('option');
+      option.value = owner.id;
+      option.textContent = owner.display_name || owner.email;
+      gatewayOwnerSelect.appendChild(option);
+    });
   }
 };
 
@@ -56,25 +50,21 @@ const loadGateways = async () => {
   renderGateways();
 };
 
-const buildPlaceSelect = (gateway) => {
-  const select = document.createElement('select');
-  const emptyOption = document.createElement('option');
-  emptyOption.value = '';
-  emptyOption.textContent = 'Sin lugar';
-  select.appendChild(emptyOption);
-  places.forEach((place) => {
-    const option = document.createElement('option');
-    option.value = place.id;
-    option.textContent = place.name;
-    if (place.id === gateway.place_id) {
-      option.selected = true;
-    }
-    select.appendChild(option);
-  });
-  return select;
+const ownerLabel = (gateway) => {
+  if (!gateway.owner_id) {
+    return '—';
+  }
+  const owner = owners.find((candidate) => candidate.id === gateway.owner_id);
+  if (owner) {
+    return owner.display_name || owner.email;
+  }
+  if (gateway.owner_id === user.id) {
+    return 'Tú';
+  }
+  return `ID ${gateway.owner_id}`;
 };
 
-const ownerOptions = () => {
+const buildOwnerOptions = () => {
   const options = [{ value: '', label: 'Sin propietario' }];
   owners.forEach((owner) => {
     options.push({ value: owner.id, label: owner.display_name || owner.email });
@@ -86,14 +76,19 @@ const handleEditGateway = async (gateway) => {
   const fields = [
     { name: 'name', label: 'Nombre', type: 'text', placeholder: 'Nombre descriptivo' },
     { name: 'description', label: 'Descripción', type: 'textarea', rows: 3, placeholder: 'Detalles' },
-    { name: 'active', label: 'Activa', type: 'select', options: [
-      { value: 'true', label: 'Activa' },
-      { value: 'false', label: 'Inactiva' }
-    ] }
+    {
+      name: 'active',
+      label: 'Estado',
+      type: 'select',
+      options: [
+        { value: 'true', label: 'Activa' },
+        { value: 'false', label: 'Inactiva' }
+      ]
+    }
   ];
 
   if (isAdmin) {
-    fields.push({ name: 'ownerId', label: 'Propietario', type: 'select', options: ownerOptions() });
+    fields.push({ name: 'ownerId', label: 'Propietario', type: 'select', options: buildOwnerOptions() });
   }
 
   await openFormModal({
@@ -145,31 +140,13 @@ const renderGateways = () => {
     row.innerHTML = `
       <td>${gateway.name || 'Sin nombre'}</td>
       <td>${gateway.mac_address}</td>
-      <td>${gateway.place_name || '—'}</td>
+      <td>${ownerLabel(gateway)}</td>
+      <td>${gateway.active ? 'Activa' : 'Inactiva'}</td>
       <td></td>
     `;
     const actionsCell = row.querySelector('td:last-child');
     const container = document.createElement('div');
     container.className = 'actions';
-
-    const select = buildPlaceSelect(gateway);
-    container.appendChild(select);
-
-    const assignButton = document.createElement('button');
-    assignButton.type = 'button';
-    assignButton.textContent = 'Asignar lugar';
-    assignButton.addEventListener('click', async () => {
-      try {
-        const payload = { placeId: select.value ? Number(select.value) : null };
-        await apiPost(`/gateways/${gateway.id}/assign-place`, payload);
-        assignButton.textContent = 'Guardado';
-        setTimeout(() => (assignButton.textContent = 'Asignar lugar'), 1500);
-        await loadGateways();
-      } catch (error) {
-        alert(error.message);
-      }
-    });
-    container.appendChild(assignButton);
 
     const editButton = document.createElement('button');
     editButton.type = 'button';
@@ -189,7 +166,7 @@ const renderGateways = () => {
   });
 };
 
-if (isAdmin) {
+if (isAdmin && gatewayForm) {
   gatewayForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     gatewayMessage.style.display = 'none';
@@ -212,7 +189,7 @@ if (isAdmin) {
 
     try {
       await apiPost('/gateways', payload);
-      gatewayMessage.textContent = 'Gateway registrada correctamente';
+      gatewayMessage.textContent = 'Gateway registrada correctamente.';
       gatewayMessage.className = 'alert success';
       gatewayMessage.style.display = 'block';
       gatewayForm.reset();
@@ -227,10 +204,10 @@ if (isAdmin) {
 
 const init = async () => {
   try {
-    await Promise.all([loadPlaces(), loadOwners()]);
+    await loadOwners();
     await loadGateways();
   } catch (error) {
-    gatewaysTableBody.innerHTML = `<tr><td colspan="4">${error.message}</td></tr>`;
+    gatewaysTableBody.innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
   }
 };
 
