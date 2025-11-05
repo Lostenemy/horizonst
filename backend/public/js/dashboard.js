@@ -7,10 +7,12 @@ const startDashboard = () => {
     return;
   }
 
-  const summaryCards = document.getElementById('summaryCards');
+  const getSummaryCards = () => document.getElementById('summaryCards');
   const recentTableBody = document.querySelector('#recentDevicesTable tbody');
   const recentEmpty = document.getElementById('recentDevicesEmpty');
   const messagesContainer = document.getElementById('messagesContainer');
+
+  const summaryCards = getSummaryCards();
 
   if (!summaryCards || !recentTableBody || !recentEmpty || !messagesContainer) {
     console.error('No se encontraron los contenedores del panel.');
@@ -18,7 +20,12 @@ const startDashboard = () => {
   }
 
   const renderSummary = (stats) => {
-    summaryCards.innerHTML = '';
+    const container = getSummaryCards();
+    if (!container) {
+      console.error('No se encontró el contenedor del resumen para renderizar las estadísticas.');
+      return;
+    }
+    container.innerHTML = '';
     const items = [
       { label: 'Dispositivos', value: stats.devices },
       { label: 'Gateways', value: stats.gateways },
@@ -30,7 +37,7 @@ const startDashboard = () => {
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `<h3>${item.label}</h3><p style="font-size:2.5rem;margin:0;color:var(--secondary-color);">${item.value}</p>`;
-      summaryCards.appendChild(card);
+      container.appendChild(card);
     });
   };
 
@@ -91,7 +98,12 @@ const startDashboard = () => {
   };
 
   const renderError = (message) => {
-    summaryCards.innerHTML = `<div class="alert error">${message}</div>`;
+    const container = getSummaryCards();
+    if (!container) {
+      console.error('No se pudo mostrar el error del resumen:', message);
+      return;
+    }
+    container.innerHTML = `<div class="alert error">${message}</div>`;
   };
 
   const loadData = async () => {
