@@ -22,8 +22,11 @@ const { handlePayload }: {
 
 const SCAN_FLAGS = new Set(['30a0', '30b2']);
 
-export const decodeMk2 = (payload: string): ProcessedDeviceRecord[] => {
-  const jsonEnvelope = tryDecodeMk2Json(payload);
+export const decodeMk2 = (payload: string | Buffer): ProcessedDeviceRecord[] => {
+  const payloadText = typeof payload === 'string' ? payload : payload.toString('utf8');
+  const hexPayload = extractHexPayload(payload);
+
+  const jsonEnvelope = tryDecodeMk2Json(payloadText, hexPayload);
   if (jsonEnvelope?.gatewayMac && Array.isArray(jsonEnvelope.records)) {
     const gatewayMac = String(jsonEnvelope.gatewayMac).toUpperCase();
     return jsonEnvelope.records
@@ -31,7 +34,7 @@ export const decodeMk2 = (payload: string): ProcessedDeviceRecord[] => {
       .filter((rec): rec is ProcessedDeviceRecord => Boolean(rec));
   }
 
-  const legacyPayload = tryDecodeLegacyPayload(payload);
+  const legacyPayload = tryDecodeLegacyPayload(payloadText, hexPayload);
   if (legacyPayload?.flag === 'mk2-json' && legacyPayload.gatewayMac && Array.isArray(legacyPayload.records)) {
     const gatewayMac = String(legacyPayload.gatewayMac).toUpperCase();
     return legacyPayload.records
@@ -54,13 +57,13 @@ export const decodeMk2 = (payload: string): ProcessedDeviceRecord[] => {
   }
 
   try {
-    return decodeMk1(payload).map((rec) => ({ ...rec, topic: 'devices/MK2' }));
+    return decodeMk1(payloadText).map((rec) => ({ ...rec, topic: 'devices/MK2' }));
   } catch (error) {
     return [];
   }
 };
 
-const tryDecodeMk2Json = (payload: string): Mk2DecodedEnvelope | null => {
+const tryDecodeMk2Json = (payload: string, hexPayload?: string): Mk2DecodedEnvelope | null => {
   try {
     return JSON.parse(payload) as Mk2DecodedEnvelope;
   } catch (jsonError) {
@@ -68,10 +71,9 @@ const tryDecodeMk2Json = (payload: string): Mk2DecodedEnvelope | null => {
       const base64 = Buffer.from(payload, 'base64').toString('utf8');
       return JSON.parse(base64) as Mk2DecodedEnvelope;
     } catch (base64Error) {
-      const hex = payload.replace(/[^0-9a-fA-F]/g, '');
-      if (hex.length % 2 === 0 && hex.length !== 0) {
+      if (hexPayload && hexPayload.length % 2 === 0 && hexPayload.length !== 0) {
         try {
-          const text = Buffer.from(hex, 'hex').toString('utf8');
+          const text = Buffer.from(hexPayload, 'hex').toString('utf8');
           return JSON.parse(text) as Mk2DecodedEnvelope;
         } catch {
           return null;
@@ -82,9 +84,13 @@ const tryDecodeMk2Json = (payload: string): Mk2DecodedEnvelope | null => {
   }
 };
 
-const tryDecodeLegacyPayload = (payload: string): LegacyMk2Payload | null => {
+const tryDecodeLegacyPayload = (payload: string, hexPayload?: string): LegacyMk2Payload | null => {
+  const candidate = hexPayload ?? sanitizeHexPayload(payload);
+  if (!candidate) {
+    return null;
+  }
   try {
-    return handlePayload(payload, undefined, undefined);
+    return handlePayload(candidate, undefined, undefined);
   } catch {
     return null;
   }
@@ -240,16 +246,11 @@ const convertLegacyScanDevice = (
 };
 
 const formatHexPayload = (value: string): string | undefined => {
-  const trimmed = value.trim();
-  if (!trimmed) {
+  const normalized = sanitizeHexPayload(value);
+  if (!normalized) {
     return undefined;
   }
-  const normalized = trimmed.startsWith('0x') || trimmed.startsWith('0X') ? trimmed.slice(2) : trimmed;
-  const upper = normalized.toUpperCase();
-  if (!upper || !/^[0-9A-F]+$/.test(upper)) {
-    return undefined;
-  }
-  return `0x${upper}`;
+  return `0x${normalized.toUpperCase()}`;
 };
 
 const parseNumericValue = (value: unknown): number | undefined => {
@@ -293,4 +294,27 @@ const normaliseBatteryValue = (value: unknown): number | undefined => {
     return Math.round(numeric * 1000);
   }
   return undefined;
+};
+
+const extractHexPayload = (payload: string | Buffer): string | undefined => {
+  if (Buffer.isBuffer(payload)) {
+    const hex = payload.toString('hex');
+    return hex.length > 0 ? hex : undefined;
+  }
+  return sanitizeHexPayload(payload);
+};
+
+const sanitizeHexPayload = (value: string): string | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (!/^(?:0x)?[0-9a-fA-F\s:-]+$/.test(trimmed)) {
+    return undefined;
+  }
+  const compact = trimmed.replace(/[^0-9a-fA-F]/g, '');
+  if (!compact || compact.length % 2 !== 0) {
+    return undefined;
+  }
+  return compact.toLowerCase();
 };
