@@ -67,9 +67,11 @@ const request = async <T = JsonValue>(method: HttpMethod, path: string, body?: J
   return parsed as T;
 };
 
+const connectorPath = `/connectors/${CONNECTOR_NAME}`;
+
 const getConnector = async (): Promise<JsonValue | null> => {
   try {
-    return await request('GET', `/connectors/postgresql/${CONNECTOR_NAME}`);
+    return await request('GET', connectorPath);
   } catch (error) {
     if (error instanceof HttpRequestError && error.status === 404) {
       return null;
@@ -97,16 +99,18 @@ const ensureConnector = async (): Promise<void> => {
 
   const existing = await getConnector();
   if (existing) {
-    await request('PUT', `/connectors/postgresql/${CONNECTOR_NAME}`, connectorPayload);
+    await request('PUT', connectorPath, connectorPayload);
     return;
   }
 
-  await request('POST', '/connectors/postgresql', connectorPayload);
+  await request('POST', '/connectors', connectorPayload);
 };
+
+const bridgePath = `/bridges/${BRIDGE_NAME}`;
 
 const getBridge = async (): Promise<JsonValue | null> => {
   try {
-    return await request('GET', `/bridges/postgresql/${BRIDGE_NAME}`);
+    return await request('GET', bridgePath);
   } catch (error) {
     if (error instanceof HttpRequestError && error.status === 404) {
       return null;
@@ -140,11 +144,11 @@ const ensureBridge = async (): Promise<void> => {
 
   const existing = await getBridge();
   if (existing) {
-    await request('PUT', `/bridges/postgresql/${BRIDGE_NAME}`, bridgePayload);
+    await request('PUT', bridgePath, bridgePayload);
     return;
   }
 
-  await request('POST', '/bridges/postgresql', bridgePayload);
+  await request('POST', '/bridges', bridgePayload);
 };
 
 const getRule = async (): Promise<JsonValue | null> => {
