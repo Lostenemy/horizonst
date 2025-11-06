@@ -25,16 +25,64 @@ const buildBaseUrl = (): string => {
   return `${protocol}://${config.emqx.host}:${config.emqx.port}/api/v5`;
 };
 
-const basicAuthHeader = (): string => {
-  const credentials = Buffer.from(`${config.emqx.username}:${config.emqx.password}`).toString('base64');
-  return `Basic ${credentials}`;
+let authToken: string | null = null;
+let tokenExpiresAt: number | null = null;
+
+interface LoginResponse {
+  token: string;
+  expire_at?: string;
+}
+
+const parseExpireAt = (expireAt?: string): number | null => {
+  if (!expireAt) {
+    return null;
+  }
+  const parsed = Date.parse(expireAt);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
-const request = async <T = JsonValue>(method: HttpMethod, path: string, body?: JsonValue): Promise<T> => {
+const authenticate = async (): Promise<void> => {
+  const url = `${buildBaseUrl()}/login`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      username: config.emqx.username,
+      password: config.emqx.password
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new HttpRequestError(`Failed to authenticate with EMQX management API: ${response.status}`, response.status, body);
+  }
+
+  const payload = (await response.json()) as LoginResponse;
+  authToken = payload.token;
+  tokenExpiresAt = parseExpireAt(payload.expire_at);
+};
+
+const ensureAuthToken = async (): Promise<void> => {
+  if (!authToken) {
+    await authenticate();
+    return;
+  }
+
+  if (tokenExpiresAt !== null && Date.now() >= tokenExpiresAt - 5000) {
+    await authenticate();
+  }
+};
+
+const request = async <T = JsonValue>(method: HttpMethod, path: string, body?: JsonValue, allowRetry = true): Promise<T> => {
+  await ensureAuthToken();
+
   const url = `${buildBaseUrl()}${path}`;
-  const headers: Record<string, string> = {
-    Authorization: basicAuthHeader()
-  };
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
   let payload: string | undefined;
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -48,6 +96,16 @@ const request = async <T = JsonValue>(method: HttpMethod, path: string, body?: J
   });
 
   const rawText = await response.text();
+
+  if (response.status === 401) {
+    if (!allowRetry) {
+      throw new HttpRequestError(`Request to ${path} failed with status ${response.status}`, response.status, rawText);
+    }
+    authToken = null;
+    tokenExpiresAt = null;
+    return request(method, path, body, false);
+  }
+
   let parsed: JsonValue | undefined;
   if (rawText) {
     try {
