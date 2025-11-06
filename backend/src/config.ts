@@ -102,7 +102,7 @@ export const config: AppConfig = {
     host: process.env.EMQX_MGMT_HOST || process.env.MQTT_HOST || 'emqx',
     port: parseNumber(process.env.EMQX_MGMT_PORT, 18083),
     username: process.env.EMQX_MGMT_USERNAME || 'admin',
-    password: process.env.EMQX_MGMT_PASSWORD || 'public',
+    password: process.env.EMQX_MGMT_PASSWORD || '20025@BLELoRa',
     ssl: parseBoolean(process.env.EMQX_MGMT_SSL, false),
     maxRetries: Math.max(1, parseNumber(process.env.EMQX_MGMT_MAX_RETRIES, 10)),
     retryIntervalMs: Math.max(500, parseNumber(process.env.EMQX_MGMT_RETRY_INTERVAL_MS, 3000))

@@ -29,7 +29,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      EMQX_MGMT_HOST=emqx
      EMQX_MGMT_PORT=18083
      EMQX_MGMT_USERNAME=admin
-     EMQX_MGMT_PASSWORD=public
+     EMQX_MGMT_PASSWORD=20025@BLELoRa
      EMQX_MGMT_SSL=false
      ```
      Si necesita anular valores, edite este archivo antes de levantar los servicios.
