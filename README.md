@@ -25,14 +25,14 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      ```env
      MQTT_HOST=emqx
      MQTT_PORT=1883
-     MQTT_PERSISTENCE_MODE=emqx
+     MQTT_PERSISTENCE_MODE=app
      EMQX_MGMT_HOST=emqx
      EMQX_MGMT_PORT=18083
      EMQX_MGMT_USERNAME=admin
      EMQX_MGMT_PASSWORD=20025@BLELoRa
      EMQX_MGMT_SSL=false
      ```
-     Si necesita anular valores, edite este archivo antes de levantar los servicios.
+    El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`. Cambie a `MQTT_PERSISTENCE_MODE=emqx` únicamente si su instancia de EMQX dispone de conectores PostgreSQL (por ejemplo, la edición Enterprise) o ha configurado un bridge compatible manualmente. Si el broker rechaza el conector, la aplicación continuará automáticamente con la persistencia local.
 
 3. **Construir e iniciar todos los servicios de aplicación y datos:**
    ```bash
@@ -108,7 +108,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 - **Acceso externo:** `mqtt://<dominio-o-ip>:1887` (sin TLS). Cree usuarios/contraseñas específicos para clientes finales.
 - **Acceso interno (app → EMQX):** `mqtt://emqx:1883` gracias al fichero `backend/.env`.
 - **Panel de control:** disponible en `https://horizonst.com.es/emqx/` tras Nginx. No abra el puerto 18083 de manera directa.
-- **Persistencia nativa de mensajes:** durante el arranque la API crea (vía REST) un conector y una regla de EMQX que envían el contenido de **todos** los topics a PostgreSQL (`mqtt_messages`). El histórico queda disponible en la ruta autenticada `GET /api/messages` y en la tabla para auditoría o análisis forense.
+- **Persistencia de mensajes:** por defecto la API guarda los payloads recibidos en `mqtt_messages`. Si configura `MQTT_PERSISTENCE_MODE=emqx` y el broker soporta conectores `pgsql`, el servicio intentará delegar la ingesta vía REST en EMQX; en caso contrario mantendrá el modo local sin bloquear el arranque.
 - **Pruebas rápidas (Windows):**
   - *MQTTX:* configure un perfil con host `<dominio>` y puerto `1887`, suscríbase a `test/#` y publique en `test/ping`.
   - *Mosquitto CLI:*

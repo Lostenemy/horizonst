@@ -127,6 +127,26 @@ const request = async <T = JsonValue>(method: HttpMethod, path: string, body?: J
 
 const connectorPath = `/connectors/${CONNECTOR_NAME}`;
 
+const isUnsupportedConnectorError = (error: unknown): boolean => {
+  if (!(error instanceof HttpRequestError)) {
+    return false;
+  }
+
+  if (error.status === 401 || error.status === 403) {
+    return true;
+  }
+
+  if (error.status !== 400) {
+    return false;
+  }
+
+  if (!error.body) {
+    return false;
+  }
+
+  return error.body.includes('unknown connector type');
+};
+
 const getConnector = async (): Promise<JsonValue | null> => {
   try {
     return await request('GET', connectorPath);
@@ -248,15 +268,23 @@ const delay = (ms: number): Promise<void> => {
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
-export const ensureEmqxMessageAudit = async (): Promise<void> => {
+export type EmqxAuditResult = 'ready' | 'unsupported';
+
+export const ensureEmqxMessageAudit = async (): Promise<EmqxAuditResult> => {
   for (let attempt = 1; attempt <= config.emqx.maxRetries; attempt += 1) {
     try {
       await ensureConnector();
       await ensureBridge();
       await ensureRule();
       console.log('EMQX message audit integration is ready');
-      return;
+      return 'ready';
     } catch (error) {
+      if (isUnsupportedConnectorError(error)) {
+        console.warn(
+          'EMQX management API does not support the configured PostgreSQL connector; falling back to application-level persistence.'
+        );
+        return 'unsupported';
+      }
       console.error(`Failed to configure EMQX message auditing (attempt ${attempt}/${config.emqx.maxRetries})`, error);
       if (attempt === config.emqx.maxRetries) {
         throw error;
@@ -264,4 +292,5 @@ export const ensureEmqxMessageAudit = async (): Promise<void> => {
       await delay(config.emqx.retryIntervalMs);
     }
   }
+  return 'unsupported';
 };

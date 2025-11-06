@@ -17,7 +17,11 @@ const start = async () => {
     await runMigrations();
     console.log('Database migrations applied');
     if (config.mqtt.persistenceMode === 'emqx') {
-      await ensureEmqxMessageAudit();
+      const auditResult = await ensureEmqxMessageAudit();
+      if (auditResult === 'unsupported') {
+        config.mqtt.persistenceMode = 'app';
+        console.warn('Falling back to application-level MQTT message persistence.');
+      }
     }
     await initMqtt();
     startAlarmMonitor();
