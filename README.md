@@ -21,10 +21,16 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    ```
 
 2. **Configurar variables opcionales:**
-   - El contenedor de la app consume el fichero `backend/.env`. Incluye la configuración mínima para enlazar con EMQX dentro de la red de Docker:
+  - El contenedor de la app consume el fichero `backend/.env`. Incluye la configuración mínima para enlazar con EMQX dentro de la red de Docker y exponer las credenciales del panel para la integración de auditoría:
      ```env
      MQTT_HOST=emqx
      MQTT_PORT=1883
+     MQTT_PERSISTENCE_MODE=emqx
+     EMQX_MGMT_HOST=emqx
+     EMQX_MGMT_PORT=18083
+     EMQX_MGMT_USERNAME=admin
+     EMQX_MGMT_PASSWORD=public
+     EMQX_MGMT_SSL=false
      ```
      Si necesita anular valores, edite este archivo antes de levantar los servicios.
 
@@ -102,6 +108,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 - **Acceso externo:** `mqtt://<dominio-o-ip>:1887` (sin TLS). Cree usuarios/contraseñas específicos para clientes finales.
 - **Acceso interno (app → EMQX):** `mqtt://emqx:1883` gracias al fichero `backend/.env`.
 - **Panel de control:** disponible en `https://horizonst.com.es/emqx/` tras Nginx. No abra el puerto 18083 de manera directa.
+- **Persistencia nativa de mensajes:** durante el arranque la API crea (vía REST) un conector y una regla de EMQX que envían el contenido de **todos** los topics a PostgreSQL (`mqtt_messages`). El histórico queda disponible en la ruta autenticada `GET /api/messages` y en la tabla para auditoría o análisis forense.
 - **Pruebas rápidas (Windows):**
   - *MQTTX:* configure un perfil con host `<dominio>` y puerto `1887`, suscríbase a `test/#` y publique en `test/ping`.
   - *Mosquitto CLI:*
