@@ -1,4 +1,4 @@
-import mqtt, { IClientOptions, MqttClient } from 'mqtt';
+import mqtt, { type IPublishPacket, IClientOptions, MqttClient } from 'mqtt';
 import { config } from '../config';
 import { decodeMk1 } from './decoders/mk1Decoder';
 import { decodeMk2 } from './decoders/mk2Decoder';
@@ -49,9 +49,14 @@ export const initMqtt = async (): Promise<void> => {
       console.error('MQTT error', error);
     });
 
-    client.on('message', async (topic: string, messageBuffer: Buffer) => {
+    const shouldPersistLocally = config.mqtt.persistenceMode === 'app';
+
+    client.on('message', async (topic: string, messageBuffer: Buffer, packet: IPublishPacket) => {
       const payloadText = messageBuffer.toString();
-      const storedPayload = topic === 'devices/MK2' ? messageBuffer.toString('hex') : payloadText;
+      const payloadHex = messageBuffer.toString('hex');
+      const payloadBase64 = messageBuffer.toString('base64');
+      const payloadEncoding = topic === 'devices/MK2' ? 'hex' : 'utf8';
+      const storedPayload = topic === 'devices/MK2' ? payloadHex : payloadText;
       let records: ProcessedDeviceRecord[] = [];
       try {
         if (topic === 'devices/MK1') {
@@ -67,11 +72,22 @@ export const initMqtt = async (): Promise<void> => {
 
       const gatewayMac = records[0]?.gatewayMac || null;
       try {
-        await pool.query(
-          `INSERT INTO mqtt_messages (topic, payload, gateway_mac, received_at)
-           VALUES ($1, $2, $3, NOW())`,
-          [topic, storedPayload, gatewayMac]
-        );
+        if (shouldPersistLocally) {
+          await pool.query(
+            `INSERT INTO mqtt_messages (topic, payload, payload_raw, payload_encoding, client_id, qos, retain, gateway_mac, received_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+            [
+              topic,
+              storedPayload,
+              payloadBase64,
+              payloadEncoding,
+              null,
+              packet?.qos ?? 0,
+              packet?.retain ?? false,
+              gatewayMac
+            ]
+          );
+        }
       } catch (error) {
         console.error('Failed to persist MQTT message', error);
       }

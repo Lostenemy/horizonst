@@ -26,6 +26,14 @@ services:
       - DB_NAME=horizonst
       - MQTT_USER=${MQTT_USER:-Horizon@user2024}
       - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+      - MQTT_PERSISTENCE_MODE=app
+      - EMQX_MGMT_HOST=emqx
+      - EMQX_MGMT_PORT=18083
+      - EMQX_MGMT_USERNAME=admin
+      - EMQX_MGMT_PASSWORD=20025@BLELoRa
+      - EMQX_MGMT_SSL=false
+      - EMQX_MGMT_MAX_RETRIES=20
+      - EMQX_MGMT_RETRY_INTERVAL_MS=3000
     depends_on:
       - postgres
       - emqx
@@ -129,8 +137,11 @@ services:
     environment:
       - EMQX_NODE__NAME=emqx@127.0.0.1
       - EMQX_LISTENERS__TCP__DEFAULT__BIND=0.0.0.0:1883
-      - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=20025@BLELoRa
       - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_ALLOW_ANONYMOUS=false
+      - EMQX_AUTH__MNESIA__USER__1__USERNAME=${MQTT_USER:-Horizon@user2024}
+      - EMQX_AUTH__MNESIA__USER__1__PASSWORD=${MQTT_PASS:-Chanel_horizon@2024}
     restart: unless-stopped
     logging:
       driver: json-file

@@ -6,7 +6,8 @@ const router = Router();
 
 router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
   try {
-    let query = `SELECT m.id, m.topic, m.gateway_mac, m.payload, m.received_at,
+    let query = `SELECT m.id, m.topic, m.gateway_mac, m.payload, m.payload_raw, m.payload_encoding,
+                        m.client_id, m.qos, m.retain, m.received_at,
                         g.id AS gateway_id, g.name AS gateway_name,
                         p.id AS place_id, p.name AS place_name
                  FROM mqtt_messages m

@@ -145,9 +145,28 @@ CREATE TABLE IF NOT EXISTS mqtt_messages (
     id BIGSERIAL PRIMARY KEY,
     topic TEXT NOT NULL,
     payload TEXT NOT NULL,
+    payload_raw TEXT,
+    payload_encoding TEXT DEFAULT 'plain',
+    client_id TEXT,
+    qos SMALLINT,
+    retain BOOLEAN DEFAULT FALSE,
     gateway_mac VARCHAR(32),
     received_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE mqtt_messages
+    ADD COLUMN IF NOT EXISTS payload_raw TEXT,
+    ADD COLUMN IF NOT EXISTS payload_encoding TEXT DEFAULT 'plain',
+    ADD COLUMN IF NOT EXISTS client_id TEXT,
+    ADD COLUMN IF NOT EXISTS qos SMALLINT,
+    ADD COLUMN IF NOT EXISTS retain BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE mqtt_messages
+    ALTER COLUMN payload_encoding SET DEFAULT 'plain',
+    ALTER COLUMN retain SET DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_mqtt_messages_topic ON mqtt_messages(topic);
+CREATE INDEX IF NOT EXISTS idx_mqtt_messages_received_at ON mqtt_messages(received_at DESC);
 
 CREATE TABLE IF NOT EXISTS alarm_configs (
     id SERIAL PRIMARY KEY,

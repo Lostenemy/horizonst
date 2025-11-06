@@ -5,6 +5,7 @@ import { initMqtt } from './services/mqttService';
 import { startAlarmMonitor } from './services/alarmMonitor';
 import { pool } from './db/pool';
 import { runMigrations } from './db/migrations';
+import { ensureEmqxMessageAudit } from './services/emqxAudit';
 
 const server = http.createServer(app);
 
@@ -15,6 +16,13 @@ const start = async () => {
     console.log('Connected to PostgreSQL');
     await runMigrations();
     console.log('Database migrations applied');
+    if (config.mqtt.persistenceMode === 'emqx') {
+      const auditResult = await ensureEmqxMessageAudit();
+      if (auditResult === 'unsupported') {
+        config.mqtt.persistenceMode = 'app';
+        console.warn('Falling back to application-level MQTT message persistence.');
+      }
+    }
     await initMqtt();
     startAlarmMonitor();
     server.listen(config.port, config.host, () => {

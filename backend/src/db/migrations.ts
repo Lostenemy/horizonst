@@ -34,7 +34,17 @@ const statements: string[] = [
   `UPDATE category_photos SET image_data = '' WHERE image_data IS NULL`,
   `ALTER TABLE category_photos ALTER COLUMN image_data SET NOT NULL`,
   `UPDATE place_photos SET image_data = '' WHERE image_data IS NULL`,
-  `ALTER TABLE place_photos ALTER COLUMN image_data SET NOT NULL`
+  `ALTER TABLE place_photos ALTER COLUMN image_data SET NOT NULL`,
+  `ALTER TABLE mqtt_messages
+      ADD COLUMN IF NOT EXISTS payload_raw TEXT,
+      ADD COLUMN IF NOT EXISTS payload_encoding TEXT DEFAULT 'plain',
+      ADD COLUMN IF NOT EXISTS client_id TEXT,
+      ADD COLUMN IF NOT EXISTS qos SMALLINT,
+      ADD COLUMN IF NOT EXISTS retain BOOLEAN DEFAULT FALSE`,
+  `ALTER TABLE mqtt_messages
+      ALTER COLUMN payload_encoding SET DEFAULT 'plain'`,
+  `ALTER TABLE mqtt_messages
+      ALTER COLUMN retain SET DEFAULT FALSE`
 ];
 
 export const runMigrations = async (): Promise<void> => {

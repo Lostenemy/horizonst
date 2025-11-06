@@ -49,6 +49,7 @@ interface MqttConfig {
   clean: boolean;
   connectTimeout: number;
   clientPrefix: string;
+  persistenceMode: 'app' | 'emqx';
 }
 
 interface AppConfig {
@@ -58,6 +59,17 @@ interface AppConfig {
   jwtExpiresIn: string;
   database: DatabaseConfig;
   mqtt: MqttConfig;
+  emqx: EmqxManagementConfig;
+}
+
+interface EmqxManagementConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  ssl: boolean;
+  maxRetries: number;
+  retryIntervalMs: number;
 }
 
 export const config: AppConfig = {
@@ -83,6 +95,16 @@ export const config: AppConfig = {
     protocolVersion: parseProtocolVersion(process.env.MQTT_PROTOCOL_VERSION),
     clean: parseBoolean(process.env.MQTT_CLEAN, true),
     connectTimeout: parseNumber(process.env.MQTT_CONNECT_TIMEOUT, 10000),
-    clientPrefix: process.env.MQTT_CLIENT_PREFIX || 'acces_control_server_'
+    clientPrefix: process.env.MQTT_CLIENT_PREFIX || 'acces_control_server_',
+    persistenceMode: process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app'
+  },
+  emqx: {
+    host: process.env.EMQX_MGMT_HOST || process.env.MQTT_HOST || 'emqx',
+    port: parseNumber(process.env.EMQX_MGMT_PORT, 18083),
+    username: process.env.EMQX_MGMT_USERNAME || 'admin',
+    password: process.env.EMQX_MGMT_PASSWORD || '20025@BLELoRa',
+    ssl: parseBoolean(process.env.EMQX_MGMT_SSL, false),
+    maxRetries: Math.max(1, parseNumber(process.env.EMQX_MGMT_MAX_RETRIES, 10)),
+    retryIntervalMs: Math.max(500, parseNumber(process.env.EMQX_MGMT_RETRY_INTERVAL_MS, 3000))
   }
 };
