@@ -141,7 +141,7 @@ const getConnector = async (): Promise<JsonValue | null> => {
 const ensureConnector = async (): Promise<void> => {
   const connectorPayload = {
     name: CONNECTOR_NAME,
-    type: 'postgresql',
+    type: 'pgsql',
     enable: true,
     description: 'PostgreSQL connector for MQTT message auditing',
     config: {
@@ -151,7 +151,7 @@ const ensureConnector = async (): Promise<void> => {
       password: config.database.password,
       pool_size: 16,
       auto_reconnect: true,
-      ssl: false
+      ssl: 'disable'
     }
   };
 
@@ -180,7 +180,7 @@ const getBridge = async (): Promise<JsonValue | null> => {
 const ensureBridge = async (): Promise<void> => {
   const bridgePayload = {
     name: BRIDGE_NAME,
-    type: 'postgresql',
+    type: 'pgsql',
     enable: true,
     description: 'Bridge that persists MQTT payloads in PostgreSQL for auditing',
     connector: CONNECTOR_NAME,
