@@ -470,32 +470,6 @@ main section {
   font-weight: 500;
 }
 
-.hero__logos {
-  display: grid;
-  gap: 12px;
-  color: rgba(226, 232, 240, 0.9);
-}
-
-.hero__logos-title {
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.hero__logo-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.logo-pill {
-  padding: 8px 18px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.25);
-  border: 1px solid rgba(248, 250, 252, 0.2);
-  font-size: 14px;
-}
-
 .hero__media {
   position: relative;
   display: grid;
@@ -927,46 +901,6 @@ main section {
 .case p {
   margin: 0;
   color: var(--text-muted);
-}
-
-.testimonials {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  max-width: var(--max-width);
-  margin: 0 auto;
-}
-
-.testimonial {
-  background: #ffffff;
-  border-radius: var(--radius-card);
-  padding: 32px;
-  box-shadow: var(--card-shadow);
-  border: 1px solid rgba(15, 23, 42, 0.05);
-  display: grid;
-  gap: 16px;
-}
-
-.testimonial blockquote {
-  margin: 0;
-  font-size: 18px;
-  color: var(--text-muted);
-  line-height: 1.7;
-}
-
-.testimonial__logo {
-  width: fit-content;
-  padding: 8px 18px;
-  border-radius: 999px;
-  background: rgba(37, 99, 235, 0.1);
-  color: var(--primary);
-  font-weight: 600;
-}
-
-.testimonial__author {
-  margin: 0;
-  font-weight: 600;
-  color: var(--text-main);
 }
 
 .accordion {
@@ -1443,8 +1377,7 @@ main section {
 
   .grid,
   .showcase,
-  .comparison,
-  .testimonials {
+  .comparison {
     width: 100%;
     margin-inline: 0;
     grid-template-columns: minmax(0, 1fr);
@@ -1526,7 +1459,6 @@ main section {
 
   .showcase__item,
   .comparison__column,
-  .testimonial,
   .case {
     padding: 24px;
   }
@@ -1550,10 +1482,6 @@ main section {
     justify-items: stretch;
   }
 
-  .logo-pill {
-    font-size: 13px;
-  }
-
   main section {
     scroll-margin-top: 76px;
   }
@@ -1561,7 +1489,6 @@ main section {
   .card,
   .showcase__item,
   .comparison__column,
-  .testimonial,
   .case {
     padding: 24px;
   }
