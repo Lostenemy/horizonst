@@ -669,43 +669,6 @@ main section {
   color: var(--text-main);
 }
 
-.section--band {
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(226, 232, 240, 0.4) 100%);
-  color: var(--text-main);
-  padding: 64px 24px;
-  border-block: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.stats-band {
-  max-width: var(--max-width);
-  width: min(100%, var(--max-width));
-  margin: 0 auto;
-  display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  align-items: center;
-  justify-items: center;
-}
-
-.stats-band__item {
-  display: grid;
-  gap: 8px;
-  text-align: center;
-}
-
-.stats-band__value {
-  font-size: clamp(32px, 4vw, 44px);
-  font-weight: 700;
-  color: var(--primary);
-}
-
-.stats-band__label {
-  font-size: 16px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
 .section--dark {
   background: var(--bg-darker);
   color: var(--text-inverse);
@@ -1481,8 +1444,7 @@ main section {
   .grid,
   .showcase,
   .comparison,
-  .testimonials,
-  .stats-band {
+  .testimonials {
     width: 100%;
     margin-inline: 0;
     grid-template-columns: minmax(0, 1fr);
@@ -1550,16 +1512,6 @@ main section {
   .hero__stats {
     grid-template-columns: minmax(0, 1fr);
     max-width: none;
-  }
-
-  .stats-band {
-    justify-items: stretch;
-    text-align: left;
-    gap: 20px;
-  }
-
-  .stats-band__item {
-    text-align: left;
   }
 
   .glow {
