@@ -587,7 +587,14 @@
             Cuéntanos tus retos logísticos y te mostraremos cómo HorizonST puede resolverlos en pocas semanas. Usaremos tus datos
             únicamente para coordinar la demo.
           </p>
-          <form class="contact" aria-label="Formulario de contacto" novalidate>
+          <form
+            class="contact"
+            aria-label="Formulario de contacto"
+            action="mailto:horizonsmartracker@gmail.com"
+            method="post"
+            enctype="text/plain"
+            novalidate
+          >
             <div class="contact__row">
               <label for="nombre">Nombre</label>
               <input id="nombre" name="nombre" type="text" placeholder="Nombre y apellidos" autocomplete="name" required />
@@ -729,21 +736,44 @@
         }
 
         statusEl.classList.remove("contact__status--error", "contact__status--success");
-        statusEl.textContent = "Enviando solicitud...";
+        statusEl.textContent = "Preparando el correo...";
         submitBtn.disabled = true;
         submitBtn.classList.add("cta--loading");
 
-        window.setTimeout(() => {
-          statusEl.textContent = "¡Gracias! Te contactaremos en menos de 24 horas para coordinar la demo.";
-          statusEl.classList.add("contact__status--success");
-          form.reset();
-          fields.forEach(({ id }) => {
-            const input = form.querySelector(`#${id}`);
-            input.classList.remove("is-valid");
-          });
-          submitBtn.disabled = false;
-          submitBtn.classList.remove("cta--loading");
-        }, 900);
+        const formData = new FormData(form);
+        const nombre = formData.get("nombre")?.trim() ?? "";
+        const empresa = formData.get("empresa")?.trim() ?? "";
+        const email = formData.get("email")?.trim() ?? "";
+        const mensaje = formData.get("mensaje")?.trim() ?? "";
+
+        const subjectBase = empresa || nombre || "Solicitud demo";
+        const subject = encodeURIComponent(`Solicitud demo · ${subjectBase}`);
+        const bodyLines = [
+          "Nueva solicitud de demo desde horizonst.com:",
+          "",
+          `Nombre: ${nombre}`,
+          `Empresa: ${empresa}`,
+          `Email: ${email}`,
+          "",
+          "Mensaje:",
+          mensaje
+        ];
+
+        const body = encodeURIComponent(bodyLines.join("\n"));
+        const mailtoLink = `mailto:horizonsmartracker@gmail.com?subject=${subject}&body=${body}`;
+
+        window.location.href = mailtoLink;
+
+        statusEl.textContent =
+          "Hemos abierto tu cliente de correo para que completes el envío a horizonsmartracker@gmail.com.";
+        statusEl.classList.add("contact__status--success");
+        form.reset();
+        fields.forEach(({ id }) => {
+          const input = form.querySelector(`#${id}`);
+          input.classList.remove("is-valid");
+        });
+        submitBtn.disabled = false;
+        submitBtn.classList.remove("cta--loading");
       });
 
       const menuToggle = document.querySelector(".menu-toggle");
