@@ -37,6 +37,7 @@ services:
     depends_on:
       - postgres
       - emqx
+      - mail
     restart: unless-stopped
     logging:
       driver: json-file
@@ -159,9 +160,67 @@ services:
     networks:
       - horizonst
 
+  mail:
+    image: mailserver/docker-mailserver:latest
+    hostname: mail
+    domainname: horizonst.com.es
+    container_name: mail
+    env_file:
+      - ./mailserver/mailserver.env
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    volumes:
+      - mail_data:/var/mail
+      - mail_state:/var/mail-state
+      - mail_logs:/var/log/mail
+      - ./mailserver/config/:/tmp/docker-mailserver/
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    networks:
+      - horizonst
+
+  webmail:
+    image: roundcube/roundcubemail:1.6.6-apache
+    depends_on:
+      - mail
+    environment:
+      - ROUNDCUBE_DEFAULT_HOST=mail
+      - ROUNDCUBE_DEFAULT_PORT=143
+      - ROUNDCUBE_SMTP_SERVER=mail
+      - ROUNDCUBE_SMTP_PORT=587
+      - ROUNDCUBE_DES_KEY=${ROUNDCUBE_DES_KEY:-b0c1a9f5f7e94a3d}
+      - ROUNDCUBE_PLUGINS=archive,zipdownload,managesieve
+      - ROUNDCUBE_SKIN=elastic
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    volumes:
+      - webmail_data:/var/roundcube
+    ports:
+      - "127.0.0.1:8080:80"
+    networks:
+      - horizonst
+
 networks:
   horizonst:
     driver: bridge
 
 volumes:
   postgres_data:
+  mail_data:
+  mail_state:
+  mail_logs:
+  webmail_data:

@@ -33,6 +33,19 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      EMQX_MGMT_SSL=false
      ```
     El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`. Cambie a `MQTT_PERSISTENCE_MODE=emqx` únicamente si su instancia de EMQX dispone de conectores PostgreSQL (por ejemplo, la edición Enterprise) o ha configurado un bridge compatible manualmente. Si el broker rechaza el conector, la aplicación continuará automáticamente con la persistencia local.
+   - Para enrutar los envíos de correo desde la API configure además:
+     ```env
+     MAIL_HOST=mail
+     MAIL_PORT=465
+     MAIL_SECURE=true
+     MAIL_USER=notificaciones@horizonst.com.es
+     MAIL_PASSWORD=HorizonMail#2024
+     MAIL_FROM=notificaciones@horizonst.com.es
+     CONTACT_RECIPIENTS=contacto@horizonst.com.es,soporte@horizonst.com.es
+     MAIL_EHLO_DOMAIN=horizonst.com.es
+     MAIL_TLS_REJECT_UNAUTHORIZED=false
+     ```
+     El valor `MAIL_TLS_REJECT_UNAUTHORIZED=false` permite utilizar el certificado autofirmado generado por defecto en el contenedor `mail`. Cambie a `true` cuando cargue certificados emitidos por una CA.
 
 3. **Construir e iniciar todos los servicios de aplicación y datos:**
    ```bash
@@ -44,6 +57,8 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    - `postgres`: base de datos PostgreSQL inicializada con `db/schema.sql` y `db/seed.sql`.
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (usuario: `admin@horizonst.com.es`, contraseña: `admin`).
    - `emqx`: broker MQTT expuesto en el puerto `1887` del host (sin TLS) y con dashboard interno en `http://127.0.0.1:18083/`.
+   - `mail`: servidor SMTP/IMAP basado en docker-mailserver expuesto en los puertos `25`, `465`, `587` y `993` del host.
+   - `webmail`: interfaz Roundcube ligada a `http://127.0.0.1:8080/` (utilícela detrás de Nginx en producción mediante `/webmail/`).
 
 4. **(Opcional) Lanzar únicamente el microservicio RFID:**
    Si solo necesita depurar el flujo de validación RFID, puede emplear el `docker-compose.rfid-access.yml` incluido en la raíz
@@ -60,6 +75,15 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      - Usuario: `admin@horizonst.com.es`
      - Contraseña: `Admin@2024`
    - Cambie la contraseña del administrador tras el primer inicio de sesión.
+
+### Servidor de correo HorizonST
+
+- La configuración de Docker Mailserver vive en `mailserver/`. El fichero `mailserver.env` habilita Fail2Ban y Managesieve y deja desactivados ClamAV/SpamAssassin para reducir consumo. Todos los datos persistentes se guardan en los volúmenes `mail_data`, `mail_state` y `mail_logs`.
+- `mailserver/config/postfix-accounts.cf` provisiona la cuenta `notificaciones@horizonst.com.es` con la contraseña `HorizonMail#2024`. Úsela como buzón de salida por defecto en `backend/.env`. Añada nuevas cuentas ejecutando `docker compose exec mail setup email add usuario@horizonst.com.es <contraseña>` o editando dicho fichero y recargando el contenedor.
+- `mailserver/config/postfix-aliases.cf` enruta `contacto@horizonst.com.es` y `soporte@horizonst.com.es` hacia el buzón principal para centralizar las solicitudes del portal.
+- Roundcube se expone a través del servicio `webmail` y, tras el proxy inverso, queda disponible en `https://horizonst.com.es/webmail/`. Inicie sesión con `notificaciones@horizonst.com.es` para revisar bandejas, responder y organizar carpetas. La contraseña coincide con la definida en `MAIL_PASSWORD`.
+- Para firmar DKIM ejecute una vez `docker compose exec mail setup config dkim` y publique el registro TXT indicado en su DNS (`mailserver/config/opendkim/keys/`).
+- Recuerde crear los registros DNS necesarios: `MX` apuntando a `mail.horizonst.com.es`, SPF (`v=spf1 mx ~all`) y, opcionalmente, DMARC (`_dmarc`). Abra en el cortafuegos los puertos TCP `25`, `465`, `587` y `993` hacia el host que ejecuta Docker.
 
 ## Estructura del proyecto
 
@@ -90,6 +114,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 - **Administradores** pueden registrar gateways y dispositivos, consultar mensajes MQTT, revisar históricos completos y gestionar alarmas.
 - **Usuarios** gestionan lugares, categorías, asignación de dispositivos y fotos, así como reclamación de dispositivos por MAC.
 - Visualizaciones agrupadas por lugar y herramientas para configurar alarmas basadas en tiempo sin señal.
+- El formulario público de contacto envía las solicitudes mediante `POST /api/contact`, almacenando una copia en `notificaciones@horizonst.com.es` y mostrando confirmaciones en la propia página.
 
 ### Alarmas
 
@@ -100,6 +125,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 ## Arquitectura de despliegue
 
 - **Nginx (host):** sirve la aplicación en HTTPS y publica los paneles de EMQX (`/emqx`) y pgAdmin (`/pgadmin`). Redirige automáticamente las peticiones HTTP (80) a HTTPS (443).
+- Añada al `server` HTTPS un bloque para `/webmail/` que apunte a `http://127.0.0.1:8080/` y habilite `proxy_buffering off` para Roundcube. Mantenga publicados los puertos TCP `25`, `465`, `587` y `993` del host para el servicio SMTP/IMAP.
 - **Docker Compose (loopback):** la app, PostgreSQL y pgAdmin solo escuchan en `127.0.0.1`. EMQX expone el puerto `1887` hacia el exterior sin TLS y mantiene el dashboard ligado al loopback (`127.0.0.1:18083`).
 - **Supervisión:** la API expone `GET /health` y los servicios incluyen healthchecks y rotación de logs (`json-file`, 50 MB × 3).
 
