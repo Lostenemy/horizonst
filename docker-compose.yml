@@ -195,13 +195,12 @@ services:
     depends_on:
       - mail
     environment:
-      - ROUNDCUBE_DEFAULT_HOST=ssl://mail
-      - ROUNDCUBE_DEFAULT_PORT=993
-      - ROUNDCUBE_SMTP_SERVER=tls://mail
-      - ROUNDCUBE_SMTP_PORT=587
-      - ROUNDCUBE_DES_KEY=${ROUNDCUBE_DES_KEY:-b0c1a9f5f7e94a3d}
-      - ROUNDCUBE_PLUGINS=archive,zipdownload,managesieve
-      - ROUNDCUBE_SKIN=elastic
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mail
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=tls://mail
+      - ROUNDCUBEMAIL_SMTP_PORT=587
+      - ROUNDCUBEMAIL_SMTP_USER=%u
+      - ROUNDCUBEMAIL_SMTP_PASS=%p
     restart: unless-stopped
     logging:
       driver: json-file
