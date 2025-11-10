@@ -190,13 +190,14 @@ services:
       - horizonst
 
   webmail:
-    image: roundcube/roundcubemail:1.6.6-apache
+    build:
+      context: ./webmail
     depends_on:
       - mail
     environment:
-      - ROUNDCUBE_DEFAULT_HOST=mail
-      - ROUNDCUBE_DEFAULT_PORT=143
-      - ROUNDCUBE_SMTP_SERVER=mail
+      - ROUNDCUBE_DEFAULT_HOST=ssl://mail
+      - ROUNDCUBE_DEFAULT_PORT=993
+      - ROUNDCUBE_SMTP_SERVER=tls://mail
       - ROUNDCUBE_SMTP_PORT=587
       - ROUNDCUBE_DES_KEY=${ROUNDCUBE_DES_KEY:-b0c1a9f5f7e94a3d}
       - ROUNDCUBE_PLUGINS=archive,zipdownload,managesieve
