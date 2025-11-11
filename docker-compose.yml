@@ -190,8 +190,7 @@ services:
       - horizonst
 
   webmail:
-    build:
-      context: ./webmail
+    image: roundcube/roundcubemail:1.6.6-apache
     depends_on:
       - mail
     environment:
@@ -209,6 +208,7 @@ services:
         max-file: "5"
     volumes:
       - webmail_data:/var/roundcube
+      - ./webmail/config/config.docker.inc.php:/var/www/html/config/config.docker.inc.php:ro
     ports:
       - "127.0.0.1:8080:80"
     networks:
