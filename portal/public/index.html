@@ -19,6 +19,7 @@
     />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="es_ES" />
+    <meta name="contact-api-base" content="https://api.horizonst.com.es" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -636,7 +637,7 @@
           </div>
           <div class="card card--outline card--contact">
             <h3>También puedes escribirnos</h3>
-            <a href="mailto:horizonsmartracker@gmail.com" class="link">horizonsmartracker@gmail.com</a>
+            <a href="mailto:contacto@horizonst.com.es" class="link">contacto@horizonst.com.es</a>
             <p class="contact-info__phone">+34 900 000 123</p>
             <p class="contact__privacy">Responderemos en menos de 24 horas.</p>
           </div>
@@ -666,7 +667,7 @@
       <div class="footer__legal">
         <p>&copy; <span id="year"></span> HorizonST. Todos los derechos reservados.</p>
         <p>
-          <a class="link" href="mailto:horizonsmartracker@gmail.com">horizonsmartracker@gmail.com</a>
+          <a class="link" href="mailto:contacto@horizonst.com.es">contacto@horizonst.com.es</a>
           · CIF B-12345678 · <a class="link" href="#contacto">Aviso legal y privacidad</a>
         </p>
         <div class="footer__social" aria-label="Redes sociales">
@@ -694,6 +695,24 @@
         { id: "mensaje", message: "Comparte el reto que quieres resolver." }
       ];
 
+      const detectApiBase = () => {
+        const metaBase = document.querySelector('meta[name="contact-api-base"]');
+        const fromMeta = metaBase?.getAttribute('content');
+        if (fromMeta && fromMeta.trim()) {
+          return fromMeta.replace(/\/$/, '');
+        }
+        const { origin, hostname, port } = window.location;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || port === '3080') {
+          return 'http://127.0.0.1:3000';
+        }
+        if (hostname.startsWith('www.')) {
+          return origin.replace('www.', 'api.');
+        }
+        return origin;
+      };
+
+      const apiBase = detectApiBase();
+
       const validateField = ({ id, message }) => {
         const input = form.querySelector(`#${id}`);
         const error = form.querySelector(`#error-${id}`);
@@ -719,7 +738,7 @@
         input.addEventListener("blur", () => validateField(field));
       });
 
-      form.addEventListener("submit", (event) => {
+      form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const allValid = fields.every((field) => validateField(field));
         if (!allValid) {
@@ -729,7 +748,7 @@
         }
 
         statusEl.classList.remove("contact__status--error", "contact__status--success");
-        statusEl.textContent = "Preparando el correo...";
+        statusEl.textContent = "Enviando tu solicitud...";
         submitBtn.disabled = true;
         submitBtn.classList.add("cta--loading");
 
@@ -738,35 +757,42 @@
         const empresa = formData.get("empresa")?.trim() ?? "";
         const email = formData.get("email")?.trim() ?? "";
         const mensaje = formData.get("mensaje")?.trim() ?? "";
+        try {
+          const response = await fetch(`${apiBase}/api/contact`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: nombre,
+              company: empresa,
+              email,
+              message: mensaje
+            })
+          });
 
-        const subjectBase = empresa || nombre || "Solicitud demo";
-        const subject = encodeURIComponent(`Solicitud demo · ${subjectBase}`);
-        const bodyLines = [
-          "Nueva solicitud de demo desde horizonst.com:",
-          "",
-          `Nombre: ${nombre}`,
-          `Empresa: ${empresa}`,
-          `Email: ${email}`,
-          "",
-          "Mensaje:",
-          mensaje
-        ];
+          const payload = await response
+            .json()
+            .catch(() => ({ message: "Hemos recibido tu solicitud correctamente." }));
 
-        const body = encodeURIComponent(bodyLines.join("\n"));
-        const mailtoLink = `mailto:horizonsmartracker@gmail.com?subject=${subject}&body=${body}`;
+          if (!response.ok) {
+            throw new Error(payload?.message || "No se pudo enviar tu solicitud. Inténtalo de nuevo.");
+          }
 
-        window.location.href = mailtoLink;
-
-        statusEl.textContent =
-          "Hemos abierto tu cliente de correo para que completes el envío a horizonsmartracker@gmail.com.";
-        statusEl.classList.add("contact__status--success");
-        form.reset();
-        fields.forEach(({ id }) => {
-          const input = form.querySelector(`#${id}`);
-          input.classList.remove("is-valid");
-        });
-        submitBtn.disabled = false;
-        submitBtn.classList.remove("cta--loading");
+          statusEl.textContent =
+            payload?.message || "Hemos recibido tu solicitud y nos pondremos en contacto contigo en menos de 24 horas.";
+          statusEl.classList.add("contact__status--success");
+          form.reset();
+          fields.forEach(({ id }) => {
+            const input = form.querySelector(`#${id}`);
+            input.classList.remove("is-valid");
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "No se pudo enviar tu solicitud.";
+          statusEl.textContent = message;
+          statusEl.classList.add("contact__status--error");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove("cta--loading");
+        }
       });
 
       const menuToggle = document.querySelector(".menu-toggle");

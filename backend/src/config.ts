@@ -17,6 +17,16 @@ const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean
   return value.toLowerCase() === 'true';
 };
 
+const parseList = (value: string | undefined): string[] => {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+};
+
 const parseProtocolId = (value: string | undefined): 'MQTT' | 'MQIsdp' => {
   return value === 'MQIsdp' ? 'MQIsdp' : 'MQTT';
 };
@@ -60,6 +70,7 @@ interface AppConfig {
   database: DatabaseConfig;
   mqtt: MqttConfig;
   emqx: EmqxManagementConfig;
+  mail: MailConfig;
 }
 
 interface EmqxManagementConfig {
@@ -70,6 +81,19 @@ interface EmqxManagementConfig {
   ssl: boolean;
   maxRetries: number;
   retryIntervalMs: number;
+}
+
+interface MailConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+  from: string;
+  contactRecipients: string[];
+  ehloDomain: string;
+  tlsRejectUnauthorized: boolean;
 }
 
 export const config: AppConfig = {
@@ -106,5 +130,30 @@ export const config: AppConfig = {
     ssl: parseBoolean(process.env.EMQX_MGMT_SSL, false),
     maxRetries: Math.max(1, parseNumber(process.env.EMQX_MGMT_MAX_RETRIES, 10)),
     retryIntervalMs: Math.max(500, parseNumber(process.env.EMQX_MGMT_RETRY_INTERVAL_MS, 3000))
-  }
+  },
+  mail: (() => {
+    const host = process.env.MAIL_HOST || 'mail';
+    const port = parseNumber(process.env.MAIL_PORT, 465);
+    const secure = parseBoolean(process.env.MAIL_SECURE, true);
+    const user = process.env.MAIL_USER || 'notificaciones@horizonst.com.es';
+    const password = process.env.MAIL_PASSWORD || 'HorizonMail#2024';
+    const from = process.env.MAIL_FROM || user;
+    const recipientsFromEnv = parseList(process.env.CONTACT_RECIPIENTS);
+    const recipients = recipientsFromEnv.length > 0 ? recipientsFromEnv : [from];
+    const enabled = parseBoolean(process.env.MAIL_ENABLED, true) && Boolean(host) && Boolean(user);
+    const ehloDomain = process.env.MAIL_EHLO_DOMAIN || 'horizonst.com.es';
+    const tlsRejectUnauthorized = parseBoolean(process.env.MAIL_TLS_REJECT_UNAUTHORIZED, false);
+    return {
+      enabled,
+      host,
+      port,
+      secure,
+      user,
+      password,
+      from,
+      contactRecipients: recipients,
+      ehloDomain,
+      tlsRejectUnauthorized
+    };
+  })()
 };
