@@ -33,14 +33,14 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      EMQX_MGMT_SSL=false
      ```
     El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`. Cambie a `MQTT_PERSISTENCE_MODE=emqx` únicamente si su instancia de EMQX dispone de conectores PostgreSQL (por ejemplo, la edición Enterprise) o ha configurado un bridge compatible manualmente. Si el broker rechaza el conector, la aplicación continuará automáticamente con la persistencia local.
-   - Para enrutar los envíos de correo desde la API configure además:
+   - Para enrutar los envíos de correo desde la API configure además (los valores por defecto utilizan el buzón `no_reply@horizonst.com.es` para envíos automatizados):
      ```env
      MAIL_HOST=mail
      MAIL_PORT=465
      MAIL_SECURE=true
-     MAIL_USER=notificaciones@horizonst.com.es
-     MAIL_PASSWORD=HorizonMail#2024
-     MAIL_FROM=notificaciones@horizonst.com.es
+     MAIL_USER=no_reply@horizonst.com.es
+     MAIL_PASSWORD=No_reply#2024
+     MAIL_FROM=no_reply@horizonst.com.es
      CONTACT_RECIPIENTS=contacto@horizonst.com.es,soporte@horizonst.com.es
      MAIL_EHLO_DOMAIN=horizonst.com.es
      MAIL_TLS_REJECT_UNAUTHORIZED=false
@@ -79,9 +79,11 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 ### Servidor de correo HorizonST
 
 - La configuración de Docker Mailserver vive en `mailserver/`. El fichero `mailserver.env` habilita Fail2Ban y Managesieve y deja desactivados ClamAV/SpamAssassin para reducir consumo. Todos los datos persistentes se guardan en los volúmenes `mail_data`, `mail_state` y `mail_logs`.
-- `mailserver/config/postfix-accounts.cf` provisiona la cuenta `notificaciones@horizonst.com.es` con la contraseña `HorizonMail#2024`. Úsela como buzón de salida por defecto en `backend/.env`. Añada nuevas cuentas ejecutando `docker compose exec mail setup email add usuario@horizonst.com.es <contraseña>` o editando dicho fichero y recargando el contenedor.
-- `mailserver/config/postfix-aliases.cf` enruta `contacto@horizonst.com.es` y `soporte@horizonst.com.es` hacia el buzón principal para centralizar las solicitudes del portal.
-- Roundcube se expone a través del servicio `webmail` y, tras el proxy inverso, queda disponible en `https://horizonst.com.es/webmail/`. El contenedor personalizado fuerza el prefijo `/webmail/`, confía en las cabeceras `X-Forwarded-*` del proxy y mantiene TLS hacia IMAP (`ssl://mail:993`) y SMTP (`tls://mail:587`). Inicie sesión con `notificaciones@horizonst.com.es` para revisar bandejas, responder y organizar carpetas. La contraseña coincide con la definida en `MAIL_PASSWORD`.
+- `mailserver/config/postfix-accounts.cf` provisiona `notificaciones@horizonst.com.es` (`HorizonMail#2024`) y `no_reply@horizonst.com.es` (`No_reply#2024`). Utilice el primero como buzón de soporte y el segundo para envíos automatizados.
+- `mailserver/config/postfix-aliases.cf` enruta `contacto@horizonst.com.es` y `soporte@horizonst.com.es` hacia `notificaciones@horizonst.com.es` para centralizar las solicitudes del portal.
+- `mailserver/fail2ban/postfix.local` amplía la directiva `ignoreip` de Fail2Ban a la subred Docker (`172.18.0.0/16`) y evita falsos positivos al acceder desde los contenedores internos. El fichero se monta en `/etc/fail2ban/jail.d/postfix.local`.
+- `mailserver/roundcube/20-horizonst.php` se inyecta en `/var/roundcube/config/` y fuerza el prefijo `/webmail/`, el uso de TLS hacia IMAP/SMTP y la aceptación del certificado autofirmado del servidor interno durante las pruebas.
+- Roundcube se expone mediante la imagen oficial `roundcube/roundcubemail:1.6-apache`, con sus datos (`/var/roundcube`) persistidos en el volumen `webmail_data`. Tras Nginx se publica en `https://horizonst.com.es/webmail/`; utilice las cuentas anteriores para acceder al webmail.
 - Para firmar DKIM ejecute una vez `docker compose exec mail setup config dkim` y publique el registro TXT indicado en su DNS (`mailserver/config/opendkim/keys/`).
 - Recuerde crear los registros DNS necesarios: `MX` apuntando a `mail.horizonst.com.es`, SPF (`v=spf1 mx ~all`) y, opcionalmente, DMARC (`_dmarc`). Abra en el cortafuegos los puertos TCP `25`, `465`, `587` y `993` hacia el host que ejecuta Docker.
 
@@ -125,7 +127,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 ## Arquitectura de despliegue
 
 - **Nginx (host):** sirve la aplicación en HTTPS y publica los paneles de EMQX (`/emqx`) y pgAdmin (`/pgadmin`). Redirige automáticamente las peticiones HTTP (80) a HTTPS (443).
-- Añada al `server` HTTPS un bloque para `/webmail/` que apunte a `http://127.0.0.1:8080/` y habilite `proxy_buffering off` para Roundcube. Mantenga publicados los puertos TCP `25`, `465`, `587` y `993` del host para el servicio SMTP/IMAP.
+- Incluya el snippet `nginx/snippets/roundcube.conf` dentro del `server` HTTPS para servir `https://horizonst.com.es/webmail/` (con `proxy_buffering off`, `client_max_body_size 25m` y las cabeceras `X-Forwarded-*`). Mantenga publicados los puertos TCP `25`, `465`, `587` y `993` del host para el servicio SMTP/IMAP.
 - **Docker Compose (loopback):** la app, PostgreSQL y pgAdmin solo escuchan en `127.0.0.1`. EMQX expone el puerto `1887` hacia el exterior sin TLS y mantiene el dashboard ligado al loopback (`127.0.0.1:18083`).
 - **Supervisión:** la API expone `GET /health` y los servicios incluyen healthchecks y rotación de logs (`json-file`, 50 MB × 3).
 
