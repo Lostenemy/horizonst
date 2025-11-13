@@ -2,7 +2,6 @@ services:
   portal:
     build:
       context: ./portal
-    restart: unless-stopped
     logging:
       driver: json-file
       options:
@@ -37,6 +36,7 @@ services:
     depends_on:
       - postgres
       - emqx
+      - mail
     restart: unless-stopped
     logging:
       driver: json-file
@@ -159,9 +159,73 @@ services:
     networks:
       - horizonst
 
+  mail:
+    image: mailserver/docker-mailserver:latest
+    hostname: mail
+    domainname: horizonst.com.es
+    container_name: mail
+    env_file:
+      - ./mailserver/mailserver.env
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    volumes:
+      - mail_data:/var/mail
+      - mail_state:/var/mail-state
+      - mail_logs:/var/log/mail
+      - ./mailserver/config/:/tmp/docker-mailserver/
+      - ./mailserver/fail2ban/postfix.local:/etc/fail2ban/jail.d/postfix.local:ro
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    networks:
+      - horizonst
+
+  webmail:
+    image: roundcube/roundcubemail:1.6-apache
+    depends_on:
+      - mail
+    restart: unless-stopped
+    environment:
+      ROUNDCUBEMAIL_DEFAULT_HOST: "ssl://mail"
+      ROUNDCUBEMAIL_DEFAULT_PORT: "993"
+      ROUNDCUBEMAIL_SMTP_SERVER: "tls://mail"
+      ROUNDCUBEMAIL_SMTP_PORT: "587"
+      ROUNDCUBEMAIL_SMTP_USER: "%u"
+      ROUNDCUBEMAIL_SMTP_PASS: "%p"
+      ROUNDCUBEMAIL_REQUEST_PATH: "/webmail/"
+      ROUNDCUBEMAIL_DB_TYPE: "sqlite"
+      ROUNDCUBEMAIL_IMAP_CONN_OPTIONS: '{"ssl":{"verify_peer":false,"verify_peer_name":false}}'
+      ROUNDCUBEMAIL_SMTP_CONN_OPTIONS: '{"ssl":{"verify_peer":false,"verify_peer_name":false}}'
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    volumes:
+      - webmail_data:/var/roundcube
+      - ./mailserver/roundcube/20-horizonst.php:/var/roundcube/config/20-horizonst.php:ro
+    ports:
+      - "127.0.0.1:8080:80"
+    networks:
+      - horizonst
+
 networks:
   horizonst:
     driver: bridge
 
 volumes:
   postgres_data:
+  mail_data:
+  mail_state:
+  mail_logs:
+  webmail_data:
