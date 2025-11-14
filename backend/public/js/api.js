@@ -50,14 +50,38 @@ const callApi = (path, options) => {
   return fetch(url, options);
 };
 
+const extractErrorMessage = async (response, fallback = 'Unauthorized. Please log in again.') => {
+  if (!response || typeof response.text !== 'function') {
+    return fallback;
+  }
+  try {
+    const text = await response.text();
+    if (!text) {
+      return fallback;
+    }
+    const data = JSON.parse(text);
+    return typeof data.message === 'string' && data.message ? data.message : fallback;
+  } catch (_error) {
+    return fallback;
+  }
+};
+
+const handleUnauthorized = async (response) => {
+  const hadSession = Boolean(getToken());
+  const message = await extractErrorMessage(response, 'Sesión no autorizada. Inicia sesión de nuevo.');
+  if (hadSession) {
+    clearSession();
+    redirectToLogin();
+  }
+  throw new Error(message);
+};
+
 export const apiGet = async (path) => {
   const response = await callApi(path, {
     headers: defaultHeaders()
   });
   if (response.status === 401) {
-    clearSession();
-    redirectToLogin();
-    return;
+    await handleUnauthorized(response);
   }
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`);
@@ -72,9 +96,7 @@ export const apiPost = async (path, body) => {
     body: JSON.stringify(body)
   });
   if (response.status === 401) {
-    clearSession();
-    redirectToLogin();
-    return;
+    await handleUnauthorized(response);
   }
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
@@ -90,9 +112,7 @@ export const apiPut = async (path, body) => {
     body: JSON.stringify(body)
   });
   if (response.status === 401) {
-    clearSession();
-    redirectToLogin();
-    return;
+    await handleUnauthorized(response);
   }
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
@@ -107,9 +127,7 @@ export const apiDelete = async (path) => {
     headers: defaultHeaders()
   });
   if (response.status === 401) {
-    clearSession();
-    redirectToLogin();
-    return;
+    await handleUnauthorized(response);
   }
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
