@@ -6,6 +6,7 @@ import { startAlarmMonitor } from './services/alarmMonitor';
 import { pool } from './db/pool';
 import { runMigrations } from './db/migrations';
 import { ensureEmqxMessageAudit } from './services/emqxAudit';
+import { verifyMailConnection } from './services/mail';
 
 const server = http.createServer(app);
 
@@ -16,6 +17,16 @@ const start = async () => {
     console.log('Connected to PostgreSQL');
     await runMigrations();
     console.log('Database migrations applied');
+    if (config.mail.enabled) {
+      try {
+        await verifyMailConnection();
+        console.log('Mail server ready to deliver messages');
+      } catch (mailError) {
+        console.error('Mail server verification failed', mailError);
+      }
+    } else {
+      console.warn('Mail delivery disabled via configuration');
+    }
     if (config.mqtt.persistenceMode === 'emqx') {
       const auditResult = await ensureEmqxMessageAudit();
       if (auditResult === 'unsupported') {
