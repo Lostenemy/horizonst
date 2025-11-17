@@ -382,7 +382,18 @@ button:hover {
   color: #0b2343;
 }
 
+.badge--success,
+.badge--ok {
+  background: rgba(31, 157, 108, 0.14);
+  color: var(--success);
+}
+
 .badge--alert {
+  background: rgba(192, 57, 43, 0.12);
+  color: var(--danger);
+}
+
+.badge--danger {
   background: rgba(192, 57, 43, 0.12);
   color: var(--danger);
 }
@@ -390,6 +401,63 @@ button:hover {
 .badge--muted {
   background: rgba(11, 35, 67, 0.08);
   color: var(--muted);
+}
+
+.badge--neutral {
+  background: rgba(11, 35, 67, 0.08);
+  color: var(--navy);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(11, 35, 67, 0.08);
+  color: var(--navy);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.chip--accent {
+  background: rgba(243, 111, 33, 0.12);
+  color: var(--orange-dark);
+}
+
+.chip--success {
+  background: rgba(31, 157, 108, 0.14);
+  color: var(--success);
+}
+
+.chip--danger {
+  background: rgba(192, 57, 43, 0.12);
+  color: var(--danger);
+}
+
+.chip--muted {
+  background: rgba(11, 35, 67, 0.06);
+  color: var(--muted);
+}
+
+.action-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--navy-2);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link--danger {
+  color: var(--danger);
 }
 
 .input {

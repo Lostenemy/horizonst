@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 
 import { logger } from './logger.js';
+import { authenticateUser, createUser, deleteUser, ensureDefaultAdmin, listUsers, updateUser } from './authStore.js';
 import type { AccessEvaluationResult, SimulationRequest } from './types.js';
 
 export interface WebInterfaceConfig {
@@ -74,6 +75,8 @@ export const startWebInterface = async ({
     return null;
   }
 
+  await ensureDefaultAdmin({ username: config.username, password: config.password, role: 'admin' });
+
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -113,6 +116,15 @@ export const startWebInterface = async ({
     res.status(401).json({ error: 'UNAUTHENTICATED' });
   };
 
+  const ensureAdmin: express.RequestHandler = (req, res, next) => {
+    if (req.session?.authenticated && req.session.role === 'admin') {
+      next();
+      return;
+    }
+
+    res.status(403).json({ error: 'FORBIDDEN' });
+  };
+
   const asTrimmedString = (value: unknown): string => {
     return typeof value === 'string' ? value.trim() : '';
   };
@@ -122,7 +134,7 @@ export const startWebInterface = async ({
     return parsed || fallback;
   };
 
-  router.post('/api/login', (req, res) => {
+  router.post('/api/login', async (req, res) => {
     const { username, password } = req.body ?? {};
 
     if (typeof username !== 'string' || typeof password !== 'string') {
@@ -130,7 +142,8 @@ export const startWebInterface = async ({
       return;
     }
 
-    if (username !== config.username || password !== config.password) {
+    const user = await authenticateUser(username, password);
+    if (!user) {
       logger.warn({ username }, 'Failed login attempt to RFID test interface');
       res.status(401).json({ error: 'INVALID_CREDENTIALS' });
       return;
@@ -138,10 +151,11 @@ export const startWebInterface = async ({
 
     if (req.session) {
       req.session.authenticated = true;
-      req.session.username = username;
+      req.session.username = user.username;
+      req.session.role = user.role;
     }
 
-    res.json({ authenticated: true, username });
+    res.json({ authenticated: true, username: user.username, role: user.role });
   });
 
   router.post('/api/logout', ensureAuthenticated, (req, res) => {
@@ -159,8 +173,120 @@ export const startWebInterface = async ({
   router.get('/api/session', (req, res) => {
     res.json({
       authenticated: Boolean(req.session?.authenticated),
-      username: req.session?.username ?? null
+      username: req.session?.username ?? null,
+      role: req.session?.role ?? null
     });
+  });
+
+  router.get('/api/auth/users', ensureAuthenticated, ensureAdmin, async (_req, res) => {
+    const users = await listUsers();
+    res.json({ users });
+  });
+
+  router.post('/api/auth/users', ensureAuthenticated, ensureAdmin, async (req, res) => {
+    const { username, password, role, active = true } = req.body ?? {};
+
+    if (typeof username !== 'string' || username.trim().length < 3) {
+      res.status(400).json({ error: 'INVALID_USERNAME' });
+      return;
+    }
+
+    if (typeof password !== 'string' || password.trim().length < 4) {
+      res.status(400).json({ error: 'INVALID_PASSWORD' });
+      return;
+    }
+
+    if (role !== 'admin' && role !== 'user') {
+      res.status(400).json({ error: 'INVALID_ROLE' });
+      return;
+    }
+
+    try {
+      const user = await createUser(username.trim(), password.trim(), role, Boolean(active));
+      res.status(201).json({ user });
+    } catch (error) {
+      const err = error as Error;
+      if (err.message === 'USERNAME_EXISTS') {
+        res.status(409).json({ error: 'USERNAME_EXISTS' });
+        return;
+      }
+
+      logger.error({ err }, 'Failed to create app user');
+      res.status(500).json({ error: 'USER_CREATION_FAILED' });
+    }
+  });
+
+  router.patch('/api/auth/users/:username', ensureAuthenticated, ensureAdmin, async (req, res) => {
+    const { username } = req.params;
+    const { password, role, active } = req.body ?? {};
+
+    const updates: { password?: string; role?: 'admin' | 'user'; active?: boolean } = {};
+
+    if (password !== undefined) {
+      if (typeof password !== 'string' || password.trim().length < 4) {
+        res.status(400).json({ error: 'INVALID_PASSWORD' });
+        return;
+      }
+      updates.password = password.trim();
+    }
+
+    if (role !== undefined) {
+      if (role !== 'admin' && role !== 'user') {
+        res.status(400).json({ error: 'INVALID_ROLE' });
+        return;
+      }
+      updates.role = role;
+    }
+
+    if (active !== undefined) {
+      updates.active = Boolean(active);
+    }
+
+    try {
+      const user = await updateUser(username, updates);
+      if (req.session?.username === username && updates.role) {
+        req.session.role = updates.role;
+      }
+      res.json({ user });
+    } catch (error) {
+      const err = error as Error;
+      if (err.message === 'NOT_FOUND') {
+        res.status(404).json({ error: 'NOT_FOUND' });
+        return;
+      }
+      if (err.message === 'LAST_ADMIN') {
+        res.status(409).json({ error: 'LAST_ADMIN' });
+        return;
+      }
+      logger.error({ err }, 'Failed to update app user');
+      res.status(500).json({ error: 'USER_UPDATE_FAILED' });
+    }
+  });
+
+  router.delete('/api/auth/users/:username', ensureAuthenticated, ensureAdmin, async (req, res) => {
+    const { username } = req.params;
+
+    if (req.session?.username === username) {
+      res.status(400).json({ error: 'CANNOT_DELETE_SELF' });
+      return;
+    }
+
+    try {
+      await deleteUser(username);
+      res.status(204).send();
+    } catch (error) {
+      const err = error as Error;
+      if (err.message === 'NOT_FOUND') {
+        res.status(404).json({ error: 'NOT_FOUND' });
+        return;
+      }
+      if (err.message === 'LAST_ADMIN') {
+        res.status(409).json({ error: 'LAST_ADMIN' });
+        return;
+      }
+      logger.error({ err }, 'Failed to delete app user');
+      res.status(500).json({ error: 'USER_DELETE_FAILED' });
+    }
   });
 
   router.get('/api/ecoordina/defaults', ensureAuthenticated, (_req, res) => {
@@ -371,6 +497,40 @@ export const startWebInterface = async ({
     return 'public, max-age=300';
   };
 
+  const htmlTemplates = new Map<string, string>();
+  const basePathForClient = basePath === '/' ? '' : basePath;
+
+  const renderHtml = async (fileName: string, res: express.Response): Promise<void> => {
+    try {
+      if (!htmlTemplates.has(fileName)) {
+        const template = await readFile(path.join(publicDir, fileName), 'utf8');
+        htmlTemplates.set(fileName, template);
+      }
+      const template = htmlTemplates.get(fileName) as string;
+      res.setHeader('Cache-Control', 'no-store');
+      res.type('html').send(template.replace(/__BASE_PATH__/g, basePathForClient));
+    } catch (error) {
+      logger.warn({ err: error, fileName }, 'Failed to render HTML template');
+      res.status(404).send('Not found');
+    }
+  };
+
+  router.get(['/', '/index.html'], (_req, res) => {
+    void renderHtml('index.html', res);
+  });
+
+  router.get(['/elecnor-usuarios', '/elecnor-usuarios.html'], (_req, res) => {
+    void renderHtml('elecnor-usuarios.html', res);
+  });
+
+  router.get(['/elecnor-tarjetas', '/elecnor-tarjetas.html'], (_req, res) => {
+    void renderHtml('elecnor-tarjetas.html', res);
+  });
+
+  router.get(['/elecnor-cuentas', '/elecnor-cuentas.html'], (_req, res) => {
+    void renderHtml('elecnor-cuentas.html', res);
+  });
+
   router.use(
     express.static(publicDir, {
       index: false,
@@ -380,12 +540,8 @@ export const startWebInterface = async ({
     })
   );
 
-  const indexTemplate = await readFile(path.join(publicDir, 'index.html'), 'utf8');
-  const basePathForClient = basePath === '/' ? '' : basePath;
-
   router.get('*', (_req, res) => {
-    res.setHeader('Cache-Control', 'no-store');
-    res.type('html').send(indexTemplate.replace(/__BASE_PATH__/g, basePathForClient));
+    void renderHtml('index.html', res);
   });
 
   app.use(basePath, router);

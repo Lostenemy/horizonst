@@ -1,4 +1,5 @@
 (() => {
+  const { ensureSession } = window.ElecnorAuth;
   const form = document.getElementById('user-form');
   const resetButton = document.getElementById('reset-form');
   const statusChip = document.getElementById('form-status');
@@ -163,6 +164,12 @@
   filterInput.addEventListener('input', renderUsers);
   centerFilter.addEventListener('change', renderUsers);
 
-  fillCenterOptions();
-  renderUsers();
+  const init = async () => {
+    const session = await ensureSession();
+    if (!session) return;
+    fillCenterOptions();
+    renderUsers();
+  };
+
+  init();
 })();

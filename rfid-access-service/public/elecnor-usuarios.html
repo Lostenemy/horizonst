@@ -23,7 +23,8 @@
       </div>
       <nav class="topbar__nav" aria-label="Navegación principal">
         <a class="nav-link" href="index.html">Simulador</a>
-        <a class="nav-link nav-link--active" href="elecnor-usuarios.html" aria-current="page">Usuarios</a>
+        <a class="nav-link" href="elecnor-cuentas.html">Cuentas</a>
+        <a class="nav-link nav-link--active" href="elecnor-usuarios.html" aria-current="page">Trabajadores</a>
         <a class="nav-link" href="elecnor-tarjetas.html">Tarjetas</a>
       </nav>
     </header>
@@ -31,11 +32,11 @@
     <main class="page">
       <section class="hero">
         <div>
-          <p class="breadcrumb"><a href="index.html">Inicio</a> · Elecnor · Usuarios</p>
-          <h1>Gestión de usuarios</h1>
+          <p class="breadcrumb"><a href="index.html">Inicio</a> · Elecnor · Trabajadores</p>
+          <h1>Gestión de trabajadores</h1>
           <p class="lead">
-            Registra a los trabajadores autorizados indicando su DNI, empresa (CIF) y centro. Podrás editarlos,
-            activarlos o eliminarlos; las tarjetas asociadas se bloquearán automáticamente si borras al usuario.
+            Registra a los trabajadores autorizados indicando su DNI, empresa (CIF) y centro. Estos datos son
+            independientes de las cuentas que acceden a la app y se usan solo para vincular tarjetas RFID.
           </p>
           <div class="pill-row">
             <span class="pill pill--info">Validación inmediata</span>
@@ -141,7 +142,8 @@
         </article>
       </section>
     </main>
-
+    <script src="elecnor-auth.js"></script>
+    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
     <script src="elecnor-data.js"></script>
     <script src="elecnor-users.js"></script>
   </body>

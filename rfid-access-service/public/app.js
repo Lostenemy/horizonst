@@ -45,6 +45,7 @@ let ecoordinaDefaults = null;
 
 const RAW_BASE_PATH = window.__RFID_BASE_PATH__ || '';
 const BASE_PATH = !RAW_BASE_PATH || RAW_BASE_PATH === '/' ? '' : RAW_BASE_PATH;
+const nextPage = new URLSearchParams(window.location.search).get('next');
 
 const withBasePath = (path) => {
   if (!path) {
@@ -249,7 +250,13 @@ const checkSession = async () => {
   try {
     const session = await fetchJson(withBasePath('/api/session'), { method: 'GET' });
     if (session.authenticated) {
-      sessionUsername.textContent = session.username ?? '';
+      sessionUsername.textContent = session.role
+        ? `${session.username ?? ''} · ${session.role === 'admin' ? 'Admin' : 'Usuario'}`
+        : session.username ?? '';
+      if (nextPage) {
+        window.location.replace(withBasePath(`/${nextPage}`));
+        return;
+      }
       toggleViews(true);
       await loadHistory();
       await loadEcoordinaDefaults();
@@ -278,9 +285,13 @@ loginForm.addEventListener('submit', async (event) => {
     sessionUsername.textContent = username;
     usernameInput.value = '';
     passwordInput.value = '';
-    toggleViews(true);
-    await loadHistory();
-    await loadEcoordinaDefaults();
+    if (nextPage) {
+      window.location.replace(withBasePath(`/${nextPage}`));
+    } else {
+      toggleViews(true);
+      await loadHistory();
+      await loadEcoordinaDefaults();
+    }
   } catch (error) {
     loginError.textContent =
       error instanceof Error ? error.message : 'No se pudo iniciar sesión. Compruebe las credenciales.';

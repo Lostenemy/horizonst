@@ -1,4 +1,5 @@
 (() => {
+  const { ensureSession } = window.ElecnorAuth;
   const form = document.getElementById('card-form');
   const resetButton = document.getElementById('reset-card-form');
   const statusChip = document.getElementById('card-form-status');
@@ -186,7 +187,13 @@
   filterInput.addEventListener('input', renderCards);
   stateFilter.addEventListener('change', renderCards);
 
-  loadUserOptions();
-  suggestCenter();
-  renderCards();
+  const init = async () => {
+    const session = await ensureSession();
+    if (!session) return;
+    loadUserOptions();
+    suggestCenter();
+    renderCards();
+  };
+
+  init();
 })();
