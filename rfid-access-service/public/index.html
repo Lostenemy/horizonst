@@ -6,156 +6,207 @@
     <title>Simulador RFID · HorizonST</title>
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body>
-    <div id="app">
-      <section id="login-view" class="card">
-        <h1>Simulador de accesos RFID</h1>
-        <p class="muted">
-          Introduzca las credenciales definidas en las variables de entorno
-          <code>RFID_WEB_USERNAME</code> y <code>RFID_WEB_PASSWORD</code>.
-        </p>
-        <form id="login-form" autocomplete="off">
-          <label class="field">
+  <body class="elecnor-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">elecnor</div>
+        <div class="brand__text">
+          <strong>Portal de accesos</strong>
+          <span>Simulador RFID</span>
+        </div>
+      </div>
+      <nav class="topbar__nav" aria-label="Navegación principal">
+        <a class="nav-link nav-link--active" href="index.html" aria-current="page">Simulador</a>
+        <a class="nav-link" href="elecnor-usuarios.html">Usuarios</a>
+        <a class="nav-link" href="elecnor-tarjetas.html">Tarjetas</a>
+      </nav>
+    </header>
+
+    <main id="app" class="page">
+      <section id="login-view" class="card auth-card">
+        <div>
+          <p class="breadcrumb">Acceso privado</p>
+          <h1>Simulador de accesos RFID</h1>
+          <p class="muted">
+            Introduzca las credenciales definidas en las variables de entorno
+            <code>RFID_WEB_USERNAME</code> y <code>RFID_WEB_PASSWORD</code>.
+          </p>
+        </div>
+        <form id="login-form" autocomplete="off" class="form-grid">
+          <label class="form-field">
             <span>Usuario</span>
             <input type="text" id="login-username" required autocomplete="username" />
           </label>
-          <label class="field">
+          <label class="form-field">
             <span>Contraseña</span>
             <input type="password" id="login-password" required autocomplete="current-password" />
           </label>
-          <button type="submit" class="primary">Iniciar sesión</button>
+          <div class="form-actions">
+            <button type="submit" class="cta cta--primary">Iniciar sesión</button>
+            <p class="muted">Solo disponible para el equipo técnico.</p>
+          </div>
         </form>
         <p id="login-error" class="error" hidden></p>
       </section>
 
       <section id="main-view" class="hidden">
-        <header class="toolbar">
+        <header class="hero hero--compact">
           <div>
-            <h1>Panel de pruebas RFID</h1>
-            <p class="muted">
-              Envíe lecturas manuales para comprobar el flujo completo (directorio MAC ↔ DNI,
-              API externa y publicación de órdenes a los actuadores).
+            <p class="breadcrumb">Panel Elecnor</p>
+            <h1>Pruebas y API e-coordina</h1>
+            <p class="lead">
+              Envíe lecturas manuales para comprobar el flujo completo (directorio MAC ↔ DNI, validación externa y
+              publicación de GPIO al lector).
             </p>
+            <div class="pill-row">
+              <span class="pill pill--info">MQTT + API externa</span>
+              <span class="pill pill--neutral">Histórico en memoria</span>
+              <span class="pill pill--accent">Tarjetas y usuarios en páginas dedicadas</span>
+            </div>
           </div>
           <div class="session">
             <span id="session-username" class="badge"></span>
-            <button id="logout-button" class="secondary">Cerrar sesión</button>
+            <div class="cta-group">
+              <a class="cta cta--secondary" href="elecnor-usuarios.html">Gestión de usuarios</a>
+              <a class="cta cta--ghost" href="elecnor-tarjetas.html">Tarjetas RFID</a>
+              <button id="logout-button" class="cta cta--danger" type="button">Cerrar sesión</button>
+            </div>
           </div>
         </header>
 
-        <section class="card">
-          <h2>Simular lectura</h2>
-          <form id="simulate-form">
-            <div class="grid">
-              <label class="field">
+        <section class="panel-grid">
+          <article class="panel">
+            <header class="panel__header">
+              <div>
+                <p class="eyebrow">Lecturas</p>
+                <h2>Simular lectura</h2>
+                <p class="muted">Tarjeta y MAC son obligatorios; el resto de datos es opcional.</p>
+              </div>
+            </header>
+            <form id="simulate-form" class="form-grid">
+              <label class="form-field">
                 <span>ID de tarjeta*</span>
                 <input type="text" id="simulate-card-id" required autocomplete="off" />
               </label>
-              <label class="field">
+              <label class="form-field">
                 <span>MAC del lector*</span>
                 <input type="text" id="simulate-mac" required autocomplete="off" />
               </label>
-            </div>
-            <div class="grid">
-              <label class="field">
+              <label class="form-field">
                 <span>Fecha y hora (opcional)</span>
                 <input type="datetime-local" id="simulate-timestamp" />
               </label>
-              <label class="field">
+              <label class="form-field form-field--wide">
                 <span>Datos adicionales (JSON)</span>
                 <textarea id="simulate-additional" placeholder='{"departamento":"I+D"}'></textarea>
               </label>
-            </div>
-            <button type="submit" class="primary">Enviar lectura</button>
-          </form>
-          <p id="simulate-error" class="error" hidden></p>
-          <div id="simulate-result" class="result hidden"></div>
-        </section>
+              <div class="form-actions">
+                <button type="submit" class="cta cta--primary">Enviar lectura</button>
+                <p class="muted">El resultado incluye la decisión y las publicaciones MQTT realizadas.</p>
+              </div>
+            </form>
+            <p id="simulate-error" class="error" hidden></p>
+            <div id="simulate-result" class="result hidden"></div>
+          </article>
 
-        <section class="card">
-          <h2>Probar API e-coordina</h2>
-          <p class="muted">
-            Envíe una petición manual al servicio <code>https://ws.e-coordina.com/1.4</code> con los datos
-            del trabajador y el centro. Los campos se precargan con los valores por defecto del servicio,
-            pero puede modificarlos antes de lanzar la prueba.
-          </p>
-          <form id="ecoordina-form" class="grid">
-            <label class="field">
-              <span>URL del servicio</span>
-              <input type="url" id="ecoordina-url" autocomplete="url" />
-            </label>
-            <label class="field">
-              <span>Usuario (user)</span>
-              <input type="text" id="ecoordina-user" autocomplete="username" />
-            </label>
-            <label class="field">
-              <span>Token</span>
-              <input type="text" id="ecoordina-token" autocomplete="off" />
-            </label>
-            <label class="field">
-              <span>Marca (brand)</span>
-              <input type="text" id="ecoordina-brand" />
-            </label>
-            <label class="field">
-              <span>Acción</span>
-              <input type="text" id="ecoordina-action" />
-            </label>
-            <label class="field">
-              <span>Tipo de acción</span>
-              <input type="text" id="ecoordina-action-type" />
-            </label>
-            <label class="field">
-              <span>Instancia</span>
-              <input type="text" id="ecoordina-instance" />
-            </label>
-            <label class="field">
-              <span>Formato de entrada (in)</span>
-              <input type="text" id="ecoordina-input" />
-            </label>
-            <label class="field">
-              <span>Formato de salida (out)</span>
-              <input type="text" id="ecoordina-output" />
-            </label>
-            <label class="field">
-              <span>Código de centro</span>
-              <input type="text" id="ecoordina-centro" required />
-            </label>
-            <label class="field">
-              <span>CIF de la empresa</span>
-              <input type="text" id="ecoordina-cif" required />
-            </label>
-            <label class="field">
-              <span>DNI del trabajador</span>
-              <input type="text" id="ecoordina-dni" required />
-            </label>
-            <label class="field">
-              <span>Nombre del trabajador (opcional)</span>
-              <input type="text" id="ecoordina-nombre" />
-            </label>
-            <label class="field">
-              <span>Apellidos del trabajador (opcional)</span>
-              <input type="text" id="ecoordina-apellidos" />
-            </label>
-            <div class="field">
-              <span>Datos enviados</span>
-              <textarea id="ecoordina-payload" readonly rows="4"></textarea>
-            </div>
-          </form>
-          <div class="actions">
-            <button type="button" id="ecoordina-reset" class="secondary">Restablecer valores</button>
-            <button type="button" id="ecoordina-submit" class="primary">Lanzar prueba</button>
-          </div>
-          <p id="ecoordina-error" class="error" hidden></p>
-          <pre id="ecoordina-response" class="result hidden"></pre>
-        </section>
+          <article class="panel">
+            <header class="panel__header">
+              <div>
+                <p class="eyebrow">Webservice</p>
+                <h2>Probar API e-coordina</h2>
+                <p class="muted">
+                  Lanza una petición al servicio <code>https://ws.e-coordina.com/1.4</code> con los datos del trabajador y
+                  centro. Los campos se precargan con los valores por defecto configurados en el servicio.
+                </p>
+              </div>
+              <div class="panel__actions">
+                <button type="button" id="ecoordina-reset" class="cta cta--ghost">Restablecer</button>
+                <button type="button" id="ecoordina-submit" class="cta cta--primary">Lanzar prueba</button>
+              </div>
+            </header>
 
-        <section class="card">
-          <h2>Histórico reciente</h2>
-          <div id="history-empty" class="muted">Todavía no se han registrado eventos.</div>
-          <ul id="history-list" class="history"></ul>
+            <form id="ecoordina-form" class="form-grid">
+              <label class="form-field">
+                <span>URL del servicio</span>
+                <input type="url" id="ecoordina-url" autocomplete="url" />
+              </label>
+              <label class="form-field">
+                <span>Usuario (user)</span>
+                <input type="text" id="ecoordina-user" autocomplete="username" />
+              </label>
+              <label class="form-field">
+                <span>Token</span>
+                <input type="text" id="ecoordina-token" autocomplete="off" />
+              </label>
+              <label class="form-field">
+                <span>Marca (brand)</span>
+                <input type="text" id="ecoordina-brand" />
+              </label>
+              <label class="form-field">
+                <span>Acción</span>
+                <input type="text" id="ecoordina-action" />
+              </label>
+              <label class="form-field">
+                <span>Tipo de acción</span>
+                <input type="text" id="ecoordina-action-type" />
+              </label>
+              <label class="form-field">
+                <span>Instancia</span>
+                <input type="text" id="ecoordina-instance" />
+              </label>
+              <label class="form-field">
+                <span>Formato de entrada (in)</span>
+                <input type="text" id="ecoordina-input" />
+              </label>
+              <label class="form-field">
+                <span>Formato de salida (out)</span>
+                <input type="text" id="ecoordina-output" />
+              </label>
+              <label class="form-field">
+                <span>Código de centro</span>
+                <input type="text" id="ecoordina-centro" required />
+              </label>
+              <label class="form-field">
+                <span>CIF de la empresa</span>
+                <input type="text" id="ecoordina-cif" required />
+              </label>
+              <label class="form-field">
+                <span>DNI del trabajador</span>
+                <input type="text" id="ecoordina-dni" required />
+              </label>
+              <label class="form-field">
+                <span>Nombre del trabajador (opcional)</span>
+                <input type="text" id="ecoordina-nombre" />
+              </label>
+              <label class="form-field">
+                <span>Apellidos del trabajador (opcional)</span>
+                <input type="text" id="ecoordina-apellidos" />
+              </label>
+              <label class="form-field form-field--wide">
+                <span>Datos enviados</span>
+                <textarea id="ecoordina-payload" readonly rows="4"></textarea>
+              </label>
+            </form>
+            <p id="ecoordina-error" class="error" hidden></p>
+            <pre id="ecoordina-response" class="result hidden"></pre>
+          </article>
+
+          <article class="panel">
+            <header class="panel__header">
+              <div>
+                <p class="eyebrow">Seguimiento</p>
+                <h2>Histórico reciente</h2>
+                <p class="muted">Últimos eventos registrados desde la web o MQTT.</p>
+              </div>
+            </header>
+            <div class="history-wrapper">
+              <div id="history-empty" class="muted">Todavía no se han registrado eventos.</div>
+              <ul id="history-list" class="history"></ul>
+            </div>
+          </article>
         </section>
       </section>
-    </div>
+    </main>
     <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
     <script type="module" src="app.js"></script>
   </body>
