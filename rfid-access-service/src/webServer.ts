@@ -1,3 +1,4 @@
+import axios, { AxiosError } from 'axios';
 import express from 'express';
 import session from 'express-session';
 import path from 'node:path';
@@ -17,6 +18,19 @@ export interface WebInterfaceConfig {
   historySize: number;
 }
 
+export interface EcoordinaConfig {
+  url: string;
+  user: string;
+  token: string;
+  brand: string;
+  action: string;
+  actionType: string;
+  instance: string;
+  inputFormat: string;
+  outputFormat: string;
+  timeoutMs: number;
+}
+
 export interface HistoryEvent extends AccessEvaluationResult {
   cardId: string;
   mac: string;
@@ -31,6 +45,7 @@ export interface WebInterfaceController {
 
 interface StartWebInterfaceOptions {
   config: WebInterfaceConfig;
+  ecoordinaDefaults: EcoordinaConfig;
   simulateScan: (input: SimulationRequest) => Promise<AccessEvaluationResult>;
 }
 
@@ -52,6 +67,7 @@ const buildHistoryRecorder = (history: HistoryEvent[], limit: number) => {
 
 export const startWebInterface = async ({
   config,
+  ecoordinaDefaults,
   simulateScan
 }: StartWebInterfaceOptions): Promise<WebInterfaceController | null> => {
   if (!config.enabled) {
@@ -97,6 +113,15 @@ export const startWebInterface = async ({
     res.status(401).json({ error: 'UNAUTHENTICATED' });
   };
 
+  const asTrimmedString = (value: unknown): string => {
+    return typeof value === 'string' ? value.trim() : '';
+  };
+
+  const pickStringOrDefault = (candidate: unknown, fallback: string): string => {
+    const parsed = asTrimmedString(candidate);
+    return parsed || fallback;
+  };
+
   router.post('/api/login', (req, res) => {
     const { username, password } = req.body ?? {};
 
@@ -136,6 +161,142 @@ export const startWebInterface = async ({
       authenticated: Boolean(req.session?.authenticated),
       username: req.session?.username ?? null
     });
+  });
+
+  router.get('/api/ecoordina/defaults', ensureAuthenticated, (_req, res) => {
+    res.json({ defaults: ecoordinaDefaults });
+  });
+
+  router.post('/api/ecoordina/test', ensureAuthenticated, async (req, res) => {
+    const {
+      url,
+      user,
+      token,
+      brand,
+      action,
+      actionType,
+      instance,
+      inputFormat,
+      outputFormat,
+      centro_cod: centroCodRaw,
+      empresa_cif: empresaCifRaw,
+      trabajador_dni: trabajadorDniRaw,
+      trabajador_nombre: trabajadorNombreRaw,
+      trabajador_apellidos: trabajadorApellidosRaw
+    } = req.body ?? {};
+
+    const targetUrl = pickStringOrDefault(url, ecoordinaDefaults.url);
+    const authUser = pickStringOrDefault(user, ecoordinaDefaults.user);
+    const authToken = pickStringOrDefault(token, ecoordinaDefaults.token);
+    const selectedBrand = pickStringOrDefault(brand, ecoordinaDefaults.brand);
+    const selectedAction = pickStringOrDefault(action, ecoordinaDefaults.action);
+    const selectedActionType = pickStringOrDefault(actionType, ecoordinaDefaults.actionType);
+    const selectedInstance = pickStringOrDefault(instance, ecoordinaDefaults.instance);
+    const selectedInput = pickStringOrDefault(inputFormat, ecoordinaDefaults.inputFormat);
+    const selectedOutput = pickStringOrDefault(outputFormat, ecoordinaDefaults.outputFormat);
+
+    const centroCod = pickStringOrDefault(centroCodRaw, '').toUpperCase();
+    const empresaCif = pickStringOrDefault(empresaCifRaw, '').toUpperCase();
+    const trabajadorDni = pickStringOrDefault(trabajadorDniRaw, '').toUpperCase();
+    const trabajadorNombre = asTrimmedString(trabajadorNombreRaw);
+    const trabajadorApellidos = asTrimmedString(trabajadorApellidosRaw);
+
+    if (!targetUrl || !authUser || !authToken || !centroCod || !empresaCif || !trabajadorDni) {
+      res.status(400).json({
+        error: 'MISSING_FIELDS',
+        required: ['url', 'user', 'token', 'centro_cod', 'empresa_cif', 'trabajador_dni']
+      });
+      return;
+    }
+
+    const payloadData: Record<string, string> = {
+      centro_cod: centroCod,
+      empresa_cif: empresaCif,
+      trabajador_dni: trabajadorDni
+    };
+
+    if (trabajadorNombre) {
+      payloadData.trabajador_nombre = trabajadorNombre;
+    }
+
+    if (trabajadorApellidos) {
+      payloadData.trabajador_apellidos = trabajadorApellidos;
+    }
+
+    const form = new URLSearchParams();
+    form.set('action', selectedAction);
+    form.set('action_type', selectedActionType);
+    form.set('brand', selectedBrand);
+    form.set('data', JSON.stringify({ data: payloadData }));
+    form.set('in', selectedInput);
+    form.set('instance', selectedInstance);
+    form.set('out', selectedOutput);
+    form.set('user', authUser);
+    form.set('token', authToken);
+
+    const requestPreview = {
+      url: targetUrl,
+      action: selectedAction,
+      actionType: selectedActionType,
+      brand: selectedBrand,
+      instance: selectedInstance,
+      input: selectedInput,
+      output: selectedOutput,
+      user: authUser,
+      centro_cod: centroCod,
+      empresa_cif: empresaCif,
+      trabajador_dni: trabajadorDni,
+      trabajador_nombre: trabajadorNombre || undefined,
+      trabajador_apellidos: trabajadorApellidos || undefined
+    };
+
+    try {
+      const response = await axios.post<string>(targetUrl, form.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: ecoordinaDefaults.timeoutMs,
+        responseType: 'text',
+        validateStatus: () => true
+      });
+
+      const rawText = response.data ?? '';
+      let parsed: unknown = null;
+      if (rawText) {
+        try {
+          parsed = JSON.parse(rawText);
+        } catch (error) {
+          parsed = rawText;
+        }
+      }
+
+      if (response.status < 200 || response.status >= 300) {
+        res.status(response.status).json({
+          error: 'ECOORDINA_REQUEST_FAILED',
+          status: response.status,
+          message: response.statusText,
+          payload: requestPreview,
+          raw: rawText,
+          data: parsed
+        });
+        return;
+      }
+
+      res.json({
+        status: response.status,
+        payload: requestPreview,
+        raw: rawText,
+        data: parsed
+      });
+    } catch (error) {
+      const err = error as AxiosError;
+      const status = err.response?.status ?? 502;
+      const rawText = typeof err.response?.data === 'string' ? err.response.data : undefined;
+      res.status(status).json({
+        error: err.code === 'ECONNABORTED' ? 'ECOORDINA_TIMEOUT' : 'ECOORDINA_UNAVAILABLE',
+        message: err.message,
+        payload: requestPreview,
+        raw: rawText
+      });
+    }
   });
 
   router.get('/api/history', ensureAuthenticated, (_req, res) => {

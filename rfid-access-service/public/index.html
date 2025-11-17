@@ -73,6 +73,83 @@
         </section>
 
         <section class="card">
+          <h2>Probar API e-coordina</h2>
+          <p class="muted">
+            Envíe una petición manual al servicio <code>https://ws.e-coordina.com/1.4</code> con los datos
+            del trabajador y el centro. Los campos se precargan con los valores por defecto del servicio,
+            pero puede modificarlos antes de lanzar la prueba.
+          </p>
+          <form id="ecoordina-form" class="grid">
+            <label class="field">
+              <span>URL del servicio</span>
+              <input type="url" id="ecoordina-url" autocomplete="url" />
+            </label>
+            <label class="field">
+              <span>Usuario (user)</span>
+              <input type="text" id="ecoordina-user" autocomplete="username" />
+            </label>
+            <label class="field">
+              <span>Token</span>
+              <input type="text" id="ecoordina-token" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Marca (brand)</span>
+              <input type="text" id="ecoordina-brand" />
+            </label>
+            <label class="field">
+              <span>Acción</span>
+              <input type="text" id="ecoordina-action" />
+            </label>
+            <label class="field">
+              <span>Tipo de acción</span>
+              <input type="text" id="ecoordina-action-type" />
+            </label>
+            <label class="field">
+              <span>Instancia</span>
+              <input type="text" id="ecoordina-instance" />
+            </label>
+            <label class="field">
+              <span>Formato de entrada (in)</span>
+              <input type="text" id="ecoordina-input" />
+            </label>
+            <label class="field">
+              <span>Formato de salida (out)</span>
+              <input type="text" id="ecoordina-output" />
+            </label>
+            <label class="field">
+              <span>Código de centro</span>
+              <input type="text" id="ecoordina-centro" required />
+            </label>
+            <label class="field">
+              <span>CIF de la empresa</span>
+              <input type="text" id="ecoordina-cif" required />
+            </label>
+            <label class="field">
+              <span>DNI del trabajador</span>
+              <input type="text" id="ecoordina-dni" required />
+            </label>
+            <label class="field">
+              <span>Nombre del trabajador (opcional)</span>
+              <input type="text" id="ecoordina-nombre" />
+            </label>
+            <label class="field">
+              <span>Apellidos del trabajador (opcional)</span>
+              <input type="text" id="ecoordina-apellidos" />
+            </label>
+            <div class="field">
+              <span>Datos enviados</span>
+              <textarea id="ecoordina-payload" readonly rows="4"></textarea>
+            </div>
+          </form>
+          <div class="actions">
+            <button type="button" id="ecoordina-reset" class="secondary">Restablecer valores</button>
+            <button type="button" id="ecoordina-submit" class="primary">Lanzar prueba</button>
+          </div>
+          <p id="ecoordina-error" class="error" hidden></p>
+          <pre id="ecoordina-response" class="result hidden"></pre>
+        </section>
+
+        <section class="card">
           <h2>Histórico reciente</h2>
           <div id="history-empty" class="muted">Todavía no se han registrado eventos.</div>
           <ul id="history-list" class="history"></ul>

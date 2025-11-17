@@ -221,6 +221,20 @@ button:active {
   color: var(--muted);
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+#ecoordina-payload,
+pre.result {
+  font-family: 'Fira Code', 'SFMono-Regular', 'Roboto Mono', monospace;
+  white-space: pre-wrap;
+}
+
 .hidden {
   display: none;
 }

@@ -315,6 +315,7 @@ const start = async (): Promise<void> => {
   try {
     webInterfaceController = await startWebInterface({
       config: config.webInterface,
+      ecoordinaDefaults: config.ecoordina,
       simulateScan: async (payload: SimulationRequest) =>
         evaluateScan(client, { ...payload, source: 'web' })
     });
