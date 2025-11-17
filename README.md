@@ -116,6 +116,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 ### Ingesta y procesamiento MQTT
 
 - Suscripción automática a `devices/MK1`, `devices/MK2`, `devices/MK3` mediante un cliente MQTT configurado con las credenciales proporcionadas.
+- Monitorización adicional de `devices/RF1` para lecturas RFID procedentes de los lectores Elecnor.
 - Decodificadores específicos para cada canal, normalizando campos como `BaTtVol`/`BattVoltage`.
 - Validación de gateways y dispositivos registrados antes de persistir lecturas.
 - Reglas de consolidación por lugar: lecturas con menos de 30 s se ignoran, entre 30 s y 5 min actualizan el registro anterior y, superados 5 min, se genera uno nuevo.
@@ -124,6 +125,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 ### Portal web
 
 - **Administradores** pueden registrar gateways y dispositivos, consultar mensajes MQTT, revisar históricos completos y gestionar alarmas.
+- **Administradores** disponen además de un módulo RFID para asociar IDs de tarjeta con trabajadores (DNI, nombre, apellidos, empresa y código de centro) y revisar el histórico de lecturas.
 - **Usuarios** gestionan lugares, categorías, asignación de dispositivos y fotos, así como reclamación de dispositivos por MAC.
 - Visualizaciones agrupadas por lugar y herramientas para configurar alarmas basadas en tiempo sin señal.
 - El formulario público de contacto envía las solicitudes mediante `POST /api/contact`, almacenando una copia en `notificaciones@horizonst.com.es` y mostrando confirmaciones en la propia página.
@@ -170,6 +172,14 @@ alarma) mediante nuevos topics MQTT.
 - **Interfaz de pruebas:** activando `RFID_WEB_ENABLED=1` se expone un panel protegido por usuario y contraseña (`RFID_WEB_USERNAME`/`RFID_WEB_PASSWORD`) en `http://127.0.0.1:${HTTP_PORT:-3001}${BASE_PATH:-/}`. Desde allí se pueden simular lecturas introduciendo el ID de tarjeta y la MAC del lector, revisar el histórico reciente y consultar los mensajes publicados a los actuadores para cada decisión. El endpoint `GET /health` facilita comprobar el estado del servicio desde el balanceador o los healthchecks de Docker.
 - **Variables adicionales:** revise `rfid-access-service/.env.example` para conocer todos los ajustes disponibles
   (timeouts, credenciales MQTT, etc.).
+
+### Integración RFID Elecnor
+
+- El backend principal también consume el topic `devices/RF1` para las lecturas procedentes de los lectores Elecnor.
+- Cada tarjeta puede registrarse desde la pestaña **RFID** del portal (solo administradores), indicando DNI, nombre y apellidos, empresa/CIF y código de centro. Esta información es la que se envía al webservice `https://ws.e-coordina.com/1.4` (`action=acceso_permitido_data`).
+- Tras cada lectura el sistema consulta la API (`user`/`token` configurables) y registra el resultado en `rfid_access_logs`, mostrando el histórico en la propia interfaz.
+- Dependiendo del campo `acceso` (`1` verde / `0` rojo) se publica un comando MQTT que activa el GPIO 6 o 7 del lector; si la API falla, el intento queda almacenado con el error correspondiente y se fuerza el GPIO rojo.
+- Ajuste las variables `RFID_ACCESS_*` y `RFID_GPIO_*` en `backend/.env` para definir el topic a vigilar, las credenciales del servicio remoto, tiempos de espera y el formato de los comandos enviados al lector.
 
 ## Proxy inverso Nginx externo
 

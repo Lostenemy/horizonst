@@ -225,6 +225,29 @@ button:hover {
   color: #123c69;
 }
 
+.status-pill {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.status-pill.success {
+  background-color: rgba(30, 166, 110, 0.15);
+  color: #1e7a58;
+}
+
+.status-pill.error {
+  background-color: rgba(196, 38, 60, 0.15);
+  color: #a32032;
+}
+
+.status-pill.pending {
+  background-color: rgba(255, 193, 7, 0.25);
+  color: #9a6b00;
+}
+
 .nowrap {
   white-space: nowrap;
 }

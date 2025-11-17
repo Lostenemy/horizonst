@@ -168,6 +168,46 @@ ALTER TABLE mqtt_messages
 CREATE INDEX IF NOT EXISTS idx_mqtt_messages_topic ON mqtt_messages(topic);
 CREATE INDEX IF NOT EXISTS idx_mqtt_messages_received_at ON mqtt_messages(received_at DESC);
 
+CREATE TABLE IF NOT EXISTS rfid_cards (
+    id SERIAL PRIMARY KEY,
+    card_uid VARCHAR(64) UNIQUE NOT NULL,
+    dni VARCHAR(20) NOT NULL,
+    first_name VARCHAR(120) NOT NULL,
+    last_name VARCHAR(160) NOT NULL,
+    company_name VARCHAR(180) NOT NULL,
+    company_cif VARCHAR(32) NOT NULL,
+    center_code VARCHAR(64) NOT NULL,
+    notes TEXT,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS rfid_access_logs (
+    id BIGSERIAL PRIMARY KEY,
+    card_uid VARCHAR(64) NOT NULL,
+    dni VARCHAR(20),
+    center_code VARCHAR(64),
+    company_cif VARCHAR(32),
+    antenna_id VARCHAR(64),
+    direction VARCHAR(16),
+    reader_id VARCHAR(64),
+    event_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    access_allowed BOOLEAN,
+    api_status VARCHAR(32),
+    api_error TEXT,
+    request_payload JSONB,
+    api_response JSONB,
+    raw_message TEXT,
+    gpio_command_topic TEXT,
+    gpio_command_payload TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rfid_cards_uid ON rfid_cards(card_uid);
+CREATE INDEX IF NOT EXISTS idx_rfid_access_logs_card ON rfid_access_logs(card_uid);
+CREATE INDEX IF NOT EXISTS idx_rfid_access_logs_created ON rfid_access_logs(created_at DESC);
+
 CREATE TABLE IF NOT EXISTS alarm_configs (
     id SERIAL PRIMARY KEY,
     owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

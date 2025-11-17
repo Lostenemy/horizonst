@@ -11,6 +11,7 @@ import categoryRouter from './routes/categories';
 import alarmRouter from './routes/alarms';
 import messageRouter from './routes/messages';
 import contactRouter from './routes/contact';
+import rfidRouter from './routes/rfid';
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/api/categories', categoryRouter);
 app.use('/api/alarms', alarmRouter);
 app.use('/api/messages', messageRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/rfid', rfidRouter);
 
 const publicDir = path.join(__dirname, '..', 'public');
 const adminBasePath = '/administracion';
