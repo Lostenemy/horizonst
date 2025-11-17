@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elecnor | Gestión de usuarios</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="app app--elecnor">
+    <header class="app__header">
+      <div class="app__header-inner">
+        <a class="brand" href="index.html" aria-label="Volver a HorizonST">
+          <span class="brand__logo" aria-hidden="true">HST</span>
+          <span class="brand__text">
+            <strong>Elecnor</strong>
+            <span>Portal interno</span>
+          </span>
+        </a>
+        <nav class="app__nav" aria-label="Navegación secundaria">
+          <a class="nav-link" href="elecnor-usuarios.html" aria-current="page">Usuarios</a>
+          <a class="nav-link" href="elecnor-tarjetas.html">Tarjetas RFID</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="app__main">
+      <section class="app-hero" aria-labelledby="usuarios-title">
+        <div>
+          <p class="breadcrumb"><a href="index.html">Inicio</a> · Elecnor · Usuarios</p>
+          <h1 id="usuarios-title">Gestión de usuarios</h1>
+          <p class="lead">
+            Da de alta a los operarios autorizados indicando su DNI, nombre, apellidos, empresa y centro. Aquí podrás
+            editar sus datos, activar o desactivar accesos y dejar todo listo para asociarles tarjetas RFID.
+          </p>
+          <div class="pill-group">
+            <span class="pill pill--info">Validación rápida de campos obligatorios</span>
+            <span class="pill pill--neutral">Sin backend: datos en tu navegador</span>
+            <span class="pill pill--accent">Listo para conectar con la API de e-coordina</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-grid" aria-label="Altas y listados">
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Formulario</p>
+              <h2>Alta y edición de usuarios</h2>
+              <p class="muted">Completa los campos obligatorios marcados con * para guardar o actualizar un usuario.</p>
+            </div>
+            <div class="panel__actions">
+              <button id="reset-form" class="cta cta--ghost" type="button">Limpiar formulario</button>
+              <span id="form-status" class="badge-chip badge-chip--muted" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <form id="user-form" class="form-grid" autocomplete="off">
+            <label class="form-field">
+              <span>DNI *</span>
+              <input id="dni" name="dni" type="text" required minlength="5" placeholder="00000000A" />
+            </label>
+            <label class="form-field">
+              <span>Nombre *</span>
+              <input id="nombre" name="nombre" type="text" required placeholder="Nombre" />
+            </label>
+            <label class="form-field">
+              <span>Apellidos *</span>
+              <input id="apellidos" name="apellidos" type="text" required placeholder="Apellidos" />
+            </label>
+            <label class="form-field">
+              <span>Empresa *</span>
+              <input id="empresa" name="empresa" type="text" required placeholder="Razón social" />
+            </label>
+            <label class="form-field">
+              <span>CIF *</span>
+              <input id="cif" name="cif" type="text" required placeholder="A12345678" />
+            </label>
+            <label class="form-field">
+              <span>Código de centro *</span>
+              <input id="centro" name="centro" type="text" required placeholder="C-XXX-000" />
+            </label>
+            <label class="form-field">
+              <span>Email de contacto</span>
+              <input id="email" name="email" type="email" placeholder="persona@empresa.com" />
+            </label>
+            <label class="form-field form-field--inline">
+              <input id="activo" name="activo" type="checkbox" checked />
+              <span>Usuario activo y autorizable</span>
+            </label>
+            <div class="form-actions">
+              <button class="cta cta--primary" type="submit">Guardar usuario</button>
+              <p class="muted">Los cambios se aplican al instante y se sincronizan con la tabla de abajo.</p>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Listado</p>
+              <h2>Usuarios configurados</h2>
+              <p class="muted">Filtra por nombre, DNI o centro para localizar rápidamente a la persona.</p>
+            </div>
+            <div class="panel__actions panel__actions--wrap">
+              <input
+                id="filter"
+                class="input input--search"
+                type="search"
+                placeholder="Buscar por nombre, DNI o centro"
+                aria-label="Buscar usuarios"
+              />
+              <select id="center-filter" class="input input--select" aria-label="Filtrar por centro">
+                <option value="">Todos los centros</option>
+              </select>
+              <span id="list-status" class="badge-chip badge-chip--muted" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <div class="table-wrapper" role="region" aria-live="polite">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>DNI</th>
+                  <th>Nombre</th>
+                  <th>Empresa</th>
+                  <th>Centro</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="elecnor.js"></script>
+    <script>
+      const form = document.getElementById("user-form");
+      const status = document.getElementById("form-status");
+      const listStatus = document.getElementById("list-status");
+      const resetBtn = document.getElementById("reset-form");
+      const tbody = document.getElementById("users-body");
+      const searchInput = document.getElementById("filter");
+      const centerFilter = document.getElementById("center-filter");
+
+      let editingDni = null;
+
+      const setStatus = (message, tone = "muted") => {
+        status.textContent = message;
+        status.className = `badge-chip badge-chip--${tone}`;
+      };
+
+      const setListStatus = (message, tone = "muted") => {
+        listStatus.textContent = message;
+        listStatus.className = `badge-chip badge-chip--${tone}`;
+      };
+
+      const resetForm = () => {
+        form.reset();
+        form.dni.readOnly = false;
+        editingDni = null;
+        setStatus("Formulario listo para nuevas altas", "muted");
+      };
+
+      const renderCenters = (users) => {
+        const uniqueCenters = Array.from(new Set(users.map((user) => user.centro))).sort();
+        centerFilter.innerHTML = '<option value="">Todos los centros</option>';
+        uniqueCenters.forEach((centro) => {
+          const option = document.createElement("option");
+          option.value = centro;
+          option.textContent = centro;
+          centerFilter.appendChild(option);
+        });
+      };
+
+      const renderUsers = () => {
+        const query = searchInput.value.toLowerCase();
+        const center = centerFilter.value;
+        const users = ElecnorData.getUsers();
+
+        renderCenters(users);
+
+        const filtered = users.filter((user) => {
+          const matchesQuery =
+            user.dni.toLowerCase().includes(query) ||
+            user.nombre.toLowerCase().includes(query) ||
+            user.apellidos.toLowerCase().includes(query) ||
+            user.centro.toLowerCase().includes(query);
+          const matchesCenter = !center || user.centro === center;
+          return matchesQuery && matchesCenter;
+        });
+
+        tbody.innerHTML = "";
+        if (!filtered.length) {
+          const emptyRow = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 6;
+          cell.textContent = "No hay usuarios que coincidan con el filtro.";
+          emptyRow.appendChild(cell);
+          tbody.appendChild(emptyRow);
+          setListStatus("0 resultados", "warning");
+          return;
+        }
+
+        filtered.forEach((user) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${user.dni}</td>
+            <td>${user.nombre} ${user.apellidos}</td>
+            <td><small>${user.empresa}</small><br /><span class="muted">${user.cif}</span></td>
+            <td>${user.centro}</td>
+            <td><span class="pill ${user.activo ? "pill--success" : "pill--neutral"}">${
+            user.activo ? "Activo" : "Suspendido"
+          }</span></td>
+            <td class="table-actions">
+              <button class="link" data-action="edit" data-dni="${user.dni}">Editar</button>
+              <button class="link link--danger" data-action="delete" data-dni="${user.dni}">Eliminar</button>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+
+        setListStatus(`${filtered.length} usuario(s) mostrados`, "muted");
+      };
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(form));
+
+        if (!data.dni || !data.nombre || !data.apellidos || !data.empresa || !data.cif || !data.centro) {
+          setStatus("Completa todos los campos obligatorios", "warning");
+          return;
+        }
+
+        const payload = {
+          dni: data.dni.trim(),
+          nombre: data.nombre.trim(),
+          apellidos: data.apellidos.trim(),
+          empresa: data.empresa.trim(),
+          cif: data.cif.trim(),
+          centro: data.centro.trim(),
+          email: data.email?.trim() || "",
+          activo: Boolean(data.activo)
+        };
+
+        ElecnorData.upsertUser(payload);
+        setStatus(editingDni ? "Usuario actualizado" : "Usuario guardado", "success");
+        renderUsers();
+        form.dni.readOnly = true;
+        editingDni = payload.dni;
+      });
+
+      resetBtn.addEventListener("click", resetForm);
+
+      tbody.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+
+        const { action, dni } = button.dataset;
+        if (action === "edit") {
+          const user = ElecnorData.getUserByDni(dni);
+          if (!user) return;
+          Object.entries(user).forEach(([key, value]) => {
+            if (form.elements[key]) {
+              if (form.elements[key].type === "checkbox") {
+                form.elements[key].checked = Boolean(value);
+              } else {
+                form.elements[key].value = value;
+              }
+            }
+          });
+          form.dni.readOnly = true;
+          editingDni = user.dni;
+          setStatus(`Editando usuario ${user.dni}`, "info");
+          form.scrollIntoView({ behavior: "smooth" });
+        }
+
+        if (action === "delete") {
+          if (!confirm("¿Eliminar este usuario? Las tarjetas quedarán bloqueadas.")) return;
+          ElecnorData.deleteUser(dni);
+          setStatus("Usuario eliminado", "warning");
+          resetForm();
+          renderUsers();
+        }
+      });
+
+      searchInput.addEventListener("input", renderUsers);
+      centerFilter.addEventListener("change", renderUsers);
+
+      resetForm();
+      renderUsers();
+    </script>
+  </body>
+</html>
