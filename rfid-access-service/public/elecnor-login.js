@@ -51,6 +51,14 @@
     window.location.href = withBasePath(target.startsWith('/') ? target : `/${target}`);
   };
 
+  const rewriteNavLinks = () => {
+    document.querySelectorAll('.topbar__nav a, .breadcrumb a').forEach((anchor) => {
+      const href = anchor.getAttribute('href');
+      if (!href) return;
+      anchor.setAttribute('href', withBasePath(href));
+    });
+  };
+
   const handleAuthenticated = () => {
     if (nextPage) {
       redirectTo(nextPage);
@@ -91,5 +99,6 @@
     }
   });
 
+  rewriteNavLinks();
   checkSession();
 })();

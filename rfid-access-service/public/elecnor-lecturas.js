@@ -1,5 +1,5 @@
 (() => {
-  const { withBasePath, fetchJson, ensureSession } = window.ElecnorAuth;
+  const { withBasePath, fetchJson, ensureSession, rewriteNavLinks } = window.ElecnorAuth;
 
   const simulateForm = document.getElementById('simulate-form');
   const simulateError = document.getElementById('simulate-error');
@@ -97,6 +97,7 @@
   });
 
   const init = async () => {
+    rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
   };

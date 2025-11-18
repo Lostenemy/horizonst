@@ -1,5 +1,5 @@
 (() => {
-  const { fetchJson, withBasePath, ensureSession } = window.ElecnorAuth;
+  const { fetchJson, withBasePath, ensureSession, rewriteNavLinks } = window.ElecnorAuth;
 
   const historyList = document.getElementById('history-list');
   const historyEmpty = document.getElementById('history-empty');
@@ -68,6 +68,7 @@
   };
 
   const init = async () => {
+    rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
     await loadHistory();

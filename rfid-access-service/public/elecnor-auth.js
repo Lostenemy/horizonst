@@ -14,6 +14,16 @@
     return `${BASE_PATH}${normalized}`;
   };
 
+  const rewriteNavLinks = (selectors = ['.topbar__nav a', '.breadcrumb a']) => {
+    selectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((anchor) => {
+        const href = anchor.getAttribute('href');
+        if (!href) return;
+        anchor.setAttribute('href', withBasePath(href));
+      });
+    });
+  };
+
   const fetchJson = async (url, options = {}) => {
     const response = await fetch(url, {
       credentials: 'same-origin',
@@ -63,5 +73,5 @@
     }
   };
 
-  window.ElecnorAuth = { withBasePath, fetchJson, ensureSession };
+  window.ElecnorAuth = { withBasePath, fetchJson, ensureSession, rewriteNavLinks };
 })();

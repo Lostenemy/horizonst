@@ -23,19 +23,19 @@
         </div>
       </div>
       <nav class="topbar__nav" aria-label="Navegación principal">
-        <a class="nav-link" href="elecnor-tarjetas.html">Tarjetas</a>
-        <a class="nav-link" href="elecnor-lecturas.html">Lecturas</a>
-        <a class="nav-link nav-link--active" href="elecnor-webservice.html" aria-current="page">Webservice</a>
-        <a class="nav-link" href="elecnor-seguimiento.html">Seguimiento</a>
-        <a class="nav-link" href="elecnor-usuarios.html">Trabajadores</a>
-        <a class="nav-link" href="elecnor-cuentas.html">Cuentas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html">Tarjetas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html">Lecturas</a>
+        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-webservice.html" aria-current="page">Webservice</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html">Seguimiento</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
       </nav>
     </header>
 
     <main class="page">
       <section class="hero hero--compact">
         <div>
-          <p class="breadcrumb"><a href="elecnor-tarjetas.html">Inicio</a> · Elecnor · Webservice</p>
+          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Webservice</p>
           <h1>Prueba la API de e-coordina</h1>
           <p class="lead">Valida accesos enviando centro, empresa y DNI; el resto de datos quedan como referencia.</p>
           <div class="pill-row">
@@ -126,13 +126,43 @@
               <span>Apellidos del trabajador (solo referencia)</span>
               <input type="text" id="ecoordina-apellidos" />
             </label>
-            <label class="form-field form-field--wide">
-              <span>Datos enviados</span>
-              <textarea id="ecoordina-payload" readonly rows="4"></textarea>
-            </label>
-          </form>
-          <p id="ecoordina-error" class="error" hidden></p>
-          <pre id="ecoordina-response" class="result hidden"></pre>
+          <label class="form-field form-field--wide">
+            <span>Datos enviados</span>
+            <textarea id="ecoordina-payload" readonly rows="4"></textarea>
+          </label>
+        </form>
+        <p id="ecoordina-error" class="error" hidden></p>
+        <pre id="ecoordina-response" class="result hidden"></pre>
+          <div class="help-box">
+            <p>
+              Según la ayuda oficial (<a href="https://ws.e-coordina.com/1.4/help" target="_blank" rel="noreferrer">documentación</a>),
+              los parámetros obligatorios son <strong>user</strong>, <strong>password/token</strong>, <strong>instance</strong>,
+              los formatos <strong>in/out</strong> (por defecto json) y el <strong>action_type</strong> que debe ser <code>do</code>
+              para enviar datos; el <code>action</code> solicitado aquí es <code>acceso_permitido_data</code>.
+            </p>
+            <p class="muted">Ejemplo de error devuelto por el servicio con los valores facilitados:</p>
+            <pre>{
+  "status": 200,
+  "payload": {
+    "url": "https://ws.e-coordina.com/1.4",
+    "action": "acceso_permitido_data",
+    "actionType": "do",
+    "brand": "ecoordina",
+    "instance": "elecnor",
+    "input": "json",
+    "output": "json",
+    "user": "webservice",
+    "centro_cod": "512/73000-A79408683",
+    "empresa_cif": "B45740816",
+    "trabajador_dni": "70590602W"
+  },
+  "data": {
+    "status": "ERROR",
+    "message": "ACTION REQUEST",
+    "help": "https://ws.e-coordina.com/1.4/help"
+  }
+}</pre>
+          </div>
         </article>
       </section>
     </main>

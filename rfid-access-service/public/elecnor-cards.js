@@ -1,5 +1,5 @@
 (() => {
-  const { ensureSession } = window.ElecnorAuth;
+  const { ensureSession, rewriteNavLinks } = window.ElecnorAuth;
   const form = document.getElementById('card-form');
   const resetButton = document.getElementById('reset-card-form');
   const statusChip = document.getElementById('card-form-status');
@@ -188,6 +188,7 @@
   stateFilter.addEventListener('change', renderCards);
 
   const init = async () => {
+    rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
     loadUserOptions();

@@ -313,6 +313,7 @@ h3 {
 button {
   font-family: inherit;
   font-weight: 700;
+  letter-spacing: 0.01em;
   border-radius: 12px;
   border: 1px solid transparent;
   cursor: pointer;
@@ -376,6 +377,26 @@ button:not(.cta) {
   background: linear-gradient(135deg, #0b2343, #12325a);
   color: #fff;
   padding: 10px 14px;
+  border-color: #0b2343;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cta--ghost button,
+.cta--ghost {
+  border-color: rgba(11, 35, 67, 0.28);
+}
+
+.table__actions button {
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.cta:disabled,
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .table__actions .cta {
@@ -620,6 +641,23 @@ button:not(.cta) {
 .empty {
   padding: 12px;
   color: var(--muted);
+}
+
+.help-box {
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: var(--muted);
+}
+
+.help-box pre {
+  margin: 10px 0 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  overflow: auto;
 }
 
 .auth-card {

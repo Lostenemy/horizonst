@@ -1,5 +1,5 @@
 (() => {
-  const { ensureSession } = window.ElecnorAuth;
+  const { ensureSession, rewriteNavLinks } = window.ElecnorAuth;
   const form = document.getElementById('user-form');
   const resetButton = document.getElementById('reset-form');
   const statusChip = document.getElementById('form-status');
@@ -165,6 +165,7 @@
   centerFilter.addEventListener('change', renderUsers);
 
   const init = async () => {
+    rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
     fillCenterOptions();

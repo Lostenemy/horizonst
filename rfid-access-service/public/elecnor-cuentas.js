@@ -11,7 +11,7 @@
   const recargarBtn = document.getElementById('recargar-cuentas');
   const sessionChip = document.getElementById('session-chip');
 
-  const { ensureSession, fetchJson, withBasePath } = window.ElecnorAuth;
+  const { ensureSession, fetchJson, withBasePath, rewriteNavLinks } = window.ElecnorAuth;
   let currentSession = null;
 
   const showStatus = (message, tone = 'neutral') => {
@@ -195,6 +195,7 @@
   };
 
   const init = async () => {
+    rewriteNavLinks();
     currentSession = await ensureSession(true);
     if (!currentSession) return;
     sessionChip.textContent = `${currentSession.username} · ${currentSession.role === 'admin' ? 'Admin' : 'Usuario'}`;

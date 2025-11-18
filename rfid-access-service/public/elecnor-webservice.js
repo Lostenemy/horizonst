@@ -1,5 +1,5 @@
 (() => {
-  const { withBasePath, fetchJson, ensureSession } = window.ElecnorAuth;
+  const { withBasePath, fetchJson, ensureSession, rewriteNavLinks } = window.ElecnorAuth;
 
   const ecoordinaForm = document.getElementById('ecoordina-form');
   const ecoordinaUrl = document.getElementById('ecoordina-url');
@@ -132,6 +132,7 @@
   });
 
   const init = async () => {
+    rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
     await loadEcoordinaDefaults();
