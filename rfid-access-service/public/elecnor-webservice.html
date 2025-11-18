@@ -37,9 +37,9 @@
         <div>
           <p class="breadcrumb"><a href="elecnor-tarjetas.html">Inicio</a> · Elecnor · Webservice</p>
           <h1>Prueba la API de e-coordina</h1>
-          <p class="lead">Valida accesos enviando centro, empresa y datos completos del trabajador.</p>
+          <p class="lead">Valida accesos enviando centro, empresa y DNI; el resto de datos quedan como referencia.</p>
           <div class="pill-row">
-            <span class="pill pill--info">Datos obligatorios: centro, CIF, DNI y nombre completo</span>
+            <span class="pill pill--info">Datos obligatorios: centro, CIF y DNI</span>
             <span class="pill pill--neutral">Valores por defecto desde el backend</span>
             <span class="pill pill--accent">Respuesta detallada</span>
           </div>
@@ -47,7 +47,7 @@
         <div class="hero__cta">
           <div class="callout">
             <p class="eyebrow">Recordatorio</p>
-            <p>Nombre y apellidos se envían siempre en la petición.</p>
+            <p>Solo se envían centro, CIF y DNI. Los datos personales se quedan en local.</p>
           </div>
         </div>
       </section>
@@ -59,8 +59,8 @@
               <p class="eyebrow">Webservice</p>
               <h2>Probar API e-coordina</h2>
               <p class="muted">
-                Lanza una petición al servicio <code>https://ws.e-coordina.com/1.4</code> con los datos completos del
-                trabajador. Los campos se precargan con los valores por defecto configurados en el servicio.
+                Lanza una petición al servicio <code>https://ws.e-coordina.com/1.4</code> con los datos mínimos
+                (centro, CIF y DNI). El nombre y los apellidos se guardan solo a nivel local y no viajan en la consulta.
               </p>
             </div>
             <div class="panel__actions">
@@ -119,12 +119,12 @@
               <input type="text" id="ecoordina-dni" required />
             </label>
             <label class="form-field">
-              <span>Nombre del trabajador</span>
-              <input type="text" id="ecoordina-nombre" required />
+              <span>Nombre del trabajador (solo referencia, no se envía)</span>
+              <input type="text" id="ecoordina-nombre" />
             </label>
             <label class="form-field">
-              <span>Apellidos del trabajador</span>
-              <input type="text" id="ecoordina-apellidos" required />
+              <span>Apellidos del trabajador (solo referencia)</span>
+              <input type="text" id="ecoordina-apellidos" />
             </label>
             <label class="form-field form-field--wide">
               <span>Datos enviados</span>

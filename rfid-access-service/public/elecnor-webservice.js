@@ -27,9 +27,7 @@
   const buildEcoordinaData = () => ({
     centro_cod: ecoordinaCentro.value.trim().toUpperCase(),
     empresa_cif: ecoordinaCif.value.trim().toUpperCase(),
-    trabajador_dni: ecoordinaDni.value.trim().toUpperCase(),
-    trabajador_nombre: ecoordinaNombre.value.trim(),
-    trabajador_apellidos: ecoordinaApellidos.value.trim()
+    trabajador_dni: ecoordinaDni.value.trim().toUpperCase()
   });
 
   const refreshEcoordinaPreview = () => {
@@ -80,8 +78,6 @@
     ecoordinaCentro,
     ecoordinaCif,
     ecoordinaDni,
-    ecoordinaNombre,
-    ecoordinaApellidos,
     ecoordinaUrl,
     ecoordinaUser,
     ecoordinaToken,
@@ -103,8 +99,8 @@
 
     const payload = buildEcoordinaData();
 
-    if (!payload.trabajador_nombre || !payload.trabajador_apellidos) {
-      ecoordinaError.textContent = 'Nombre y apellidos son obligatorios para la petición.';
+    if (!payload.centro_cod || !payload.empresa_cif || !payload.trabajador_dni) {
+      ecoordinaError.textContent = 'Centro, CIF y DNI son obligatorios para la petición.';
       ecoordinaError.hidden = false;
       return;
     }

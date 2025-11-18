@@ -306,9 +306,7 @@ export const startWebInterface = async ({
       outputFormat,
       centro_cod: centroCodRaw,
       empresa_cif: empresaCifRaw,
-      trabajador_dni: trabajadorDniRaw,
-      trabajador_nombre: trabajadorNombreRaw,
-      trabajador_apellidos: trabajadorApellidosRaw
+      trabajador_dni: trabajadorDniRaw
     } = req.body ?? {};
 
     const targetUrl = pickStringOrDefault(url, ecoordinaDefaults.url);
@@ -324,19 +322,7 @@ export const startWebInterface = async ({
     const centroCod = pickStringOrDefault(centroCodRaw, '').toUpperCase();
     const empresaCif = pickStringOrDefault(empresaCifRaw, '').toUpperCase();
     const trabajadorDni = pickStringOrDefault(trabajadorDniRaw, '').toUpperCase();
-    const trabajadorNombre = asTrimmedString(trabajadorNombreRaw);
-    const trabajadorApellidos = asTrimmedString(trabajadorApellidosRaw);
-
-    if (
-      !targetUrl ||
-      !authUser ||
-      !authToken ||
-      !centroCod ||
-      !empresaCif ||
-      !trabajadorDni ||
-      !trabajadorNombre ||
-      !trabajadorApellidos
-    ) {
+    if (!targetUrl || !authUser || !authToken || !centroCod || !empresaCif || !trabajadorDni) {
       res.status(400).json({
         error: 'MISSING_FIELDS',
         required: [
@@ -345,9 +331,7 @@ export const startWebInterface = async ({
           'token',
           'centro_cod',
           'empresa_cif',
-          'trabajador_dni',
-          'trabajador_nombre',
-          'trabajador_apellidos'
+          'trabajador_dni'
         ]
       });
       return;
@@ -356,9 +340,7 @@ export const startWebInterface = async ({
     const payloadData: Record<string, string> = {
       centro_cod: centroCod,
       empresa_cif: empresaCif,
-      trabajador_dni: trabajadorDni,
-      trabajador_nombre: trabajadorNombre,
-      trabajador_apellidos: trabajadorApellidos
+      trabajador_dni: trabajadorDni
     };
 
     const form = new URLSearchParams();
@@ -383,9 +365,7 @@ export const startWebInterface = async ({
       user: authUser,
       centro_cod: centroCod,
       empresa_cif: empresaCif,
-      trabajador_dni: trabajadorDni,
-      trabajador_nombre: trabajadorNombre || undefined,
-      trabajador_apellidos: trabajadorApellidos || undefined
+      trabajador_dni: trabajadorDni
     };
 
     try {

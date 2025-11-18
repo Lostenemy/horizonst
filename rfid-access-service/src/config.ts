@@ -167,7 +167,7 @@ export const config = {
     token: process.env.ECOORDINA_API_TOKEN || '',
     brand: process.env.ECOORDINA_API_BRAND || 'ecoordina',
     action: process.env.ECOORDINA_API_ACTION || 'acceso_permitido_data',
-    actionType: process.env.ECOORDINA_API_ACTION_TYPE || 'clo',
+    actionType: process.env.ECOORDINA_API_ACTION_TYPE || 'do',
     instance: process.env.ECOORDINA_API_INSTANCE || 'elecnor',
     inputFormat: process.env.ECOORDINA_API_IN || 'json',
     outputFormat: process.env.ECOORDINA_API_OUT || 'json',
