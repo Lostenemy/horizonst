@@ -349,6 +349,16 @@ export const startWebInterface = async ({
       }
     };
 
+    const formPayload = new URLSearchParams();
+    formPayload.append('user', authUser);
+    formPayload.append('token', authToken);
+    formPayload.append('instance', selectedInstance);
+    formPayload.append('in', selectedInput);
+    formPayload.append('out', selectedOutput);
+    formPayload.append('action_type', selectedActionType);
+    formPayload.append('action', selectedAction);
+    formPayload.append('data', JSON.stringify({ data: payload.data }));
+
     const requestPreview = {
       url: targetUrl,
       action: selectedAction,
@@ -364,8 +374,8 @@ export const startWebInterface = async ({
     };
 
     try {
-      const response = await axios.post<string>(targetUrl, payload, {
-        headers: { 'Content-Type': 'application/json' },
+      const response = await axios.post<string>(targetUrl, formPayload.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         timeout: ecoordinaDefaults.timeoutMs,
         responseType: 'text',
         validateStatus: () => true
@@ -388,6 +398,7 @@ export const startWebInterface = async ({
           message: response.statusText,
           payload: requestPreview,
           payloadSent: payload,
+          formPayload: Object.fromEntries(formPayload.entries()),
           raw: rawText,
           data: parsed
         });
@@ -398,6 +409,7 @@ export const startWebInterface = async ({
         status: response.status,
         payload: requestPreview,
         payloadSent: payload,
+        formPayload: Object.fromEntries(formPayload.entries()),
         raw: rawText,
         data: parsed
       });
