@@ -327,10 +327,28 @@ export const startWebInterface = async ({
     const trabajadorNombre = asTrimmedString(trabajadorNombreRaw);
     const trabajadorApellidos = asTrimmedString(trabajadorApellidosRaw);
 
-    if (!targetUrl || !authUser || !authToken || !centroCod || !empresaCif || !trabajadorDni) {
+    if (
+      !targetUrl ||
+      !authUser ||
+      !authToken ||
+      !centroCod ||
+      !empresaCif ||
+      !trabajadorDni ||
+      !trabajadorNombre ||
+      !trabajadorApellidos
+    ) {
       res.status(400).json({
         error: 'MISSING_FIELDS',
-        required: ['url', 'user', 'token', 'centro_cod', 'empresa_cif', 'trabajador_dni']
+        required: [
+          'url',
+          'user',
+          'token',
+          'centro_cod',
+          'empresa_cif',
+          'trabajador_dni',
+          'trabajador_nombre',
+          'trabajador_apellidos'
+        ]
       });
       return;
     }
@@ -338,16 +356,10 @@ export const startWebInterface = async ({
     const payloadData: Record<string, string> = {
       centro_cod: centroCod,
       empresa_cif: empresaCif,
-      trabajador_dni: trabajadorDni
+      trabajador_dni: trabajadorDni,
+      trabajador_nombre: trabajadorNombre,
+      trabajador_apellidos: trabajadorApellidos
     };
-
-    if (trabajadorNombre) {
-      payloadData.trabajador_nombre = trabajadorNombre;
-    }
-
-    if (trabajadorApellidos) {
-      payloadData.trabajador_apellidos = trabajadorApellidos;
-    }
 
     const form = new URLSearchParams();
     form.set('action', selectedAction);
@@ -529,6 +541,18 @@ export const startWebInterface = async ({
 
   router.get(['/elecnor-cuentas', '/elecnor-cuentas.html'], (_req, res) => {
     void renderHtml('elecnor-cuentas.html', res);
+  });
+
+  router.get(['/elecnor-lecturas', '/elecnor-lecturas.html'], (_req, res) => {
+    void renderHtml('elecnor-lecturas.html', res);
+  });
+
+  router.get(['/elecnor-webservice', '/elecnor-webservice.html'], (_req, res) => {
+    void renderHtml('elecnor-webservice.html', res);
+  });
+
+  router.get(['/elecnor-seguimiento', '/elecnor-seguimiento.html'], (_req, res) => {
+    void renderHtml('elecnor-seguimiento.html', res);
   });
 
   router.use(

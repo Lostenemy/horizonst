@@ -1,6 +1,12 @@
 (function () {
-  const RAW_BASE_PATH = '__BASE_PATH__';
-  const BASE_PATH = !RAW_BASE_PATH || RAW_BASE_PATH === '/' ? '' : RAW_BASE_PATH;
+  const resolveBasePath = () => {
+    const raw = window.__RFID_BASE_PATH__ || document.querySelector('base')?.getAttribute('href') || '';
+    if (!raw || raw === '/') return '';
+    const normalized = raw.endsWith('/') ? raw.slice(0, -1) : raw;
+    return normalized;
+  };
+
+  const BASE_PATH = resolveBasePath();
 
   const withBasePath = (path) => {
     if (!path) return BASE_PATH || '/';
