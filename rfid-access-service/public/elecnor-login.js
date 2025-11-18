@@ -71,6 +71,7 @@
     try {
       const session = await fetchJson(withBasePath('/api/session'));
       if (session?.authenticated) {
+        window.ElecnorAuth?.cacheSession?.(session);
         handleAuthenticated();
       }
     } catch (error) {
@@ -84,13 +85,14 @@
     loginError.textContent = '';
 
     try {
-      await fetchJson(withBasePath('/api/login'), {
+      const session = await fetchJson(withBasePath('/api/login'), {
         method: 'POST',
         body: JSON.stringify({
           username: usernameInput.value.trim(),
           password: passwordInput.value
         })
       });
+      window.ElecnorAuth?.cacheSession?.(session);
       handleAuthenticated();
     } catch (error) {
       loginError.textContent =

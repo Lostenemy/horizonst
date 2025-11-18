@@ -8,10 +8,42 @@
 
   const BASE_PATH = resolveBasePath();
 
+  const SESSION_CACHE_KEY = 'elecnorSession';
+
   const withBasePath = (path) => {
     if (!path) return BASE_PATH || '/';
     const normalized = path.startsWith('/') ? path : `/${path}`;
     return `${BASE_PATH}${normalized}`;
+  };
+
+  const getCachedSession = () => {
+    try {
+      const stored = sessionStorage.getItem(SESSION_CACHE_KEY);
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_err) {
+      return null;
+    }
+  };
+
+  const cacheSession = (session) => {
+    try {
+      if (!session || !session.authenticated) {
+        sessionStorage.removeItem(SESSION_CACHE_KEY);
+        return;
+      }
+      sessionStorage.setItem(
+        SESSION_CACHE_KEY,
+        JSON.stringify({
+          authenticated: Boolean(session.authenticated),
+          username: session.username ?? null,
+          role: session.role ?? null
+        })
+      );
+    } catch (_err) {
+      // Ignorar fallos de almacenamiento silenciosamente
+    }
   };
 
   const rewriteNavLinks = (selectors = ['.topbar__nav a', '.breadcrumb a']) => {
@@ -57,21 +89,27 @@
   };
 
   const ensureSession = async (requireAdmin = false) => {
+    const cached = getCachedSession();
     try {
       const session = await fetchJson(withBasePath('/api/session'));
       if (!session.authenticated) {
+        cacheSession(null);
         redirectToLogin();
         return null;
       }
+      cacheSession(session);
       if (requireAdmin && session.role !== 'admin') {
         throw new Error('FORBIDDEN');
       }
       return session;
     } catch (error) {
+      if (cached?.authenticated) {
+        return cached;
+      }
       redirectToLogin();
       return null;
     }
   };
 
-  window.ElecnorAuth = { withBasePath, fetchJson, ensureSession, rewriteNavLinks };
+  window.ElecnorAuth = { withBasePath, fetchJson, ensureSession, rewriteNavLinks, cacheSession, getCachedSession };
 })();
