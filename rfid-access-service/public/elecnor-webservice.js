@@ -4,7 +4,7 @@
   const ecoordinaForm = document.getElementById('ecoordina-form');
   const ecoordinaUrl = document.getElementById('ecoordina-url');
   const ecoordinaUser = document.getElementById('ecoordina-user');
-  const ecoordinaPassword = document.getElementById('ecoordina-password');
+  const ecoordinaToken = document.getElementById('ecoordina-token');
   const ecoordinaAction = document.getElementById('ecoordina-action');
   const ecoordinaActionType = document.getElementById('ecoordina-action-type');
   const ecoordinaInstance = document.getElementById('ecoordina-instance');
@@ -33,7 +33,7 @@
     ecoordinaPayload.value = JSON.stringify(
       {
         user: ecoordinaUser.value.trim(),
-        password: ecoordinaPassword.value.trim(),
+        token: ecoordinaToken.value.trim(),
         instance: ecoordinaInstance.value.trim(),
         in: ecoordinaInput.value.trim(),
         out: ecoordinaOutput.value.trim(),
@@ -50,7 +50,7 @@
     ecoordinaDefaults = defaults;
     ecoordinaUrl.value = defaults.url ?? '';
     ecoordinaUser.value = defaults.user ?? '';
-    ecoordinaPassword.value = defaults.password ?? '';
+    ecoordinaToken.value = defaults.token ?? '';
     ecoordinaAction.value = defaults.action ?? '';
     ecoordinaActionType.value = defaults.actionType ?? '';
     ecoordinaInstance.value = defaults.instance ?? '';
@@ -91,7 +91,7 @@
     ecoordinaDni,
     ecoordinaUrl,
     ecoordinaUser,
-    ecoordinaPassword,
+    ecoordinaToken,
     ecoordinaAction,
     ecoordinaActionType,
     ecoordinaInstance,
@@ -121,7 +121,7 @@
         body: JSON.stringify({
           url: ecoordinaUrl.value,
           user: ecoordinaUser.value,
-          password: ecoordinaPassword.value,
+          token: ecoordinaToken.value,
           action: ecoordinaAction.value,
           actionType: ecoordinaActionType.value,
           instance: ecoordinaInstance.value,
