@@ -387,6 +387,7 @@ export const startWebInterface = async ({
           status: response.status,
           message: response.statusText,
           payload: requestPreview,
+          payloadSent: payload,
           raw: rawText,
           data: parsed
         });
@@ -396,6 +397,7 @@ export const startWebInterface = async ({
       res.json({
         status: response.status,
         payload: requestPreview,
+        payloadSent: payload,
         raw: rawText,
         data: parsed
       });
@@ -407,6 +409,7 @@ export const startWebInterface = async ({
         error: err.code === 'ECONNABORTED' ? 'ECOORDINA_TIMEOUT' : 'ECOORDINA_UNAVAILABLE',
         message: err.message,
         payload: requestPreview,
+        payloadSent: payload,
         raw: rawText
       });
     }
