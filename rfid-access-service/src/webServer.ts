@@ -357,7 +357,7 @@ export const startWebInterface = async ({
     formPayload.append('out', selectedOutput);
     formPayload.append('action_type', selectedActionType);
     formPayload.append('action', selectedAction);
-    formPayload.append('data', JSON.stringify({ data: payload.data }));
+    formPayload.append('data', JSON.stringify(payload.data));
 
     const requestPreview = {
       url: targetUrl,
