@@ -22,7 +22,7 @@ export interface WebInterfaceConfig {
 export interface EcoordinaConfig {
   url: string;
   user: string;
-  token: string;
+  password: string;
   action: string;
   actionType: string;
   instance: string;
@@ -296,7 +296,7 @@ export const startWebInterface = async ({
     const {
       url,
       user,
-      token,
+      password,
       action,
       actionType,
       instance,
@@ -309,7 +309,7 @@ export const startWebInterface = async ({
 
     const targetUrl = pickStringOrDefault(url, ecoordinaDefaults.url);
     const authUser = pickStringOrDefault(user, ecoordinaDefaults.user);
-    const authToken = pickStringOrDefault(token, ecoordinaDefaults.token);
+    const authPassword = pickStringOrDefault(password, ecoordinaDefaults.password);
     const selectedAction = pickStringOrDefault(action, ecoordinaDefaults.action);
     const selectedActionType = pickStringOrDefault(actionType, ecoordinaDefaults.actionType);
     const selectedInstance = pickStringOrDefault(instance, ecoordinaDefaults.instance);
@@ -319,13 +319,13 @@ export const startWebInterface = async ({
     const centroCod = pickStringOrDefault(centroCodRaw, '').toUpperCase();
     const empresaCif = pickStringOrDefault(empresaCifRaw, '').toUpperCase();
     const trabajadorDni = pickStringOrDefault(trabajadorDniRaw, '').toUpperCase();
-    if (!targetUrl || !authUser || !authToken || !centroCod || !empresaCif || !trabajadorDni) {
+    if (!targetUrl || !authUser || !authPassword || !centroCod || !empresaCif || !trabajadorDni) {
       res.status(400).json({
         error: 'MISSING_FIELDS',
         required: [
           'url',
           'user',
-          'token',
+          'password',
           'centro_cod',
           'empresa_cif',
           'trabajador_dni'
@@ -336,7 +336,7 @@ export const startWebInterface = async ({
 
     const payload = {
       user: authUser,
-      token: authToken,
+      password: authPassword,
       instance: selectedInstance,
       in: selectedInput,
       out: selectedOutput,
@@ -351,7 +351,7 @@ export const startWebInterface = async ({
 
     const formPayload = new URLSearchParams();
     formPayload.append('user', authUser);
-    formPayload.append('token', authToken);
+    formPayload.append('password', authPassword);
     formPayload.append('instance', selectedInstance);
     formPayload.append('in', selectedInput);
     formPayload.append('out', selectedOutput);
@@ -367,14 +367,16 @@ export const startWebInterface = async ({
       input: selectedInput,
       output: selectedOutput,
       user: authUser,
-      token: '••••••',
+      password: '••••••',
       centro_cod: centroCod,
       empresa_cif: empresaCif,
       trabajador_dni: trabajadorDni
     };
 
+    const encodedForm = formPayload.toString();
+
     try {
-      const response = await axios.post<string>(targetUrl, formPayload.toString(), {
+      const response = await axios.post<string>(targetUrl, encodedForm, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         timeout: ecoordinaDefaults.timeoutMs,
         responseType: 'text',
@@ -399,6 +401,7 @@ export const startWebInterface = async ({
           payload: requestPreview,
           payloadSent: payload,
           formPayload: Object.fromEntries(formPayload.entries()),
+          formBody: encodedForm,
           raw: rawText,
           data: parsed
         });
@@ -410,6 +413,7 @@ export const startWebInterface = async ({
         payload: requestPreview,
         payloadSent: payload,
         formPayload: Object.fromEntries(formPayload.entries()),
+        formBody: encodedForm,
         raw: rawText,
         data: parsed
       });

@@ -79,8 +79,8 @@
               <input type="text" id="ecoordina-user" autocomplete="username" />
             </label>
             <label class="form-field">
-              <span>Token</span>
-              <input type="password" id="ecoordina-token" autocomplete="off" />
+              <span>Contraseña (password)</span>
+              <input type="password" id="ecoordina-password" autocomplete="off" />
             </label>
             <label class="form-field">
               <span>Acción</span>
@@ -132,14 +132,14 @@
           <div class="help-box">
             <p>
               Según la ayuda oficial (<a href="https://ws.e-coordina.com/1.4/help" target="_blank" rel="noreferrer">documentación</a>),
-              los parámetros obligatorios son <strong>user</strong>, <strong>token</strong>, <strong>instance</strong>, los formatos
+              los parámetros obligatorios son <strong>user</strong>, <strong>password</strong>, <strong>instance</strong>, los formatos
               <strong>in/out</strong> (por defecto json) y el <strong>action_type</strong> que debe ser <code>do</code> para enviar datos;
               el <code>action</code> solicitado aquí es <code>acceso_permitido_data</code>.
             </p>
             <p class="muted">Ejemplo de cuerpo esperado según la versión 1.4 del servicio:</p>
             <pre>{
   "user": "webservice",
-  "token": "TU_TOKEN",
+  "password": "TU_PASSWORD",
   "instance": "elecnor",
   "in": "json",
   "out": "json",
