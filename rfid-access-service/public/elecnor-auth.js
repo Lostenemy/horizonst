@@ -92,16 +92,23 @@
     const cached = getCachedSession();
     try {
       const session = await fetchJson(withBasePath('/api/session'));
-      if (!session.authenticated) {
-        cacheSession(null);
-        redirectToLogin();
-        return null;
+      if (session.authenticated) {
+        cacheSession(session);
+        if (requireAdmin && session.role !== 'admin') {
+          throw new Error('FORBIDDEN');
+        }
+        return session;
       }
-      cacheSession(session);
-      if (requireAdmin && session.role !== 'admin') {
-        throw new Error('FORBIDDEN');
+
+      // Si el servidor indica no autenticado pero tenemos una sesión válida en caché,
+      // reutilizamos la sesión para evitar redirecciones erróneas al login.
+      if (cached?.authenticated) {
+        return cached;
       }
-      return session;
+
+      cacheSession(null);
+      redirectToLogin();
+      return null;
     } catch (error) {
       if (cached?.authenticated) {
         return cached;
