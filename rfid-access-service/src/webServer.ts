@@ -22,8 +22,7 @@ export interface WebInterfaceConfig {
 export interface EcoordinaConfig {
   url: string;
   user: string;
-  token: string;
-  brand: string;
+  password: string;
   action: string;
   actionType: string;
   instance: string;
@@ -297,8 +296,7 @@ export const startWebInterface = async ({
     const {
       url,
       user,
-      token,
-      brand,
+      password,
       action,
       actionType,
       instance,
@@ -311,8 +309,7 @@ export const startWebInterface = async ({
 
     const targetUrl = pickStringOrDefault(url, ecoordinaDefaults.url);
     const authUser = pickStringOrDefault(user, ecoordinaDefaults.user);
-    const authToken = pickStringOrDefault(token, ecoordinaDefaults.token);
-    const selectedBrand = pickStringOrDefault(brand, ecoordinaDefaults.brand);
+    const authPassword = pickStringOrDefault(password, ecoordinaDefaults.password);
     const selectedAction = pickStringOrDefault(action, ecoordinaDefaults.action);
     const selectedActionType = pickStringOrDefault(actionType, ecoordinaDefaults.actionType);
     const selectedInstance = pickStringOrDefault(instance, ecoordinaDefaults.instance);
@@ -322,13 +319,13 @@ export const startWebInterface = async ({
     const centroCod = pickStringOrDefault(centroCodRaw, '').toUpperCase();
     const empresaCif = pickStringOrDefault(empresaCifRaw, '').toUpperCase();
     const trabajadorDni = pickStringOrDefault(trabajadorDniRaw, '').toUpperCase();
-    if (!targetUrl || !authUser || !authToken || !centroCod || !empresaCif || !trabajadorDni) {
+    if (!targetUrl || !authUser || !authPassword || !centroCod || !empresaCif || !trabajadorDni) {
       res.status(400).json({
         error: 'MISSING_FIELDS',
         required: [
           'url',
           'user',
-          'token',
+          'password',
           'centro_cod',
           'empresa_cif',
           'trabajador_dni'
@@ -337,40 +334,38 @@ export const startWebInterface = async ({
       return;
     }
 
-    const payloadData: Record<string, string> = {
-      centro_cod: centroCod,
-      empresa_cif: empresaCif,
-      trabajador_dni: trabajadorDni
+    const payload = {
+      user: authUser,
+      password: authPassword,
+      instance: selectedInstance,
+      in: selectedInput,
+      out: selectedOutput,
+      action_type: selectedActionType,
+      action: selectedAction,
+      data: {
+        centro_cod: centroCod,
+        empresa_cif: empresaCif,
+        trabajador_dni: trabajadorDni
+      }
     };
-
-    const form = new URLSearchParams();
-    form.set('action', selectedAction);
-    form.set('action_type', selectedActionType);
-    form.set('brand', selectedBrand);
-    form.set('data', JSON.stringify({ data: payloadData }));
-    form.set('in', selectedInput);
-    form.set('instance', selectedInstance);
-    form.set('out', selectedOutput);
-    form.set('user', authUser);
-    form.set('token', authToken);
 
     const requestPreview = {
       url: targetUrl,
       action: selectedAction,
       actionType: selectedActionType,
-      brand: selectedBrand,
       instance: selectedInstance,
       input: selectedInput,
       output: selectedOutput,
       user: authUser,
+      password: '••••••',
       centro_cod: centroCod,
       empresa_cif: empresaCif,
       trabajador_dni: trabajadorDni
     };
 
     try {
-      const response = await axios.post<string>(targetUrl, form.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      const response = await axios.post<string>(targetUrl, payload, {
+        headers: { 'Content-Type': 'application/json' },
         timeout: ecoordinaDefaults.timeoutMs,
         responseType: 'text',
         validateStatus: () => true

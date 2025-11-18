@@ -4,8 +4,7 @@
   const ecoordinaForm = document.getElementById('ecoordina-form');
   const ecoordinaUrl = document.getElementById('ecoordina-url');
   const ecoordinaUser = document.getElementById('ecoordina-user');
-  const ecoordinaToken = document.getElementById('ecoordina-token');
-  const ecoordinaBrand = document.getElementById('ecoordina-brand');
+  const ecoordinaPassword = document.getElementById('ecoordina-password');
   const ecoordinaAction = document.getElementById('ecoordina-action');
   const ecoordinaActionType = document.getElementById('ecoordina-action-type');
   const ecoordinaInstance = document.getElementById('ecoordina-instance');
@@ -31,15 +30,27 @@
   });
 
   const refreshEcoordinaPreview = () => {
-    ecoordinaPayload.value = JSON.stringify({ data: buildEcoordinaData() }, null, 2);
+    ecoordinaPayload.value = JSON.stringify(
+      {
+        user: ecoordinaUser.value.trim(),
+        password: ecoordinaPassword.value.trim(),
+        instance: ecoordinaInstance.value.trim(),
+        in: ecoordinaInput.value.trim(),
+        out: ecoordinaOutput.value.trim(),
+        action_type: ecoordinaActionType.value.trim(),
+        action: ecoordinaAction.value.trim(),
+        data: buildEcoordinaData()
+      },
+      null,
+      2
+    );
   };
 
   const hydrateEcoordinaDefaults = (defaults) => {
     ecoordinaDefaults = defaults;
     ecoordinaUrl.value = defaults.url ?? '';
     ecoordinaUser.value = defaults.user ?? '';
-    ecoordinaToken.value = defaults.token ?? '';
-    ecoordinaBrand.value = defaults.brand ?? '';
+    ecoordinaPassword.value = defaults.password ?? '';
     ecoordinaAction.value = defaults.action ?? '';
     ecoordinaActionType.value = defaults.actionType ?? '';
     ecoordinaInstance.value = defaults.instance ?? '';
@@ -80,8 +91,7 @@
     ecoordinaDni,
     ecoordinaUrl,
     ecoordinaUser,
-    ecoordinaToken,
-    ecoordinaBrand,
+    ecoordinaPassword,
     ecoordinaAction,
     ecoordinaActionType,
     ecoordinaInstance,
@@ -111,8 +121,7 @@
         body: JSON.stringify({
           url: ecoordinaUrl.value,
           user: ecoordinaUser.value,
-          token: ecoordinaToken.value,
-          brand: ecoordinaBrand.value,
+          password: ecoordinaPassword.value,
           action: ecoordinaAction.value,
           actionType: ecoordinaActionType.value,
           instance: ecoordinaInstance.value,

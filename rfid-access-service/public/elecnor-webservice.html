@@ -79,12 +79,8 @@
               <input type="text" id="ecoordina-user" autocomplete="username" />
             </label>
             <label class="form-field">
-              <span>Token</span>
-              <input type="text" id="ecoordina-token" autocomplete="off" />
-            </label>
-            <label class="form-field">
-              <span>Marca (brand)</span>
-              <input type="text" id="ecoordina-brand" />
+              <span>Contraseña (password)</span>
+              <input type="password" id="ecoordina-password" autocomplete="current-password" />
             </label>
             <label class="form-field">
               <span>Acción</span>
@@ -132,36 +128,30 @@
           </label>
         </form>
         <p id="ecoordina-error" class="error" hidden></p>
-        <pre id="ecoordina-response" class="result hidden"></pre>
+            <pre id="ecoordina-response" class="result hidden"></pre>
           <div class="help-box">
             <p>
               Según la ayuda oficial (<a href="https://ws.e-coordina.com/1.4/help" target="_blank" rel="noreferrer">documentación</a>),
-              los parámetros obligatorios son <strong>user</strong>, <strong>password/token</strong>, <strong>instance</strong>,
-              los formatos <strong>in/out</strong> (por defecto json) y el <strong>action_type</strong> que debe ser <code>do</code>
-              para enviar datos; el <code>action</code> solicitado aquí es <code>acceso_permitido_data</code>.
+              los parámetros obligatorios son <strong>user</strong>, <strong>password</strong>, <strong>instance</strong>, los formatos
+              <strong>in/out</strong> (por defecto json) y el <strong>action_type</strong> que debe ser <code>do</code> para enviar datos;
+              el <code>action</code> solicitado aquí es <code>acceso_permitido_data</code>.
             </p>
-            <p class="muted">Ejemplo de error devuelto por el servicio con los valores facilitados:</p>
+            <p class="muted">Ejemplo de cuerpo esperado según la versión 1.4 del servicio:</p>
             <pre>{
-  "status": 200,
-  "payload": {
-    "url": "https://ws.e-coordina.com/1.4",
-    "action": "acceso_permitido_data",
-    "actionType": "do",
-    "brand": "ecoordina",
-    "instance": "elecnor",
-    "input": "json",
-    "output": "json",
-    "user": "webservice",
+  "user": "webservice",
+  "password": "TU_PASSWORD",
+  "instance": "elecnor",
+  "in": "json",
+  "out": "json",
+  "action_type": "do",
+  "action": "acceso_permitido_data",
+  "data": {
     "centro_cod": "512/73000-A79408683",
     "empresa_cif": "B45740816",
     "trabajador_dni": "70590602W"
-  },
-  "data": {
-    "status": "ERROR",
-    "message": "ACTION REQUEST",
-    "help": "https://ws.e-coordina.com/1.4/help"
   }
 }</pre>
+            <p class="muted">Si la API responde con <code>status: "ERROR"</code> revisa la acción, credenciales y parámetros enviados.</p>
           </div>
         </article>
       </section>
