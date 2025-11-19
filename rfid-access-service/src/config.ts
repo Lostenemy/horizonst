@@ -165,7 +165,7 @@ export const config = {
     url: process.env.ECOORDINA_API_URL || 'https://ws.e-coordina.com/1.4',
     user: process.env.ECOORDINA_API_USER || 'webservice',
     token: process.env.ECOORDINA_API_TOKEN || '',
-    action: process.env.ECOORDINA_API_ACTION || 'acceso_permitido_data',
+    action: process.env.ECOORDINA_API_ACTION || 'acceso.permitido_data',
     actionType: process.env.ECOORDINA_API_ACTION_TYPE || 'do',
     instance: process.env.ECOORDINA_API_INSTANCE || 'elecnor',
     inputFormat: process.env.ECOORDINA_API_IN || 'json',

@@ -176,7 +176,7 @@ alarma) mediante nuevos topics MQTT.
 ### Integración RFID Elecnor
 
 - El backend principal también consume el topic `devices/RF1` para las lecturas procedentes de los lectores Elecnor.
-- Cada tarjeta puede registrarse desde la pestaña **RFID** del portal (solo administradores), indicando DNI, nombre y apellidos, empresa/CIF y código de centro. Solo se envían a `https://ws.e-coordina.com/1.4` (`action=acceso_permitido_data`) los campos de centro, CIF y DNI; el resto de datos quedan como referencia local.
+- Cada tarjeta puede registrarse desde la pestaña **RFID** del portal (solo administradores), indicando DNI, nombre y apellidos, empresa/CIF y código de centro. Solo se envían a `https://ws.e-coordina.com/1.4` (`action=acceso.permitido_data`) los campos de centro, CIF y DNI, encapsulados dentro del bloque `data={"data":{...}}`; el resto de datos quedan como referencia local.
 - Tras cada lectura el sistema consulta la API (`user`/`token` configurables) y registra el resultado en `rfid_access_logs`, mostrando el histórico en la propia interfaz.
 - Dependiendo del campo `acceso` (`1` verde / `0` rojo) se publica un comando MQTT que activa el GPIO 6 o 7 del lector; si la API falla, el intento queda almacenado con el error correspondiente y se fuerza el GPIO rojo.
 - Ajuste las variables `RFID_ACCESS_*` y `RFID_GPIO_*` en `backend/.env` para definir el topic a vigilar, las credenciales del servicio remoto, tiempos de espera y el formato de los comandos enviados al lector.

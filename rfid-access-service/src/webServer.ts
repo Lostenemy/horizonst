@@ -334,6 +334,14 @@ export const startWebInterface = async ({
       return;
     }
 
+    const payloadData = {
+      data: {
+        centro_cod: centroCod,
+        empresa_cif: empresaCif,
+        trabajador_dni: trabajadorDni
+      }
+    };
+
     const payload = {
       user: authUser,
       token: authToken,
@@ -342,11 +350,7 @@ export const startWebInterface = async ({
       out: selectedOutput,
       action_type: selectedActionType,
       action: selectedAction,
-      data: {
-        centro_cod: centroCod,
-        empresa_cif: empresaCif,
-        trabajador_dni: trabajadorDni
-      }
+      data: payloadData
     };
 
     const formPayload = new URLSearchParams();
@@ -357,7 +361,7 @@ export const startWebInterface = async ({
     formPayload.append('out', selectedOutput);
     formPayload.append('action_type', selectedActionType);
     formPayload.append('action', selectedAction);
-    const dataField = JSON.stringify(payload.data).replace(/\\\//g, '/');
+    const dataField = JSON.stringify(payloadData).replace(/\\\//g, '/');
     formPayload.append('data', dataField);
 
     const requestPreview = {
@@ -371,7 +375,8 @@ export const startWebInterface = async ({
       token: '••••••',
       centro_cod: centroCod,
       empresa_cif: empresaCif,
-      trabajador_dni: trabajadorDni
+      trabajador_dni: trabajadorDni,
+      data: payloadData
     };
 
     const encodedForm = formPayload.toString();

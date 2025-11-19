@@ -30,6 +30,7 @@
   });
 
   const refreshEcoordinaPreview = () => {
+    const requestData = buildEcoordinaData();
     ecoordinaPayload.value = JSON.stringify(
       {
         user: ecoordinaUser.value.trim(),
@@ -39,7 +40,9 @@
         out: ecoordinaOutput.value.trim(),
         action_type: ecoordinaActionType.value.trim(),
         action: ecoordinaAction.value.trim(),
-        data: buildEcoordinaData()
+        data: {
+          data: requestData
+        }
       },
       null,
       2
