@@ -11,6 +11,7 @@
   const cuentasBody = document.getElementById('cuentas-body');
   const cuentasVacias = document.getElementById('cuentas-vacias');
   const recargarBtn = document.getElementById('recargar-cuentas');
+  const backToSimulatorBtn = document.getElementById('back-to-simulator');
   const sessionChip = document.getElementById('session-chip');
   const accountModal = document.getElementById('account-modal');
   const openAccountModalBtn = document.getElementById('open-account-modal');
@@ -229,6 +230,9 @@
 
   recargarBtn.addEventListener('click', loadUsers);
   accountForm.addEventListener('submit', createAccount);
+  backToSimulatorBtn?.addEventListener('click', () => {
+    window.location.href = withBasePath('/index.html');
+  });
   openAccountModalBtn?.addEventListener('click', () => {
     accountForm.reset();
     activeInput.checked = true;
