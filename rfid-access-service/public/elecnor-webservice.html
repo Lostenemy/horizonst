@@ -122,13 +122,46 @@
               <span>Apellidos del trabajador (solo referencia)</span>
               <input type="text" id="ecoordina-apellidos" />
             </label>
-          <label class="form-field form-field--wide">
-            <span>Datos enviados</span>
-            <textarea id="ecoordina-payload" readonly rows="4"></textarea>
-          </label>
-        </form>
-        <p id="ecoordina-error" class="error" hidden></p>
-            <pre id="ecoordina-response" class="result hidden"></pre>
+            <label class="form-field form-field--wide">
+              <span>Datos enviados</span>
+              <textarea id="ecoordina-payload" readonly rows="4"></textarea>
+            </label>
+          </form>
+          <p id="ecoordina-error" class="error" hidden></p>
+
+          <div id="ecoordina-access-card" class="card result-card hidden" aria-live="polite">
+            <div class="result-card__header">
+              <span id="ecoordina-access-badge" class="badge badge--neutral">Pendiente</span>
+              <span id="ecoordina-status-badge" class="badge badge--muted">Status --</span>
+            </div>
+            <div class="result-grid">
+              <div>
+                <p class="label-text">Trabajador</p>
+                <strong id="ecoordina-worker">—</strong>
+                <p class="muted" id="ecoordina-worker-dni">DNI —</p>
+              </div>
+              <div>
+                <p class="label-text">Empresa</p>
+                <strong id="ecoordina-company">—</strong>
+              </div>
+              <div>
+                <p class="label-text">Centro</p>
+                <strong id="ecoordina-center">—</strong>
+              </div>
+            </div>
+            <div class="doc-section">
+              <div class="doc-section__header">
+                <div>
+                  <p class="label-text">Documentación pendiente / incumplida</p>
+                  <p class="muted">Incidencias devueltas por e-coordina.</p>
+                </div>
+                <span id="ecoordina-doc-count" class="badge badge--info">0</span>
+              </div>
+              <ul id="ecoordina-docs" class="doc-list"></ul>
+            </div>
+          </div>
+
+          <pre id="ecoordina-response" class="result hidden"></pre>
           <div class="help-box">
             <p>
               Según la ayuda oficial (<a href="https://ws.e-coordina.com/1.4/help" target="_blank" rel="noreferrer">documentación</a>),
