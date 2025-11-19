@@ -46,7 +46,7 @@
     }
   };
 
-  const rewriteNavLinks = (selectors = ['.topbar__nav a', '.breadcrumb a']) => {
+  const rewriteNavLinks = (selectors = ['.breadcrumb a']) => {
     selectors.forEach((selector) => {
       document.querySelectorAll(selector).forEach((anchor) => {
         const href = anchor.getAttribute('href');
