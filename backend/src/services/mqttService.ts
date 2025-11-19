@@ -6,10 +6,19 @@ import { decodeMk3 } from './decoders/mk3Decoder';
 import { handleDeviceRecord } from './deviceProcessor';
 import { pool } from '../db/pool';
 import { ProcessedDeviceRecord } from '../types';
+import { handleRfidScanMessage } from './rfidAccess';
 
 let client: MqttClient | null = null;
 
-const TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3'];
+const BASE_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3'];
+const TOPICS = (() => {
+  if (config.rfidAccess.enabled) {
+    const set = new Set(BASE_TOPICS);
+    set.add(config.rfidAccess.topic);
+    return Array.from(set);
+  }
+  return BASE_TOPICS;
+})();
 
 export const initMqtt = async (): Promise<void> => {
   if (client) {
@@ -55,19 +64,22 @@ export const initMqtt = async (): Promise<void> => {
       const payloadText = messageBuffer.toString();
       const payloadHex = messageBuffer.toString('hex');
       const payloadBase64 = messageBuffer.toString('base64');
+      const isRfidTopic = config.rfidAccess.enabled && topic === config.rfidAccess.topic;
       const payloadEncoding = topic === 'devices/MK2' ? 'hex' : 'utf8';
       const storedPayload = topic === 'devices/MK2' ? payloadHex : payloadText;
       let records: ProcessedDeviceRecord[] = [];
-      try {
-        if (topic === 'devices/MK1') {
-          records = decodeMk1(payloadText);
-        } else if (topic === 'devices/MK2') {
-          records = decodeMk2(messageBuffer);
-        } else if (topic === 'devices/MK3') {
-          records = decodeMk3(payloadText);
+      if (!isRfidTopic) {
+        try {
+          if (topic === 'devices/MK1') {
+            records = decodeMk1(payloadText);
+          } else if (topic === 'devices/MK2') {
+            records = decodeMk2(messageBuffer);
+          } else if (topic === 'devices/MK3') {
+            records = decodeMk3(payloadText);
+          }
+        } catch (error) {
+          console.error('Failed to decode payload', error);
         }
-      } catch (error) {
-        console.error('Failed to decode payload', error);
       }
 
       const gatewayMac = records[0]?.gatewayMac || null;
@@ -90,6 +102,15 @@ export const initMqtt = async (): Promise<void> => {
         }
       } catch (error) {
         console.error('Failed to persist MQTT message', error);
+      }
+
+      if (isRfidTopic) {
+        try {
+          await handleRfidScanMessage(client as MqttClient, messageBuffer);
+        } catch (error) {
+          console.error('Unhandled error processing RFID lectura', error);
+        }
+        return;
       }
 
       for (const record of records) {

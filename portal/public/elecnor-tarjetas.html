@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elecnor | Tarjetas y asignación</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="app app--elecnor">
+    <header class="app__header">
+      <div class="app__header-inner">
+        <a class="brand" href="index.html" aria-label="Volver a HorizonST">
+          <span class="brand__logo" aria-hidden="true">HST</span>
+          <span class="brand__text">
+            <strong>Elecnor</strong>
+            <span>Portal interno</span>
+          </span>
+        </a>
+        <nav class="app__nav" aria-label="Navegación secundaria">
+          <a class="nav-link" href="index.html#elecnor">Inicio</a>
+          <a class="nav-link" href="elecnor-usuarios.html">Usuarios</a>
+          <a class="nav-link" href="elecnor-tarjetas.html" aria-current="page">Tarjetas RFID</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="app__main">
+      <section class="app-hero" aria-labelledby="tarjetas-title">
+        <div>
+          <p class="breadcrumb"><a href="index.html">Inicio</a> · Elecnor · Tarjetas RFID</p>
+          <h1 id="tarjetas-title">Gestión y asignación de tarjetas</h1>
+          <p class="lead">
+            Asigna identificadores RFID a los usuarios registrados, marca su estado y comprueba que cada tarjeta esté
+            vinculada al centro correcto antes de enviar la autorización al hardware.
+          </p>
+          <div class="pill-group">
+            <span class="pill pill--info">Arranques rápidos con datos de ejemplo</span>
+            <span class="pill pill--success">Sincronización inmediata en la tabla</span>
+            <span class="pill pill--neutral">Pensado para GPIO 6/7 y antenas</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-grid" aria-label="Asignación de tarjetas">
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Tarjeta</p>
+              <h2>Asignar RFID a un usuario</h2>
+              <p class="muted">Selecciona el usuario por DNI, indica el centro y define si la tarjeta queda activa o bloqueada.</p>
+            </div>
+            <div class="panel__actions">
+              <button id="reset-card-form" class="cta cta--ghost" type="button">Limpiar campos</button>
+              <span id="card-form-status" class="badge-chip badge-chip--muted" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <form id="card-form" class="form-grid" autocomplete="off">
+            <label class="form-field">
+              <span>ID de tarjeta *</span>
+              <input id="idTarjeta" name="idTarjeta" type="text" required placeholder="RFID-XXXX" />
+            </label>
+            <label class="form-field">
+              <span>DNI del usuario *</span>
+              <input list="dni-options" id="dniCard" name="dni" required placeholder="Selecciona o escribe" />
+              <datalist id="dni-options"></datalist>
+            </label>
+            <label class="form-field">
+              <span>Código de centro *</span>
+              <input id="centroCard" name="centro" type="text" required placeholder="C-XXX-000" />
+            </label>
+            <label class="form-field">
+              <span>Estado *</span>
+              <select id="estado" name="estado" class="input input--select" required>
+                <option value="activa">Activa (GPIO 6 verde)</option>
+                <option value="bloqueada">Bloqueada (GPIO 7 roja)</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Notas</span>
+              <input id="notas" name="notas" type="text" placeholder="Observaciones opcionales" />
+            </label>
+            <div class="form-actions">
+              <button class="cta cta--primary" type="submit">Guardar asignación</button>
+              <p class="muted">Los cambios afectan a la tabla de la derecha al instante.</p>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Control</p>
+              <h2>Tarjetas asignadas</h2>
+              <p class="muted">Activa/desactiva tarjetas, comprueba su centro y elimina las que ya no se necesiten.</p>
+            </div>
+            <div class="panel__actions panel__actions--wrap">
+              <input
+                id="card-filter"
+                class="input input--search"
+                type="search"
+                placeholder="Buscar por tarjeta, DNI o centro"
+                aria-label="Buscar tarjetas"
+              />
+              <select id="card-state-filter" class="input input--select" aria-label="Filtrar por estado">
+                <option value="">Todos los estados</option>
+                <option value="activa">Activas</option>
+                <option value="bloqueada">Bloqueadas</option>
+              </select>
+              <span id="card-list-status" class="badge-chip badge-chip--muted" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <div class="table-wrapper" role="region" aria-live="polite">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tarjeta</th>
+                  <th>Usuario</th>
+                  <th>Centro</th>
+                  <th>Estado</th>
+                  <th>Notas</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="cards-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="elecnor.js"></script>
+    <script>
+      const cardForm = document.getElementById("card-form");
+      const cardStatus = document.getElementById("card-form-status");
+      const resetCardFormBtn = document.getElementById("reset-card-form");
+      const cardsBody = document.getElementById("cards-body");
+      const dniOptions = document.getElementById("dni-options");
+      const cardFilter = document.getElementById("card-filter");
+      const cardStateFilter = document.getElementById("card-state-filter");
+      const cardListStatus = document.getElementById("card-list-status");
+
+      let editingId = null;
+
+      const setCardStatus = (message, tone = "muted") => {
+        cardStatus.textContent = message;
+        cardStatus.className = `badge-chip badge-chip--${tone}`;
+      };
+
+      const setCardListStatus = (message, tone = "muted") => {
+        cardListStatus.textContent = message;
+        cardListStatus.className = `badge-chip badge-chip--${tone}`;
+      };
+
+      const resetCardForm = () => {
+        cardForm.reset();
+        cardForm.idTarjeta.readOnly = false;
+        editingId = null;
+        setCardStatus("Formulario listo", "muted");
+      };
+
+      const renderUserOptions = () => {
+        const users = ElecnorData.getUsers();
+        dniOptions.innerHTML = "";
+        users.forEach((user) => {
+          const option = document.createElement("option");
+          option.value = user.dni;
+          option.label = `${user.dni} · ${user.nombre} ${user.apellidos}`;
+          dniOptions.appendChild(option);
+        });
+      };
+
+      const renderCards = () => {
+        const query = cardFilter.value.toLowerCase();
+        const state = cardStateFilter.value;
+        const cards = ElecnorData.getCards();
+
+        cardsBody.innerHTML = "";
+
+        const filtered = cards.filter((card) => {
+          const matchesQuery =
+            card.idTarjeta.toLowerCase().includes(query) ||
+            card.dni.toLowerCase().includes(query) ||
+            card.centro.toLowerCase().includes(query);
+          const matchesState = !state || card.estado === state;
+          return matchesQuery && matchesState;
+        });
+
+        if (!filtered.length) {
+          const empty = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 6;
+          cell.textContent = "No hay tarjetas que coincidan con el filtro.";
+          empty.appendChild(cell);
+          cardsBody.appendChild(empty);
+          setCardListStatus("0 resultados", "warning");
+          return;
+        }
+
+        filtered.forEach((card) => {
+          const user = ElecnorData.getUserByDni(card.dni);
+          const userName = user ? `${user.nombre} ${user.apellidos}` : "Usuario sin registrar";
+          const centroInfo = card.centro || user?.centro || "-";
+          const warning = user ? "" : "pill--warning";
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${card.idTarjeta}</td>
+            <td><strong>${card.dni}</strong><br /><span class="muted">${userName}</span></td>
+            <td>${centroInfo}</td>
+            <td><span class="pill ${card.estado === "activa" ? "pill--success" : "pill--neutral"} ${warning}">${
+            card.estado === "activa" ? "Activa" : "Bloqueada"
+          }</span></td>
+            <td>${card.notas || "-"}</td>
+            <td class="table-actions">
+              <button class="link" data-action="edit" data-id="${card.idTarjeta}">Editar</button>
+              <button class="link" data-action="toggle" data-id="${card.idTarjeta}" data-next="${
+            card.estado === "activa" ? "bloqueada" : "activa"
+          }">${card.estado === "activa" ? "Bloquear" : "Activar"}</button>
+              <button class="link link--danger" data-action="delete" data-id="${card.idTarjeta}">Eliminar</button>
+            </td>
+          `;
+          cardsBody.appendChild(row);
+        });
+
+        setCardListStatus(`${filtered.length} tarjeta(s) mostradas`, "muted");
+      };
+
+      cardForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(cardForm));
+
+        if (!data.idTarjeta || !data.dni || !data.centro || !data.estado) {
+          setCardStatus("Completa los campos obligatorios", "warning");
+          return;
+        }
+
+        const user = ElecnorData.getUserByDni(data.dni.trim());
+        if (!user) {
+          setCardStatus("El DNI no existe en el maestro de usuarios", "warning");
+          return;
+        }
+
+        const payload = {
+          idTarjeta: data.idTarjeta.trim(),
+          dni: data.dni.trim(),
+          centro: data.centro.trim() || user.centro,
+          estado: data.estado,
+          notas: data.notas?.trim() || ""
+        };
+
+        ElecnorData.upsertCard(payload);
+        setCardStatus(editingId ? "Tarjeta actualizada" : "Tarjeta asignada", "success");
+        renderCards();
+        cardForm.idTarjeta.readOnly = true;
+        editingId = payload.idTarjeta;
+      });
+
+      resetCardFormBtn.addEventListener("click", resetCardForm);
+
+      cardsBody.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+
+        const { action, id, next } = button.dataset;
+
+        if (action === "edit") {
+          const card = ElecnorData.getCards().find((item) => item.idTarjeta === id);
+          if (!card) return;
+          cardForm.idTarjeta.value = card.idTarjeta;
+          cardForm.dniCard.value = card.dni;
+          cardForm.centroCard.value = card.centro;
+          cardForm.estado.value = card.estado;
+          cardForm.notas.value = card.notas || "";
+          cardForm.idTarjeta.readOnly = true;
+          editingId = card.idTarjeta;
+          setCardStatus(`Editando ${card.idTarjeta}`, "info");
+          cardForm.scrollIntoView({ behavior: "smooth" });
+        }
+
+        if (action === "toggle") {
+          ElecnorData.toggleCardState(id, next);
+          setCardStatus(next === "activa" ? "Tarjeta activada" : "Tarjeta bloqueada", "success");
+          renderCards();
+        }
+
+        if (action === "delete") {
+          if (!confirm("¿Eliminar esta tarjeta?")) return;
+          ElecnorData.deleteCard(id);
+          setCardStatus("Tarjeta eliminada", "warning");
+          resetCardForm();
+          renderCards();
+        }
+      });
+
+      cardFilter.addEventListener("input", renderCards);
+      cardStateFilter.addEventListener("change", renderCards);
+
+      cardForm.dniCard.addEventListener("change", (event) => {
+        const dni = event.target.value;
+        const user = ElecnorData.getUserByDni(dni);
+        if (user) {
+          cardForm.centroCard.value = user.centro;
+          setCardStatus(`Centro sugerido ${user.centro} para ${user.nombre}`, "info");
+        }
+      });
+
+      renderUserOptions();
+      renderCards();
+      resetCardForm();
+    </script>
+  </body>
+</html>

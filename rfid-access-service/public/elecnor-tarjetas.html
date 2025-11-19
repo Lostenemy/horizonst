@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elecnor · Tarjetas RFID</title>
+    <base href="__BASE_PATH__/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="__BASE_PATH__/style.css" />
+  </head>
+  <body class="elecnor-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">elecnor</div>
+      <div class="brand__text">
+        <strong>Portal de accesos</strong>
+        <span>Simulador RFID</span>
+      </div>
+    </div>
+    <nav class="topbar__nav" aria-label="Navegación principal">
+        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-tarjetas.html" aria-current="page">Tarjetas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html">Lecturas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-webservice.html">Webservice</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html">Seguimiento</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="hero">
+        <div>
+          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Tarjetas RFID</p>
+          <h1>Asignación de tarjetas</h1>
+          <p class="lead">
+            Vincula identificadores RFID a los DNIs registrados y controla su estado (activa, suspendida o bloqueada).
+            Cuando elimines un usuario, las tarjetas se bloquearán de forma preventiva.
+          </p>
+          <div class="pill-row">
+            <span class="pill pill--info">Sugiere centro automáticamente</span>
+            <span class="pill pill--neutral">Estados rápido: activar / bloquear</span>
+            <span class="pill pill--accent">Listo para validar con la API</span>
+          </div>
+        </div>
+        <div class="hero__cta">
+          <div class="callout">
+            <p class="eyebrow">Consejo</p>
+            <p>Usa <strong>IDs legibles</strong> (RFID-0001...) para localizar tarjetas al depurar accesos.</p>
+          </div>
+          <a class="cta cta--ghost" href="__BASE_PATH__/elecnor-usuarios.html">Volver a usuarios</a>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Asignación</p>
+              <h2>Alta o edición de tarjeta</h2>
+              <p class="muted">Asocia el ID de tarjeta a un DNI y define su estado inicial.</p>
+            </div>
+            <div class="panel__actions">
+              <button id="reset-card-form" class="cta cta--ghost" type="button">Limpiar</button>
+              <span id="card-form-status" class="badge" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <form id="card-form" class="form-grid" autocomplete="off">
+            <label class="form-field">
+              <span>ID tarjeta *</span>
+              <input id="idTarjeta" name="idTarjeta" type="text" required placeholder="RFID-0001" />
+            </label>
+            <label class="form-field">
+              <span>DNI *</span>
+              <select id="dni" name="dni" required></select>
+            </label>
+            <label class="form-field">
+              <span>Código de centro</span>
+              <input id="centro" name="centro" type="text" placeholder="C-XXX-000" />
+            </label>
+            <label class="form-field">
+              <span>Estado</span>
+              <select id="estado" name="estado">
+                <option value="activa">Activa</option>
+                <option value="suspendida">Suspendida</option>
+                <option value="bloqueada">Bloqueada</option>
+              </select>
+            </label>
+            <label class="form-field form-field--wide">
+              <span>Notas</span>
+              <textarea id="notas" name="notas" rows="2" placeholder="Autorización, zonas permitidas..."></textarea>
+            </label>
+            <div class="form-actions">
+              <button class="cta cta--primary" type="submit">Guardar tarjeta</button>
+              <p class="muted">Los cambios se reflejan al instante.</p>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Listado</p>
+              <h2>Tarjetas configuradas</h2>
+              <p class="muted">Filtra por estado o busca por ID / DNI para localizar tarjetas rápidamente.</p>
+            </div>
+            <div class="panel__actions panel__actions--wrap">
+              <input
+                id="card-filter"
+                class="input input--search"
+                type="search"
+                placeholder="Buscar por ID o DNI"
+                aria-label="Buscar tarjetas"
+              />
+              <select id="state-filter" class="input input--select" aria-label="Filtrar por estado">
+                <option value="">Todos los estados</option>
+                <option value="activa">Activa</option>
+                <option value="suspendida">Suspendida</option>
+                <option value="bloqueada">Bloqueada</option>
+              </select>
+            </div>
+          </header>
+
+          <div class="table" role="table" aria-label="Tarjetas">
+            <div class="table__head" role="row">
+              <span class="table__cell" role="columnheader">ID tarjeta</span>
+              <span class="table__cell" role="columnheader">DNI</span>
+              <span class="table__cell" role="columnheader">Centro</span>
+              <span class="table__cell" role="columnheader">Estado</span>
+              <span class="table__cell" role="columnheader">Notas</span>
+              <span class="table__cell" role="columnheader">Acciones</span>
+            </div>
+            <div id="cards-body" class="table__body"></div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="elecnor-auth.js"></script>
+    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
+    <script src="elecnor-data.js"></script>
+    <script src="elecnor-cards.js"></script>
+  </body>
+</html>

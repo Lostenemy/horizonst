@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elecnor · Seguimiento</title>
+    <base href="__BASE_PATH__/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="__BASE_PATH__/style.css" />
+  </head>
+  <body class="elecnor-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">elecnor</div>
+        <div class="brand__text">
+          <strong>Portal de accesos</strong>
+          <span>Seguimiento</span>
+        </div>
+      </div>
+      <nav class="topbar__nav" aria-label="Navegación principal">
+        <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html">Tarjetas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html">Lecturas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-webservice.html">Webservice</a>
+        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-seguimiento.html" aria-current="page">Seguimiento</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="hero hero--compact">
+        <div>
+          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Seguimiento</p>
+          <h1>Histórico de accesos</h1>
+          <p class="lead">Consulta los últimos eventos registrados desde la web o los lectores MQTT.</p>
+          <div class="pill-row">
+            <span class="pill pill--info">Origen web o MQTT</span>
+            <span class="pill pill--neutral">Incluye publicaciones GPIO</span>
+            <span class="pill pill--accent">Ordenado por fecha</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Seguimiento</p>
+              <h2>Histórico reciente</h2>
+              <p class="muted">Últimos eventos registrados desde la web o MQTT.</p>
+            </div>
+          </header>
+          <div class="history-wrapper">
+            <div id="history-empty" class="muted">Todavía no se han registrado eventos.</div>
+            <ul id="history-list" class="history"></ul>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script src="elecnor-auth.js"></script>
+    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
+    <script src="elecnor-seguimiento.js"></script>
+  </body>
+</html>

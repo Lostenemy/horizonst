@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elecnor · Lecturas</title>
+    <base href="__BASE_PATH__/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="__BASE_PATH__/style.css" />
+  </head>
+  <body class="elecnor-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">elecnor</div>
+        <div class="brand__text">
+          <strong>Portal de accesos</strong>
+          <span>Lecturas</span>
+        </div>
+      </div>
+      <nav class="topbar__nav" aria-label="Navegación principal">
+        <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html">Tarjetas</a>
+        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-lecturas.html" aria-current="page">Lecturas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-webservice.html">Webservice</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html">Seguimiento</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="hero hero--compact">
+        <div>
+          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Lecturas</p>
+          <h1>Simular lecturas RFID</h1>
+          <p class="lead">
+            Envía una lectura manual para comprobar el flujo (directorio MAC ↔ DNI, validación externa y publicación MQTT).
+          </p>
+          <div class="pill-row">
+            <span class="pill pill--info">MQTT + API externa</span>
+            <span class="pill pill--neutral">Histórico consultable</span>
+            <span class="pill pill--accent">Usa el ID y MAC reales</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Lecturas</p>
+              <h2>Simular lectura</h2>
+              <p class="muted">Tarjeta y MAC son obligatorios; el resto de datos es opcional.</p>
+            </div>
+          </header>
+          <form id="simulate-form" class="form-grid">
+            <label class="form-field">
+              <span>ID de tarjeta*</span>
+              <input type="text" id="simulate-card-id" required autocomplete="off" />
+            </label>
+            <label class="form-field">
+              <span>MAC del lector*</span>
+              <input type="text" id="simulate-mac" required autocomplete="off" />
+            </label>
+            <label class="form-field">
+              <span>Fecha y hora (opcional)</span>
+              <input type="datetime-local" id="simulate-timestamp" />
+            </label>
+            <label class="form-field form-field--wide">
+              <span>Datos adicionales (JSON)</span>
+              <textarea id="simulate-additional" placeholder='{"departamento":"I+D"}'></textarea>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="cta cta--primary">Enviar lectura</button>
+              <p class="muted">El resultado incluye la decisión y las publicaciones MQTT realizadas.</p>
+            </div>
+          </form>
+          <p id="simulate-error" class="error" hidden></p>
+          <div id="simulate-result" class="result hidden"></div>
+        </article>
+      </section>
+    </main>
+    <script src="elecnor-auth.js"></script>
+    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
+    <script src="elecnor-lecturas.js"></script>
+  </body>
+</html>

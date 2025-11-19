@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="./" />
+    <title>Tarjetas RFID | HorizonST</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · RFID</h1>
+      <nav>
+        <a href="dashboard.html">Resumen</a>
+        <a href="devices.html">Dispositivos</a>
+        <a href="users.html" class="admin-only">Usuarios</a>
+        <a href="categories.html">Categorías</a>
+        <a href="gateways.html">Gateways</a>
+        <a href="messages.html">Mensajes</a>
+        <a href="history.html">Históricos</a>
+        <a href="alarms.html">Alarmas</a>
+        <a href="rfid.html" class="admin-only active">RFID</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card admin-only">
+        <div class="card-header">
+          <h2>Tarjetas registradas</h2>
+          <button type="button" id="refreshCards">Recargar</button>
+        </div>
+        <form id="rfidCardForm" class="form-grid">
+          <div>
+            <label for="cardUid">ID de tarjeta</label>
+            <input type="text" id="cardUid" name="cardUid" required placeholder="E2000017221101441890" />
+          </div>
+          <div>
+            <label for="dni">DNI / NIE</label>
+            <input type="text" id="dni" name="dni" required placeholder="12345678Z" />
+          </div>
+          <div>
+            <label for="firstName">Nombre</label>
+            <input type="text" id="firstName" name="firstName" required />
+          </div>
+          <div>
+            <label for="lastName">Apellidos</label>
+            <input type="text" id="lastName" name="lastName" required />
+          </div>
+          <div>
+            <label for="companyName">Empresa</label>
+            <input type="text" id="companyName" name="companyName" required />
+          </div>
+          <div>
+            <label for="companyCif">CIF</label>
+            <input type="text" id="companyCif" name="companyCif" required placeholder="A12345678" />
+          </div>
+          <div>
+            <label for="centerCode">Código de centro</label>
+            <input type="text" id="centerCode" name="centerCode" required placeholder="HIBRIDACION" />
+          </div>
+          <div>
+            <label for="notes">Notas</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Observaciones opcionales"></textarea>
+          </div>
+          <div>
+            <label class="nowrap">
+              <input type="checkbox" id="cardActive" name="cardActive" checked />
+              Activa
+            </label>
+          </div>
+          <div class="actions">
+            <button type="submit" id="rfidSubmit">Guardar tarjeta</button>
+            <button type="button" id="rfidCancelEdit" class="secondary" style="display:none">Cancelar</button>
+          </div>
+        </form>
+        <div class="alert info" id="rfidCardMessage" style="display:none"></div>
+        <div class="table-wrapper">
+          <table id="rfidCardsTable">
+            <thead>
+              <tr>
+                <th>Tarjeta</th>
+                <th>DNI</th>
+                <th>Trabajador</th>
+                <th>Empresa</th>
+                <th>Centro</th>
+                <th>Notas</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-empty" id="rfidCardsEmpty" style="display:none">No hay tarjetas registradas.</div>
+      </section>
+      <section class="card">
+        <div class="card-header">
+          <h2>Últimas lecturas</h2>
+          <button type="button" id="refreshLogs">Actualizar</button>
+        </div>
+        <div class="table-wrapper">
+          <table id="rfidLogsTable">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tarjeta</th>
+                <th>Trabajador</th>
+                <th>Empresa</th>
+                <th>Antenna</th>
+                <th>Sentido</th>
+                <th>Resultado</th>
+                <th>Observaciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-empty" id="rfidLogsEmpty" style="display:none">Sin lecturas registradas.</div>
+      </section>
+    </main>
+    <footer>
+      &copy; <span id="year"></span> HorizonST. Plataforma de control de accesos BLE.
+    </footer>
+    <script src="./js/base.js"></script>
+    <script type="module" src="./js/rfid.js"></script>
+  </body>
+</html>

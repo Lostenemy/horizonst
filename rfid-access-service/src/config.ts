@@ -161,6 +161,17 @@ export const config = {
     clean: parseBoolean(process.env.MQTT_CLEAN, true),
     protocolVersion: parseProtocolVersion(process.env.MQTT_PROTOCOL_VERSION, 5)
   },
+  ecoordina: {
+    url: process.env.ECOORDINA_API_URL || 'https://ws.e-coordina.com/1.4',
+    user: process.env.ECOORDINA_API_USER || 'webservice',
+    token: process.env.ECOORDINA_API_TOKEN || '',
+    action: process.env.ECOORDINA_API_ACTION || 'acceso.permitido_data',
+    actionType: process.env.ECOORDINA_API_ACTION_TYPE || 'do',
+    instance: process.env.ECOORDINA_API_INSTANCE || 'elecnor',
+    inputFormat: process.env.ECOORDINA_API_IN || 'json',
+    outputFormat: process.env.ECOORDINA_API_OUT || 'json',
+    timeoutMs: parsePort(process.env.ECOORDINA_API_TIMEOUT, 7000)
+  },
   subscriptions: {
     topic: process.env.RFID_READER_TOPIC || 'rfid/readers/+/scan',
     qos: Number.parseInt(process.env.RFID_READER_QOS || '1', 10)

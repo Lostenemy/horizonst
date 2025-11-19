@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elecnor · Webservice</title>
+    <base href="__BASE_PATH__/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="__BASE_PATH__/style.css" />
+  </head>
+  <body class="elecnor-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">elecnor</div>
+        <div class="brand__text">
+          <strong>Portal de accesos</strong>
+          <span>Webservice</span>
+        </div>
+      </div>
+      <nav class="topbar__nav" aria-label="Navegación principal">
+        <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html">Tarjetas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html">Lecturas</a>
+        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-webservice.html" aria-current="page">Webservice</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html">Seguimiento</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="hero hero--compact">
+        <div>
+          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Webservice</p>
+          <h1>Prueba la API de e-coordina</h1>
+          <p class="lead">Valida accesos enviando centro, empresa y DNI; el resto de datos quedan como referencia.</p>
+          <div class="pill-row">
+            <span class="pill pill--info">Datos obligatorios: centro, CIF y DNI</span>
+            <span class="pill pill--neutral">Valores por defecto desde el backend</span>
+            <span class="pill pill--accent">Respuesta detallada</span>
+          </div>
+        </div>
+        <div class="hero__cta">
+          <div class="callout">
+            <p class="eyebrow">Recordatorio</p>
+            <p>Solo se envían centro, CIF y DNI. Los datos personales se quedan en local.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <header class="panel__header">
+            <div>
+              <p class="eyebrow">Webservice</p>
+              <h2>Probar API e-coordina</h2>
+              <p class="muted">
+                Lanza una petición al servicio <code>https://ws.e-coordina.com/1.4</code> con los datos mínimos
+                (centro, CIF y DNI). El nombre y los apellidos se guardan solo a nivel local y no viajan en la consulta.
+              </p>
+            </div>
+            <div class="panel__actions">
+              <button type="button" id="ecoordina-reset" class="cta cta--ghost">Restablecer</button>
+              <button type="button" id="ecoordina-submit" class="cta cta--primary">Lanzar prueba</button>
+            </div>
+          </header>
+
+          <form id="ecoordina-form" class="form-grid">
+            <label class="form-field">
+              <span>URL del servicio</span>
+              <input type="url" id="ecoordina-url" autocomplete="url" />
+            </label>
+            <label class="form-field">
+              <span>Usuario (user)</span>
+              <input type="text" id="ecoordina-user" autocomplete="username" />
+            </label>
+            <label class="form-field">
+              <span>Token</span>
+              <input type="text" id="ecoordina-token" autocomplete="off" />
+            </label>
+            <label class="form-field">
+              <span>Acción</span>
+              <input type="text" id="ecoordina-action" />
+            </label>
+            <label class="form-field">
+              <span>Tipo de acción</span>
+              <input type="text" id="ecoordina-action-type" />
+            </label>
+            <label class="form-field">
+              <span>Instancia</span>
+              <input type="text" id="ecoordina-instance" />
+            </label>
+            <label class="form-field">
+              <span>Formato de entrada (in)</span>
+              <input type="text" id="ecoordina-input" />
+            </label>
+            <label class="form-field">
+              <span>Formato de salida (out)</span>
+              <input type="text" id="ecoordina-output" />
+            </label>
+            <label class="form-field">
+              <span>Código de centro</span>
+              <input type="text" id="ecoordina-centro" required />
+            </label>
+            <label class="form-field">
+              <span>CIF de la empresa</span>
+              <input type="text" id="ecoordina-cif" required />
+            </label>
+            <label class="form-field">
+              <span>DNI del trabajador</span>
+              <input type="text" id="ecoordina-dni" required />
+            </label>
+            <label class="form-field">
+              <span>Nombre del trabajador (solo referencia, no se envía)</span>
+              <input type="text" id="ecoordina-nombre" />
+            </label>
+            <label class="form-field">
+              <span>Apellidos del trabajador (solo referencia)</span>
+              <input type="text" id="ecoordina-apellidos" />
+            </label>
+            <label class="form-field form-field--wide">
+              <span>Datos enviados</span>
+              <textarea id="ecoordina-payload" readonly rows="4"></textarea>
+            </label>
+          </form>
+          <p id="ecoordina-error" class="error" hidden></p>
+
+          <div id="ecoordina-access-card" class="card result-card hidden" aria-live="polite">
+            <div class="result-card__header">
+              <span id="ecoordina-access-badge" class="badge badge--neutral">Pendiente</span>
+              <span id="ecoordina-status-badge" class="badge badge--muted">Status --</span>
+            </div>
+            <div class="result-grid">
+              <div>
+                <p class="label-text">Trabajador</p>
+                <strong id="ecoordina-worker">—</strong>
+                <p class="muted" id="ecoordina-worker-dni">DNI —</p>
+              </div>
+              <div>
+                <p class="label-text">Empresa</p>
+                <strong id="ecoordina-company">—</strong>
+              </div>
+              <div>
+                <p class="label-text">Centro</p>
+                <strong id="ecoordina-center">—</strong>
+              </div>
+            </div>
+            <div class="doc-section">
+              <div class="doc-section__header">
+                <div>
+                  <p class="label-text">Documentación pendiente / incumplida</p>
+                  <p class="muted">Incidencias devueltas por e-coordina.</p>
+                </div>
+                <span id="ecoordina-doc-count" class="badge badge--info">0</span>
+              </div>
+              <ul id="ecoordina-docs" class="doc-list"></ul>
+            </div>
+          </div>
+
+          <pre id="ecoordina-response" class="result hidden"></pre>
+          <div class="help-box">
+            <p>
+              Según la ayuda oficial (<a href="https://ws.e-coordina.com/1.4/help" target="_blank" rel="noreferrer">documentación</a>),
+              los parámetros obligatorios son <strong>user</strong>, <strong>token</strong>, <strong>instance</strong>, los formatos
+              <strong>in/out</strong> (por defecto json) y el <strong>action_type</strong> que debe ser <code>do</code> para enviar datos;
+              el <code>action</code> solicitado aquí es <code>acceso.permitido_data</code>.
+            </p>
+            <p class="muted">Ejemplo de cuerpo esperado según la versión 1.4 del servicio:</p>
+            <pre>{
+  "user": "webservice",
+  "token": "TU_TOKEN",
+  "instance": "elecnor",
+  "in": "json",
+  "out": "json",
+  "action_type": "do",
+  "action": "acceso.permitido_data",
+  "data": {
+    "data": {
+      "centro_cod": "512/73000-A79408683",
+      "empresa_cif": "B45740816",
+      "trabajador_dni": "70590602W"
+    }
+  }
+}</pre>
+            <p class="muted">Si la API responde con <code>status: "ERROR"</code> revisa la acción, credenciales y parámetros enviados.</p>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script src="elecnor-auth.js"></script>
+    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
+    <script src="elecnor-webservice.js"></script>
+  </body>
+</html>
