@@ -12,6 +12,19 @@
   const cardsBody = document.getElementById('cards-body');
   const filterInput = document.getElementById('card-filter');
   const stateFilter = document.getElementById('state-filter');
+  const openModalButton = document.getElementById('open-card-modal');
+  const cardModal = document.getElementById('card-modal');
+  const modalClosers = cardModal ? cardModal.querySelectorAll('[data-modal-close]') : [];
+
+  const setModalOpen = (open) => {
+    if (!cardModal) return;
+    cardModal.classList.toggle('modal--open', open);
+    cardModal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    document.body.classList.toggle('modal-open', open);
+    if (open) {
+      requestAnimationFrame(() => idInput?.focus());
+    }
+  };
 
   const normalize = (value) => value.trim();
 
@@ -117,6 +130,7 @@
         stateSelect.value = card.estado;
         notesInput.value = card.notas || '';
         setStatus(`Editando ${card.idTarjeta}`, 'info');
+        setModalOpen(true);
         idInput.focus();
       });
 
@@ -186,6 +200,24 @@
   dniSelect.addEventListener('change', suggestCenter);
   filterInput.addEventListener('input', renderCards);
   stateFilter.addEventListener('change', renderCards);
+
+  openModalButton?.addEventListener('click', () => {
+    form.reset();
+    stateSelect.value = 'activa';
+    suggestCenter();
+    setStatus('Introduce la información de la tarjeta', 'muted');
+    setModalOpen(true);
+  });
+
+  modalClosers.forEach((element) => {
+    element.addEventListener('click', () => setModalOpen(false));
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && cardModal?.classList.contains('modal--open')) {
+      setModalOpen(false);
+    }
+  });
 
   const init = async () => {
     rewriteNavLinks();

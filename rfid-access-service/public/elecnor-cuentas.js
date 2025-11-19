@@ -1,6 +1,8 @@
 (() => {
   const statusBadge = document.getElementById('account-status');
+  const modalStatusBadge = document.getElementById('account-modal-status');
   const accountError = document.getElementById('account-error');
+  const accountModalError = document.getElementById('account-modal-error');
   const accountForm = document.getElementById('account-form');
   const usernameInput = document.getElementById('cuenta-usuario');
   const passwordInput = document.getElementById('cuenta-password');
@@ -10,23 +12,36 @@
   const cuentasVacias = document.getElementById('cuentas-vacias');
   const recargarBtn = document.getElementById('recargar-cuentas');
   const sessionChip = document.getElementById('session-chip');
+  const accountModal = document.getElementById('account-modal');
+  const openAccountModalBtn = document.getElementById('open-account-modal');
+  const modalClosers = accountModal ? accountModal.querySelectorAll('[data-modal-close]') : [];
 
   const { ensureSession, fetchJson, withBasePath, rewriteNavLinks } = window.ElecnorAuth;
   let currentSession = null;
 
   const showStatus = (message, tone = 'neutral') => {
-    statusBadge.textContent = message;
-    statusBadge.className = `badge badge--${tone}`;
+    [statusBadge, modalStatusBadge].forEach((element) => {
+      if (!element) return;
+      element.textContent = message;
+      element.className = `badge badge--${tone}`;
+      element.hidden = !message;
+    });
   };
 
   const showError = (message) => {
-    accountError.textContent = message;
-    accountError.hidden = false;
+    [accountError, accountModalError].forEach((element) => {
+      if (!element) return;
+      element.textContent = message;
+      element.hidden = false;
+    });
   };
 
   const clearError = () => {
-    accountError.hidden = true;
-    accountError.textContent = '';
+    [accountError, accountModalError].forEach((element) => {
+      if (!element) return;
+      element.hidden = true;
+      element.textContent = '';
+    });
   };
 
   const formatDate = (value) => new Date(value).toLocaleString();
@@ -65,24 +80,24 @@
       updatedCell.className = 'table__cell muted';
       updatedCell.textContent = formatDate(user.updatedAt || user.createdAt);
 
-      const actionsCell = document.createElement('span');
-      actionsCell.className = 'table__cell action-group';
+      const actionsCell = document.createElement('div');
+      actionsCell.className = 'table__cell table__actions';
 
       const toggleBtn = document.createElement('button');
       toggleBtn.type = 'button';
-      toggleBtn.className = 'link';
+      toggleBtn.className = 'cta cta--secondary';
       toggleBtn.textContent = user.active ? 'Desactivar' : 'Activar';
       toggleBtn.addEventListener('click', () => updateUser(user.username, { active: !user.active }));
 
       const roleBtn = document.createElement('button');
       roleBtn.type = 'button';
-      roleBtn.className = 'link';
+      roleBtn.className = 'cta cta--ghost';
       roleBtn.textContent = user.role === 'admin' ? 'Pasar a usuario' : 'Pasar a admin';
       roleBtn.addEventListener('click', () => updateUser(user.username, { role: user.role === 'admin' ? 'user' : 'admin' }));
 
       const resetBtn = document.createElement('button');
       resetBtn.type = 'button';
-      resetBtn.className = 'link';
+      resetBtn.className = 'cta cta--ghost';
       resetBtn.textContent = 'Cambiar contraseña';
       resetBtn.addEventListener('click', () => {
         const nueva = window.prompt(`Nueva contraseña para ${user.username}`);
@@ -95,7 +110,7 @@
 
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
-      deleteBtn.className = 'link link--danger';
+      deleteBtn.className = 'cta cta--danger';
       deleteBtn.textContent = 'Eliminar';
       deleteBtn.disabled = currentSession?.username === user.username;
       deleteBtn.title = deleteBtn.disabled ? 'No puedes eliminar tu propia sesión' : 'Eliminar cuenta';
@@ -194,6 +209,16 @@
     }
   };
 
+  const setModalOpen = (open) => {
+    if (!accountModal) return;
+    accountModal.classList.toggle('modal--open', open);
+    accountModal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    document.body.classList.toggle('modal-open', open);
+    if (open) {
+      requestAnimationFrame(() => usernameInput?.focus());
+    }
+  };
+
   const init = async () => {
     rewriteNavLinks();
     currentSession = await ensureSession(true);
@@ -204,6 +229,20 @@
 
   recargarBtn.addEventListener('click', loadUsers);
   accountForm.addEventListener('submit', createAccount);
+  openAccountModalBtn?.addEventListener('click', () => {
+    accountForm.reset();
+    activeInput.checked = true;
+    clearError();
+    setModalOpen(true);
+  });
+  modalClosers.forEach((element) => {
+    element.addEventListener('click', () => setModalOpen(false));
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && accountModal?.classList.contains('modal--open')) {
+      setModalOpen(false);
+    }
+  });
 
   init();
 })();

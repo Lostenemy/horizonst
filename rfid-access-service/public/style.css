@@ -29,6 +29,10 @@ body {
   color: var(--navy);
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 .elecnor-shell {
   padding: 24px 16px 48px;
 }
@@ -158,6 +162,68 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 16px;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.modal--open {
+  display: flex;
+}
+
+.modal__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 35, 67, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 0;
+}
+
+.modal__content {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 25px 60px rgba(11, 35, 67, 0.25);
+  padding: 24px;
+  z-index: 1;
+}
+
+.modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent !important;
+  border: none !important;
+  font-size: 1.4rem;
+  color: var(--navy);
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+  box-shadow: none !important;
+}
+
+.modal__close:hover {
+  transform: none;
 }
 
 .panel__header {

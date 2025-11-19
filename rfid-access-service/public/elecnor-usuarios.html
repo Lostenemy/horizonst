@@ -60,8 +60,47 @@
         <article class="panel">
           <header class="panel__header">
             <div>
+              <p class="eyebrow">Listado</p>
+              <h2>Usuarios configurados</h2>
+              <p class="muted">Filtra por nombre, DNI o centro para localizar rápidamente a una persona.</p>
+            </div>
+            <div class="panel__actions panel__actions--wrap">
+              <button id="open-user-modal" class="cta cta--primary" type="button">Registrar trabajador</button>
+              <input
+                id="filter"
+                class="input input--search"
+                type="search"
+                placeholder="Buscar por nombre, DNI o centro"
+                aria-label="Buscar usuarios"
+              />
+              <select id="center-filter" class="input input--select" aria-label="Filtrar por centro">
+                <option value="">Todos los centros</option>
+              </select>
+            </div>
+          </header>
+
+          <div class="table" role="table" aria-label="Usuarios">
+            <div class="table__head" role="row">
+              <span class="table__cell" role="columnheader">DNI</span>
+              <span class="table__cell" role="columnheader">Nombre</span>
+              <span class="table__cell" role="columnheader">Empresa (CIF)</span>
+              <span class="table__cell" role="columnheader">Centro</span>
+              <span class="table__cell" role="columnheader">Estado</span>
+              <span class="table__cell" role="columnheader">Acciones</span>
+            </div>
+            <div id="users-body" class="table__body"></div>
+          </div>
+        </article>
+      </section>
+
+      <div id="user-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="user-modal-title">
+        <div class="modal__overlay" data-modal-close></div>
+        <div class="modal__content">
+          <button id="close-user-modal" class="modal__close" type="button" aria-label="Cerrar" data-modal-close>×</button>
+          <header class="modal__header">
+            <div>
               <p class="eyebrow">Formulario</p>
-              <h2>Alta y edición</h2>
+              <h2 id="user-modal-title">Alta y edición</h2>
               <p class="muted">Campos obligatorios marcados con *. El DNI se usa como identificador único.</p>
             </div>
             <div class="panel__actions">
@@ -108,42 +147,8 @@
               <p class="muted">Los cambios son inmediatos y se reflejan en la tabla.</p>
             </div>
           </form>
-        </article>
-
-        <article class="panel">
-          <header class="panel__header">
-            <div>
-              <p class="eyebrow">Listado</p>
-              <h2>Usuarios configurados</h2>
-              <p class="muted">Filtra por nombre, DNI o centro para localizar rápidamente a una persona.</p>
-            </div>
-            <div class="panel__actions panel__actions--wrap">
-              <input
-                id="filter"
-                class="input input--search"
-                type="search"
-                placeholder="Buscar por nombre, DNI o centro"
-                aria-label="Buscar usuarios"
-              />
-              <select id="center-filter" class="input input--select" aria-label="Filtrar por centro">
-                <option value="">Todos los centros</option>
-              </select>
-            </div>
-          </header>
-
-          <div class="table" role="table" aria-label="Usuarios">
-            <div class="table__head" role="row">
-              <span class="table__cell" role="columnheader">DNI</span>
-              <span class="table__cell" role="columnheader">Nombre</span>
-              <span class="table__cell" role="columnheader">Empresa (CIF)</span>
-              <span class="table__cell" role="columnheader">Centro</span>
-              <span class="table__cell" role="columnheader">Estado</span>
-              <span class="table__cell" role="columnheader">Acciones</span>
-            </div>
-            <div id="users-body" class="table__body"></div>
-          </div>
-        </article>
-      </section>
+        </div>
+      </div>
     </main>
     <script src="elecnor-auth.js"></script>
     <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>

@@ -53,7 +53,7 @@
             <p class="eyebrow">Consejo</p>
             <p>Debe existir al menos un administrador activo. Protege la cuenta inicial cambiando su contraseña.</p>
           </div>
-          <a class="cta cta--ghost" href="index.html">Volver al simulador</a>
+          <a class="cta cta--ghost" href="__BASE_PATH__/index.html">Volver al simulador</a>
         </div>
       </section>
 
@@ -61,12 +61,45 @@
         <article class="panel">
           <header class="panel__header">
             <div>
+              <p class="eyebrow">Equipo</p>
+              <h2>Listado de cuentas</h2>
+              <p class="muted">Gestiona roles, activa o desactiva accesos y elimina usuarios secundarios.</p>
+            </div>
+            <div class="panel__actions panel__actions--wrap">
+              <button id="open-account-modal" class="cta cta--primary" type="button">Nueva cuenta</button>
+              <span id="session-chip" class="chip"></span>
+              <button id="recargar-cuentas" class="cta cta--ghost" type="button">Recargar</button>
+              <span id="account-status" class="badge" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <div class="table" role="table" aria-label="Cuentas de aplicación">
+            <div class="table__head" role="row">
+              <span class="table__cell" role="columnheader">Usuario</span>
+              <span class="table__cell" role="columnheader">Rol</span>
+              <span class="table__cell" role="columnheader">Estado</span>
+              <span class="table__cell" role="columnheader">Última actualización</span>
+              <span class="table__cell" role="columnheader">Acciones</span>
+            </div>
+            <div id="cuentas-body" class="table__body"></div>
+          </div>
+          <p id="cuentas-vacias" class="muted">Todavía no hay más cuentas aparte del administrador inicial.</p>
+          <p id="account-error" class="error" hidden></p>
+        </article>
+      </section>
+
+      <div id="account-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="account-modal-title">
+        <div class="modal__overlay" data-modal-close></div>
+        <div class="modal__content">
+          <button id="close-account-modal" class="modal__close" type="button" aria-label="Cerrar" data-modal-close>×</button>
+          <header class="modal__header">
+            <div>
               <p class="eyebrow">Nueva cuenta</p>
-              <h2>Alta rápida</h2>
+              <h2 id="account-modal-title">Alta rápida</h2>
               <p class="muted">Introduce un nombre de usuario, contraseña y rol. Las cuentas inactivas no podrán iniciar sesión.</p>
             </div>
             <div class="panel__actions">
-              <span id="account-status" class="badge" aria-live="polite"></span>
+              <span id="account-modal-status" class="badge" aria-live="polite"></span>
             </div>
           </header>
 
@@ -95,35 +128,9 @@
               <p class="muted">Las credenciales se guardan en el servicio de simulación.</p>
             </div>
           </form>
-          <p id="account-error" class="error" hidden></p>
-        </article>
-
-        <article class="panel">
-          <header class="panel__header">
-            <div>
-              <p class="eyebrow">Equipo</p>
-              <h2>Listado de cuentas</h2>
-              <p class="muted">Gestiona roles, activa o desactiva accesos y elimina usuarios secundarios.</p>
-            </div>
-            <div class="panel__actions panel__actions--wrap">
-              <span id="session-chip" class="chip"></span>
-              <button id="recargar-cuentas" class="cta cta--ghost" type="button">Recargar</button>
-            </div>
-          </header>
-
-          <div class="table" role="table" aria-label="Cuentas de aplicación">
-            <div class="table__head" role="row">
-              <span class="table__cell" role="columnheader">Usuario</span>
-              <span class="table__cell" role="columnheader">Rol</span>
-              <span class="table__cell" role="columnheader">Estado</span>
-              <span class="table__cell" role="columnheader">Última actualización</span>
-              <span class="table__cell" role="columnheader">Acciones</span>
-            </div>
-            <div id="cuentas-body" class="table__body"></div>
-          </div>
-          <p id="cuentas-vacias" class="muted">Todavía no hay más cuentas aparte del administrador inicial.</p>
-        </article>
-      </section>
+          <p id="account-modal-error" class="error" hidden></p>
+        </div>
+      </div>
     </main>
     <script src="elecnor-auth.js"></script>
     <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>

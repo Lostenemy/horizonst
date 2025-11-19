@@ -6,8 +6,21 @@
   const filterInput = document.getElementById('filter');
   const centerFilter = document.getElementById('center-filter');
   const usersBody = document.getElementById('users-body');
+  const openModalButton = document.getElementById('open-user-modal');
+  const userModal = document.getElementById('user-modal');
+  const modalClosers = userModal ? userModal.querySelectorAll('[data-modal-close]') : [];
 
   let editingDni = null;
+
+  const setModalOpen = (open) => {
+    if (!userModal) return;
+    userModal.classList.toggle('modal--open', open);
+    userModal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    document.body.classList.toggle('modal-open', open);
+    if (open) {
+      requestAnimationFrame(() => form?.dni.focus());
+    }
+  };
 
   const normalize = (value) => value.trim();
 
@@ -96,6 +109,7 @@
         form.email.value = user.email || '';
         form.activo.checked = Boolean(user.activo);
         setStatus(`Editando ${user.dni}`, 'info');
+        setModalOpen(true);
         form.dni.focus();
       });
 
@@ -163,6 +177,24 @@
 
   filterInput.addEventListener('input', renderUsers);
   centerFilter.addEventListener('change', renderUsers);
+
+  openModalButton?.addEventListener('click', () => {
+    editingDni = null;
+    form.reset();
+    form.activo.checked = true;
+    setStatus('Completa los datos del trabajador', 'muted');
+    setModalOpen(true);
+  });
+
+  modalClosers.forEach((element) => {
+    element.addEventListener('click', () => setModalOpen(false));
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && userModal?.classList.contains('modal--open')) {
+      setModalOpen(false);
+    }
+  });
 
   const init = async () => {
     rewriteNavLinks();
