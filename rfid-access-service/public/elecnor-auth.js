@@ -89,30 +89,22 @@
   };
 
   const ensureSession = async (requireAdmin = false) => {
-    const cached = getCachedSession();
     try {
       const session = await fetchJson(withBasePath('/api/session'));
-      if (session.authenticated) {
-        cacheSession(session);
-        if (requireAdmin && session.role !== 'admin') {
-          throw new Error('FORBIDDEN');
-        }
-        return session;
+      cacheSession(session);
+
+      if (!session.authenticated) {
+        redirectToLogin();
+        return null;
       }
 
-      // Si el servidor indica no autenticado pero tenemos una sesión válida en caché,
-      // reutilizamos la sesión para evitar redirecciones erróneas al login.
-      if (cached?.authenticated) {
-        return cached;
+      if (requireAdmin && session.role !== 'admin') {
+        throw new Error('FORBIDDEN');
       }
 
+      return session;
+    } catch (_error) {
       cacheSession(null);
-      redirectToLogin();
-      return null;
-    } catch (error) {
-      if (cached?.authenticated) {
-        return cached;
-      }
       redirectToLogin();
       return null;
     }
