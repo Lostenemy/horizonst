@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, QueryResult, QueryResultRow } from 'pg';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
@@ -116,11 +116,25 @@ export const initDatabase = async (): Promise<Pool> => {
   return pool;
 };
 
-export const db = {
-  query: async <T = unknown>(text: string, params: unknown[] = []): Promise<{ rows: T[] }> => {
-    if (!pool) {
-      await initDatabase();
-    }
-    return (pool as Pool).query<T>(text, params);
+export const query = async <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: unknown[] = []
+): Promise<QueryResult<T>> => {
+  if (!pool) {
+    await initDatabase();
   }
+  return (pool as Pool).query<T>(text, params);
+};
+
+export const queryRows = async <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: unknown[] = []
+): Promise<T[]> => {
+  const { rows } = await query<T>(text, params);
+  return rows;
+};
+
+export const db = {
+  query,
+  queryRows
 };
