@@ -547,9 +547,12 @@ export const startWebInterface = async ({
     void renderHtml('elecnor-lecturas.html', res);
   });
 
-  router.get(['/elecnor-webservice', '/elecnor-webservice.html'], (_req, res) => {
-    void renderHtml('elecnor-webservice.html', res);
-  });
+  router.get(
+    ['/elecnor-accesos', '/elecnor-accesos.html', '/elecnor-webservice', '/elecnor-webservice.html'],
+    (_req, res) => {
+      void renderHtml('elecnor-accesos.html', res);
+    }
+  );
 
   router.get(['/elecnor-seguimiento', '/elecnor-seguimiento.html'], (_req, res) => {
     void renderHtml('elecnor-seguimiento.html', res);
