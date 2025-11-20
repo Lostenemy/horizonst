@@ -7,6 +7,8 @@ import { readFile } from 'node:fs/promises';
 
 import { logger } from './logger.js';
 import { authenticateUser, createUser, deleteUser, ensureDefaultAdmin, listUsers, updateUser } from './authStore.js';
+import { deleteCard, deleteWorker, listCards, listWorkers, upsertCard, upsertWorker, updateCardState } from './dataStore.js';
+import { initDatabase } from './db.js';
 import type { AccessEvaluationResult, SimulationRequest } from './types.js';
 
 export interface WebInterfaceConfig {
@@ -74,6 +76,7 @@ export const startWebInterface = async ({
     return null;
   }
 
+  await initDatabase();
   await ensureDefaultAdmin({ username: config.username, password: config.password, role: 'admin' });
 
   const app = express();
@@ -131,6 +134,29 @@ export const startWebInterface = async ({
   const pickStringOrDefault = (candidate: unknown, fallback: string): string => {
     const parsed = asTrimmedString(candidate);
     return parsed || fallback;
+  };
+
+  const toWorkerPayload = (payload: any) => {
+    const dni = asTrimmedString(payload?.dni).toUpperCase();
+    const nombre = asTrimmedString(payload?.nombre);
+    const apellidos = asTrimmedString(payload?.apellidos);
+    const empresa = asTrimmedString(payload?.empresa);
+    const cif = asTrimmedString(payload?.cif);
+    const centro = asTrimmedString(payload?.centro).toUpperCase();
+    const email = asTrimmedString(payload?.email) || null;
+    const activo = payload?.activo !== undefined ? Boolean(payload?.activo) : true;
+
+    return { dni, nombre, apellidos, empresa, cif, centro, email, activo } as const;
+  };
+
+  const toCardPayload = (payload: any) => {
+    const idTarjeta = asTrimmedString(payload?.idTarjeta).toUpperCase();
+    const dni = asTrimmedString(payload?.dni).toUpperCase();
+    const centro = asTrimmedString(payload?.centro).toUpperCase();
+    const estado = (asTrimmedString(payload?.estado) || 'activa').toLowerCase();
+    const notas = asTrimmedString(payload?.notas) || null;
+
+    return { idTarjeta, dni, centro, estado, notas } as const;
   };
 
   router.post('/api/login', async (req, res) => {
@@ -285,6 +311,118 @@ export const startWebInterface = async ({
       }
       logger.error({ err }, 'Failed to delete app user');
       res.status(500).json({ error: 'USER_DELETE_FAILED' });
+    }
+  });
+
+  router.get('/api/workers', ensureAuthenticated, async (_req, res) => {
+    const workers = await listWorkers();
+    res.json({ workers });
+  });
+
+  router.post('/api/workers', ensureAuthenticated, async (req, res) => {
+    const payload = toWorkerPayload(req.body);
+    if (!payload.dni || !payload.nombre || !payload.apellidos || !payload.empresa || !payload.cif || !payload.centro) {
+      res.status(400).json({ error: 'INVALID_WORKER' });
+      return;
+    }
+
+    try {
+      const worker = await upsertWorker({ ...payload, creadoEn: new Date().toISOString() });
+      res.status(201).json({ worker });
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to upsert worker');
+      res.status(500).json({ error: 'WORKER_WRITE_FAILED' });
+    }
+  });
+
+  router.patch('/api/workers/:dni', ensureAuthenticated, async (req, res) => {
+    const payload = toWorkerPayload({ ...req.body, dni: req.params.dni });
+    if (!payload.dni || !payload.nombre || !payload.apellidos || !payload.empresa || !payload.cif || !payload.centro) {
+      res.status(400).json({ error: 'INVALID_WORKER' });
+      return;
+    }
+
+    try {
+      const worker = await upsertWorker({ ...payload, creadoEn: new Date().toISOString() });
+      res.json({ worker });
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to update worker');
+      res.status(500).json({ error: 'WORKER_WRITE_FAILED' });
+    }
+  });
+
+  router.delete('/api/workers/:dni', ensureAuthenticated, async (req, res) => {
+    const dni = asTrimmedString(req.params.dni).toUpperCase();
+    if (!dni) {
+      res.status(400).json({ error: 'INVALID_WORKER' });
+      return;
+    }
+
+    try {
+      await deleteWorker(dni);
+      res.status(204).send();
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to delete worker');
+      res.status(500).json({ error: 'WORKER_DELETE_FAILED' });
+    }
+  });
+
+  router.get('/api/cards', ensureAuthenticated, async (_req, res) => {
+    const cards = await listCards();
+    res.json({ cards });
+  });
+
+  router.post('/api/cards', ensureAuthenticated, async (req, res) => {
+    const payload = toCardPayload(req.body);
+    if (!payload.idTarjeta || !payload.dni) {
+      res.status(400).json({ error: 'INVALID_CARD' });
+      return;
+    }
+
+    try {
+      const card = await upsertCard({ ...payload, asignadaEn: new Date().toISOString() });
+      res.status(201).json({ card });
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to upsert card');
+      res.status(500).json({ error: 'CARD_WRITE_FAILED' });
+    }
+  });
+
+  router.patch('/api/cards/:idTarjeta', ensureAuthenticated, async (req, res) => {
+    const idTarjeta = asTrimmedString(req.params.idTarjeta).toUpperCase();
+    if (!idTarjeta) {
+      res.status(400).json({ error: 'INVALID_CARD' });
+      return;
+    }
+
+    const estado = asTrimmedString(req.body?.estado);
+    if (!estado) {
+      res.status(400).json({ error: 'INVALID_CARD' });
+      return;
+    }
+
+    try {
+      const card = await updateCardState(idTarjeta, estado);
+      res.json({ card });
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to update card');
+      res.status(500).json({ error: 'CARD_WRITE_FAILED' });
+    }
+  });
+
+  router.delete('/api/cards/:idTarjeta', ensureAuthenticated, async (req, res) => {
+    const idTarjeta = asTrimmedString(req.params.idTarjeta).toUpperCase();
+    if (!idTarjeta) {
+      res.status(400).json({ error: 'INVALID_CARD' });
+      return;
+    }
+
+    try {
+      await deleteCard(idTarjeta);
+      res.status(204).send();
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to delete card');
+      res.status(500).json({ error: 'CARD_DELETE_FAILED' });
     }
   });
 

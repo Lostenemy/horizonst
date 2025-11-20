@@ -150,6 +150,15 @@ const buildDirectoryConfig = (): DirectoryConfig => {
 
 export const config = {
   logLevel: (process.env.LOG_LEVEL as LogLevel) || 'info',
+  db: {
+    host: process.env.RFID_DB_HOST || 'postgres',
+    port: parsePort(process.env.RFID_DB_PORT, 5432),
+    user: process.env.RFID_DB_USER || 'horizonst',
+    password: process.env.RFID_DB_PASSWORD || 'horizonst',
+    database: process.env.RFID_DB_NAME || 'rfid_access',
+    adminDatabase: process.env.RFID_DB_ADMIN_DB || 'postgres',
+    ssl: parseBoolean(process.env.RFID_DB_SSL, false)
+  },
   mqtt: {
     host: process.env.MQTT_HOST || 'emqx',
     port: parsePort(process.env.MQTT_PORT, 1883),

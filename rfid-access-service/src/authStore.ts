@@ -1,5 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import path from 'node:path';
+import { db, initDatabase } from './db.js';
 
 export type AppUserRole = 'admin' | 'user';
 
@@ -20,75 +19,83 @@ interface DefaultUserOptions {
   role?: AppUserRole;
 }
 
-const storePath = process.env.RFID_WEB_USER_STORE || path.join(process.cwd(), 'data', 'app-users.json');
-
-const ensureStoreFolder = async (): Promise<void> => {
-  await mkdir(path.dirname(storePath), { recursive: true });
-};
-
-const readStore = async (): Promise<AppUserRecord[]> => {
-  try {
-    const raw = await readFile(storePath, 'utf8');
-    const data = JSON.parse(raw) as AppUserRecord[];
-    if (!Array.isArray(data)) {
-      throw new Error('Store is not an array');
-    }
-    return data;
-  } catch (error) {
-    return [];
-  }
-};
-
-const writeStore = async (users: AppUserRecord[]): Promise<void> => {
-  await ensureStoreFolder();
-  await writeFile(storePath, JSON.stringify(users, null, 2), 'utf8');
-};
-
 const sanitize = (user: AppUserRecord): PublicAppUser => {
   const { password, ...rest } = user;
   return rest;
 };
 
-export const ensureDefaultAdmin = async (defaults: DefaultUserOptions): Promise<PublicAppUser> => {
-  const users = await readStore();
-  const existing = users.find((user) => user.username === defaults.username);
+const toRecord = (row: {
+  username: string;
+  password: string;
+  role: AppUserRole;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}): AppUserRecord => ({
+  username: row.username,
+  password: row.password,
+  role: row.role,
+  active: row.active,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt
+});
 
-  if (existing) {
-    if (existing.role !== 'admin') {
-      existing.role = 'admin';
-      existing.updatedAt = new Date().toISOString();
-      await writeStore(users);
+const countActiveAdmins = async (excludeUsername?: string): Promise<number> => {
+  const { rows } = await db.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM app_users WHERE role = 'admin' AND active = TRUE ${excludeUsername ? 'AND username <> $1' : ''}`,
+    excludeUsername ? [excludeUsername] : []
+  );
+  return Number.parseInt(rows[0]?.count ?? '0', 10);
+};
+
+export const ensureDefaultAdmin = async (defaults: DefaultUserOptions): Promise<PublicAppUser> => {
+  await initDatabase();
+  const existing = await db.query<AppUserRecord>(
+    'SELECT username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt" FROM app_users WHERE username = $1 LIMIT 1',
+    [defaults.username]
+  );
+
+  if (existing.rows[0]) {
+    const record = existing.rows[0];
+    if (record.role !== 'admin') {
+      const updated = await db.query<AppUserRecord>(
+        `UPDATE app_users SET role = 'admin', active = TRUE, updated_at = NOW() WHERE username = $1 RETURNING username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt"`,
+        [defaults.username]
+      );
+      return sanitize(updated.rows[0]);
     }
-    return sanitize(existing);
+    return sanitize(existing.rows[0]);
   }
 
-  const now = new Date().toISOString();
-  const admin: AppUserRecord = {
-    username: defaults.username,
-    password: defaults.password,
-    role: defaults.role ?? 'admin',
-    active: true,
-    createdAt: now,
-    updatedAt: now
-  };
+  const created = await db.query<AppUserRecord>(
+    `INSERT INTO app_users (username, password, role, active)
+     VALUES ($1, $2, $3, TRUE)
+     RETURNING username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [defaults.username, defaults.password, defaults.role ?? 'admin']
+  );
 
-  users.push(admin);
-  await writeStore(users);
-  return sanitize(admin);
+  return sanitize(created.rows[0]);
 };
 
 export const listUsers = async (): Promise<PublicAppUser[]> => {
-  const users = await readStore();
-  return users.map(sanitize);
+  await initDatabase();
+  const { rows } = await db.query<AppUserRecord>(
+    'SELECT username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt" FROM app_users ORDER BY username'
+  );
+  return rows.map(sanitize);
 };
 
 export const authenticateUser = async (
   username: string,
   password: string
 ): Promise<PublicAppUser | null> => {
-  const users = await readStore();
-  const found = users.find((user) => user.username === username && user.password === password);
-  if (!found || !found.active) {
+  await initDatabase();
+  const { rows } = await db.query<AppUserRecord>(
+    'SELECT username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt" FROM app_users WHERE username = $1 LIMIT 1',
+    [username]
+  );
+  const found = rows[0];
+  if (!found || !found.active || found.password !== password) {
     return null;
   }
   return sanitize(found);
@@ -100,59 +107,94 @@ export const createUser = async (
   role: AppUserRole,
   active = true
 ): Promise<PublicAppUser> => {
-  const users = await readStore();
+  await initDatabase();
+  const existing = await db.query<AppUserRecord>(
+    'SELECT username FROM app_users WHERE username = $1 LIMIT 1',
+    [username]
+  );
 
-  if (users.some((user) => user.username === username)) {
+  if (existing.rows[0]) {
     throw new Error('USERNAME_EXISTS');
   }
 
-  const now = new Date().toISOString();
-  const record: AppUserRecord = { username, password, role, active, createdAt: now, updatedAt: now };
-  users.push(record);
-  await writeStore(users);
-  return sanitize(record);
+  const { rows } = await db.query<AppUserRecord>(
+    `INSERT INTO app_users (username, password, role, active)
+     VALUES ($1, $2, $3, $4)
+     RETURNING username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [username, password, role, active]
+  );
+
+  return sanitize(toRecord(rows[0]));
 };
 
 export const updateUser = async (
   username: string,
   changes: Partial<Pick<AppUserRecord, 'password' | 'role' | 'active'>>
 ): Promise<PublicAppUser> => {
-  const users = await readStore();
-  const index = users.findIndex((user) => user.username === username);
+  await initDatabase();
+  const current = await db.query<AppUserRecord>(
+    'SELECT username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt" FROM app_users WHERE username = $1',
+    [username]
+  );
 
-  if (index === -1) {
+  const existing = current.rows[0];
+  if (!existing) {
     throw new Error('NOT_FOUND');
   }
 
-  const next = { ...users[index], ...changes, updatedAt: new Date().toISOString() } satisfies AppUserRecord;
-
-  if (next.role !== 'admin') {
-    const remainingAdmins = users.filter((user, idx) => idx !== index && user.role === 'admin' && user.active);
-    if (remainingAdmins.length === 0) {
+  const nextRole = changes.role ?? existing.role;
+  const nextActive = changes.active ?? existing.active;
+  if ((nextRole !== 'admin' || nextActive === false) && existing.role === 'admin' && existing.active) {
+    const admins = await countActiveAdmins(existing.username);
+    if (admins === 0) {
       throw new Error('LAST_ADMIN');
     }
   }
 
-  users[index] = next;
-  await writeStore(users);
-  return sanitize(next);
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+  if (changes.password !== undefined) {
+    fields.push(`password = $${idx++}`);
+    values.push(changes.password);
+  }
+  if (changes.role !== undefined) {
+    fields.push(`role = $${idx++}`);
+    values.push(changes.role);
+  }
+  if (changes.active !== undefined) {
+    fields.push(`active = $${idx++}`);
+    values.push(changes.active);
+  }
+  fields.push(`updated_at = NOW()`);
+  values.push(username);
+
+  const { rows } = await db.query<AppUserRecord>(
+    `UPDATE app_users SET ${fields.join(', ')} WHERE username = $${idx} RETURNING username, password, role, active, created_at AS "createdAt", updated_at AS "updatedAt"`,
+    values
+  );
+
+  return sanitize(toRecord(rows[0]));
 };
 
 export const deleteUser = async (username: string): Promise<void> => {
-  const users = await readStore();
-  const target = users.find((user) => user.username === username);
+  await initDatabase();
+  const existing = await db.query<AppUserRecord>(
+    'SELECT username, role, active FROM app_users WHERE username = $1',
+    [username]
+  );
+  const target = existing.rows[0];
   if (!target) {
     throw new Error('NOT_FOUND');
   }
 
-  if (target.role === 'admin') {
-    const remainingAdmins = users.filter((user) => user.username !== username && user.role === 'admin' && user.active);
-    if (remainingAdmins.length === 0) {
+  if (target.role === 'admin' && target.active) {
+    const admins = await countActiveAdmins(username);
+    if (admins === 0) {
       throw new Error('LAST_ADMIN');
     }
   }
 
-  const filtered = users.filter((user) => user.username !== username);
-  await writeStore(filtered);
+  await db.query('DELETE FROM app_users WHERE username = $1', [username]);
 };
 

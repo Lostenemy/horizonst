@@ -159,13 +159,17 @@
       const nextState = card.estado === 'bloqueada' ? 'activa' : 'bloqueada';
       toggleBtn.textContent = nextState === 'activa' ? 'Activar' : 'Bloquear';
       toggleBtn.setAttribute('aria-label', `${toggleBtn.textContent} tarjeta ${card.idTarjeta}`);
-      toggleBtn.addEventListener('click', () => {
-        window.ElecnorData.toggleCardState(card.idTarjeta, nextState);
-        showToast(
-          `Tarjeta ${card.idTarjeta} ${nextState === 'activa' ? 'activada' : 'bloqueada'}`,
-          'info'
-        );
-        renderCards();
+      toggleBtn.addEventListener('click', async () => {
+        try {
+          await window.ElecnorData.toggleCardState(card.idTarjeta, nextState);
+          showToast(
+            `Tarjeta ${card.idTarjeta} ${nextState === 'activa' ? 'activada' : 'bloqueada'}`,
+            'info'
+          );
+          renderCards();
+        } catch (error) {
+          showToast('No se pudo actualizar la tarjeta', 'error');
+        }
       });
 
       const deleteBtn = document.createElement('button');
@@ -180,9 +184,13 @@
           confirmLabel: 'Eliminar tarjeta'
         });
         if (!confirmed) return;
-        window.ElecnorData.deleteCard(card.idTarjeta);
-        showToast(`Tarjeta ${card.idTarjeta} eliminada`, 'success');
-        renderCards();
+        try {
+          await window.ElecnorData.deleteCard(card.idTarjeta);
+          showToast(`Tarjeta ${card.idTarjeta} eliminada`, 'success');
+          renderCards();
+        } catch (error) {
+          showToast('No se pudo eliminar la tarjeta', 'error');
+        }
       });
 
       actions.append(editBtn, toggleBtn, deleteBtn);
@@ -191,7 +199,7 @@
     });
   };
 
-  form.addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
     clearFieldErrors(form);
@@ -223,16 +231,21 @@
       payload.centro = user.centro;
     }
 
-    window.ElecnorData.upsertCard(payload);
-    setStatus(`Tarjeta ${payload.idTarjeta} guardada`, 'ok');
-    showToast(`✓ Tarjeta ${payload.idTarjeta} guardada correctamente`, 'success');
-    renderCards();
-    idInput.value = '';
-    dniSelect.selectedIndex = 0;
-    centerInput.value = '';
-    stateSelect.value = 'activa';
-    notesInput.value = '';
-    clearFieldErrors(form);
+    try {
+      await window.ElecnorData.upsertCard(payload);
+      setStatus(`Tarjeta ${payload.idTarjeta} guardada`, 'ok');
+      showToast(`✓ Tarjeta ${payload.idTarjeta} guardada correctamente`, 'success');
+      renderCards();
+      idInput.value = '';
+      dniSelect.selectedIndex = 0;
+      centerInput.value = '';
+      stateSelect.value = 'activa';
+      notesInput.value = '';
+      clearFieldErrors(form);
+    } catch (error) {
+      setStatus('No se pudo guardar la tarjeta', 'alert');
+      showToast('No se pudo guardar la tarjeta', 'error');
+    }
   });
 
   const resetCardForm = (message = 'Formulario limpio') => {
@@ -275,6 +288,7 @@
     const session = await ensureSession();
     if (!session) return;
     applyNavAccess(session);
+    await window.ElecnorData.init();
     loadUserOptions();
     suggestCenter();
     renderCards();

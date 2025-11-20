@@ -131,13 +131,17 @@
         'aria-label',
         `${user.activo ? 'Desactivar' : 'Activar'} trabajador ${user.dni}`
       );
-      toggleBtn.addEventListener('click', () => {
-        window.ElecnorData.upsertUser({ ...user, activo: !user.activo });
-        showToast(
-          `Trabajador ${user.dni} ${user.activo ? 'desactivado' : 'activado'}`,
-          'info'
-        );
-        renderUsers();
+      toggleBtn.addEventListener('click', async () => {
+        try {
+          await window.ElecnorData.upsertUser({ ...user, activo: !user.activo });
+          showToast(
+            `Trabajador ${user.dni} ${user.activo ? 'desactivado' : 'activado'}`,
+            'info'
+          );
+          renderUsers();
+        } catch (error) {
+          showToast('No se pudo actualizar el estado', 'error');
+        }
       });
 
       const deleteBtn = document.createElement('button');
@@ -152,10 +156,14 @@
           confirmLabel: 'Eliminar trabajador'
         });
         if (!confirmed) return;
-        window.ElecnorData.deleteUser(user.dni);
-        showToast(`Trabajador ${user.dni} eliminado`, 'success');
-        renderUsers();
-        fillCenterOptions();
+        try {
+          await window.ElecnorData.deleteUser(user.dni);
+          showToast(`Trabajador ${user.dni} eliminado`, 'success');
+          renderUsers();
+          fillCenterOptions();
+        } catch (error) {
+          showToast('No se pudo eliminar el trabajador', 'error');
+        }
       });
 
       actions.append(editBtn, toggleBtn, deleteBtn);
@@ -164,7 +172,7 @@
     });
   };
 
-  form.addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
     clearFieldErrors(form);
@@ -211,15 +219,20 @@
       return;
     }
 
-    window.ElecnorData.upsertUser(payload);
-    setStatus(`Usuario ${payload.dni} guardado correctamente`, 'ok');
-    showToast(`✓ Usuario ${payload.dni} guardado correctamente`, 'success');
-    editingDni = null;
-    renderUsers();
-    fillCenterOptions();
-    form.reset();
-    form.activo.checked = true;
-    clearFieldErrors(form);
+    try {
+      await window.ElecnorData.upsertUser(payload);
+      setStatus(`Usuario ${payload.dni} guardado correctamente`, 'ok');
+      showToast(`✓ Usuario ${payload.dni} guardado correctamente`, 'success');
+      editingDni = null;
+      renderUsers();
+      fillCenterOptions();
+      form.reset();
+      form.activo.checked = true;
+      clearFieldErrors(form);
+    } catch (error) {
+      setStatus('No se pudo guardar el usuario', 'alert');
+      showToast('No se pudo guardar el usuario', 'error');
+    }
   });
 
   resetButton.addEventListener('click', () => {
@@ -258,6 +271,7 @@
     const session = await ensureSession();
     if (!session) return;
     applyNavAccess(session);
+    await window.ElecnorData.init();
     fillCenterOptions();
     renderUsers();
   };
