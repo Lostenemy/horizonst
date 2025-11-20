@@ -1,0 +1,2 @@
+mailserver/ssl/*
+!mailserver/ssl/.gitkeep

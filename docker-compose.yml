@@ -167,21 +167,37 @@ services:
     networks:
       - horizonst
 
+  cert-init:
+    image: alpine:3.20
+    container_name: cert-init
+    command: ["/bin/sh", "-c", "/scripts/gen-dev-certs.sh"]
+    volumes:
+      - ./mailserver/ssl:/work/ssl:rw
+      - ./scripts:/scripts:ro
+    environment:
+      FQDN: mail.horizonst.com.es
+    restart: "no"
+
   mail:
-    image: mailserver/docker-mailserver:latest
-    hostname: mail
-    domainname: horizonst.com.es
+    image: mailserver/docker-mailserver:15.1.0
+    hostname: mail.horizonst.com.es
     container_name: mail
     env_file:
       - ./mailserver/mailserver.env
+    environment:
+      - SSL_TYPE=self-signed
     cap_add:
       - NET_ADMIN
       - SYS_PTRACE
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
     volumes:
       - mail_data:/var/mail
       - mail_state:/var/mail-state
       - mail_logs:/var/log/mail
-      - ./mailserver/config/:/tmp/docker-mailserver/
+      - ./mailserver:/tmp/docker-mailserver:rw
+      - ./mailserver/ssl:/tmp/docker-mailserver/ssl:rw
       - ./mailserver/fail2ban/postfix.local:/etc/fail2ban/jail.d/postfix.local:ro
     ports:
       - "25:25"
