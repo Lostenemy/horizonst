@@ -6,6 +6,16 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 - **Portal web HTML5 + JavaScript** accesible a través de `www.horizonst.com.es` con funcionalidades diferenciadas para administradores y usuarios finales.
 - **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y EMQX. El proxy inverso Nginx se despliega
   **fuera** de Docker y expone la web en HTTPS junto con los paneles de EMQX y pgAdmin.
+- **Microservicio de control de accesos RFID (Elecnor)** con interfaz web propia, autenticación con sesiones HTTP, paneles de tarjetas/trabajadores/cuentas/accesos/seguimiento y persistencia en una base de datos PostgreSQL dedicada creada automáticamente.
+
+## Estado del repositorio
+
+- `backend/`: API principal BLE/LoRa con el portal web incrustado en `backend/public` tras el build, ingestión MQTT y servicios de alarmas.
+- `frontend/`: código fuente del portal HTML5 que se copia a `backend/public` durante el empaquetado.
+- `rfid-access-service/`: microservicio Node.js independiente para los flujos Elecnor (accesos RFID), con frontend estático en `public/`, API Express en `src/` y persistencia en PostgreSQL.
+- `db/`: esquema y seed SQL del backend principal.
+- `docker-compose*.yml`: orquestaciones completas (`docker-compose.yml`) y específicas para el microservicio RFID (`docker-compose.rfid-access.yml`).
+- `nginx/` y `mailserver/`: configuraciones de referencia para el proxy inverso externo y el servidor de correo.
 
 ## Requisitos
 
@@ -159,19 +169,25 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 
 ## Servicio de control de accesos RFID
 
-El contenedor `rfid_access` se encarga de procesar los eventos MQTT publicados por los lectores RFID y de consultar una API REST
-externa que confirmará o denegará el acceso. Según la respuesta, el servicio envía órdenes al actuador (luces verde/roja y
-alarma) mediante nuevos topics MQTT.
+El contenedor `rfid_access` procesa los eventos publicados por los lectores RFID, consulta una API REST externa para validar el acceso y, según la respuesta, envía órdenes al actuador (luces verde/roja y alarma) mediante nuevos topics MQTT.
 
-- **Suscripción:** por defecto escucha `rfid/readers/+/scan` (configurable vía `RFID_READER_TOPIC`).
-- **Autenticación externa:** realice peticiones `POST` a `RFID_AUTH_API_URL` con los datos `{ dni, cardId, readerMac }`. El
-  servicio interpreta como aceptación un `accepted: true` o un `status`/`result` igual a `ACCEPTED`/`GRANTED`.
-- **Control de actuadores:** publica comandos en `rfid/{mac}/actuators/green`, `rfid/{mac}/actuators/red` y
-  `rfid/{mac}/actuators/alarm`. El formato puede ser `json` o `text` (`RFID_COMMAND_PAYLOAD_FORMAT`).
-- **Mapeo MAC ↔ DNI:** configure `RFID_MAC_DNI_MAP` con un JSON o lista `mac=dni`, y opcionalmente complemente con un fichero (`RFID_MAC_DNI_FILE`) o un directorio remoto (`RFID_MAC_DNI_DIRECTORY_URL`) que se recarga periódicamente (`RFID_MAC_DNI_REFRESH_MS`). El modo `RFID_MAC_DNI_LOOKUP_STRATEGY` permite precargar los datos o consultarlos bajo demanda.
-- **Interfaz de pruebas:** activando `RFID_WEB_ENABLED=1` se expone un panel protegido por usuario y contraseña (`RFID_WEB_USERNAME`/`RFID_WEB_PASSWORD`) en `http://127.0.0.1:${HTTP_PORT:-3001}${BASE_PATH:-/}`. Desde allí se pueden simular lecturas introduciendo el ID de tarjeta y la MAC del lector, revisar el histórico reciente y consultar los mensajes publicados a los actuadores para cada decisión. El endpoint `GET /health` facilita comprobar el estado del servicio desde el balanceador o los healthchecks de Docker.
-- **Variables adicionales:** revise `rfid-access-service/.env.example` para conocer todos los ajustes disponibles
-  (timeouts, credenciales MQTT, etc.).
+- **Suscripción y actuadores:** escucha `rfid/readers/+/scan` (`RFID_READER_TOPIC`) y publica en `rfid/{mac}/actuators/green`, `rfid/{mac}/actuators/red` y `rfid/{mac}/actuators/alarm` (formato `json` o `text` según `RFID_COMMAND_PAYLOAD_FORMAT`).
+- **Autenticación externa:** delega la validación en `RFID_AUTH_API_URL` recibiendo `{ dni, cardId, readerMac }`; acepta `accepted: true` o estados `ACCEPTED`/`GRANTED`.
+- **Directorio MAC↔DNI:** admite inline JSON (`RFID_MAC_DNI_MAP`), fichero (`RFID_MAC_DNI_FILE`) o directorio remoto (`RFID_MAC_DNI_DIRECTORY_URL`) con refresco (`RFID_MAC_DNI_REFRESH_MS`) y estrategia `eager`/`on-demand` (`RFID_MAC_DNI_LOOKUP_STRATEGY`).
+- **Salud y despliegue:** `GET /health` responde con `{"status":"ok"}` y la interfaz HTTP se sirve en `HTTP_PORT` (3001 por defecto) y `BASE_PATH` (`/elecnor`).
+
+### Base de datos y API del portal Elecnor
+
+- **Persistencia dedicada:** el servicio crea automáticamente la base de datos `RFID_DB_NAME` (por defecto `rfid_access`) en PostgreSQL usando el usuario definido y el catálogo administrador `RFID_DB_ADMIN_DB`. Genera las tablas `app_users`, `workers` y `cards` si no existen y precarga ejemplos de trabajadores/tarjetas cuando están vacías para facilitar las pruebas iniciales.
+- **Autenticación y roles:** al arrancar se asegura un usuario administrador con `RFID_WEB_USERNAME`/`RFID_WEB_PASSWORD` (por defecto `admin/admin`). La API expone `/api/login`, `/api/logout` y `/api/session` con sesiones HTTP, además de CRUD protegidos para usuarios (`/api/auth/users`), trabajadores (`/api/workers`) y tarjetas (`/api/cards`). El microservicio valida que siempre quede al menos un administrador activo.
+- **Pruebas contra la API externa:** los endpoints `/api/ecoordina/defaults` y `/api/ecoordina/test` devuelven o lanzan peticiones reales a la API de e-coordina usando los valores configurados (`ECOORDINA_*`), devolviendo un resumen de la solicitud y la respuesta procesada.
+
+### Interfaz web Elecnor
+
+- **Páginas disponibles:** Tarjetas, Accesos (antes Webservice), Seguimiento y Trabajadores están habilitadas para usuarios estándar; los administradores ven también la gestión de cuentas (usuarios) y controles avanzados. La navegación superior muestra u oculta enlaces según el rol de sesión.
+- **Flujos y accesibilidad:** los formularios incluyen etiquetas asociadas, validación visual, búsquedas con debounce, chips de estado y toasts de éxito/error. Las acciones destructivas piden confirmación y todas las páginas comparten estilos y espaciados homogéneos.
+- **Base path:** el HTML se sirve con `<base href="__BASE_PATH__/">` y scripts auxiliares reescriben enlaces para funcionar bajo el `BASE_PATH` definido en entorno (por defecto `/elecnor`).
+- **Autenticación web:** la pantalla `index.html` solicita las credenciales del microservicio y, tras iniciar sesión, persiste la sesión en cookie HTTP-only. El botón “Desconectar” de la barra superior invalida la sesión y redirige al login respetando el `BASE_PATH`.
 
 ### Integración RFID Elecnor
 
