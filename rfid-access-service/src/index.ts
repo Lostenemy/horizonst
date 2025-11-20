@@ -357,7 +357,8 @@ const start = async (): Promise<void> => {
       config: config.webInterface,
       ecoordinaDefaults: config.ecoordina,
       simulateScan: async (payload: SimulationRequest) =>
-        evaluateScan(client, { ...payload, source: 'web' })
+        evaluateScan(client, { ...payload, source: 'web' }),
+      gpoController
     });
   } catch (error) {
     logger.error({ err: error }, 'Failed to start web test interface');

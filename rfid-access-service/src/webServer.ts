@@ -9,7 +9,8 @@ import { logger } from './logger.js';
 import { authenticateUser, createUser, deleteUser, ensureDefaultAdmin, listUsers, updateUser } from './authStore.js';
 import { deleteCard, deleteWorker, listCards, listWorkers, upsertCard, upsertWorker, updateCardState } from './dataStore.js';
 import { initDatabase } from './db.js';
-import type { AccessEvaluationResult, SimulationRequest } from './types.js';
+import { ReaderGpoController } from './gpoController.js';
+import type { AccessDecision, AccessEvaluationResult, SimulationRequest } from './types.js';
 
 export interface WebInterfaceConfig {
   enabled: boolean;
@@ -49,6 +50,7 @@ interface StartWebInterfaceOptions {
   config: WebInterfaceConfig;
   ecoordinaDefaults: EcoordinaConfig;
   simulateScan: (input: SimulationRequest) => Promise<AccessEvaluationResult>;
+  gpoController: ReaderGpoController | null;
 }
 
 const normalizeMacForDisplay = (mac: string): string => mac.trim().toLowerCase();
@@ -70,7 +72,8 @@ const buildHistoryRecorder = (history: HistoryEvent[], limit: number) => {
 export const startWebInterface = async ({
   config,
   ecoordinaDefaults,
-  simulateScan
+  simulateScan,
+  gpoController
 }: StartWebInterfaceOptions): Promise<WebInterfaceController | null> => {
   if (!config.enabled) {
     return null;
@@ -627,6 +630,99 @@ export const startWebInterface = async ({
     }
   });
 
+  const parseScenario = (value: unknown): AccessDecision | null => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim().toLowerCase();
+    if (['granted', 'permitido', 'acceso permitido', 'allow'].includes(normalized)) {
+      return 'GRANTED';
+    }
+    if (['denied', 'denegado', 'acceso denegado', 'deny'].includes(normalized)) {
+      return 'DENIED';
+    }
+    return null;
+  };
+
+  router.get('/api/gpo/status', ensureAuthenticated, ensureAdmin, (_req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE', status: { enabled: false } });
+      return;
+    }
+
+    res.json({ status: gpoController.status() });
+  });
+
+  router.post('/api/gpo/test/scenario', ensureAuthenticated, ensureAdmin, async (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const decision = parseScenario(req.body?.scenario);
+    if (!decision) {
+      res.status(400).json({ error: 'INVALID_SCENARIO' });
+      return;
+    }
+
+    if (!gpoController.isEnabled()) {
+      res.status(503).json({ error: 'GPO_DISABLED' });
+      return;
+    }
+
+    try {
+      await gpoController.triggerDecision(decision);
+      res.json({ ok: true, decision });
+    } catch (error) {
+      logger.error({ err: error, decision }, 'Failed to run GPO scenario test');
+      res.status(500).json({ error: 'GPO_SCENARIO_FAILED' });
+    }
+  });
+
+  router.post('/api/gpo/test/line', ensureAuthenticated, ensureAdmin, async (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const line = Number.parseInt(req.body?.line, 10);
+    const action = typeof req.body?.action === 'string' ? req.body.action.trim().toLowerCase() : '';
+    const duration = req.body?.durationMs !== undefined ? Number(req.body.durationMs) : undefined;
+
+    if (Number.isNaN(line)) {
+      res.status(400).json({ error: 'INVALID_LINE' });
+      return;
+    }
+
+    if (!['on', 'off', 'pulse'].includes(action)) {
+      res.status(400).json({ error: 'INVALID_ACTION' });
+      return;
+    }
+
+    if (duration !== undefined && (!Number.isFinite(duration) || duration <= 0)) {
+      res.status(400).json({ error: 'INVALID_DURATION' });
+      return;
+    }
+
+    if (!gpoController.isEnabled()) {
+      res.status(503).json({ error: 'GPO_DISABLED' });
+      return;
+    }
+
+    try {
+      await gpoController.controlLine(line, action as 'on' | 'off' | 'pulse', duration);
+      res.json({ ok: true, line, action, durationMs: action === 'pulse' ? duration ?? 1000 : undefined });
+    } catch (error) {
+      const err = error as Error;
+      const knownErrors = ['INVALID_LINE', 'GPO_DISABLED'];
+      if (knownErrors.includes(err.message)) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+
+      logger.error({ err, line, action, duration }, 'Failed to control reader GPO line');
+      res.status(500).json({ error: 'GPO_CONTROL_FAILED' });
+    }
+  });
+
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const publicDir = path.join(currentDir, '..', 'public');
 
@@ -713,6 +809,10 @@ export const startWebInterface = async ({
 
   router.get(['/elecnor-seguimiento', '/elecnor-seguimiento.html'], (req, res) => {
     void renderHtml('elecnor-seguimiento.html', req, res);
+  });
+
+  router.get(['/elecnor-gpo', '/elecnor-gpo.html'], (req, res) => {
+    void renderHtml('elecnor-gpo.html', req, res);
   });
 
   router.use(

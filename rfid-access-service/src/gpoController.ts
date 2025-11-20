@@ -16,6 +16,8 @@ export class ReaderGpoController {
 
   private readonly enabled: boolean;
 
+  private readonly allowedLines = [4, 5, 6];
+
   constructor(private readonly config: ReaderControlConfig) {
     this.enabled = Boolean(config.enabled && config.baseUrl && config.deviceId);
     this.http = axios.create({
@@ -35,6 +37,47 @@ export class ReaderGpoController {
     }
 
     await Promise.all([this.pulse(5, 10000), this.pulse(6, 5000)]);
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  status() {
+    return {
+      enabled: this.enabled,
+      deviceId: this.config.deviceId,
+      baseUrl: this.normalizeBaseUrl(this.config.baseUrl),
+      allowedLines: this.allowedLines
+    } as const;
+  }
+
+  async triggerDecision(decision: AccessDecision): Promise<void> {
+    await this.handleDecision(decision);
+  }
+
+  async controlLine(
+    line: number,
+    action: 'on' | 'off' | 'pulse',
+    durationMs: number | undefined = 1000
+  ): Promise<void> {
+    if (!this.enabled) {
+      throw new Error('GPO_DISABLED');
+    }
+
+    if (!this.allowedLines.includes(line)) {
+      throw new Error('INVALID_LINE');
+    }
+
+    if (action === 'pulse') {
+      const parsedDuration = Number.isFinite(durationMs)
+        ? Math.min(Math.max(1, durationMs), 60000)
+        : 1000;
+      await this.pulse(line, parsedDuration);
+      return;
+    }
+
+    await this.setGpo(line, action === 'on');
   }
 
   private normalizeBaseUrl(baseUrl: string): string {
