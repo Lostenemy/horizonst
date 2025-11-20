@@ -17,6 +17,7 @@
   const modalClosers = accountModal ? accountModal.querySelectorAll('[data-modal-close]') : [];
 
   const { ensureSession, fetchJson, withBasePath, rewriteNavLinks } = window.ElecnorAuth;
+  const { showToast, confirmAction, clearFieldErrors, showFieldError } = window.ElecnorUI;
   let currentSession = null;
 
   const showStatus = (message, tone = 'neutral') => {
@@ -50,61 +51,75 @@
     cuentasBody.innerHTML = '';
     if (!users.length) {
       cuentasVacias.classList.remove('hidden');
+      const emptyRow = document.createElement('tr');
+      emptyRow.className = 'table__row table__row--empty';
+      const emptyCell = document.createElement('td');
+      emptyCell.className = 'table__cell';
+      emptyCell.colSpan = 5;
+      emptyCell.textContent = 'No hay cuentas adicionales registradas.';
+      emptyRow.appendChild(emptyCell);
+      cuentasBody.appendChild(emptyRow);
       return;
     }
     cuentasVacias.classList.add('hidden');
 
     users.forEach((user) => {
-      const row = document.createElement('div');
+      const row = document.createElement('tr');
       row.className = 'table__row';
 
-      const userCell = document.createElement('span');
+      const userCell = document.createElement('td');
       userCell.className = 'table__cell strong';
       userCell.textContent = user.username;
 
-      const roleCell = document.createElement('span');
+      const roleCell = document.createElement('td');
       roleCell.className = 'table__cell';
       const roleBadge = document.createElement('span');
       roleBadge.className = `chip chip--${user.role === 'admin' ? 'accent' : 'muted'}`;
       roleBadge.textContent = user.role === 'admin' ? 'Administrador' : 'Usuario';
       roleCell.appendChild(roleBadge);
 
-      const stateCell = document.createElement('span');
+      const stateCell = document.createElement('td');
       stateCell.className = 'table__cell';
       const stateBadge = document.createElement('span');
       stateBadge.className = `chip chip--${user.active ? 'success' : 'danger'}`;
       stateBadge.textContent = user.active ? 'Activa' : 'Desactivada';
       stateCell.appendChild(stateBadge);
 
-      const updatedCell = document.createElement('span');
+      const updatedCell = document.createElement('td');
       updatedCell.className = 'table__cell muted';
       updatedCell.textContent = formatDate(user.updatedAt || user.createdAt);
 
-      const actionsCell = document.createElement('div');
+      const actionsCell = document.createElement('td');
       actionsCell.className = 'table__cell table__actions';
 
       const toggleBtn = document.createElement('button');
       toggleBtn.type = 'button';
       toggleBtn.className = 'cta cta--secondary';
       toggleBtn.textContent = user.active ? 'Desactivar' : 'Activar';
+      toggleBtn.setAttribute(
+        'aria-label',
+        `${user.active ? 'Desactivar' : 'Activar'} cuenta ${user.username}`
+      );
       toggleBtn.addEventListener('click', () => updateUser(user.username, { active: !user.active }));
 
       const roleBtn = document.createElement('button');
       roleBtn.type = 'button';
       roleBtn.className = 'cta cta--ghost';
       roleBtn.textContent = user.role === 'admin' ? 'Pasar a usuario' : 'Pasar a admin';
+      roleBtn.setAttribute('aria-label', `Cambiar rol de ${user.username}`);
       roleBtn.addEventListener('click', () => updateUser(user.username, { role: user.role === 'admin' ? 'user' : 'admin' }));
 
       const resetBtn = document.createElement('button');
       resetBtn.type = 'button';
       resetBtn.className = 'cta cta--ghost';
       resetBtn.textContent = 'Cambiar contraseña';
+      resetBtn.setAttribute('aria-label', `Cambiar contraseña de ${user.username}`);
       resetBtn.addEventListener('click', () => {
         const nueva = window.prompt(`Nueva contraseña para ${user.username}`);
         if (nueva && nueva.trim().length >= 4) {
           updateUser(user.username, { password: nueva.trim() });
         } else if (nueva) {
-          alert('La contraseña debe tener al menos 4 caracteres.');
+          showToast('La contraseña debe tener al menos 4 caracteres.', 'error');
         }
       });
 
@@ -114,10 +129,16 @@
       deleteBtn.textContent = 'Eliminar';
       deleteBtn.disabled = currentSession?.username === user.username;
       deleteBtn.title = deleteBtn.disabled ? 'No puedes eliminar tu propia sesión' : 'Eliminar cuenta';
-      deleteBtn.addEventListener('click', () => {
-        if (confirm(`¿Eliminar la cuenta ${user.username}?`)) {
-          deleteUser(user.username);
-        }
+      deleteBtn.setAttribute('aria-label', `Eliminar cuenta ${user.username}`);
+      deleteBtn.addEventListener('click', async () => {
+        if (deleteBtn.disabled) return;
+        const confirmed = await confirmAction({
+          title: '¿Eliminar cuenta?',
+          message: `¿Seguro que deseas eliminar la cuenta ${user.username}? Esta acción es irreversible.`,
+          confirmLabel: 'Eliminar cuenta'
+        });
+        if (!confirmed) return;
+        deleteUser(user.username);
       });
 
       actionsCell.append(toggleBtn, roleBtn, resetBtn, deleteBtn);
@@ -140,21 +161,45 @@
   const createAccount = async (event) => {
     event.preventDefault();
     clearError();
+    clearFieldErrors(accountForm);
     showStatus('Guardando...', 'info');
+
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
+    const role = roleInput.value;
+    let isValid = true;
+    if (username.length < 3) {
+      showFieldError(usernameInput, 'El usuario debe tener al menos 3 caracteres');
+      isValid = false;
+    }
+    if (password.length < 4) {
+      showFieldError(passwordInput, 'La contraseña debe tener al menos 4 caracteres');
+      isValid = false;
+    }
+    if (!role) {
+      showFieldError(roleInput, 'Selecciona un rol');
+      isValid = false;
+    }
+    if (!isValid) {
+      showStatus('Corrige los errores del formulario', 'danger');
+      return;
+    }
 
     try {
       await fetchJson(withBasePath('/api/auth/users'), {
         method: 'POST',
         body: JSON.stringify({
-          username: usernameInput.value.trim(),
-          password: passwordInput.value.trim(),
-          role: roleInput.value,
+          username,
+          password,
+          role,
           active: activeInput.checked
         })
       });
       showStatus('Cuenta creada', 'success');
       accountForm.reset();
       activeInput.checked = true;
+      clearFieldErrors(accountForm);
+      showToast(`Cuenta ${username} creada correctamente`, 'success');
       await loadUsers();
     } catch (error) {
       if (error.status === 409) {
@@ -178,6 +223,7 @@
       });
       await loadUsers();
       showStatus('Actualizado', 'success');
+      showToast(`Cuenta ${username} actualizada`, 'success');
     } catch (error) {
       if (error.status === 409) {
         showError('Debe existir al menos un administrador activo');
@@ -199,6 +245,7 @@
       });
       await loadUsers();
       showStatus('Cuenta eliminada', 'success');
+      showToast(`Cuenta ${username} eliminada`, 'success');
     } catch (error) {
       if (error.status === 409) {
         showError('Debe quedar un administrador activo');
@@ -232,6 +279,7 @@
   openAccountModalBtn?.addEventListener('click', () => {
     accountForm.reset();
     activeInput.checked = true;
+    clearFieldErrors(accountForm);
     clearError();
     setModalOpen(true);
   });

@@ -79,16 +79,20 @@
             </div>
           </header>
 
-          <div class="table" role="table" aria-label="Usuarios">
-            <div class="table__head" role="row">
-              <span class="table__cell" role="columnheader">DNI</span>
-              <span class="table__cell" role="columnheader">Nombre</span>
-              <span class="table__cell" role="columnheader">Empresa (CIF)</span>
-              <span class="table__cell" role="columnheader">Centro</span>
-              <span class="table__cell" role="columnheader">Estado</span>
-              <span class="table__cell" role="columnheader">Acciones</span>
-            </div>
-            <div id="users-body" class="table__body"></div>
+          <div class="table-wrapper">
+            <table class="table table--users" aria-label="Usuarios configurados">
+              <thead>
+                <tr class="table__head">
+                  <th scope="col">DNI</th>
+                  <th scope="col">Nombre</th>
+                  <th scope="col">Empresa (CIF)</th>
+                  <th scope="col">Centro</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="users-body" class="table__body"></tbody>
+            </table>
           </div>
         </article>
       </section>
@@ -110,38 +114,38 @@
           </header>
 
           <form id="user-form" class="form-grid" autocomplete="off">
-            <label class="form-field">
-              <span>DNI *</span>
-              <input id="dni" name="dni" type="text" required minlength="5" placeholder="00000000A" />
-            </label>
-            <label class="form-field">
-              <span>Nombre *</span>
-              <input id="nombre" name="nombre" type="text" required placeholder="Nombre" />
-            </label>
-            <label class="form-field">
-              <span>Apellidos *</span>
-              <input id="apellidos" name="apellidos" type="text" required placeholder="Apellidos" />
-            </label>
-            <label class="form-field">
-              <span>Empresa *</span>
-              <input id="empresa" name="empresa" type="text" required placeholder="Razón social" />
-            </label>
-            <label class="form-field">
-              <span>CIF *</span>
-              <input id="cif" name="cif" type="text" required placeholder="A12345678" />
-            </label>
-            <label class="form-field">
-              <span>Código de centro *</span>
-              <input id="centro" name="centro" type="text" required placeholder="C-XXX-000" />
-            </label>
-            <label class="form-field">
-              <span>Email</span>
+            <div class="form-field">
+              <label for="dni">DNI *</label>
+              <input id="dni" name="dni" type="text" required minlength="5" aria-required="true" placeholder="00000000A" />
+            </div>
+            <div class="form-field">
+              <label for="nombre">Nombre *</label>
+              <input id="nombre" name="nombre" type="text" required aria-required="true" placeholder="Nombre" />
+            </div>
+            <div class="form-field">
+              <label for="apellidos">Apellidos *</label>
+              <input id="apellidos" name="apellidos" type="text" required aria-required="true" placeholder="Apellidos" />
+            </div>
+            <div class="form-field">
+              <label for="empresa">Empresa *</label>
+              <input id="empresa" name="empresa" type="text" required aria-required="true" placeholder="Razón social" />
+            </div>
+            <div class="form-field">
+              <label for="cif">CIF *</label>
+              <input id="cif" name="cif" type="text" required aria-required="true" placeholder="A12345678" />
+            </div>
+            <div class="form-field">
+              <label for="centro">Código de centro *</label>
+              <input id="centro" name="centro" type="text" required aria-required="true" placeholder="C-XXX-000" />
+            </div>
+            <div class="form-field">
+              <label for="email">Email</label>
               <input id="email" name="email" type="email" placeholder="persona@empresa.com" />
-            </label>
-            <label class="form-field form-field--inline">
+            </div>
+            <div class="form-field form-field--inline">
               <input id="activo" name="activo" type="checkbox" checked />
-              <span>Usuario activo</span>
-            </label>
+              <label for="activo">Usuario activo</label>
+            </div>
             <div class="form-actions">
               <button class="cta cta--primary" type="submit">Guardar usuario</button>
               <p class="muted">Los cambios son inmediatos y se reflejan en la tabla.</p>
@@ -151,6 +155,7 @@
       </div>
     </main>
     <script src="elecnor-auth.js"></script>
+    <script src="elecnor-ui.js"></script>
     <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
     <script src="elecnor-data.js"></script>
     <script src="elecnor-users.js"></script>
