@@ -175,6 +175,7 @@ El contenedor `rfid_access` procesa los eventos publicados por los lectores RFID
 - **Autenticación externa:** delega la validación en `RFID_AUTH_API_URL` recibiendo `{ dni, cardId, readerMac }`; acepta `accepted: true` o estados `ACCEPTED`/`GRANTED`.
 - **Directorio MAC↔DNI:** admite inline JSON (`RFID_MAC_DNI_MAP`), fichero (`RFID_MAC_DNI_FILE`) o directorio remoto (`RFID_MAC_DNI_DIRECTORY_URL`) con refresco (`RFID_MAC_DNI_REFRESH_MS`) y estrategia `eager`/`on-demand` (`RFID_MAC_DNI_LOOKUP_STRATEGY`).
 - **Salud y despliegue:** `GET /health` responde con `{"status":"ok"}` y la interfaz HTTP se sirve en `HTTP_PORT` (3001 por defecto) y `BASE_PATH` (`/elecnor`).
+- **Control GPIO de lectores Keonn:** cuando la API externa devuelve *acceso permitido* se enciende el GPO 4 durante 5 s; con *acceso denegado* se activan los GPO 5 (10 s) y 6 (5 s) de forma concurrente. Las peticiones se envían vía `GET {baseUrl}/devices/{deviceId}/setGPO/{line}/{state}` (AdvanNet `setGPO`). Configure `RFID_READER_CONTROLLER_BASE_URL`, `RFID_READER_DEVICE_ID`, `RFID_READER_CONTROLLER_TIMEOUT` y `RFID_READER_CONTROLLER_ENABLED` para activar el control; si cualquiera de los parámetros falta, el módulo queda deshabilitado sin bloquear el resto del flujo.
 
 ### Base de datos y API del portal Elecnor
 
