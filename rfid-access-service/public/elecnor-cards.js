@@ -1,5 +1,5 @@
 (() => {
-  const { ensureSession, rewriteNavLinks } = window.ElecnorAuth;
+  const { ensureSession, rewriteNavLinks, applyNavAccess } = window.ElecnorAuth;
   const { showToast, debounce, confirmAction, clearFieldErrors, showFieldError } = window.ElecnorUI;
   const form = document.getElementById('card-form');
   const resetButton = document.getElementById('reset-card-form');
@@ -274,6 +274,7 @@
     rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
+    applyNavAccess(session);
     loadUserOptions();
     suggestCenter();
     renderCards();

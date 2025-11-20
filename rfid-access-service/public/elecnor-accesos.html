@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Elecnor · Webservice</title>
+    <title>Elecnor · Accesos API</title>
     <base href="__BASE_PATH__/" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,35 +19,37 @@
         <div class="brand__mark" aria-hidden="true">elecnor</div>
         <div class="brand__text">
           <strong>Portal de accesos</strong>
-          <span>Webservice</span>
+          <span>Accesos API</span>
         </div>
       </div>
       <nav class="topbar__nav" aria-label="Navegación principal">
         <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html">Tarjetas</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html">Lecturas</a>
-        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-webservice.html" aria-current="page">Webservice</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html" data-requires-admin>Lecturas</a>
+        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-accesos.html" aria-current="page">Accesos</a>
         <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html">Seguimiento</a>
         <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
+        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html" data-requires-admin>Cuentas</a>
       </nav>
     </header>
 
     <main class="page">
       <section class="hero hero--compact">
         <div>
-          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Webservice</p>
-          <h1>Prueba la API de e-coordina</h1>
-          <p class="lead">Valida accesos enviando centro, empresa y DNI; el resto de datos quedan como referencia.</p>
+          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Accesos</p>
+          <h1>Accesos y respuesta de la API</h1>
+          <p class="lead">
+            Consulta el resultado que devuelve e-coordina para un trabajador y controla la información clave de acceso.
+          </p>
           <div class="pill-row">
-            <span class="pill pill--info">Datos obligatorios: centro, CIF y DNI</span>
-            <span class="pill pill--neutral">Valores por defecto desde el backend</span>
-            <span class="pill pill--accent">Respuesta detallada</span>
+            <span class="pill pill--info">Vista resumida para usuarios</span>
+            <span class="pill pill--neutral">Configuración completa para administradores</span>
+            <span class="pill pill--accent">Respuesta procesada y legible</span>
           </div>
         </div>
         <div class="hero__cta">
           <div class="callout">
             <p class="eyebrow">Recordatorio</p>
-            <p>Solo se envían centro, CIF y DNI. Los datos personales se quedan en local.</p>
+            <p>Los administradores pueden editar la petición completa. Los usuarios consultan solo el resultado.</p>
           </div>
         </div>
       </section>
@@ -56,20 +58,59 @@
         <article class="panel">
           <header class="panel__header">
             <div>
-              <p class="eyebrow">Webservice</p>
-              <h2>Probar API e-coordina</h2>
+              <p class="eyebrow">Accesos</p>
+              <h2>Respuesta de e-coordina</h2>
               <p class="muted">
-                Lanza una petición al servicio <code>https://ws.e-coordina.com/1.4</code> con los datos mínimos
-                (centro, CIF y DNI). El nombre y los apellidos se guardan solo a nivel local y no viajan en la consulta.
+                Procesamos la respuesta para mostrar el estado, trabajador y documentación pendiente. Usa los datos de prueba o los
+                parámetros reales según el rol.
               </p>
             </div>
-            <div class="panel__actions">
-              <button type="button" id="ecoordina-reset" class="cta cta--ghost">Restablecer</button>
-              <button type="button" id="ecoordina-submit" class="cta cta--primary">Lanzar prueba</button>
+            <div class="panel__actions panel__actions--wrap">
+              <button type="button" id="ecoordina-refresh-lite" class="cta cta--primary" data-user-only>Actualizar acceso</button>
+              <button type="button" id="ecoordina-submit" class="cta cta--primary" data-admin-only>Lanzar prueba</button>
+              <button type="button" id="ecoordina-reset" class="cta cta--ghost" data-admin-only>Restablecer</button>
             </div>
           </header>
 
-          <form id="ecoordina-form" class="form-grid">
+          <p id="accesos-user-note" class="muted" data-user-only>
+            Solo ves la respuesta procesada. Contacta con un administrador para modificar los parámetros de la consulta.
+          </p>
+
+          <p id="ecoordina-error" class="error" hidden></p>
+
+          <div id="ecoordina-access-card" class="card result-card hidden" aria-live="polite">
+            <div class="result-card__header">
+              <span id="ecoordina-access-badge" class="badge badge--neutral">Pendiente</span>
+              <span id="ecoordina-status-badge" class="badge badge--muted">Status --</span>
+            </div>
+            <div class="result-grid">
+              <div>
+                <p class="label-text">Trabajador</p>
+                <strong id="ecoordina-worker">—</strong>
+                <p class="muted" id="ecoordina-worker-dni">DNI —</p>
+              </div>
+              <div>
+                <p class="label-text">Empresa</p>
+                <strong id="ecoordina-company">—</strong>
+              </div>
+              <div>
+                <p class="label-text">Centro</p>
+                <strong id="ecoordina-center">—</strong>
+              </div>
+            </div>
+            <div class="doc-section">
+              <div class="doc-section__header">
+                <div>
+                  <p class="label-text">Documentación pendiente / incumplida</p>
+                  <p class="muted">Incidencias devueltas por e-coordina.</p>
+                </div>
+                <span id="ecoordina-doc-count" class="badge badge--info">0</span>
+              </div>
+              <ul id="ecoordina-docs" class="doc-list"></ul>
+            </div>
+          </div>
+
+          <form id="ecoordina-form" class="form-grid" data-admin-only>
             <label class="form-field">
               <span>URL del servicio</span>
               <input type="url" id="ecoordina-url" autocomplete="url" />
@@ -127,42 +168,9 @@
               <textarea id="ecoordina-payload" readonly rows="4"></textarea>
             </label>
           </form>
-          <p id="ecoordina-error" class="error" hidden></p>
 
-          <div id="ecoordina-access-card" class="card result-card hidden" aria-live="polite">
-            <div class="result-card__header">
-              <span id="ecoordina-access-badge" class="badge badge--neutral">Pendiente</span>
-              <span id="ecoordina-status-badge" class="badge badge--muted">Status --</span>
-            </div>
-            <div class="result-grid">
-              <div>
-                <p class="label-text">Trabajador</p>
-                <strong id="ecoordina-worker">—</strong>
-                <p class="muted" id="ecoordina-worker-dni">DNI —</p>
-              </div>
-              <div>
-                <p class="label-text">Empresa</p>
-                <strong id="ecoordina-company">—</strong>
-              </div>
-              <div>
-                <p class="label-text">Centro</p>
-                <strong id="ecoordina-center">—</strong>
-              </div>
-            </div>
-            <div class="doc-section">
-              <div class="doc-section__header">
-                <div>
-                  <p class="label-text">Documentación pendiente / incumplida</p>
-                  <p class="muted">Incidencias devueltas por e-coordina.</p>
-                </div>
-                <span id="ecoordina-doc-count" class="badge badge--info">0</span>
-              </div>
-              <ul id="ecoordina-docs" class="doc-list"></ul>
-            </div>
-          </div>
-
-          <pre id="ecoordina-response" class="result hidden"></pre>
-          <div class="help-box">
+          <pre id="ecoordina-response" class="result hidden" data-admin-only></pre>
+          <div class="help-box" data-admin-only>
             <p>
               Según la ayuda oficial (<a href="https://ws.e-coordina.com/1.4/help" target="_blank" rel="noreferrer">documentación</a>),
               los parámetros obligatorios son <strong>user</strong>, <strong>token</strong>, <strong>instance</strong>, los formatos
@@ -193,6 +201,6 @@
     </main>
     <script src="elecnor-auth.js"></script>
     <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
-    <script src="elecnor-webservice.js"></script>
+    <script src="elecnor-accesos.js"></script>
   </body>
 </html>

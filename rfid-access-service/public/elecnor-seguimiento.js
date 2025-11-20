@@ -1,5 +1,5 @@
 (() => {
-  const { fetchJson, withBasePath, ensureSession, rewriteNavLinks } = window.ElecnorAuth;
+  const { fetchJson, withBasePath, ensureSession, rewriteNavLinks, applyNavAccess } = window.ElecnorAuth;
 
   const historyList = document.getElementById('history-list');
   const historyEmpty = document.getElementById('history-empty');
@@ -71,6 +71,7 @@
     rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
+    applyNavAccess(session);
     await loadHistory();
   };
 

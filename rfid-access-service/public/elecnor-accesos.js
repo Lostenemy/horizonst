@@ -1,5 +1,5 @@
 (() => {
-  const { withBasePath, fetchJson, ensureSession, rewriteNavLinks } = window.ElecnorAuth;
+  const { withBasePath, fetchJson, ensureSession, rewriteNavLinks, applyNavAccess } = window.ElecnorAuth;
 
   const ecoordinaForm = document.getElementById('ecoordina-form');
   const ecoordinaUrl = document.getElementById('ecoordina-url');
@@ -29,8 +29,13 @@
   const ecoordinaDocsList = document.getElementById('ecoordina-docs');
   const ecoordinaResetButton = document.getElementById('ecoordina-reset');
   const ecoordinaSubmitButton = document.getElementById('ecoordina-submit');
+  const ecoordinaRefreshLite = document.getElementById('ecoordina-refresh-lite');
+  const userNote = document.getElementById('accesos-user-note');
+  const adminSections = document.querySelectorAll('[data-admin-only]');
+  const userSections = document.querySelectorAll('[data-user-only]');
 
   let ecoordinaDefaults = null;
+  let isAdmin = false;
 
   const buildEcoordinaData = () => ({
     centro_cod: ecoordinaCentro.value.trim().toUpperCase(),
@@ -45,6 +50,22 @@
     ecoordinaAccessBadge.textContent = 'Pendiente';
     ecoordinaStatusBadge.className = 'badge badge--muted';
     ecoordinaStatusBadge.textContent = 'Status --';
+  };
+
+  const toggleRoleSections = () => {
+    adminSections.forEach((section) => {
+      section.classList.toggle('hidden', !isAdmin);
+      section.setAttribute('aria-hidden', !isAdmin ? 'true' : 'false');
+    });
+
+    userSections.forEach((section) => {
+      section.classList.toggle('hidden', isAdmin);
+      section.setAttribute('aria-hidden', isAdmin ? 'true' : 'false');
+    });
+
+    if (userNote) {
+      userNote.hidden = isAdmin;
+    }
   };
 
   const interpretAccessFlag = (value) => {
@@ -202,6 +223,11 @@
     ecoordinaInstance.value = defaults.instance ?? '';
     ecoordinaInput.value = defaults.inputFormat ?? '';
     ecoordinaOutput.value = defaults.outputFormat ?? '';
+    if (defaults.data) {
+      ecoordinaCentro.value = defaults.data.centro_cod ?? ecoordinaCentro.value;
+      ecoordinaCif.value = defaults.data.empresa_cif ?? ecoordinaCif.value;
+      ecoordinaDni.value = defaults.data.trabajador_dni ?? ecoordinaDni.value;
+    }
     refreshEcoordinaPreview();
   };
 
@@ -216,7 +242,7 @@
     }
   };
 
-  ecoordinaResetButton.addEventListener('click', () => {
+  ecoordinaResetButton?.addEventListener('click', () => {
     if (!ecoordinaDefaults) return;
     hydrateEcoordinaDefaults(ecoordinaDefaults);
     ecoordinaCentro.value = '';
@@ -248,7 +274,7 @@
     input.addEventListener('input', refreshEcoordinaPreview);
   });
 
-  ecoordinaSubmitButton.addEventListener('click', async () => {
+  const runEcoordinaTest = async () => {
     ecoordinaError.hidden = true;
     ecoordinaError.textContent = '';
     ecoordinaResponse.classList.add('hidden');
@@ -258,7 +284,9 @@
     const payload = buildEcoordinaData();
 
     if (!payload.centro_cod || !payload.empresa_cif || !payload.trabajador_dni) {
-      ecoordinaError.textContent = 'Centro, CIF y DNI son obligatorios para la petición.';
+      ecoordinaError.textContent = isAdmin
+        ? 'Centro, CIF y DNI son obligatorios para la petición.'
+        : 'Faltan datos para consultar la API. Pide a un administrador que complete centro, CIF y DNI.';
       ecoordinaError.hidden = false;
       return;
     }
@@ -288,14 +316,23 @@
       ecoordinaError.hidden = false;
       resetResultCard();
     }
-  });
+  };
+
+  ecoordinaSubmitButton?.addEventListener('click', runEcoordinaTest);
+  ecoordinaRefreshLite?.addEventListener('click', runEcoordinaTest);
 
   const init = async () => {
     rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
+    applyNavAccess(session);
+    isAdmin = session.role === 'admin';
+    toggleRoleSections();
     await loadEcoordinaDefaults();
     refreshEcoordinaPreview();
+    if (!isAdmin) {
+      runEcoordinaTest();
+    }
   };
 
   ecoordinaForm.addEventListener('submit', (event) => event.preventDefault());

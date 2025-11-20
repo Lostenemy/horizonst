@@ -16,7 +16,7 @@
   const openAccountModalBtn = document.getElementById('open-account-modal');
   const modalClosers = accountModal ? accountModal.querySelectorAll('[data-modal-close]') : [];
 
-  const { ensureSession, fetchJson, withBasePath, rewriteNavLinks } = window.ElecnorAuth;
+  const { ensureSession, fetchJson, withBasePath, rewriteNavLinks, applyNavAccess } = window.ElecnorAuth;
   const { showToast, confirmAction, clearFieldErrors, showFieldError } = window.ElecnorUI;
   let currentSession = null;
 
@@ -270,6 +270,7 @@
     rewriteNavLinks();
     currentSession = await ensureSession(true);
     if (!currentSession) return;
+    applyNavAccess(currentSession);
     sessionChip.textContent = `${currentSession.username} · ${currentSession.role === 'admin' ? 'Admin' : 'Usuario'}`;
     await loadUsers();
   };

@@ -56,6 +56,17 @@
     });
   };
 
+  const applyNavAccess = (session) => {
+    const role = session?.role || 'user';
+    document.querySelectorAll('[data-requires-admin]').forEach((link) => {
+      const hide = role !== 'admin';
+      link.hidden = hide;
+      link.setAttribute('aria-hidden', hide ? 'true' : 'false');
+      link.setAttribute('tabindex', hide ? '-1' : '0');
+      link.classList.toggle('nav-link--hidden', hide);
+    });
+  };
+
   const fetchJson = async (url, options = {}) => {
     const response = await fetch(url, {
       credentials: 'same-origin',
@@ -110,5 +121,13 @@
     }
   };
 
-  window.ElecnorAuth = { withBasePath, fetchJson, ensureSession, rewriteNavLinks, cacheSession, getCachedSession };
+  window.ElecnorAuth = {
+    withBasePath,
+    fetchJson,
+    ensureSession,
+    rewriteNavLinks,
+    cacheSession,
+    getCachedSession,
+    applyNavAccess
+  };
 })();

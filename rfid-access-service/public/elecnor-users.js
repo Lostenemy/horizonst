@@ -1,5 +1,5 @@
 (() => {
-  const { ensureSession, rewriteNavLinks } = window.ElecnorAuth;
+  const { ensureSession, rewriteNavLinks, applyNavAccess } = window.ElecnorAuth;
   const { showToast, debounce, confirmAction, clearFieldErrors, showFieldError } = window.ElecnorUI;
   const form = document.getElementById('user-form');
   const resetButton = document.getElementById('reset-form');
@@ -257,6 +257,7 @@
     rewriteNavLinks();
     const session = await ensureSession();
     if (!session) return;
+    applyNavAccess(session);
     fillCenterOptions();
     renderUsers();
   };
