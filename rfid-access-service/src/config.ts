@@ -191,6 +191,12 @@ export const config = {
     timeoutMs: parsePort(process.env.RFID_AUTH_API_TIMEOUT, 5000),
     apiKey: process.env.RFID_AUTH_API_KEY
   },
+  readerControl: {
+    baseUrl: process.env.RFID_READER_CONTROLLER_BASE_URL || '',
+    deviceId: process.env.RFID_READER_DEVICE_ID || '',
+    timeoutMs: parsePort(process.env.RFID_READER_CONTROLLER_TIMEOUT, 5000),
+    enabled: parseBoolean(process.env.RFID_READER_CONTROLLER_ENABLED, true)
+  },
   publishing: {
     qos: Number.parseInt(process.env.RFID_COMMAND_QOS || '1', 10),
     retain: parseBoolean(process.env.RFID_COMMAND_RETAIN, false),
