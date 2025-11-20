@@ -16,14 +16,37 @@ export class ReaderGpoController {
 
   private readonly enabled: boolean;
 
+  private readonly disabledReason: 'MISSING_BASE_URL' | 'MISSING_DEVICE_ID' | 'DISABLED_FLAG' | null;
+
   private readonly allowedLines = [4, 5, 6];
 
-  constructor(private readonly config: ReaderControlConfig) {
-    this.enabled = Boolean(config.enabled && config.baseUrl && config.deviceId);
+  private readonly config: ReaderControlConfig;
+
+  constructor(config: ReaderControlConfig) {
+    const normalizedBaseUrl = this.normalizeBaseUrl(config.baseUrl || '');
+    const normalizedDeviceId = (config.deviceId || '').trim();
+
+    if (!config.enabled) {
+      this.disabledReason = 'DISABLED_FLAG';
+    } else if (!normalizedBaseUrl) {
+      this.disabledReason = 'MISSING_BASE_URL';
+    } else if (!normalizedDeviceId) {
+      this.disabledReason = 'MISSING_DEVICE_ID';
+    } else {
+      this.disabledReason = null;
+    }
+
+    this.enabled = !this.disabledReason;
     this.http = axios.create({
-      baseURL: this.normalizeBaseUrl(config.baseUrl),
+      baseURL: normalizedBaseUrl,
       timeout: config.timeoutMs
     });
+
+    this.config = {
+      ...config,
+      baseUrl: normalizedBaseUrl,
+      deviceId: normalizedDeviceId
+    };
   }
 
   async handleDecision(decision: AccessDecision): Promise<void> {
@@ -48,7 +71,8 @@ export class ReaderGpoController {
       enabled: this.enabled,
       deviceId: this.config.deviceId,
       baseUrl: this.normalizeBaseUrl(this.config.baseUrl),
-      allowedLines: this.allowedLines
+      allowedLines: this.allowedLines,
+      disabledReason: this.disabledReason
     } as const;
   }
 

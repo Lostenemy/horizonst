@@ -48,6 +48,19 @@
       ? status.allowedLines.join(', ')
       : '—';
 
+    if (!controllerEnabled) {
+      const reason = status.disabledReason;
+      const message =
+        reason === 'MISSING_BASE_URL'
+          ? 'Configura la URL base del lector (RFID_READER_CONTROLLER_BASE_URL) para activar el GPIO.'
+          : reason === 'MISSING_DEVICE_ID'
+            ? 'Configura el ID de dispositivo (RFID_READER_DEVICE_ID) para activar el GPIO.'
+            : reason === 'DISABLED_FLAG'
+              ? 'El control GPIO está deshabilitado en la variable RFID_READER_CONTROLLER_ENABLED.'
+              : 'No se puede controlar el GPIO hasta completar la configuración del lector.';
+      setError(message);
+    }
+
     const formElements = lineForm ? Array.from(lineForm.elements) : [];
     formElements.forEach((el) => {
       if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement || el instanceof HTMLSelectElement) {
