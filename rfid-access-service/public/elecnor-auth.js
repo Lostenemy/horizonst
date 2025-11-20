@@ -67,6 +67,21 @@
     });
   };
 
+  const primeNavAccess = () => {
+    const cachedSession = getCachedSession();
+    if (cachedSession) {
+      applyNavAccess(cachedSession);
+      return;
+    }
+
+    document.querySelectorAll('[data-requires-admin]').forEach((link) => {
+      link.hidden = true;
+      link.setAttribute('aria-hidden', 'true');
+      link.setAttribute('tabindex', '-1');
+      link.classList.add('nav-link--hidden');
+    });
+  };
+
   const logout = async () => {
     try {
       await fetchJson(withBasePath('/api/logout'), { method: 'POST' });
@@ -145,6 +160,7 @@
     }
   };
 
+  primeNavAccess();
   bindLogoutControl();
   document.addEventListener('DOMContentLoaded', bindLogoutControl);
 
