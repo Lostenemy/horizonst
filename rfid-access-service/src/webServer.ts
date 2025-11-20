@@ -677,6 +677,23 @@ export const startWebInterface = async ({
     }
   });
 
+  router.post('/api/gpo/base-url', ensureAuthenticated, ensureAdmin, (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const baseUrl = typeof req.body?.baseUrl === 'string' ? req.body.baseUrl.trim() : '';
+
+    if (!baseUrl) {
+      res.status(400).json({ error: 'INVALID_BASE_URL' });
+      return;
+    }
+
+    gpoController.updateBaseUrl(baseUrl);
+    res.json({ status: gpoController.status() });
+  });
+
   router.post('/api/gpo/test/line', ensureAuthenticated, ensureAdmin, async (req, res) => {
     if (!gpoController) {
       res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });

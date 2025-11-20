@@ -2,6 +2,8 @@
   const statusBadge = document.getElementById('gpo-status');
   const errorBox = document.getElementById('gpo-error');
   const baseUrlField = document.getElementById('gpo-base-url');
+  const baseUrlForm = document.getElementById('gpo-base-url-form');
+  const baseUrlInput = document.getElementById('gpo-base-url-input');
   const deviceField = document.getElementById('gpo-device');
   const linesField = document.getElementById('gpo-lines');
   const scenarioGranted = document.getElementById('gpo-scenario-granted');
@@ -28,7 +30,12 @@
   };
 
   const toggleLoading = (loading) => {
-    [scenarioGranted, scenarioDenied, lineForm?.querySelector('button[type="submit"]')].forEach((btn) => {
+    [
+      scenarioGranted,
+      scenarioDenied,
+      lineForm?.querySelector('button[type="submit"]'),
+      baseUrlForm?.querySelector('button[type="submit"]')
+    ].forEach((btn) => {
       if (!btn) return;
       btn.disabled = loading;
       btn.setAttribute('aria-busy', loading ? 'true' : 'false');
@@ -43,6 +50,7 @@
     }
 
     if (baseUrlField) baseUrlField.textContent = status.baseUrl || '—';
+    if (baseUrlInput) baseUrlInput.value = status.baseUrl || '';
     if (deviceField) deviceField.textContent = status.deviceId || '—';
     if (linesField) linesField.textContent = Array.isArray(status.allowedLines)
       ? status.allowedLines.join(', ')
@@ -84,6 +92,35 @@
         statusBadge.textContent = 'Estado desconocido';
         statusBadge.className = 'badge badge--muted';
       }
+    }
+  };
+
+  const handleBaseUrlSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+
+    const baseUrl = baseUrlInput?.value?.trim() || '';
+    if (!baseUrl) {
+      setError('Introduce una URL válida del lector (por ejemplo http://88.20.2.60).');
+      return;
+    }
+
+    toggleLoading(true);
+    try {
+      const { status } = await fetchJson(withBasePath('/api/gpo/base-url'), {
+        method: 'POST',
+        body: JSON.stringify({ baseUrl })
+      });
+      renderStatus(status);
+      showToast('URL del lector actualizada para las pruebas', 'success');
+    } catch (error) {
+      const message =
+        error?.message === 'INVALID_BASE_URL'
+          ? 'Introduce una URL válida (ejemplo: http://88.20.2.60).'
+          : 'No se pudo actualizar la URL del lector. Revisa la configuración o los logs.';
+      setError(message);
+    } finally {
+      toggleLoading(false);
     }
   };
 
@@ -148,6 +185,7 @@
   scenarioGranted?.addEventListener('click', () => runScenario('granted'));
   scenarioDenied?.addEventListener('click', () => runScenario('denied'));
   lineForm?.addEventListener('submit', handleLineSubmit);
+  baseUrlForm?.addEventListener('submit', handleBaseUrlSubmit);
 
   init();
 })();

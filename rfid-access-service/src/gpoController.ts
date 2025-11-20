@@ -14,9 +14,9 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 export class ReaderGpoController {
   private readonly http: AxiosInstance;
 
-  private readonly enabled: boolean;
+  private enabled: boolean;
 
-  private readonly disabledReason: 'MISSING_BASE_URL' | 'MISSING_DEVICE_ID' | 'DISABLED_FLAG' | null;
+  private disabledReason: 'MISSING_BASE_URL' | 'MISSING_DEVICE_ID' | 'DISABLED_FLAG' | null;
 
   private readonly allowedLines = [4, 5, 6];
 
@@ -26,17 +26,8 @@ export class ReaderGpoController {
     const normalizedBaseUrl = this.normalizeBaseUrl(config.baseUrl || '');
     const normalizedDeviceId = (config.deviceId || '').trim();
 
-    if (!config.enabled) {
-      this.disabledReason = 'DISABLED_FLAG';
-    } else if (!normalizedBaseUrl) {
-      this.disabledReason = 'MISSING_BASE_URL';
-    } else if (!normalizedDeviceId) {
-      this.disabledReason = 'MISSING_DEVICE_ID';
-    } else {
-      this.disabledReason = null;
-    }
-
-    this.enabled = !this.disabledReason;
+    this.disabledReason = null;
+    this.enabled = false;
     this.http = axios.create({
       baseURL: normalizedBaseUrl,
       timeout: config.timeoutMs
@@ -47,6 +38,8 @@ export class ReaderGpoController {
       baseUrl: normalizedBaseUrl,
       deviceId: normalizedDeviceId
     };
+
+    this.recomputeState();
   }
 
   async handleDecision(decision: AccessDecision): Promise<void> {
@@ -74,6 +67,13 @@ export class ReaderGpoController {
       allowedLines: this.allowedLines,
       disabledReason: this.disabledReason
     } as const;
+  }
+
+  updateBaseUrl(baseUrl: string): void {
+    const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl || '');
+    this.config.baseUrl = normalizedBaseUrl;
+    this.http.defaults.baseURL = normalizedBaseUrl;
+    this.recomputeState();
   }
 
   async triggerDecision(decision: AccessDecision): Promise<void> {
@@ -127,5 +127,19 @@ export class ReaderGpoController {
       logger.error({ err: error, line, state }, 'Failed to toggle reader GPO state');
       throw error;
     }
+  }
+
+  private recomputeState(): void {
+    if (!this.config.enabled) {
+      this.disabledReason = 'DISABLED_FLAG';
+    } else if (!this.config.baseUrl) {
+      this.disabledReason = 'MISSING_BASE_URL';
+    } else if (!this.config.deviceId) {
+      this.disabledReason = 'MISSING_DEVICE_ID';
+    } else {
+      this.disabledReason = null;
+    }
+
+    this.enabled = !this.disabledReason;
   }
 }
