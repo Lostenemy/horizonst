@@ -63,6 +63,11 @@
       link.hidden = hide;
       link.setAttribute('aria-hidden', hide ? 'true' : 'false');
       link.setAttribute('tabindex', hide ? '-1' : '0');
+      if (hide) {
+        link.setAttribute('inert', '');
+      } else {
+        link.removeAttribute('inert');
+      }
       link.classList.toggle('nav-link--hidden', hide);
     });
   };
@@ -78,6 +83,7 @@
       link.hidden = true;
       link.setAttribute('aria-hidden', 'true');
       link.setAttribute('tabindex', '-1');
+      link.setAttribute('inert', '');
       link.classList.add('nav-link--hidden');
     });
   };

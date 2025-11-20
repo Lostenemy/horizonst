@@ -650,50 +650,69 @@ export const startWebInterface = async ({
   const htmlTemplates = new Map<string, string>();
   const basePathForClient = basePath === '/' ? '' : basePath;
 
-  const renderHtml = async (fileName: string, res: express.Response): Promise<void> => {
+  const extractPartial = (html: string): string => {
+    const title = html.match(/<title[\s\S]*?<\/title>/i)?.[0] ?? '';
+    const main = html.match(/<main[\s\S]*<\/main>/i)?.[0] ?? '';
+    const scripts = [...html.matchAll(/<script[\s\S]*?<\/script>/gi)].map((match) => match[0]);
+
+    if (!main && scripts.length === 0) {
+      return html;
+    }
+
+    return [title, main, scripts.join('\n')].filter(Boolean).join('\n');
+  };
+
+  const renderHtml = async (fileName: string, req: express.Request, res: express.Response): Promise<void> => {
     try {
       if (!htmlTemplates.has(fileName)) {
         const template = await readFile(path.join(publicDir, fileName), 'utf8');
         htmlTemplates.set(fileName, template);
       }
       const template = htmlTemplates.get(fileName) as string;
+      const resolved = template.replace(/__BASE_PATH__/g, basePathForClient);
       res.setHeader('Cache-Control', 'no-store');
-      res.type('html').send(template.replace(/__BASE_PATH__/g, basePathForClient));
+
+      if (req.headers['x-partial'] === '1') {
+        res.type('html').send(extractPartial(resolved));
+        return;
+      }
+
+      res.type('html').send(resolved);
     } catch (error) {
       logger.warn({ err: error, fileName }, 'Failed to render HTML template');
       res.status(404).send('Not found');
     }
   };
 
-  router.get(['/', '/index.html'], (_req, res) => {
-    void renderHtml('index.html', res);
+  router.get(['/', '/index.html'], (req, res) => {
+    void renderHtml('index.html', req, res);
   });
 
-  router.get(['/elecnor-usuarios', '/elecnor-usuarios.html'], (_req, res) => {
-    void renderHtml('elecnor-usuarios.html', res);
+  router.get(['/elecnor-usuarios', '/elecnor-usuarios.html'], (req, res) => {
+    void renderHtml('elecnor-usuarios.html', req, res);
   });
 
-  router.get(['/elecnor-tarjetas', '/elecnor-tarjetas.html'], (_req, res) => {
-    void renderHtml('elecnor-tarjetas.html', res);
+  router.get(['/elecnor-tarjetas', '/elecnor-tarjetas.html'], (req, res) => {
+    void renderHtml('elecnor-tarjetas.html', req, res);
   });
 
-  router.get(['/elecnor-cuentas', '/elecnor-cuentas.html'], (_req, res) => {
-    void renderHtml('elecnor-cuentas.html', res);
+  router.get(['/elecnor-cuentas', '/elecnor-cuentas.html'], (req, res) => {
+    void renderHtml('elecnor-cuentas.html', req, res);
   });
 
-  router.get(['/elecnor-lecturas', '/elecnor-lecturas.html'], (_req, res) => {
-    void renderHtml('elecnor-lecturas.html', res);
+  router.get(['/elecnor-lecturas', '/elecnor-lecturas.html'], (req, res) => {
+    void renderHtml('elecnor-lecturas.html', req, res);
   });
 
   router.get(
     ['/elecnor-accesos', '/elecnor-accesos.html', '/elecnor-webservice', '/elecnor-webservice.html'],
-    (_req, res) => {
-      void renderHtml('elecnor-accesos.html', res);
+    (req, res) => {
+      void renderHtml('elecnor-accesos.html', req, res);
     }
   );
 
-  router.get(['/elecnor-seguimiento', '/elecnor-seguimiento.html'], (_req, res) => {
-    void renderHtml('elecnor-seguimiento.html', res);
+  router.get(['/elecnor-seguimiento', '/elecnor-seguimiento.html'], (req, res) => {
+    void renderHtml('elecnor-seguimiento.html', req, res);
   });
 
   router.use(
@@ -705,8 +724,8 @@ export const startWebInterface = async ({
     })
   );
 
-  router.get('*', (_req, res) => {
-    void renderHtml('index.html', res);
+  router.get('*', (req, res) => {
+    void renderHtml('index.html', req, res);
   });
 
   app.use(basePath, router);

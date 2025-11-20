@@ -114,12 +114,22 @@ body.modal-open {
   border-color: rgba(243, 111, 33, 0.35);
 }
 
+.nav-link[inert] {
+  pointer-events: none;
+}
+
 .page {
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+body.is-navigating #main-view {
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity 150ms ease;
 }
 
 .hero {

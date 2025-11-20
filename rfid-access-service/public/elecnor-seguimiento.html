@@ -24,7 +24,9 @@
       </div>
       <div class="topbar__cluster">
         <nav class="topbar__nav" aria-label="Navegación principal">
-          <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html">Tarjetas</a>
+          <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html" data-router data-nav-view="tarjetas"
+            >Tarjetas</a
+          >
           <a
             class="nav-link"
             href="__BASE_PATH__/elecnor-lecturas.html"
@@ -32,11 +34,25 @@
             hidden
             aria-hidden="true"
             tabindex="-1"
+            inert
+            data-router
+            data-nav-view="lecturas"
             >Lecturas</a
           >
-          <a class="nav-link" href="__BASE_PATH__/elecnor-accesos.html">Accesos</a>
-          <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-seguimiento.html" aria-current="page">Seguimiento</a>
-          <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
+          <a class="nav-link" href="__BASE_PATH__/elecnor-accesos.html" data-router data-nav-view="accesos"
+            >Accesos</a
+          >
+          <a
+            class="nav-link nav-link--active"
+            href="__BASE_PATH__/elecnor-seguimiento.html"
+            aria-current="page"
+            data-router
+            data-nav-view="seguimiento"
+            >Seguimiento</a
+          >
+          <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html" data-router data-nav-view="usuarios"
+            >Trabajadores</a
+          >
           <a
             class="nav-link"
             href="__BASE_PATH__/elecnor-cuentas.html"
@@ -44,6 +60,9 @@
             hidden
             aria-hidden="true"
             tabindex="-1"
+            inert
+            data-router
+            data-nav-view="cuentas"
             >Cuentas</a
           >
         </nav>
@@ -51,7 +70,7 @@
       </div>
     </header>
 
-    <main class="page">
+    <main id="main-view" class="page" data-view="seguimiento">
       <section class="hero hero--compact">
         <div>
           <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Seguimiento</p>
@@ -81,8 +100,11 @@
         </article>
       </section>
     </main>
-    <script src="elecnor-auth.js"></script>
-    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
-    <script src="elecnor-seguimiento.js"></script>
+    <script src="elecnor-auth.js" data-shared-script></script>
+    <script src="elecnor-ui.js" data-shared-script></script>
+    <script src="elecnor-router.js" data-shared-script></script>
+    <script data-shared-script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
+    <script src="elecnor-data.js" data-shared-script></script>
+    <script src="elecnor-seguimiento.js" data-page-script="seguimiento"></script>
   </body>
 </html>
