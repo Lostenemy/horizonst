@@ -48,7 +48,17 @@ body.modal-open {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
+}
+
+.topbar__cluster {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: 1;
+  flex-wrap: wrap;
 }
 
 .brand {
@@ -83,6 +93,10 @@ body.modal-open {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.topbar__logout {
+  white-space: nowrap;
 }
 
 .nav-link {
@@ -674,7 +688,7 @@ button:disabled {
 
 .table__actions {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }

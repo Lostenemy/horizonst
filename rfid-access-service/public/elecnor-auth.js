@@ -67,6 +67,30 @@
     });
   };
 
+  const logout = async () => {
+    try {
+      await fetchJson(withBasePath('/api/logout'), { method: 'POST' });
+    } catch (_error) {
+      // Ignorar errores de redirección
+    }
+
+    cacheSession(null);
+    window.location.href = withBasePath('/index.html');
+  };
+
+  const bindLogoutControl = () => {
+    const control = document.querySelector('[data-logout]');
+    if (!control || control.dataset.boundLogout === 'true') return;
+
+    control.dataset.boundLogout = 'true';
+    control.addEventListener('click', async (event) => {
+      event.preventDefault();
+      control.disabled = true;
+      control.setAttribute('aria-busy', 'true');
+      await logout();
+    });
+  };
+
   const fetchJson = async (url, options = {}) => {
     const response = await fetch(url, {
       credentials: 'same-origin',
@@ -121,6 +145,9 @@
     }
   };
 
+  bindLogoutControl();
+  document.addEventListener('DOMContentLoaded', bindLogoutControl);
+
   window.ElecnorAuth = {
     withBasePath,
     fetchJson,
@@ -128,6 +155,8 @@
     rewriteNavLinks,
     cacheSession,
     getCachedSession,
-    applyNavAccess
+    applyNavAccess,
+    logout,
+    bindLogoutControl
   };
 })();
