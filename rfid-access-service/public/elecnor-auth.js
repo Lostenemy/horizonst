@@ -56,6 +56,62 @@
     });
   };
 
+  const applyNavAccess = (session) => {
+    const role = session?.role || 'user';
+    document.querySelectorAll('[data-requires-admin]').forEach((link) => {
+      const hide = role !== 'admin';
+      link.hidden = hide;
+      link.setAttribute('aria-hidden', hide ? 'true' : 'false');
+      link.setAttribute('tabindex', hide ? '-1' : '0');
+      if (hide) {
+        link.setAttribute('inert', '');
+      } else {
+        link.removeAttribute('inert');
+      }
+      link.classList.toggle('nav-link--hidden', hide);
+    });
+  };
+
+  const primeNavAccess = () => {
+    const cachedSession = getCachedSession();
+    if (cachedSession) {
+      applyNavAccess(cachedSession);
+      return;
+    }
+
+    document.querySelectorAll('[data-requires-admin]').forEach((link) => {
+      link.hidden = true;
+      link.setAttribute('aria-hidden', 'true');
+      link.setAttribute('tabindex', '-1');
+      link.setAttribute('inert', '');
+      link.classList.add('nav-link--hidden');
+    });
+  };
+
+  const logout = async () => {
+    try {
+      await fetchJson(withBasePath('/api/logout'), { method: 'POST' });
+    } catch (_error) {
+      // Ignorar errores de redirección
+    }
+
+    cacheSession(null);
+    window.location.href = withBasePath('/index.html');
+  };
+
+  const bindLogoutControl = () => {
+    const control = document.querySelector('[data-logout]');
+    if (!control || control.dataset.boundLogout === 'true') return;
+
+    control.dataset.boundLogout = 'true';
+    control.addEventListener('click', async (event) => {
+      event.preventDefault();
+      control.disabled = true;
+      control.setAttribute('aria-busy', 'true');
+      await logout();
+    });
+  };
+
   const fetchJson = async (url, options = {}) => {
     const response = await fetch(url, {
       credentials: 'same-origin',
@@ -110,5 +166,19 @@
     }
   };
 
-  window.ElecnorAuth = { withBasePath, fetchJson, ensureSession, rewriteNavLinks, cacheSession, getCachedSession };
+  primeNavAccess();
+  bindLogoutControl();
+  document.addEventListener('DOMContentLoaded', bindLogoutControl);
+
+  window.ElecnorAuth = {
+    withBasePath,
+    fetchJson,
+    ensureSession,
+    rewriteNavLinks,
+    cacheSession,
+    getCachedSession,
+    applyNavAccess,
+    logout,
+    bindLogoutControl
+  };
 })();

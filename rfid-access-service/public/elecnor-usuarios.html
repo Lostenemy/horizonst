@@ -17,22 +17,60 @@
     <header class="topbar">
       <div class="brand">
         <div class="brand__mark" aria-hidden="true">elecnor</div>
-      <div class="brand__text">
-        <strong>Portal de accesos</strong>
-        <span>Simulador RFID</span>
+        <div class="brand__text">
+          <strong>Portal de accesos</strong>
+          <span>Simulador RFID</span>
+        </div>
       </div>
-    </div>
-    <nav class="topbar__nav" aria-label="Navegación principal">
-        <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html">Tarjetas</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html">Lecturas</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-webservice.html">Webservice</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html">Seguimiento</a>
-        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-usuarios.html" aria-current="page">Trabajadores</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
-      </nav>
+      <div class="topbar__cluster">
+        <nav class="topbar__nav" aria-label="Navegación principal">
+          <a class="nav-link" href="__BASE_PATH__/elecnor-tarjetas.html" data-router data-nav-view="tarjetas"
+            >Tarjetas</a
+          >
+          <a
+            class="nav-link"
+            href="__BASE_PATH__/elecnor-lecturas.html"
+            data-requires-admin
+            hidden
+            aria-hidden="true"
+            tabindex="-1"
+            inert
+            data-router
+            data-nav-view="lecturas"
+            >Lecturas</a
+          >
+          <a class="nav-link" href="__BASE_PATH__/elecnor-accesos.html" data-router data-nav-view="accesos"
+            >Accesos</a
+          >
+          <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html" data-router data-nav-view="seguimiento"
+            >Seguimiento</a
+          >
+          <a
+            class="nav-link nav-link--active"
+            href="__BASE_PATH__/elecnor-usuarios.html"
+            aria-current="page"
+            data-router
+            data-nav-view="usuarios"
+            >Trabajadores</a
+          >
+          <a
+            class="nav-link"
+            href="__BASE_PATH__/elecnor-cuentas.html"
+            data-requires-admin
+            hidden
+            aria-hidden="true"
+            tabindex="-1"
+            inert
+            data-router
+            data-nav-view="cuentas"
+            >Cuentas</a
+          >
+        </nav>
+        <button type="button" class="cta cta--ghost topbar__logout" data-logout>Desconectar</button>
+      </div>
     </header>
 
-    <main class="page">
+    <main id="main-view" class="page" data-view="usuarios">
       <section class="hero">
         <div>
           <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Trabajadores</p>
@@ -43,7 +81,7 @@
           </p>
           <div class="pill-row">
             <span class="pill pill--info">Validación inmediata</span>
-            <span class="pill pill--neutral">Datos locales en tu navegador</span>
+            <span class="pill pill--neutral">Datos persistidos en base de datos</span>
             <span class="pill pill--accent">Listo para vincular tarjetas</span>
           </div>
         </div>
@@ -52,65 +90,12 @@
             <p class="eyebrow">Recuerda</p>
             <p>Utiliza el mismo <strong>DNI</strong> que se enviará a la API de e-coordina en las lecturas reales.</p>
           </div>
-          <a class="cta cta--ghost" href="__BASE_PATH__/elecnor-tarjetas.html">Asignar tarjetas RFID</a>
+          <a class="cta cta--ghost" href="__BASE_PATH__/elecnor-tarjetas.html" data-router>Asignar tarjetas RFID</a>
         </div>
       </section>
 
       <section class="panel-grid">
-        <article class="panel">
-          <header class="panel__header">
-            <div>
-              <p class="eyebrow">Formulario</p>
-              <h2>Alta y edición</h2>
-              <p class="muted">Campos obligatorios marcados con *. El DNI se usa como identificador único.</p>
-            </div>
-            <div class="panel__actions">
-              <button id="reset-form" class="cta cta--ghost" type="button">Limpiar</button>
-              <span id="form-status" class="badge" aria-live="polite"></span>
-            </div>
-          </header>
-
-          <form id="user-form" class="form-grid" autocomplete="off">
-            <label class="form-field">
-              <span>DNI *</span>
-              <input id="dni" name="dni" type="text" required minlength="5" placeholder="00000000A" />
-            </label>
-            <label class="form-field">
-              <span>Nombre *</span>
-              <input id="nombre" name="nombre" type="text" required placeholder="Nombre" />
-            </label>
-            <label class="form-field">
-              <span>Apellidos *</span>
-              <input id="apellidos" name="apellidos" type="text" required placeholder="Apellidos" />
-            </label>
-            <label class="form-field">
-              <span>Empresa *</span>
-              <input id="empresa" name="empresa" type="text" required placeholder="Razón social" />
-            </label>
-            <label class="form-field">
-              <span>CIF *</span>
-              <input id="cif" name="cif" type="text" required placeholder="A12345678" />
-            </label>
-            <label class="form-field">
-              <span>Código de centro *</span>
-              <input id="centro" name="centro" type="text" required placeholder="C-XXX-000" />
-            </label>
-            <label class="form-field">
-              <span>Email</span>
-              <input id="email" name="email" type="email" placeholder="persona@empresa.com" />
-            </label>
-            <label class="form-field form-field--inline">
-              <input id="activo" name="activo" type="checkbox" checked />
-              <span>Usuario activo</span>
-            </label>
-            <div class="form-actions">
-              <button class="cta cta--primary" type="submit">Guardar usuario</button>
-              <p class="muted">Los cambios son inmediatos y se reflejan en la tabla.</p>
-            </div>
-          </form>
-        </article>
-
-        <article class="panel">
+        <article class="panel panel--users">
           <header class="panel__header">
             <div>
               <p class="eyebrow">Listado</p>
@@ -118,6 +103,7 @@
               <p class="muted">Filtra por nombre, DNI o centro para localizar rápidamente a una persona.</p>
             </div>
             <div class="panel__actions panel__actions--wrap">
+              <button id="open-user-modal" class="cta cta--primary" type="button">Registrar trabajador</button>
               <input
                 id="filter"
                 class="input input--search"
@@ -131,23 +117,86 @@
             </div>
           </header>
 
-          <div class="table" role="table" aria-label="Usuarios">
-            <div class="table__head" role="row">
-              <span class="table__cell" role="columnheader">DNI</span>
-              <span class="table__cell" role="columnheader">Nombre</span>
-              <span class="table__cell" role="columnheader">Empresa (CIF)</span>
-              <span class="table__cell" role="columnheader">Centro</span>
-              <span class="table__cell" role="columnheader">Estado</span>
-              <span class="table__cell" role="columnheader">Acciones</span>
-            </div>
-            <div id="users-body" class="table__body"></div>
+          <div class="table-wrapper">
+            <table class="table table--users" aria-label="Usuarios configurados">
+              <thead>
+                <tr class="table__head">
+                  <th scope="col">DNI</th>
+                  <th scope="col">Nombre</th>
+                  <th scope="col">Empresa (CIF)</th>
+                  <th scope="col">Centro</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="users-body" class="table__body"></tbody>
+            </table>
           </div>
         </article>
       </section>
+
+      <div id="user-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="user-modal-title">
+        <div class="modal__overlay" data-modal-close></div>
+        <div class="modal__content">
+          <button id="close-user-modal" class="modal__close" type="button" aria-label="Cerrar" data-modal-close>×</button>
+          <header class="modal__header">
+            <div>
+              <p class="eyebrow">Formulario</p>
+              <h2 id="user-modal-title">Alta y edición</h2>
+              <p class="muted">Campos obligatorios marcados con *. El DNI se usa como identificador único.</p>
+            </div>
+            <div class="panel__actions">
+              <button id="reset-form" class="cta cta--ghost" type="button">Limpiar</button>
+              <span id="form-status" class="badge" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <form id="user-form" class="form-grid" autocomplete="off">
+            <div class="form-field">
+              <label for="dni">DNI *</label>
+              <input id="dni" name="dni" type="text" required minlength="5" aria-required="true" placeholder="00000000A" />
+            </div>
+            <div class="form-field">
+              <label for="nombre">Nombre *</label>
+              <input id="nombre" name="nombre" type="text" required aria-required="true" placeholder="Nombre" />
+            </div>
+            <div class="form-field">
+              <label for="apellidos">Apellidos *</label>
+              <input id="apellidos" name="apellidos" type="text" required aria-required="true" placeholder="Apellidos" />
+            </div>
+            <div class="form-field">
+              <label for="empresa">Empresa *</label>
+              <input id="empresa" name="empresa" type="text" required aria-required="true" placeholder="Razón social" />
+            </div>
+            <div class="form-field">
+              <label for="cif">CIF *</label>
+              <input id="cif" name="cif" type="text" required aria-required="true" placeholder="A12345678" />
+            </div>
+            <div class="form-field">
+              <label for="centro">Código de centro *</label>
+              <input id="centro" name="centro" type="text" required aria-required="true" placeholder="C-XXX-000" />
+            </div>
+            <div class="form-field">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" placeholder="persona@empresa.com" />
+            </div>
+            <div class="form-field form-field--inline">
+              <input id="activo" name="activo" type="checkbox" checked />
+              <label for="activo">Usuario activo</label>
+            </div>
+            <div class="form-actions">
+              <button class="cta cta--primary" type="submit">Guardar usuario</button>
+              <p class="muted">Los cambios son inmediatos y se reflejan en la tabla.</p>
+            </div>
+          </form>
+        </div>
+      </div>
     </main>
-    <script src="elecnor-auth.js"></script>
-    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
-    <script src="elecnor-data.js"></script>
-    <script src="elecnor-users.js"></script>
+    <script src="elecnor-auth.js" data-shared-script></script>
+    <script src="elecnor-ui.js" data-shared-script></script>
+    <script src="elecnor-router.js" data-shared-script></script>
+    <script data-shared-script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
+    <script src="elecnor-data.js" data-shared-script></script>
+    <script src="elecnor-users.js" data-page-script="usuarios"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 (() => {
-  const { withBasePath, fetchJson, ensureSession, rewriteNavLinks } = window.ElecnorAuth;
+  const { withBasePath, fetchJson, ensureSession, rewriteNavLinks, applyNavAccess } = window.ElecnorAuth;
 
   const simulateForm = document.getElementById('simulate-form');
   const simulateError = document.getElementById('simulate-error');
@@ -98,8 +98,9 @@
 
   const init = async () => {
     rewriteNavLinks();
-    const session = await ensureSession();
+    const session = await ensureSession(true);
     if (!session) return;
+    applyNavAccess(session);
   };
 
   init();

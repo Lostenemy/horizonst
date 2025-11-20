@@ -11,22 +11,14 @@
     <header class="topbar">
       <div class="brand">
         <div class="brand__mark" aria-hidden="true">elecnor</div>
-      <div class="brand__text">
-        <strong>Portal de accesos</strong>
-        <span>Login</span>
+        <div class="brand__text">
+          <strong>Portal de accesos</strong>
+          <span>Login</span>
+        </div>
       </div>
-    </div>
-    <nav class="topbar__nav" aria-label="Navegación principal">
-        <a class="nav-link nav-link--active" href="__BASE_PATH__/elecnor-tarjetas.html" aria-current="page">Tarjetas</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-lecturas.html">Lecturas</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-webservice.html">Webservice</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-seguimiento.html">Seguimiento</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-usuarios.html">Trabajadores</a>
-        <a class="nav-link" href="__BASE_PATH__/elecnor-cuentas.html">Cuentas</a>
-      </nav>
     </header>
 
-    <main id="app" class="page">
+    <main id="main-view" class="page" data-view="login">
       <section class="card auth-card">
         <div>
           <p class="breadcrumb">Acceso privado</p>
@@ -50,7 +42,7 @@
         <p id="login-error" class="error" hidden></p>
       </section>
     </main>
-    <script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
+    <script data-shared-script>window.__RFID_BASE_PATH__ = "__BASE_PATH__";</script>
     <script src="elecnor-login.js"></script>
   </body>
 </html>

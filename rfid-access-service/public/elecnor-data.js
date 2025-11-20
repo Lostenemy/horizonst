@@ -1,153 +1,106 @@
 (function () {
-  const STORAGE_KEYS = {
-    users: 'elecnorUsers',
-    cards: 'elecnorCards'
-  };
+  const basePath = window.__RFID_BASE_PATH__ || '';
+  const jsonHeaders = { 'Content-Type': 'application/json' };
 
-  const sampleUsers = [
-    {
-      dni: '12345678A',
-      nombre: 'María',
-      apellidos: 'García Ruiz',
-      empresa: 'Instalaciones Norte S.L.',
-      cif: 'B12345678',
-      centro: 'C-VAL-001',
-      email: 'maria.garcia@example.com',
-      activo: true,
-      creadoEn: new Date().toISOString()
-    },
-    {
-      dni: '98765432B',
-      nombre: 'Diego',
-      apellidos: 'Martín Ortega',
-      empresa: 'Elecnor Proyectos',
-      cif: 'A87654321',
-      centro: 'C-MAD-023',
-      email: 'diego.martin@example.com',
-      activo: true,
-      creadoEn: new Date().toISOString()
-    },
-    {
-      dni: '44556677C',
-      nombre: 'Laura',
-      apellidos: 'Santos Pérez',
-      empresa: 'Logística Sur',
-      cif: 'B19283746',
-      centro: 'C-BCN-012',
-      email: 'laura.santos@example.com',
-      activo: false,
-      creadoEn: new Date().toISOString()
+  let users = [];
+  let cards = [];
+  let initialized = false;
+
+  const handleResponse = async (response) => {
+    if (response.status === 204) {
+      return null;
     }
-  ];
-
-  const sampleCards = [
-    {
-      idTarjeta: 'RFID-0001',
-      dni: '12345678A',
-      centro: 'C-VAL-001',
-      estado: 'activa',
-      notas: 'Acceso a nave principal',
-      asignadaEn: new Date().toISOString()
-    },
-    {
-      idTarjeta: 'RFID-0002',
-      dni: '98765432B',
-      centro: 'C-MAD-023',
-      estado: 'activa',
-      notas: 'Autorización completa',
-      asignadaEn: new Date().toISOString()
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = data?.error || 'REQUEST_FAILED';
+      throw new Error(message);
     }
-  ];
+    return data;
+  };
 
-  const loadCollection = (key, defaults) => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) {
-        localStorage.setItem(key, JSON.stringify(defaults));
-        return [...defaults];
-      }
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        throw new Error('Formato incorrecto');
-      }
-      return parsed;
-    } catch (error) {
-      console.warn(`No se pudo leer ${key} desde localStorage`, error);
-      localStorage.setItem(key, JSON.stringify(defaults));
-      return [...defaults];
+  const request = async (path, options = {}) => {
+    const response = await fetch(`${basePath}${path}`, { credentials: 'same-origin', ...options });
+    return handleResponse(response);
+  };
+
+  const refreshUsers = async () => {
+    const data = await request('/api/workers');
+    users = data?.workers ?? [];
+    return users;
+  };
+
+  const refreshCards = async () => {
+    const data = await request('/api/cards');
+    cards = data?.cards ?? [];
+    return cards;
+  };
+
+  const init = async () => {
+    if (initialized) return;
+    await Promise.all([refreshUsers(), refreshCards()]);
+    initialized = true;
+  };
+
+  const upsertUser = async (user) => {
+    const exists = users.some((item) => item.dni === user.dni);
+    const endpoint = exists ? `/api/workers/${encodeURIComponent(user.dni)}` : '/api/workers';
+    const data = await request(endpoint, {
+      method: exists ? 'PATCH' : 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify(user)
+    });
+    const worker = data?.worker;
+    if (worker) {
+      users = users.filter((item) => item.dni !== worker.dni).concat(worker);
     }
+    return worker;
   };
 
-  const persistCollection = (key, value) => {
-    localStorage.setItem(key, JSON.stringify(value));
-    return value;
+  const deleteUser = async (dni) => {
+    await request(`/api/workers/${encodeURIComponent(dni)}`, { method: 'DELETE' });
+    users = users.filter((user) => user.dni !== dni);
+    cards = cards.map((card) => (card.dni === dni ? { ...card, estado: 'bloqueada', notas: 'Usuario eliminado' } : card));
   };
 
-  const getUsers = () => loadCollection(STORAGE_KEYS.users, sampleUsers);
-  const getCards = () => loadCollection(STORAGE_KEYS.cards, sampleCards);
-
-  const upsertUser = (user) => {
-    const users = getUsers();
-    const existingIndex = users.findIndex((item) => item.dni === user.dni);
-    const enriched = {
-      ...user,
-      creadoEn: user.creadoEn || new Date().toISOString()
-    };
-
-    if (existingIndex >= 0) {
-      users[existingIndex] = { ...users[existingIndex], ...enriched };
-    } else {
-      users.push(enriched);
+  const upsertCard = async (card) => {
+    const data = await request('/api/cards', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify(card)
+    });
+    const saved = data?.card;
+    if (saved) {
+      cards = cards.filter((item) => item.idTarjeta !== saved.idTarjeta).concat(saved);
     }
-
-    persistCollection(STORAGE_KEYS.users, users);
-    return enriched;
+    return saved;
   };
 
-  const deleteUser = (dni) => {
-    const users = getUsers();
-    const filtered = users.filter((user) => user.dni !== dni);
-    persistCollection(STORAGE_KEYS.users, filtered);
-
-    const cards = getCards().map((card) =>
-      card.dni === dni ? { ...card, estado: 'bloqueada', notas: 'Usuario eliminado' } : card
-    );
-    persistCollection(STORAGE_KEYS.cards, cards);
-  };
-
-  const upsertCard = (card) => {
-    const cards = getCards();
-    const existingIndex = cards.findIndex((item) => item.idTarjeta === card.idTarjeta);
-    const enriched = {
-      ...card,
-      asignadaEn: card.asignadaEn || new Date().toISOString()
-    };
-
-    if (existingIndex >= 0) {
-      cards[existingIndex] = { ...cards[existingIndex], ...enriched };
-    } else {
-      cards.push(enriched);
+  const toggleCardState = async (idTarjeta, estado) => {
+    const data = await request(`/api/cards/${encodeURIComponent(idTarjeta)}`, {
+      method: 'PATCH',
+      headers: jsonHeaders,
+      body: JSON.stringify({ estado })
+    });
+    const saved = data?.card;
+    if (saved) {
+      cards = cards.filter((item) => item.idTarjeta !== saved.idTarjeta).concat(saved);
     }
-
-    persistCollection(STORAGE_KEYS.cards, cards);
-    return enriched;
+    return saved;
   };
 
-  const deleteCard = (idTarjeta) => {
-    const cards = getCards().filter((card) => card.idTarjeta !== idTarjeta);
-    persistCollection(STORAGE_KEYS.cards, cards);
+  const deleteCard = async (idTarjeta) => {
+    await request(`/api/cards/${encodeURIComponent(idTarjeta)}`, { method: 'DELETE' });
+    cards = cards.filter((card) => card.idTarjeta !== idTarjeta);
   };
 
-  const toggleCardState = (idTarjeta, estado) => {
-    const cards = getCards().map((card) => (card.idTarjeta === idTarjeta ? { ...card, estado } : card));
-    persistCollection(STORAGE_KEYS.cards, cards);
-  };
-
-  const getUserByDni = (dni) => getUsers().find((user) => user.dni === dni);
+  const getUserByDni = (dni) => users.find((user) => user.dni === dni);
 
   window.ElecnorData = {
-    getUsers,
-    getCards,
+    init,
+    refreshUsers,
+    refreshCards,
+    getUsers: () => users,
+    getCards: () => cards,
     upsertUser,
     deleteUser,
     upsertCard,
