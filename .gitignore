@@ -1,2 +1,4 @@
 mailserver/ssl/*
 !mailserver/ssl/.gitkeep
+mailserver/config/ssl/*
+!mailserver/config/ssl/.gitkeep

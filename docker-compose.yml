@@ -176,17 +176,21 @@ services:
       CERT_CN: mail.horizonst.com.es
       SSL_DIR: /tmp/docker-mailserver/ssl
     volumes:
-      - mail_ssl:/tmp/docker-mailserver/ssl
+      - ./mailserver/config:/tmp/docker-mailserver:rw
     restart: "no"
 
   mail:
     image: mailserver/docker-mailserver:15.1.0
-    hostname: mail.horizonst.com.es
+    hostname: mail
+    domainname: horizonst.com.es
     container_name: mail
     env_file:
       - ./mailserver/mailserver.env
     environment:
-      - SSL_TYPE=self-signed
+      - SSL_TYPE=manual
+      - SSL_CERT_PATH=/tmp/docker-mailserver/ssl/mail.horizonst.com.es-cert.pem
+      - SSL_KEY_PATH=/tmp/docker-mailserver/ssl/mail.horizonst.com.es-key.pem
+      - ENABLE_QUOTAS=1
     cap_add:
       - NET_ADMIN
       - SYS_PTRACE
@@ -197,8 +201,7 @@ services:
       - mail_data:/var/mail
       - mail_state:/var/mail-state
       - mail_logs:/var/log/mail
-      - ./mailserver:/tmp/docker-mailserver:rw
-      - mail_ssl:/tmp/docker-mailserver/ssl
+      - ./mailserver/config:/tmp/docker-mailserver:rw
       - ./mailserver/fail2ban/postfix.local:/etc/fail2ban/jail.d/postfix.local:ro
     ports:
       - "25:25"
@@ -253,4 +256,3 @@ volumes:
   mail_state:
   mail_logs:
   webmail_data:
-  mail_ssl:
