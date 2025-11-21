@@ -11,6 +11,7 @@
   const lineSelect = document.getElementById('gpo-line');
   const actionSelect = document.getElementById('gpo-action');
   const durationInput = document.getElementById('gpo-duration');
+  const apiResponseBox = document.getElementById('gpo-api-response');
 
   const { ensureSession, fetchJson, withBasePath, rewriteNavLinks, applyNavAccess } = window.ElecnorAuth;
   const { showToast } = window.ElecnorUI;
@@ -39,6 +40,15 @@
       btn.disabled = loading;
       btn.setAttribute('aria-busy', loading ? 'true' : 'false');
     });
+  };
+
+  const renderApiResponse = (label, payload, isError = false) => {
+    if (!apiResponseBox) return;
+    const timestamp = new Date().toLocaleTimeString();
+    const status = isError ? 'error' : 'ok';
+    const body = payload ? JSON.stringify(payload, null, 2) : '—';
+    apiResponseBox.textContent = `${timestamp} · ${label} (${status})\n${body}`;
+    apiResponseBox.dataset.state = status;
   };
 
   const renderStatus = (status = {}) => {
@@ -82,12 +92,14 @@
     try {
       const { status } = await fetchJson(withBasePath('/api/gpo/status'));
       renderStatus(status);
+      renderApiResponse('Estado', status);
     } catch (error) {
       setError('No se pudo obtener el estado del GPIO.');
       if (statusBadge) {
         statusBadge.textContent = 'Estado desconocido';
         statusBadge.className = 'badge badge--muted';
       }
+      renderApiResponse('Estado', { error: error?.message || 'Fallo al consultar el estado' }, true);
     }
   };
 
@@ -108,6 +120,7 @@
         body: JSON.stringify({ baseUrl })
       });
       renderStatus(status);
+      renderApiResponse('Actualizar URL', status);
       showToast('URL del lector actualizada para las pruebas', 'success');
     } catch (error) {
       const message =
@@ -115,6 +128,7 @@
           ? 'Introduce una URL válida (ejemplo: http://88.20.2.60).'
           : 'No se pudo actualizar la URL del lector. Revisa la configuración o los logs.';
       setError(message);
+      renderApiResponse('Actualizar URL', { error: error?.message || 'No se pudo actualizar la URL' }, true);
     } finally {
       toggleLoading(false);
     }
@@ -130,12 +144,14 @@
       });
       const label = scenario === 'granted' ? 'permitido' : 'denegado';
       showToast(`Escenario de acceso ${label} enviado`, 'success');
+      renderApiResponse('Escenario', { ok: true, decision: label });
     } catch (error) {
       const message =
         error?.message === 'GPO_DISABLED'
           ? 'El control GPIO está desactivado en la configuración.'
           : 'No se pudo ejecutar la prueba. Revisa la configuración del lector y los logs.';
       setError(message);
+      renderApiResponse('Escenario', { error: error?.message || 'No se pudo ejecutar la prueba' }, true);
     } finally {
       toggleLoading(false);
     }
@@ -162,9 +178,11 @@
             ? 'Encendido'
             : 'Apagado';
       showToast(`${actionLabel} enviado a la línea ${line}`, 'success');
+      renderApiResponse('Línea manual', { ok: true, line, action, durationMs: action === 'pulse' ? duration || 1000 : undefined });
     } catch (error) {
       const message = error?.message || 'No se pudo enviar la orden al lector.';
       setError(message);
+      renderApiResponse('Línea manual', { error: error?.message || 'No se pudo enviar la orden' }, true);
     } finally {
       toggleLoading(false);
     }
