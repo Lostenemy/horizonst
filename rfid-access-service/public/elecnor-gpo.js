@@ -57,12 +57,39 @@
     });
   };
 
+  const collectUrls = (payload) => {
+    const urls = new Set();
+
+    const visit = (value) => {
+      if (!value) return;
+
+      if (typeof value === 'string') {
+        if (/^https?:\/\//i.test(value)) urls.add(value);
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+
+      if (typeof value === 'object') {
+        Object.values(value).forEach(visit);
+      }
+    };
+
+    visit(payload);
+    return urls;
+  };
+
   const renderApiResponse = (label, payload, isError = false) => {
     if (!apiResponseBox) return;
     const timestamp = new Date().toLocaleTimeString();
     const status = isError ? 'error' : 'ok';
     const body = payload ? JSON.stringify(payload, null, 2) : '—';
-    apiResponseBox.textContent = `${timestamp} · ${label} (${status})\n${body}`;
+    const urls = collectUrls(payload);
+    const urlLabel = urls.size ? `\nURL enviada(s):\n${Array.from(urls).join('\n')}` : '';
+    apiResponseBox.textContent = `${timestamp} · ${label} (${status})${urlLabel}\n${body}`;
     apiResponseBox.dataset.state = status;
   };
 
