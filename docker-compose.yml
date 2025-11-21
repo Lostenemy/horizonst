@@ -168,14 +168,15 @@ services:
       - horizonst
 
   cert-init:
-    image: alpine:3.20
     container_name: cert-init
-    command: ["/bin/sh", "-c", "/scripts/gen-dev-certs.sh"]
-    volumes:
-      - ./mailserver/ssl:/work/ssl:rw
-      - ./scripts:/scripts:ro
+    build:
+      context: .
+      dockerfile: Dockerfile.cert-init
     environment:
-      FQDN: mail.horizonst.com.es
+      CERT_CN: mail.horizonst.com.es
+      SSL_DIR: /tmp/docker-mailserver/ssl
+    volumes:
+      - mail_ssl:/tmp/docker-mailserver/ssl
     restart: "no"
 
   mail:
@@ -197,7 +198,7 @@ services:
       - mail_state:/var/mail-state
       - mail_logs:/var/log/mail
       - ./mailserver:/tmp/docker-mailserver:rw
-      - ./mailserver/ssl:/tmp/docker-mailserver/ssl:rw
+      - mail_ssl:/tmp/docker-mailserver/ssl
       - ./mailserver/fail2ban/postfix.local:/etc/fail2ban/jail.d/postfix.local:ro
     ports:
       - "25:25"
@@ -252,3 +253,4 @@ volumes:
   mail_state:
   mail_logs:
   webmail_data:
+  mail_ssl:

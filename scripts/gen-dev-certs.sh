@@ -1,49 +1,31 @@
 #!/bin/sh
 set -eu
 
-FQDN="${FQDN:-mail.horizonst.com.es}"
-SSL_DIR="/work/ssl"
-CA_DIR="$SSL_DIR/demoCA"
-KEY="$SSL_DIR/${FQDN}-key.pem"
-CRT="$SSL_DIR/${FQDN}-cert.pem"
-CACERT="$CA_DIR/cacert.pem"
-CAKEY="$CA_DIR/cakey.pem"
+CN="${CERT_CN:-mail.horizonst.com.es}"
+SSL_DIR="${SSL_DIR:-/tmp/docker-mailserver/ssl}"
+CA_DIR="${SSL_DIR}/demoCA"
+KEY="${SSL_DIR}/${CN}-key.pem"
+CRT="${SSL_DIR}/${CN}-cert.pem"
+CACERT="${CA_DIR}/cacert.pem"
 
-mkdir -p "$CA_DIR"
+echo "[cert-init] Generating DEV self-signed certs for ${CN} ..."
 
-# Si ya existen, salir rápido (idempotente)
-if [ -s "$KEY" ] && [ -s "$CRT" ] && [ -s "$CACERT" ]; then
-  echo "[cert-init] Certs already present. Nothing to do."
-  exit 0
+mkdir -p "${CA_DIR}"
+
+# Generar cert y key si faltan o están vacíos
+if [ ! -s "${KEY}" ] || [ ! -s "${CRT}" ]; then
+  openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
+    -subj "/CN=${CN}" \
+    -keyout "${KEY}" \
+    -out    "${CRT}"
 fi
 
-echo "[cert-init] Generating DEV self-signed certs for $FQDN ..."
-
-# 1) CA de desarrollo (solo para firmar el cert del servidor)
-if [ ! -s "$CACERT" ] || [ ! -s "$CAKEY" ]; then
-  openssl req -x509 -newkey rsa:4096 -nodes -days 3650 \
-    -subj "/CN=HorizonST Dev CA" \
-    -keyout "$CAKEY" \
-    -out "$CACERT"
+# Asegurar cacert.pem
+if [ ! -s "${CACERT}" ]; then
+  cp "${CRT}" "${CACERT}"
 fi
 
-# 2) Clave + CSR del servidor
-CSR="$(mktemp)"
-openssl req -newkey rsa:4096 -nodes \
-  -subj "/CN=${FQDN}" \
-  -keyout "$KEY" \
-  -out "$CSR"
+chmod 600 "${KEY}" "${CACERT}"
 
-# 3) Firma con la CA
-openssl x509 -req -days 825 \
-  -in "$CSR" \
-  -CA "$CACERT" \
-  -CAkey "$CAKEY" -CAcreateserial \
-  -extfile /dev/stdin \
-  -out "$CRT" <<EOF2
-subjectAltName=DNS:${FQDN},DNS:horizonst.com.es
-EOF2
-
-rm -f "$CSR"
-chmod 600 "$KEY" "$CAKEY"
-echo "[cert-init] DONE."
+echo "[cert-init] Done. Files present in ${SSL_DIR}:"
+ls -l "${SSL_DIR}" || true
