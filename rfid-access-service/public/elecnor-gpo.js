@@ -78,7 +78,7 @@
     if (pathModeField)
       pathModeField.textContent =
         status.pathMode === 'single-device'
-          ? 'Ruta única: /device/gpo/{line}/{state}'
+          ? 'Ruta única: /device/setGPO/{line}/{state}'
           : 'Ruta por deviceId: /devices/{id}/setGPO/{line}/{state}';
     if (pathModeSingle) pathModeSingle.checked = Boolean(status.singleDeviceMode);
     if (pathModeMulti) pathModeMulti.checked = !status.singleDeviceMode;

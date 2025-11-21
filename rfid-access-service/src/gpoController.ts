@@ -208,7 +208,7 @@ export class ReaderGpoController {
 
     try {
       const path = this.singleDeviceMode
-        ? `/device/gpo/${line}/${state}`
+        ? `/device/setGPO/${line}/${state}`
         : `/devices/${encodeURIComponent(this.deviceId)}/setGPO/${line}/${state}`;
       if (useDigest) {
         const digestResponse = await this.performDigestRequest(path);
