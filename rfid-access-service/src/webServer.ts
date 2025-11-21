@@ -704,6 +704,23 @@ export const startWebInterface = async ({
     res.json({ status: gpoController.status() });
   });
 
+  router.post('/api/gpo/device-id', ensureAuthenticated, ensureAdmin, (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
+
+    if (!deviceId) {
+      res.status(400).json({ error: 'INVALID_DEVICE_ID' });
+      return;
+    }
+
+    gpoController.updateDeviceId(deviceId);
+    res.json({ status: gpoController.status() });
+  });
+
   router.post('/api/gpo/credentials', ensureAuthenticated, ensureAdmin, (req, res) => {
     if (!gpoController) {
       res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });

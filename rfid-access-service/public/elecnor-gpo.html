@@ -112,6 +112,10 @@
               <dd id="gpo-base-url" class="muted">—</dd>
             </div>
             <div>
+              <dt>Device ID</dt>
+              <dd id="gpo-device-id" class="muted">—</dd>
+            </div>
+            <div>
               <dt>Credenciales</dt>
               <dd id="gpo-auth-user" class="muted">Sin usuario</dd>
             </div>
@@ -135,6 +139,22 @@
             <div class="form-actions">
               <button type="submit" class="cta cta--ghost">Actualizar URL</button>
               <p class="muted">Cambiar esta URL solo afecta a las pruebas manuales.</p>
+            </div>
+          </form>
+          <form id="gpo-device-id-form" class="form-grid">
+            <label class="form-field">
+              <span>ID de dispositivo (deviceId)</span>
+              <input
+                type="text"
+                id="gpo-device-id-input"
+                name="deviceId"
+                placeholder="000000000000"
+                autocomplete="off"
+              />
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="cta cta--ghost">Guardar deviceId</button>
+              <p class="muted">Necesario para construir la ruta /devices/{id}/setGPO.</p>
             </div>
           </form>
           <form id="gpo-credentials-form" class="form-grid">
@@ -216,7 +236,7 @@
           </form>
         </article>
 
-        <article class="panel">
+        <article class="panel panel--full">
           <header class="panel__header">
             <div>
               <p class="eyebrow">Respuestas de la API</p>

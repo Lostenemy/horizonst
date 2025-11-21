@@ -4,6 +4,9 @@
   const baseUrlField = document.getElementById('gpo-base-url');
   const baseUrlForm = document.getElementById('gpo-base-url-form');
   const baseUrlInput = document.getElementById('gpo-base-url-input');
+  const deviceIdField = document.getElementById('gpo-device-id');
+  const deviceIdForm = document.getElementById('gpo-device-id-form');
+  const deviceIdInput = document.getElementById('gpo-device-id-input');
   const authUserField = document.getElementById('gpo-auth-user');
   const credentialsForm = document.getElementById('gpo-credentials-form');
   const usernameInput = document.getElementById('gpo-username');
@@ -39,6 +42,7 @@
       scenarioDenied,
       lineForm?.querySelector('button[type="submit"]'),
       baseUrlForm?.querySelector('button[type="submit"]'),
+      deviceIdForm?.querySelector('button[type="submit"]'),
       credentialsForm?.querySelector('button[type="submit"]')
     ].forEach((btn) => {
       if (!btn) return;
@@ -65,6 +69,8 @@
 
     if (baseUrlField) baseUrlField.textContent = status.baseUrl || '—';
     if (baseUrlInput) baseUrlInput.value = status.baseUrl || '';
+    if (deviceIdField) deviceIdField.textContent = status.deviceId || '—';
+    if (deviceIdInput) deviceIdInput.value = status.deviceId || '';
     if (authUserField) authUserField.textContent = status.auth?.configured
       ? `Usuario ${status.auth.username || '(oculto)'}`
       : 'Sin usuario';
@@ -82,6 +88,8 @@
       const message =
         reason === 'MISSING_BASE_URL'
           ? 'Configura la URL base del lector (RFID_READER_CONTROLLER_BASE_URL) para activar el GPIO.'
+          : reason === 'MISSING_DEVICE_ID'
+            ? 'Configura el deviceId del lector (RFID_READER_DEVICE_ID) para activar el GPIO.'
           : reason === 'DISABLED_FLAG'
             ? 'El control GPIO está deshabilitado en la variable RFID_READER_CONTROLLER_ENABLED.'
             : 'No se puede controlar el GPIO hasta completar la configuración del lector.';
@@ -142,6 +150,34 @@
           : 'No se pudo actualizar la URL del lector. Revisa la configuración o los logs.';
       setError(message);
       renderApiResponse('Actualizar URL', error?.payload || { error: error?.message || 'No se pudo actualizar la URL' }, true);
+    } finally {
+      toggleLoading(false);
+    }
+  };
+
+  const handleDeviceIdSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+
+    const deviceId = deviceIdInput?.value?.trim() || '';
+    if (!deviceId) {
+      setError('Introduce el deviceId que publica el lector en /devices para componer la ruta setGPO.');
+      return;
+    }
+
+    toggleLoading(true);
+    try {
+      const { status } = await fetchJson(withBasePath('/api/gpo/device-id'), {
+        method: 'POST',
+        body: JSON.stringify({ deviceId })
+      });
+      renderStatus(status);
+      renderApiResponse('Device ID', status);
+      showToast('Device ID actualizado para las pruebas', 'success');
+    } catch (error) {
+      const message = error?.message || 'No se pudo actualizar el deviceId del lector.';
+      setError(message);
+      renderApiResponse('Device ID', error?.payload || { error: message }, true);
     } finally {
       toggleLoading(false);
     }
@@ -244,6 +280,7 @@
   scenarioDenied?.addEventListener('click', () => runScenario('denied'));
   lineForm?.addEventListener('submit', handleLineSubmit);
   baseUrlForm?.addEventListener('submit', handleBaseUrlSubmit);
+  deviceIdForm?.addEventListener('submit', handleDeviceIdSubmit);
   credentialsForm?.addEventListener('submit', handleCredentialsSubmit);
 
   init();

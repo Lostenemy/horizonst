@@ -4,6 +4,7 @@ import { logger } from './logger.js';
 
 interface ReaderControlConfig {
   baseUrl: string;
+  deviceId: string;
   timeoutMs: number;
   enabled: boolean;
   username?: string;
@@ -35,7 +36,9 @@ export class ReaderGpoController {
 
   private credentials: { username: string; password: string } | null;
 
-  private disabledReason: 'MISSING_BASE_URL' | 'DISABLED_FLAG' | null;
+  private disabledReason: 'MISSING_BASE_URL' | 'MISSING_DEVICE_ID' | 'DISABLED_FLAG' | null;
+
+  private deviceId: string;
 
   private readonly allowedLines = [4, 5, 6];
 
@@ -43,10 +46,12 @@ export class ReaderGpoController {
 
   constructor(config: ReaderControlConfig) {
     const normalizedBaseUrl = this.normalizeBaseUrl(config.baseUrl || '');
+    const normalizedDeviceId = (config.deviceId || '').trim();
 
     this.disabledReason = null;
     this.enabled = false;
     this.credentials = null;
+    this.deviceId = normalizedDeviceId;
     this.http = axios.create({
       baseURL: normalizedBaseUrl,
       timeout: config.timeoutMs
@@ -54,7 +59,8 @@ export class ReaderGpoController {
 
     this.config = {
       ...config,
-      baseUrl: normalizedBaseUrl
+      baseUrl: normalizedBaseUrl,
+      deviceId: normalizedDeviceId
     };
 
     this.updateCredentials({ username: config.username, password: config.password });
@@ -82,6 +88,7 @@ export class ReaderGpoController {
     return {
       enabled: this.enabled,
       baseUrl: this.normalizeBaseUrl(this.config.baseUrl),
+      deviceId: this.deviceId,
       allowedLines: this.allowedLines,
       disabledReason: this.disabledReason,
       auth: {
@@ -95,6 +102,13 @@ export class ReaderGpoController {
     const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl || '');
     this.config.baseUrl = normalizedBaseUrl;
     this.http.defaults.baseURL = normalizedBaseUrl;
+    this.recomputeState();
+  }
+
+  updateDeviceId(deviceId: string): void {
+    const normalizedDeviceId = deviceId.trim();
+    this.deviceId = normalizedDeviceId;
+    this.config.deviceId = normalizedDeviceId;
     this.recomputeState();
   }
 
@@ -151,7 +165,7 @@ export class ReaderGpoController {
 
   private async setGpo(line: number, state: boolean): Promise<ReaderGpoToggleResult> {
     try {
-      const path = `/setGPO/${line}/${state}`;
+      const path = `/devices/${encodeURIComponent(this.deviceId)}/setGPO/${line}/${state}`;
       const response = await this.http.get(path, {
         auth: this.credentials ?? undefined
       });
@@ -168,6 +182,8 @@ export class ReaderGpoController {
       this.disabledReason = 'DISABLED_FLAG';
     } else if (!this.config.baseUrl) {
       this.disabledReason = 'MISSING_BASE_URL';
+    } else if (!this.deviceId) {
+      this.disabledReason = 'MISSING_DEVICE_ID';
     } else {
       this.disabledReason = null;
     }

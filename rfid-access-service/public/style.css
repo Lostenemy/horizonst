@@ -188,6 +188,10 @@ body.is-navigating #main-view {
   gap: 16px;
 }
 
+.panel--full {
+  grid-column: 1 / -1;
+}
+
 .modal {
   position: fixed;
   inset: 0;
