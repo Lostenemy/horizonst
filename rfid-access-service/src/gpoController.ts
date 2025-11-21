@@ -4,7 +4,6 @@ import { logger } from './logger.js';
 
 interface ReaderControlConfig {
   baseUrl: string;
-  deviceId: string;
   timeoutMs: number;
   enabled: boolean;
 }
@@ -16,7 +15,7 @@ export class ReaderGpoController {
 
   private enabled: boolean;
 
-  private disabledReason: 'MISSING_BASE_URL' | 'MISSING_DEVICE_ID' | 'DISABLED_FLAG' | null;
+  private disabledReason: 'MISSING_BASE_URL' | 'DISABLED_FLAG' | null;
 
   private readonly allowedLines = [4, 5, 6];
 
@@ -24,7 +23,6 @@ export class ReaderGpoController {
 
   constructor(config: ReaderControlConfig) {
     const normalizedBaseUrl = this.normalizeBaseUrl(config.baseUrl || '');
-    const normalizedDeviceId = (config.deviceId || '').trim();
 
     this.disabledReason = null;
     this.enabled = false;
@@ -35,8 +33,7 @@ export class ReaderGpoController {
 
     this.config = {
       ...config,
-      baseUrl: normalizedBaseUrl,
-      deviceId: normalizedDeviceId
+      baseUrl: normalizedBaseUrl
     };
 
     this.recomputeState();
@@ -62,7 +59,6 @@ export class ReaderGpoController {
   status() {
     return {
       enabled: this.enabled,
-      deviceId: this.config.deviceId,
       baseUrl: this.normalizeBaseUrl(this.config.baseUrl),
       allowedLines: this.allowedLines,
       disabledReason: this.disabledReason
@@ -120,7 +116,7 @@ export class ReaderGpoController {
 
   private async setGpo(line: number, state: boolean): Promise<void> {
     try {
-      const path = `/devices/${this.config.deviceId}/setGPO/${line}/${state}`;
+      const path = `/devices/setGPO/${line}/${state}`;
       await this.http.get(path);
       logger.debug({ line, state }, 'Toggled reader GPO');
     } catch (error) {
@@ -134,8 +130,6 @@ export class ReaderGpoController {
       this.disabledReason = 'DISABLED_FLAG';
     } else if (!this.config.baseUrl) {
       this.disabledReason = 'MISSING_BASE_URL';
-    } else if (!this.config.deviceId) {
-      this.disabledReason = 'MISSING_DEVICE_ID';
     } else {
       this.disabledReason = null;
     }
