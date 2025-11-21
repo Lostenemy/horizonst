@@ -129,7 +129,7 @@ export class ReaderGpoController {
 
   private async setGpo(line: number, state: boolean): Promise<ReaderGpoToggleResult> {
     try {
-      const path = `/devices/setGPO/${line}/${state}`;
+      const path = `/setGPO/${line}/${state}`;
       const response = await this.http.get(path);
       logger.debug({ line, state }, 'Toggled reader GPO');
       return { line, state, status: response.status, data: response.data };
