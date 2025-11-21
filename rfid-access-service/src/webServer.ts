@@ -704,6 +704,17 @@ export const startWebInterface = async ({
     res.json({ status: gpoController.status() });
   });
 
+  router.post('/api/gpo/path-mode', ensureAuthenticated, ensureAdmin, (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const singleDeviceMode = Boolean(req.body?.singleDeviceMode);
+    gpoController.updatePathMode(singleDeviceMode);
+    res.json({ status: gpoController.status() });
+  });
+
   router.post('/api/gpo/device-id', ensureAuthenticated, ensureAdmin, (req, res) => {
     if (!gpoController) {
       res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });

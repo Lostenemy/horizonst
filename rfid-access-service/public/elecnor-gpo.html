@@ -112,6 +112,10 @@
               <dd id="gpo-base-url" class="muted">—</dd>
             </div>
             <div>
+              <dt>Modo de ruta</dt>
+              <dd id="gpo-path-mode" class="muted">—</dd>
+            </div>
+            <div>
               <dt>Device ID</dt>
               <dd id="gpo-device-id" class="muted">—</dd>
             </div>
@@ -139,6 +143,31 @@
             <div class="form-actions">
               <button type="submit" class="cta cta--ghost">Actualizar URL</button>
               <p class="muted">Cambiar esta URL solo afecta a las pruebas manuales.</p>
+            </div>
+          </form>
+          <form id="gpo-path-mode-form" class="form-grid">
+            <fieldset class="form-field">
+              <legend>Ruta de control</legend>
+              <div class="option-row">
+                <label class="option">
+                  <input type="radio" name="pathMode" id="gpo-path-multi" value="multi" checked />
+                  <span>
+                    <strong>Varios dispositivos (/devices/{id}/setGPO)</strong>
+                    <small>Necesita el deviceId publicado por el lector.</small>
+                  </span>
+                </label>
+                <label class="option">
+                  <input type="radio" name="pathMode" id="gpo-path-single" value="single" />
+                  <span>
+                    <strong>Un único dispositivo (/device/gpo)</strong>
+                    <small>Ignora el deviceId y usa la ruta simplificada.</small>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+            <div class="form-actions">
+              <button type="submit" class="cta cta--ghost">Guardar modo</button>
+              <p class="muted">Activa el modo que corresponda con tu firmware: múltiple o único dispositivo.</p>
             </div>
           </form>
           <form id="gpo-device-id-form" class="form-grid">

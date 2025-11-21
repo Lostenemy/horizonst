@@ -192,6 +192,19 @@ body.is-navigating #main-view {
   grid-column: 1 / -1;
 }
 
+#gpo-api-response {
+  width: 100%;
+  min-height: 120px;
+  background: #0b1021;
+  color: #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid #1f2937;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -361,6 +374,35 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
   margin-top: 12px;
+}
+
+.option-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.option strong {
+  display: block;
+  font-weight: 600;
+  color: #111827;
+}
+
+.option small {
+  display: block;
+  color: #6b7280;
 }
 
 .form-field {

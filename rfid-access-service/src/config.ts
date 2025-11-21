@@ -196,6 +196,7 @@ export const config = {
     deviceId: process.env.RFID_READER_DEVICE_ID || '',
     timeoutMs: parsePort(process.env.RFID_READER_CONTROLLER_TIMEOUT, 5000),
     enabled: parseBoolean(process.env.RFID_READER_CONTROLLER_ENABLED, true),
+    singleDeviceMode: parseBoolean(process.env.RFID_READER_SINGLE_DEVICE_MODE, false),
     username: process.env.RFID_READER_CONTROLLER_USER,
     password: process.env.RFID_READER_CONTROLLER_PASSWORD
   },

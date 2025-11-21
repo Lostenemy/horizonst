@@ -4,6 +4,10 @@
   const baseUrlField = document.getElementById('gpo-base-url');
   const baseUrlForm = document.getElementById('gpo-base-url-form');
   const baseUrlInput = document.getElementById('gpo-base-url-input');
+  const pathModeField = document.getElementById('gpo-path-mode');
+  const pathModeForm = document.getElementById('gpo-path-mode-form');
+  const pathModeMulti = document.getElementById('gpo-path-multi');
+  const pathModeSingle = document.getElementById('gpo-path-single');
   const deviceIdField = document.getElementById('gpo-device-id');
   const deviceIdForm = document.getElementById('gpo-device-id-form');
   const deviceIdInput = document.getElementById('gpo-device-id-input');
@@ -42,6 +46,7 @@
       scenarioDenied,
       lineForm?.querySelector('button[type="submit"]'),
       baseUrlForm?.querySelector('button[type="submit"]'),
+      pathModeForm?.querySelector('button[type="submit"]'),
       deviceIdForm?.querySelector('button[type="submit"]'),
       credentialsForm?.querySelector('button[type="submit"]')
     ].forEach((btn) => {
@@ -69,6 +74,13 @@
 
     if (baseUrlField) baseUrlField.textContent = status.baseUrl || '—';
     if (baseUrlInput) baseUrlInput.value = status.baseUrl || '';
+    if (pathModeField)
+      pathModeField.textContent =
+        status.pathMode === 'single-device'
+          ? 'Ruta única: /device/gpo/{line}/{state}'
+          : 'Ruta por deviceId: /devices/{id}/setGPO/{line}/{state}';
+    if (pathModeSingle) pathModeSingle.checked = Boolean(status.singleDeviceMode);
+    if (pathModeMulti) pathModeMulti.checked = !status.singleDeviceMode;
     if (deviceIdField) deviceIdField.textContent = status.deviceId || '—';
     if (deviceIdInput) deviceIdInput.value = status.deviceId || '';
     if (authUserField) authUserField.textContent = status.auth?.configured
@@ -89,12 +101,18 @@
         reason === 'MISSING_BASE_URL'
           ? 'Configura la URL base del lector (RFID_READER_CONTROLLER_BASE_URL) para activar el GPIO.'
           : reason === 'MISSING_DEVICE_ID'
-            ? 'Configura el deviceId del lector (RFID_READER_DEVICE_ID) para activar el GPIO.'
+            ? 'Configura el deviceId del lector (RFID_READER_DEVICE_ID) o activa el modo de ruta única.'
           : reason === 'DISABLED_FLAG'
             ? 'El control GPIO está deshabilitado en la variable RFID_READER_CONTROLLER_ENABLED.'
             : 'No se puede controlar el GPIO hasta completar la configuración del lector.';
       setError(message);
     }
+
+    deviceIdForm?.querySelectorAll('button, input').forEach((el) => {
+      if (!(el instanceof HTMLButtonElement || el instanceof HTMLInputElement)) return;
+      const disable = Boolean(status.singleDeviceMode) || (!controllerEnabled && el instanceof HTMLButtonElement);
+      el.disabled = disable;
+    });
 
     const formElements = lineForm ? Array.from(lineForm.elements) : [];
     formElements.forEach((el) => {
@@ -150,6 +168,30 @@
           : 'No se pudo actualizar la URL del lector. Revisa la configuración o los logs.';
       setError(message);
       renderApiResponse('Actualizar URL', error?.payload || { error: error?.message || 'No se pudo actualizar la URL' }, true);
+    } finally {
+      toggleLoading(false);
+    }
+  };
+
+  const handlePathModeSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+
+    const singleDeviceMode = Boolean(pathModeSingle?.checked);
+
+    toggleLoading(true);
+    try {
+      const { status } = await fetchJson(withBasePath('/api/gpo/path-mode'), {
+        method: 'POST',
+        body: JSON.stringify({ singleDeviceMode })
+      });
+      renderStatus(status);
+      renderApiResponse('Modo de ruta', status);
+      showToast('Modo de ruta actualizado', 'success');
+    } catch (error) {
+      const message = error?.message || 'No se pudo actualizar el modo de ruta.';
+      setError(message);
+      renderApiResponse('Modo de ruta', error?.payload || { error: message }, true);
     } finally {
       toggleLoading(false);
     }
@@ -280,6 +322,7 @@
   scenarioDenied?.addEventListener('click', () => runScenario('denied'));
   lineForm?.addEventListener('submit', handleLineSubmit);
   baseUrlForm?.addEventListener('submit', handleBaseUrlSubmit);
+  pathModeForm?.addEventListener('submit', handlePathModeSubmit);
   deviceIdForm?.addEventListener('submit', handleDeviceIdSubmit);
   credentialsForm?.addEventListener('submit', handleCredentialsSubmit);
 
