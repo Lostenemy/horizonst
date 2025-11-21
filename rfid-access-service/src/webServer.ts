@@ -642,6 +642,15 @@ export const startWebInterface = async ({
     return null;
   };
 
+  const parseAuthType = (value: unknown): 'none' | 'basic' | 'digest' | null => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'none' || normalized === 'basic' || normalized === 'digest') {
+      return normalized;
+    }
+    return null;
+  };
+
   router.get('/api/gpo/status', ensureAuthenticated, ensureAdmin, (_req, res) => {
     if (!gpoController) {
       res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE', status: { enabled: false } });
@@ -679,6 +688,15 @@ export const startWebInterface = async ({
         res.status(axiosError.response.status || 500).json({
           error: 'GPO_SCENARIO_FAILED',
           readerError: { status: axiosError.response.status, data: axiosError.response.data }
+        });
+        return;
+      }
+
+      const readerError = (error as any)?.response;
+      if (readerError) {
+        res.status(readerError.status || 500).json({
+          error: 'GPO_SCENARIO_FAILED',
+          readerError: { status: readerError.status, data: readerError.data }
         });
         return;
       }
@@ -740,6 +758,14 @@ export const startWebInterface = async ({
 
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const authType = parseAuthType(req.body?.authType);
+
+    if (!authType) {
+      res.status(400).json({ error: 'INVALID_AUTH_TYPE' });
+      return;
+    }
+
+    gpoController.updateAuthType(authType);
 
     if (!username || !password) {
       gpoController.updateCredentials(null);
@@ -809,6 +835,15 @@ export const startWebInterface = async ({
         res.status(axiosError.response.status || 500).json({
           error: 'GPO_CONTROL_FAILED',
           readerError: { status: axiosError.response.status, data: axiosError.response.data }
+        });
+        return;
+      }
+
+      const readerError = (err as any)?.response;
+      if (readerError) {
+        res.status(readerError.status || 500).json({
+          error: 'GPO_CONTROL_FAILED',
+          readerError: { status: readerError.status, data: readerError.data }
         });
         return;
       }

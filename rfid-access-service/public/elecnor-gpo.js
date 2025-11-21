@@ -13,6 +13,7 @@
   const deviceIdInput = document.getElementById('gpo-device-id-input');
   const authUserField = document.getElementById('gpo-auth-user');
   const credentialsForm = document.getElementById('gpo-credentials-form');
+  const authTypeSelect = document.getElementById('gpo-auth-type');
   const usernameInput = document.getElementById('gpo-username');
   const passwordInput = document.getElementById('gpo-password');
   const linesField = document.getElementById('gpo-lines');
@@ -83,9 +84,14 @@
     if (pathModeMulti) pathModeMulti.checked = !status.singleDeviceMode;
     if (deviceIdField) deviceIdField.textContent = status.deviceId || '—';
     if (deviceIdInput) deviceIdInput.value = status.deviceId || '';
-    if (authUserField) authUserField.textContent = status.auth?.configured
-      ? `Usuario ${status.auth.username || '(oculto)'}`
-      : 'Sin usuario';
+    if (authUserField) {
+      const label = status.auth?.configured
+        ? `Usuario ${status.auth.username || '(oculto)'}`
+        : 'Sin usuario';
+      const authLabel = status.auth?.type ? ` · Auth ${status.auth.type}` : '';
+      authUserField.textContent = `${label}${authLabel}`;
+    }
+    if (authTypeSelect) authTypeSelect.value = status.auth?.type || 'digest';
     if (usernameInput && status.auth?.username) usernameInput.value = status.auth.username;
     if (!status.auth?.configured) {
       if (usernameInput) usernameInput.value = '';
@@ -231,6 +237,7 @@
 
     const username = usernameInput?.value?.trim() || '';
     const password = passwordInput?.value || '';
+    const authType = authTypeSelect?.value || 'digest';
 
     if ((username && !password) || (!username && password)) {
       setError('Introduce usuario y contraseña para activar la autenticación o deja ambos vacíos para borrar.');
@@ -241,7 +248,7 @@
     try {
       const { status } = await fetchJson(withBasePath('/api/gpo/credentials'), {
         method: 'POST',
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, authType })
       });
       renderStatus(status);
       renderApiResponse('Credenciales', status);

@@ -188,6 +188,14 @@
           </form>
           <form id="gpo-credentials-form" class="form-grid">
             <label class="form-field">
+              <span>Tipo de autenticación</span>
+              <select id="gpo-auth-type" name="authType">
+                <option value="digest">Digest (MD5)</option>
+                <option value="basic">Basic</option>
+                <option value="none">Sin autenticación</option>
+              </select>
+            </label>
+            <label class="form-field">
               <span>Usuario del lector</span>
               <input
                 type="text"
@@ -209,7 +217,7 @@
             </label>
             <div class="form-actions">
               <button type="submit" class="cta cta--ghost">Guardar credenciales</button>
-              <p class="muted">El lector responde 401 si no se envían credenciales válidas. Dejar vacío borra las credenciales.</p>
+              <p class="muted">El lector responde 401 si no se envían credenciales válidas. Dejar usuario y contraseña vacíos borra las credenciales.</p>
             </div>
           </form>
         </article>

@@ -2,6 +2,8 @@ import axios, { AxiosInstance } from 'axios';
 import type { AccessDecision } from './types.js';
 import { logger } from './logger.js';
 
+type ReaderAuthType = 'none' | 'basic' | 'digest';
+
 interface ReaderControlConfig {
   baseUrl: string;
   deviceId: string;
@@ -10,6 +12,7 @@ interface ReaderControlConfig {
   username?: string;
   password?: string;
   singleDeviceMode?: boolean;
+  authType?: ReaderAuthType;
 }
 
 export interface ReaderGpoToggleResult {
@@ -37,11 +40,15 @@ export class ReaderGpoController {
 
   private credentials: { username: string; password: string } | null;
 
+  private authType: ReaderAuthType;
+
   private disabledReason: 'MISSING_BASE_URL' | 'MISSING_DEVICE_ID' | 'DISABLED_FLAG' | null;
 
   private deviceId: string;
 
   private singleDeviceMode: boolean;
+
+  private digestClient: any | null;
 
   private readonly allowedLines = [4, 5, 6];
 
@@ -51,12 +58,15 @@ export class ReaderGpoController {
     const normalizedBaseUrl = this.normalizeBaseUrl(config.baseUrl || '');
     const normalizedDeviceId = (config.deviceId || '').trim();
     const singleDeviceMode = Boolean(config.singleDeviceMode);
+    const authType = this.normalizeAuthType(config.authType);
 
     this.disabledReason = null;
     this.enabled = false;
     this.credentials = null;
     this.deviceId = normalizedDeviceId;
     this.singleDeviceMode = singleDeviceMode;
+    this.authType = authType;
+    this.digestClient = null;
     this.http = axios.create({
       baseURL: normalizedBaseUrl,
       timeout: config.timeoutMs
@@ -66,7 +76,8 @@ export class ReaderGpoController {
       ...config,
       baseUrl: normalizedBaseUrl,
       deviceId: normalizedDeviceId,
-      singleDeviceMode
+      singleDeviceMode,
+      authType
     };
 
     this.updateCredentials({ username: config.username, password: config.password });
@@ -101,7 +112,8 @@ export class ReaderGpoController {
       disabledReason: this.disabledReason,
       auth: {
         username: this.credentials?.username ?? null,
-        configured: Boolean(this.credentials)
+        configured: Boolean(this.credentials),
+        type: this.authType
       }
     } as const;
   }
@@ -132,10 +144,17 @@ export class ReaderGpoController {
 
     if (!username || !password) {
       this.credentials = null;
+      this.digestClient = null;
       return;
     }
 
     this.credentials = { username, password };
+    this.digestClient = null;
+  }
+
+  updateAuthType(authType: ReaderAuthType): void {
+    this.authType = this.normalizeAuthType(authType);
+    this.digestClient = null;
   }
 
   async triggerDecision(decision: AccessDecision): Promise<ReaderGpoActionResult[]> {
@@ -178,7 +197,8 @@ export class ReaderGpoController {
   }
 
   private async setGpo(line: number, state: boolean): Promise<ReaderGpoToggleResult> {
-    const authHeader = this.credentials
+    const useDigest = this.credentials && this.authType === 'digest';
+    const authHeader = this.credentials && this.authType === 'basic'
       ? {
           Authorization: `Basic ${Buffer.from(`${this.credentials.username}:${this.credentials.password}`).toString(
             'base64'
@@ -190,6 +210,12 @@ export class ReaderGpoController {
       const path = this.singleDeviceMode
         ? `/device/gpo/${line}/${state}`
         : `/devices/${encodeURIComponent(this.deviceId)}/setGPO/${line}/${state}`;
+      if (useDigest) {
+        const digestResponse = await this.performDigestRequest(path);
+        logger.debug({ line, state }, 'Toggled reader GPO with digest auth');
+        return { line, state, status: digestResponse.status, data: digestResponse.data };
+      }
+
       const response = await this.http.get(path, {
         headers: authHeader
       });
@@ -199,6 +225,59 @@ export class ReaderGpoController {
       logger.error({ err: error, line, state }, 'Failed to toggle reader GPO state');
       throw error;
     }
+  }
+
+  private async performDigestRequest(path: string): Promise<{ status: number; data: unknown }> {
+    if (!this.credentials) {
+      throw new Error('MISSING_CREDENTIALS');
+    }
+
+    if (!this.digestClient) {
+      const { default: DigestFetch } = await import('digest-fetch');
+      this.digestClient = new DigestFetch(this.credentials.username, this.credentials.password, {
+        algorithm: 'MD5',
+        basic: false
+      });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+
+    try {
+      const url = `${this.config.baseUrl}${path}`;
+      const response = await this.digestClient.fetch(url, { method: 'GET', signal: controller.signal });
+      const text = await response.text();
+      let data: unknown = text;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+
+      if (!response.ok) {
+        const error: any = new Error(`Digest request failed with status ${response.status}`);
+        error.response = { status: response.status, data };
+        throw error;
+      }
+
+      return { status: response.status, data };
+    } catch (error) {
+      logger.error({ err: error, path }, 'Digest authentication request failed');
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private normalizeAuthType(authType?: string | ReaderAuthType): ReaderAuthType {
+    if (!authType) return 'digest';
+
+    const normalized = `${authType}`.trim().toLowerCase();
+    if (normalized === 'none' || normalized === 'basic' || normalized === 'digest') {
+      return normalized;
+    }
+
+    return 'digest';
   }
 
   private recomputeState(): void {
