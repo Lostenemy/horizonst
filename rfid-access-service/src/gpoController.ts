@@ -6,6 +6,8 @@ interface ReaderControlConfig {
   baseUrl: string;
   timeoutMs: number;
   enabled: boolean;
+  username?: string;
+  password?: string;
 }
 
 export interface ReaderGpoToggleResult {
@@ -31,6 +33,8 @@ export class ReaderGpoController {
 
   private enabled: boolean;
 
+  private credentials: { username: string; password: string } | null;
+
   private disabledReason: 'MISSING_BASE_URL' | 'DISABLED_FLAG' | null;
 
   private readonly allowedLines = [4, 5, 6];
@@ -42,6 +46,7 @@ export class ReaderGpoController {
 
     this.disabledReason = null;
     this.enabled = false;
+    this.credentials = null;
     this.http = axios.create({
       baseURL: normalizedBaseUrl,
       timeout: config.timeoutMs
@@ -52,6 +57,7 @@ export class ReaderGpoController {
       baseUrl: normalizedBaseUrl
     };
 
+    this.updateCredentials({ username: config.username, password: config.password });
     this.recomputeState();
   }
 
@@ -77,7 +83,11 @@ export class ReaderGpoController {
       enabled: this.enabled,
       baseUrl: this.normalizeBaseUrl(this.config.baseUrl),
       allowedLines: this.allowedLines,
-      disabledReason: this.disabledReason
+      disabledReason: this.disabledReason,
+      auth: {
+        username: this.credentials?.username ?? null,
+        configured: Boolean(this.credentials)
+      }
     } as const;
   }
 
@@ -86,6 +96,18 @@ export class ReaderGpoController {
     this.config.baseUrl = normalizedBaseUrl;
     this.http.defaults.baseURL = normalizedBaseUrl;
     this.recomputeState();
+  }
+
+  updateCredentials(credentials: { username?: string; password?: string } | null): void {
+    const username = credentials?.username?.trim() ?? '';
+    const password = credentials?.password ?? '';
+
+    if (!username || !password) {
+      this.credentials = null;
+      return;
+    }
+
+    this.credentials = { username, password };
   }
 
   async triggerDecision(decision: AccessDecision): Promise<ReaderGpoActionResult[]> {
@@ -130,7 +152,9 @@ export class ReaderGpoController {
   private async setGpo(line: number, state: boolean): Promise<ReaderGpoToggleResult> {
     try {
       const path = `/setGPO/${line}/${state}`;
-      const response = await this.http.get(path);
+      const response = await this.http.get(path, {
+        auth: this.credentials ?? undefined
+      });
       logger.debug({ line, state }, 'Toggled reader GPO');
       return { line, state, status: response.status, data: response.data };
     } catch (error) {

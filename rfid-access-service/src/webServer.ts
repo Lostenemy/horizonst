@@ -704,6 +704,25 @@ export const startWebInterface = async ({
     res.json({ status: gpoController.status() });
   });
 
+  router.post('/api/gpo/credentials', ensureAuthenticated, ensureAdmin, (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!username || !password) {
+      gpoController.updateCredentials(null);
+      res.json({ status: gpoController.status(), cleared: true });
+      return;
+    }
+
+    gpoController.updateCredentials({ username, password });
+    res.json({ status: gpoController.status() });
+  });
+
   router.post('/api/gpo/test/line', ensureAuthenticated, ensureAdmin, async (req, res) => {
     if (!gpoController) {
       res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });

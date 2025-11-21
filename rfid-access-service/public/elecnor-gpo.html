@@ -112,6 +112,10 @@
               <dd id="gpo-base-url" class="muted">—</dd>
             </div>
             <div>
+              <dt>Credenciales</dt>
+              <dd id="gpo-auth-user" class="muted">Sin usuario</dd>
+            </div>
+            <div>
               <dt>Líneas disponibles</dt>
               <dd id="gpo-lines" class="muted">—</dd>
             </div>
@@ -131,6 +135,32 @@
             <div class="form-actions">
               <button type="submit" class="cta cta--ghost">Actualizar URL</button>
               <p class="muted">Cambiar esta URL solo afecta a las pruebas manuales.</p>
+            </div>
+          </form>
+          <form id="gpo-credentials-form" class="form-grid">
+            <label class="form-field">
+              <span>Usuario del lector</span>
+              <input
+                type="text"
+                id="gpo-username"
+                name="username"
+                placeholder="admin"
+                autocomplete="username"
+              />
+            </label>
+            <label class="form-field">
+              <span>Contraseña</span>
+              <input
+                type="password"
+                id="gpo-password"
+                name="password"
+                placeholder="••••••••"
+                autocomplete="current-password"
+              />
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="cta cta--ghost">Guardar credenciales</button>
+              <p class="muted">El lector responde 401 si no se envían credenciales válidas. Dejar vacío borra las credenciales.</p>
             </div>
           </form>
         </article>

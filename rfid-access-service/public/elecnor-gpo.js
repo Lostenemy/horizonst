@@ -4,6 +4,10 @@
   const baseUrlField = document.getElementById('gpo-base-url');
   const baseUrlForm = document.getElementById('gpo-base-url-form');
   const baseUrlInput = document.getElementById('gpo-base-url-input');
+  const authUserField = document.getElementById('gpo-auth-user');
+  const credentialsForm = document.getElementById('gpo-credentials-form');
+  const usernameInput = document.getElementById('gpo-username');
+  const passwordInput = document.getElementById('gpo-password');
   const linesField = document.getElementById('gpo-lines');
   const scenarioGranted = document.getElementById('gpo-scenario-granted');
   const scenarioDenied = document.getElementById('gpo-scenario-denied');
@@ -34,7 +38,8 @@
       scenarioGranted,
       scenarioDenied,
       lineForm?.querySelector('button[type="submit"]'),
-      baseUrlForm?.querySelector('button[type="submit"]')
+      baseUrlForm?.querySelector('button[type="submit"]'),
+      credentialsForm?.querySelector('button[type="submit"]')
     ].forEach((btn) => {
       if (!btn) return;
       btn.disabled = loading;
@@ -60,6 +65,14 @@
 
     if (baseUrlField) baseUrlField.textContent = status.baseUrl || '—';
     if (baseUrlInput) baseUrlInput.value = status.baseUrl || '';
+    if (authUserField) authUserField.textContent = status.auth?.configured
+      ? `Usuario ${status.auth.username || '(oculto)'}`
+      : 'Sin usuario';
+    if (usernameInput && status.auth?.username) usernameInput.value = status.auth.username;
+    if (!status.auth?.configured) {
+      if (usernameInput) usernameInput.value = '';
+      if (passwordInput) passwordInput.value = '';
+    }
     if (linesField) linesField.textContent = Array.isArray(status.allowedLines)
       ? status.allowedLines.join(', ')
       : '—';
@@ -134,6 +147,37 @@
     }
   };
 
+  const handleCredentialsSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+
+    const username = usernameInput?.value?.trim() || '';
+    const password = passwordInput?.value || '';
+
+    if ((username && !password) || (!username && password)) {
+      setError('Introduce usuario y contraseña para activar la autenticación o deja ambos vacíos para borrar.');
+      return;
+    }
+
+    toggleLoading(true);
+    try {
+      const { status } = await fetchJson(withBasePath('/api/gpo/credentials'), {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      });
+      renderStatus(status);
+      renderApiResponse('Credenciales', status);
+      showToast('Credenciales del lector guardadas para las pruebas', 'success');
+      if (!username && passwordInput) passwordInput.value = '';
+    } catch (error) {
+      const message = error?.message || 'No se pudieron guardar las credenciales del lector.';
+      setError(message);
+      renderApiResponse('Credenciales', error?.payload || { error: message }, true);
+    } finally {
+      toggleLoading(false);
+    }
+  };
+
   const runScenario = async (scenario) => {
     setError('');
     toggleLoading(true);
@@ -200,6 +244,7 @@
   scenarioDenied?.addEventListener('click', () => runScenario('denied'));
   lineForm?.addEventListener('submit', handleLineSubmit);
   baseUrlForm?.addEventListener('submit', handleBaseUrlSubmit);
+  credentialsForm?.addEventListener('submit', handleCredentialsSubmit);
 
   init();
 })();
