@@ -7,6 +7,7 @@ import mqtt, {
 import axios, { AxiosError } from 'axios';
 import { config } from './config.js';
 import { DniDirectory } from './dniDirectory.js';
+import { ReaderGpoController } from './gpoController.js';
 import { logger } from './logger.js';
 import { normalizeMac, safeJsonParse } from './utils.js';
 import { startWebInterface, type HistoryEvent, type WebInterfaceController } from './webServer.js';
@@ -59,6 +60,8 @@ const topicMatcher = buildTopicMatcher(config.subscriptions.topic);
 const axiosInstance = axios.create({
   timeout: config.authApi.timeoutMs
 });
+
+const gpoController = new ReaderGpoController(config.readerControl);
 
 type QoS = 0 | 1 | 2;
 
@@ -154,6 +157,12 @@ const handleAccessDecision = async (
   const topics = config.publishTopicsForMac(mac);
   const publishContext: PublishContext = { client, mac, cardId, dni, reason };
 
+  if (gpoController.isEnabled()) {
+    gpoController.handleDecision(decision).catch((error) => {
+      logger.error({ err: error, decision, mac, cardId }, 'Failed to control reader GPO');
+    });
+  }
+
   if (decision === 'GRANTED') {
     const publication = await publishCommand(client, topics.green, decision, publishContext, {
       signal: 'GREEN'
@@ -169,19 +178,52 @@ const handleAccessDecision = async (
   return [redPublication, alarmPublication];
 };
 
-const determineAcceptance = (responseData: Partial<AuthApiResponse> | undefined, _status: number): AccessDecision => {
+const determineAcceptance = (responseData: Partial<AuthApiResponse> | undefined): AccessDecision => {
   if (responseData && typeof responseData.accepted === 'boolean') {
     return responseData.accepted ? 'GRANTED' : 'DENIED';
   }
 
-  const statusField = (responseData?.status || responseData?.result || responseData?.decision) as string | undefined;
-  if (statusField) {
-    const normalized = statusField.toString().trim().toUpperCase();
-    if (['ACCEPTED', 'GRANTED', 'ALLOW', 'ALLOWED'].includes(normalized)) {
+  const interpretDecision = (value: string | undefined): AccessDecision | null => {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.toString().trim().toUpperCase();
+    if (
+      ['ACCEPTED', 'GRANTED', 'ALLOW', 'ALLOWED'].includes(normalized) ||
+      normalized.includes('ACCESO PERMITIDO')
+    ) {
       return 'GRANTED';
     }
-    if (['REJECTED', 'DENIED', 'BLOCKED', 'FORBIDDEN'].includes(normalized)) {
+
+    if (
+      ['REJECTED', 'DENIED', 'BLOCKED', 'FORBIDDEN'].includes(normalized) ||
+      normalized.includes('ACCESO DENEGADO')
+    ) {
       return 'DENIED';
+    }
+
+    return null;
+  };
+
+  const statusField = (responseData?.status || responseData?.result || responseData?.decision) as
+    | string
+    | undefined;
+  const statusDecision = interpretDecision(statusField);
+  if (statusDecision) {
+    return statusDecision;
+  }
+
+  const candidates = [
+    responseData?.message,
+    responseData?.details,
+    (responseData as { resultado?: string })?.resultado
+  ];
+
+  for (const candidate of candidates) {
+    const decision = interpretDecision(candidate as string | undefined);
+    if (decision) {
+      return decision;
     }
   }
 
@@ -229,7 +271,7 @@ const evaluateScan = async (
       additional
     });
 
-    const decision = determineAcceptance(response.data, response.status);
+    const decision = determineAcceptance(response.data);
     const reason = extractReason(response.data);
     const publications = await handleAccessDecision(client, decision, mac, cardId, dni, reason);
     return { decision, reason, dni, publications };
@@ -317,7 +359,8 @@ const start = async (): Promise<void> => {
       config: config.webInterface,
       ecoordinaDefaults: config.ecoordina,
       simulateScan: async (payload: SimulationRequest) =>
-        evaluateScan(client, { ...payload, source: 'web' })
+        evaluateScan(client, { ...payload, source: 'web' }),
+      gpoController
     });
   } catch (error) {
     logger.error({ err: error }, 'Failed to start web test interface');
