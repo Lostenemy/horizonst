@@ -5,6 +5,7 @@ import type { DirectoryConfig, LookupStrategy, MacDniMap } from './types.js';
 dotenv.config();
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+type ReaderAuthType = 'none' | 'basic' | 'digest';
 
 const parsePort = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -59,6 +60,17 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
   }
 
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+};
+
+const parseReaderAuthType = (value: string | undefined): ReaderAuthType => {
+  if (!value) return 'digest';
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'none' || normalized === 'basic' || normalized === 'digest') {
+    return normalized;
+  }
+
+  return 'digest';
 };
 
 const parseProtocolVersion = (value: string | undefined, fallback: 3 | 4 | 5): 3 | 4 | 5 => {
@@ -193,8 +205,13 @@ export const config = {
   },
   readerControl: {
     baseUrl: process.env.RFID_READER_CONTROLLER_BASE_URL || '',
+    deviceId: process.env.RFID_READER_DEVICE_ID || '',
     timeoutMs: parsePort(process.env.RFID_READER_CONTROLLER_TIMEOUT, 5000),
-    enabled: parseBoolean(process.env.RFID_READER_CONTROLLER_ENABLED, true)
+    enabled: parseBoolean(process.env.RFID_READER_CONTROLLER_ENABLED, true),
+    singleDeviceMode: parseBoolean(process.env.RFID_READER_SINGLE_DEVICE_MODE, false),
+    username: process.env.RFID_READER_CONTROLLER_USER,
+    password: process.env.RFID_READER_CONTROLLER_PASSWORD,
+    authType: parseReaderAuthType(process.env.RFID_READER_CONTROLLER_AUTH)
   },
   publishing: {
     qos: Number.parseInt(process.env.RFID_COMMAND_QOS || '1', 10),

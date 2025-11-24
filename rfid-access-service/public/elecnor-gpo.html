@@ -112,6 +112,18 @@
               <dd id="gpo-base-url" class="muted">—</dd>
             </div>
             <div>
+              <dt>Modo de ruta</dt>
+              <dd id="gpo-path-mode" class="muted">—</dd>
+            </div>
+            <div>
+              <dt>Device ID</dt>
+              <dd id="gpo-device-id" class="muted">—</dd>
+            </div>
+            <div>
+              <dt>Credenciales</dt>
+              <dd id="gpo-auth-user" class="muted">Sin usuario</dd>
+            </div>
+            <div>
               <dt>Líneas disponibles</dt>
               <dd id="gpo-lines" class="muted">—</dd>
             </div>
@@ -131,6 +143,81 @@
             <div class="form-actions">
               <button type="submit" class="cta cta--ghost">Actualizar URL</button>
               <p class="muted">Cambiar esta URL solo afecta a las pruebas manuales.</p>
+            </div>
+          </form>
+          <form id="gpo-path-mode-form" class="form-grid">
+            <fieldset class="form-field">
+              <legend>Ruta de control</legend>
+              <div class="option-row">
+                <label class="option">
+                  <input type="radio" name="pathMode" id="gpo-path-multi" value="multi" checked />
+                  <span>
+                    <strong>Varios dispositivos (/devices/{id}/setGPO)</strong>
+                    <small>Necesita el deviceId publicado por el lector.</small>
+                  </span>
+                </label>
+                <label class="option">
+                  <input type="radio" name="pathMode" id="gpo-path-single" value="single" />
+                  <span>
+                    <strong>Un único dispositivo (/device/setGPO)</strong>
+                    <small>Ignora el deviceId y usa la ruta simplificada.</small>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+            <div class="form-actions">
+              <button type="submit" class="cta cta--ghost">Guardar modo</button>
+              <p class="muted">Activa el modo que corresponda con tu firmware: múltiple o único dispositivo.</p>
+            </div>
+          </form>
+          <form id="gpo-device-id-form" class="form-grid">
+            <label class="form-field">
+              <span>ID de dispositivo (deviceId)</span>
+              <input
+                type="text"
+                id="gpo-device-id-input"
+                name="deviceId"
+                placeholder="000000000000"
+                autocomplete="off"
+              />
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="cta cta--ghost">Guardar deviceId</button>
+              <p class="muted">Necesario para construir la ruta /devices/{id}/setGPO.</p>
+            </div>
+          </form>
+          <form id="gpo-credentials-form" class="form-grid">
+            <label class="form-field">
+              <span>Tipo de autenticación</span>
+              <select id="gpo-auth-type" name="authType">
+                <option value="digest">Digest (MD5)</option>
+                <option value="basic">Basic</option>
+                <option value="none">Sin autenticación</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Usuario del lector</span>
+              <input
+                type="text"
+                id="gpo-username"
+                name="username"
+                placeholder="admin"
+                autocomplete="username"
+              />
+            </label>
+            <label class="form-field">
+              <span>Contraseña</span>
+              <input
+                type="password"
+                id="gpo-password"
+                name="password"
+                placeholder="••••••••"
+                autocomplete="current-password"
+              />
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="cta cta--ghost">Guardar credenciales</button>
+              <p class="muted">El lector responde 401 si no se envían credenciales válidas. Dejar usuario y contraseña vacíos borra las credenciales.</p>
             </div>
           </form>
         </article>
@@ -165,6 +252,7 @@
                 <option value="4">4</option>
                 <option value="5">5</option>
                 <option value="6">6</option>
+                <option value="8">8</option>
               </select>
             </label>
             <label class="form-field">
@@ -186,12 +274,14 @@
           </form>
         </article>
 
-        <article class="panel">
+        <article class="panel panel--full">
           <header class="panel__header">
             <div>
               <p class="eyebrow">Respuestas de la API</p>
               <h2>Última respuesta recibida</h2>
-              <p class="muted">Consulta el payload devuelto por el backend tras cada petición de prueba.</p>
+              <p class="muted">
+                Consulta el payload devuelto por el backend y por el lector tras cada petición de prueba.
+              </p>
             </div>
           </header>
           <pre id="gpo-api-response" class="muted" aria-live="polite">Sin peticiones todavía.</pre>

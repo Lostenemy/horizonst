@@ -157,9 +157,11 @@ const handleAccessDecision = async (
   const topics = config.publishTopicsForMac(mac);
   const publishContext: PublishContext = { client, mac, cardId, dni, reason };
 
-  gpoController.handleDecision(decision).catch((error) => {
-    logger.error({ err: error, decision, mac, cardId }, 'Failed to control reader GPO');
-  });
+  if (gpoController.isEnabled()) {
+    gpoController.handleDecision(decision).catch((error) => {
+      logger.error({ err: error, decision, mac, cardId }, 'Failed to control reader GPO');
+    });
+  }
 
   if (decision === 'GRANTED') {
     const publication = await publishCommand(client, topics.green, decision, publishContext, {

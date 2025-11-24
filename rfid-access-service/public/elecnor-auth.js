@@ -132,6 +132,9 @@
     if (!response.ok) {
       const error = new Error(data?.error || `Error ${response.status}`);
       error.status = response.status;
+      if (data) {
+        error.payload = data;
+      }
       throw error;
     }
 

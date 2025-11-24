@@ -642,6 +642,15 @@ export const startWebInterface = async ({
     return null;
   };
 
+  const parseAuthType = (value: unknown): 'none' | 'basic' | 'digest' | null => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'none' || normalized === 'basic' || normalized === 'digest') {
+      return normalized;
+    }
+    return null;
+  };
+
   router.get('/api/gpo/status', ensureAuthenticated, ensureAdmin, (_req, res) => {
     if (!gpoController) {
       res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE', status: { enabled: false } });
@@ -669,10 +678,33 @@ export const startWebInterface = async ({
     }
 
     try {
-      await gpoController.triggerDecision(decision);
-      res.json({ ok: true, decision });
+      const readerResponses = await gpoController.triggerDecision(decision);
+      res.json({ ok: true, decision, readerResponses });
     } catch (error) {
       logger.error({ err: error, decision }, 'Failed to run GPO scenario test');
+
+      const axiosError = error as AxiosError & { requestUrl?: string };
+      if (axios.isAxiosError(axiosError) && axiosError.response) {
+        res.status(axiosError.response.status || 500).json({
+          error: 'GPO_SCENARIO_FAILED',
+          readerError: {
+            status: axiosError.response.status,
+            data: axiosError.response.data,
+            url: axiosError.requestUrl
+          }
+        });
+        return;
+      }
+
+      const readerError = (error as any)?.response;
+      if (readerError) {
+        res.status(readerError.status || 500).json({
+          error: 'GPO_SCENARIO_FAILED',
+          readerError: { status: readerError.status, data: readerError.data, url: (error as any)?.requestUrl }
+        });
+        return;
+      }
+
       res.status(500).json({ error: 'GPO_SCENARIO_FAILED' });
     }
   });
@@ -691,6 +723,61 @@ export const startWebInterface = async ({
     }
 
     gpoController.updateBaseUrl(baseUrl);
+    res.json({ status: gpoController.status() });
+  });
+
+  router.post('/api/gpo/path-mode', ensureAuthenticated, ensureAdmin, (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const singleDeviceMode = Boolean(req.body?.singleDeviceMode);
+    gpoController.updatePathMode(singleDeviceMode);
+    res.json({ status: gpoController.status() });
+  });
+
+  router.post('/api/gpo/device-id', ensureAuthenticated, ensureAdmin, (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
+
+    if (!deviceId) {
+      res.status(400).json({ error: 'INVALID_DEVICE_ID' });
+      return;
+    }
+
+    gpoController.updateDeviceId(deviceId);
+    res.json({ status: gpoController.status() });
+  });
+
+  router.post('/api/gpo/credentials', ensureAuthenticated, ensureAdmin, (req, res) => {
+    if (!gpoController) {
+      res.status(503).json({ error: 'GPO_CONTROLLER_UNAVAILABLE' });
+      return;
+    }
+
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const authType = parseAuthType(req.body?.authType);
+
+    if (!authType) {
+      res.status(400).json({ error: 'INVALID_AUTH_TYPE' });
+      return;
+    }
+
+    gpoController.updateAuthType(authType);
+
+    if (!username || !password) {
+      gpoController.updateCredentials(null);
+      res.json({ status: gpoController.status(), cleared: true });
+      return;
+    }
+
+    gpoController.updateCredentials({ username, password });
     res.json({ status: gpoController.status() });
   });
 
@@ -725,8 +812,18 @@ export const startWebInterface = async ({
     }
 
     try {
-      await gpoController.controlLine(line, action as 'on' | 'off' | 'pulse', duration);
-      res.json({ ok: true, line, action, durationMs: action === 'pulse' ? duration ?? 1000 : undefined });
+      const readerResponse = await gpoController.controlLine(
+        line,
+        action as 'on' | 'off' | 'pulse',
+        duration
+      );
+      res.json({
+        ok: true,
+        line,
+        action,
+        durationMs: action === 'pulse' ? duration ?? 1000 : undefined,
+        readerResponse
+      });
     } catch (error) {
       const err = error as Error;
       const knownErrors = ['INVALID_LINE', 'GPO_DISABLED'];
@@ -736,6 +833,29 @@ export const startWebInterface = async ({
       }
 
       logger.error({ err, line, action, duration }, 'Failed to control reader GPO line');
+
+      const axiosError = err as AxiosError & { requestUrl?: string };
+      if (axios.isAxiosError(axiosError) && axiosError.response) {
+        res.status(axiosError.response.status || 500).json({
+          error: 'GPO_CONTROL_FAILED',
+          readerError: {
+            status: axiosError.response.status,
+            data: axiosError.response.data,
+            url: axiosError.requestUrl
+          }
+        });
+        return;
+      }
+
+      const readerError = (err as any)?.response;
+      if (readerError) {
+        res.status(readerError.status || 500).json({
+          error: 'GPO_CONTROL_FAILED',
+          readerError: { status: readerError.status, data: readerError.data, url: (err as any)?.requestUrl }
+        });
+        return;
+      }
+
       res.status(500).json({ error: 'GPO_CONTROL_FAILED' });
     }
   });
