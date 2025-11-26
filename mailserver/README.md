@@ -24,6 +24,15 @@ Esta carpeta deja listo el contenedor de correo para envío/recepción con TLS y
 - Postfix usa `TLS_LEVEL=modern`, `smtpd_tls_auth_only=yes` y `submission_tls_security_level=encrypt`.
 - Dovecot sirve IMAPS con TLS obligatorio.
 
+### Relé saliente requerido
+- El puerto 25 saliente está bloqueado, así que docker-mailserver enviará vía relé autenticado.
+- Configura en `mailserver.env`:
+  - `RELAY_HOST` y `RELAY_PORT` (587 recomendado, STARTTLS; 465 para SMTPS).
+  - `RELAY_USER` y `RELAY_PASSWORD` (credenciales del proveedor).
+  - `ENABLE_SUBMISSION=true`, `ENABLE_SMTPS=true`, `TLS_LEVEL=modern`, `ENABLE_OPENDKIM=1`, `ENABLE_OPENDMARC=1`, `ENABLE_POLICYD_SPF=1` ya están fijados.
+  - No es necesario editar `main.cf`; docker-mailserver genera `relayhost` y `smtp_sasl_password_maps` automáticamente.
+  - Usa el bundle de CA del sistema para validar el relé (montaje extra no requerido salvo CA privada).
+
 ## Provisioning de cuentas y aliases
 - Formato `postfix-accounts.cf`: `user@domain|hash_sha512`. Se incluyen:
   - `notificaciones@horizonst.com.es`
@@ -45,6 +54,22 @@ Esta carpeta deja listo el contenedor de correo para envío/recepción con TLS y
   - `openssl s_client -connect localhost:465 -quiet` debe negociar TLS.
   - `nc -z localhost 993` confirma IMAPS.
   - Enviar prueba a `postmaster@horizonst.com.es` y a un dominio externo; revisar logs en `/var/log/mail/`.
+  - Verificar el relé: `docker compose exec mail /tmp/docker-mailserver/relay-smoke.sh external@example.com`.
+
+## Smoke test del relé (script)
+- Script en `/tmp/docker-mailserver/relay-smoke.sh` (montado desde `mailserver/config`).
+- Ejecuta:
+  - Resolución DNS de `RELAY_HOST`.
+  - Negociación TLS con `openssl s_client` (STARTTLS si puerto 587, TLS directo si 465).
+  - Envío de un correo simple vía Postfix al destinatario indicado (por defecto `postmaster@horizonst.com.es`).
+- Ejemplo: `docker compose exec mail /tmp/docker-mailserver/relay-smoke.sh prueba@gmail.com`.
+- Revisa `/var/log/mail/mail.log` para confirmar que no hay `deferred`.
+
+## Checklist DNS/Reputación
+- SPF (horizonst.com.es): incluir el dominio del relé y los registros `a`/`mx` según el proveedor (ej.: `v=spf1 a mx include:<relay-domain> -all`).
+- DKIM: publicar la clave en `mail._domainkey.horizonst.com.es` generada con `setup config dkim`.
+- DMARC recomendado: `v=DMARC1; p=quarantine; rua=mailto:dmarc@horizonst.com.es; ruf=mailto:dmarc@horizonst.com.es; fo=1` (ajusta política según necesidad).
+- PTR/rDNS: si se usa relé, prevalece el rDNS del relé; si se abre 25 directamente, pedir que apunte a `mail.horizonst.com.es`.
 
 ## Notas
 - Si la red bloquea el puerto 25 saliente, las entregas directas se aplazarán; documenta en logs y considera relé externo. Los clientes seguirán enviando por 587/465.
