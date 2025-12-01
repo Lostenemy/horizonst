@@ -90,7 +90,9 @@
         <div class="hero__cta">
           <div class="callout">
             <p class="eyebrow">Referencias</p>
-            <p>"Acceso permitido" enciende GPO4 durante 5 segundos. "Acceso denegado" activa GPO5 10s y GPO6 5s.</p>
+            <p>
+              "Acceso permitido" enciende GPO1 durante 5 segundos. "Acceso denegado" activa GPO2 10s y GPO3 5s.
+            </p>
           </div>
         </div>
       </section>
@@ -234,7 +236,7 @@
               <button type="button" id="gpo-scenario-denied" class="cta cta--danger">Acceso denegado</button>
             </div>
           </header>
-          <p class="muted">Los tiempos siguen la configuración actual (GPO4 5s, GPO5 10s, GPO6 5s).</p>
+          <p class="muted">Los tiempos siguen la configuración actual (GPO1 5s, GPO2 10s, GPO3 5s).</p>
         </article>
 
         <article class="panel">
@@ -249,9 +251,13 @@
             <label class="form-field">
               <span>Línea</span>
               <select id="gpo-line" required>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
                 <option value="4">4</option>
                 <option value="5">5</option>
                 <option value="6">6</option>
+                <option value="7">7</option>
                 <option value="8">8</option>
               </select>
             </label>

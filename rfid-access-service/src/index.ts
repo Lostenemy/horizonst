@@ -380,7 +380,7 @@ const evaluateScan = async (
   const providedDirection = normalizeDirection(context.direction);
   const direction = providedDirection ?? directionFromAntenna(antenna);
   const shouldControlGpo = direction === 'ENTRY';
-  const shouldValidateDocumentation = direction !== 'EXIT';
+  const shouldValidateDocumentation = direction === 'ENTRY';
 
   const dni = await dniDirectory.getDni(mac);
 
