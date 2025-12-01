@@ -462,7 +462,7 @@ const processMessage = async (client: MqttClient, topic: string, payloadBuffer: 
     : null;
 
   const mac = macFromPayload || macFromTopic;
-  const antenna = extractAntenna(parsed);
+  const antenna = parsed ? extractAntenna(parsed) : null;
   const direction = normalizeDirection(parsed?.direction) ?? directionFromAntenna(antenna);
 
   if (!cardId) {
@@ -480,7 +480,7 @@ const processMessage = async (client: MqttClient, topic: string, payloadBuffer: 
     cardId,
     timestamp: parsed?.timestamp,
     additional: parsed?.additional,
-    antenna,
+    antenna: antenna ?? undefined,
     direction,
     source: 'mqtt'
   });
