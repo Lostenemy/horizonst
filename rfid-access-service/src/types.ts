@@ -1,8 +1,12 @@
+export type AccessDirection = 'ENTRY' | 'EXIT' | 'UNKNOWN';
+
 export interface RfidScanMessage {
   readerMac: string;
   cardId: string;
   timestamp?: string;
   additional?: Record<string, unknown>;
+  antenna?: number;
+  direction?: AccessDirection;
 }
 
 export interface AuthApiResponse {
@@ -29,6 +33,8 @@ export interface AccessEvaluationResult {
   reason?: string;
   dni: string | null;
   publications: PublishedCommand[];
+  antenna?: number | null;
+  direction: AccessDirection;
 }
 
 export interface SimulationRequest {
@@ -36,6 +42,8 @@ export interface SimulationRequest {
   cardId: string;
   timestamp?: string;
   additional?: Record<string, unknown>;
+  antenna?: number;
+  direction?: AccessDirection;
 }
 
 export interface DirectoryConfig {
