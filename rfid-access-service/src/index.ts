@@ -459,7 +459,7 @@ const processMessage = async (client: MqttClient, topic: string, payloadBuffer: 
   const macFromPayload = normalizeMac(parsed?.readerMac);
   const macFromTopic = topicMatcher.macGroupIndex
     ? normalizeMac(topic.match(topicMatcher.regex)?.[topicMatcher.macGroupIndex] ?? undefined)
-    : null;
+    : normalizeMac(topic.split('/').pop());
 
   const mac = macFromPayload || macFromTopic;
   const antenna = parsed ? extractAntenna(parsed) : null;
