@@ -1,0 +1,10 @@
+CONTAINER                 REPOSITORY                     TAG                 PLATFORM            IMAGE ID            SIZE                CREATED
+cert-init                 horizonst-cert-init            latest              linux/amd64         0c82a5876ebf        9.1MB               About an hour ago
+horizonst-app-1           horizonst-app                  latest              linux/amd64         7115a5c0a7f7        150MB               About an hour ago
+horizonst-emqx-1          emqx/emqx                      5.5.0               linux/amd64         3e48305181f4        490MB               292 years ago
+horizonst-pgadmin-1       dpage/pgadmin4                 8.10                linux/amd64         90ec73daf8e7        481MB               292 years ago
+horizonst-portal-1        horizonst-portal               latest              linux/amd64         86afb333c28c        48.3MB              About an hour ago
+horizonst-postgres-1      postgres                       15-alpine           linux/amd64         1ea231e84a18        273MB               292 years ago
+horizonst-rfid_access-1   horizonst-rfid_access          latest              linux/amd64         41a114b1314c        202MB               About an hour ago
+horizonst-webmail-1       roundcube/roundcubemail        1.6.11-apache       linux/amd64         e2d3c655b3f8        721MB               292 years ago
+mail                      mailserver/docker-mailserver   15.1.0              linux/amd64         4f5093c251b6        762MB               292 years ago

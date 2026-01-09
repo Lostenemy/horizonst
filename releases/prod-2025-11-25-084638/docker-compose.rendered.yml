@@ -1,0 +1,424 @@
+name: horizonst
+services:
+  app:
+    build:
+      context: /opt/horizonst/backend
+      dockerfile: Dockerfile
+    depends_on:
+      emqx:
+        condition: service_started
+        required: true
+      mail:
+        condition: service_started
+        required: true
+      postgres:
+        condition: service_started
+        required: true
+    environment:
+      CONTACT_RECIPIENTS: contacto@horizonst.com.es,soporte@horizonst.com.es
+      DB_HOST: postgres
+      DB_NAME: horizonst
+      DB_PASSWORD: horizonst
+      DB_PORT: "5432"
+      DB_USER: horizonst
+      EMQX_MGMT_HOST: emqx
+      EMQX_MGMT_MAX_RETRIES: "20"
+      EMQX_MGMT_PASSWORD: 20025@BLELoRa
+      EMQX_MGMT_PORT: "18083"
+      EMQX_MGMT_RETRY_INTERVAL_MS: "3000"
+      EMQX_MGMT_SSL: "false"
+      EMQX_MGMT_USERNAME: admin
+      MAIL_EHLO_DOMAIN: horizonst.com.es
+      MAIL_FROM: no_reply@horizonst.com.es
+      MAIL_HOST: mail
+      MAIL_PASSWORD: No_reply#2024
+      MAIL_PORT: "465"
+      MAIL_SECURE: "true"
+      MAIL_TLS_REJECT_UNAUTHORIZED: "false"
+      MAIL_USER: no_reply@horizonst.com.es
+      MQTT_HOST: emqx
+      MQTT_PASS: Chanel_horizon@2024
+      MQTT_PERSISTENCE_MODE: app
+      MQTT_PORT: "1883"
+      MQTT_USER: Horizon@user2024
+      RFID_ACCESS_API_ACTION: acceso_permitido_data
+      RFID_ACCESS_API_ACTION_TYPE: clo
+      RFID_ACCESS_API_BRAND: ecoordina
+      RFID_ACCESS_API_INSTANCE: elecnor
+      RFID_ACCESS_API_TIMEOUT: "7000"
+      RFID_ACCESS_API_TOKEN: ""
+      RFID_ACCESS_API_URL: https://ws.e-coordina.com/1.4
+      RFID_ACCESS_API_USER: webservice
+      RFID_ACCESS_DEFAULT_READER: RF1
+      RFID_ACCESS_ENABLED: "true"
+      RFID_ACCESS_TOPIC: devices/RF1
+      RFID_GPIO_GREEN_PIN: "6"
+      RFID_GPIO_PULSE_MS: "3000"
+      RFID_GPIO_QOS: "1"
+      RFID_GPIO_RED_PIN: "7"
+      RFID_GPIO_TOPIC_TEMPLATE: devices/{reader}/gpio
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1:3000/health || exit 1
+      timeout: 5s
+      interval: 15s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 50m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 3000
+        published: "3000"
+        protocol: tcp
+    restart: unless-stopped
+  cert-init:
+    build:
+      context: /opt/horizonst
+      dockerfile: Dockerfile.cert-init
+    container_name: cert-init
+    environment:
+      CERT_CN: mail.horizonst.com.es
+      SSL_DIR: /tmp/docker-mailserver/ssl
+    networks:
+      default: null
+    restart: "no"
+    volumes:
+      - type: bind
+        source: /opt/horizonst/mailserver/config
+        target: /tmp/docker-mailserver
+        bind:
+          create_host_path: true
+  emqx:
+    environment:
+      EMQX_ALLOW_ANONYMOUS: "false"
+      EMQX_AUTH__MNESIA__USER__1__PASSWORD: Chanel_horizon@2024
+      EMQX_AUTH__MNESIA__USER__1__USERNAME: Horizon@user2024
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: 20025@BLELoRa
+      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
+      EMQX_LISTENERS__TCP__DEFAULT__BIND: 0.0.0.0:1883
+      EMQX_NODE__NAME: emqx@127.0.0.1
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - nc -z 127.0.0.1 1883 || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 10
+    image: emqx/emqx:5.5.0
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 50m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 18083
+        published: "18083"
+        protocol: tcp
+      - mode: ingress
+        target: 1883
+        published: "1887"
+        protocol: tcp
+    restart: unless-stopped
+  mail:
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    container_name: mail
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
+        required: true
+    domainname: horizonst.com.es
+    environment:
+      ACCOUNT_PROVISIONER: FILE
+      DEFAULT_RELAY_HOST: ""
+      DMS_DEBUG: "0"
+      ENABLE_CLAMAV: "0"
+      ENABLE_FAIL2BAN: "1"
+      ENABLE_MANAGESIEVE: "1"
+      ENABLE_POP3: "0"
+      ENABLE_POSTGREY: "0"
+      ENABLE_QUOTAS: "1"
+      ENABLE_SASLAUTHD: "0"
+      ENABLE_SPAMASSASSIN: "0"
+      ENABLE_UPDATE_CHECK: "0"
+      LOGWATCH_INTERVAL: daily
+      ONE_DIR: "1"
+      PERMIT_DOCKER: connected-networks
+      POSTMASTER_ADDRESS: postmaster@horizonst.com.es
+      REPORT_INTERVAL: daily
+      REPORT_RECIPIENT: postmaster@horizonst.com.es
+      SSL_CERT_PATH: /tmp/docker-mailserver/ssl/mail.horizonst.com.es-cert.pem
+      SSL_KEY_PATH: /tmp/docker-mailserver/ssl/mail.horizonst.com.es-key.pem
+      SSL_TYPE: manual
+      TLS_LEVEL: modern
+    hostname: mail
+    image: mailserver/docker-mailserver:15.1.0
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 50m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        target: 25
+        published: "25"
+        protocol: tcp
+      - mode: ingress
+        target: 465
+        published: "465"
+        protocol: tcp
+      - mode: ingress
+        target: 587
+        published: "587"
+        protocol: tcp
+      - mode: ingress
+        target: 993
+        published: "993"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: mail_data
+        target: /var/mail
+        volume: {}
+      - type: volume
+        source: mail_state
+        target: /var/mail-state
+        volume: {}
+      - type: volume
+        source: mail_logs
+        target: /var/log/mail
+        volume: {}
+      - type: bind
+        source: /opt/horizonst/mailserver/config
+        target: /tmp/docker-mailserver
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /opt/horizonst/mailserver/fail2ban/postfix.local
+        target: /etc/fail2ban/jail.d/postfix.local
+        read_only: true
+        bind:
+          create_host_path: true
+  pgadmin:
+    depends_on:
+      postgres:
+        condition: service_started
+        required: true
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@horizonst.com.es
+      PGADMIN_DEFAULT_PASSWORD: admin
+    image: dpage/pgadmin4:8.10
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 50m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 80
+        published: "5050"
+        protocol: tcp
+    restart: unless-stopped
+  portal:
+    build:
+      context: /opt/horizonst/portal
+      dockerfile: Dockerfile
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 50m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 80
+        published: "3080"
+        protocol: tcp
+  postgres:
+    environment:
+      POSTGRES_DB: horizonst
+      POSTGRES_PASSWORD: horizonst
+      POSTGRES_USER: horizonst
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U horizonst -d horizonst || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 10
+    image: postgres:15-alpine
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 50m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 5432
+        published: "5432"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: postgres_data
+        target: /var/lib/postgresql/data
+        volume: {}
+      - type: bind
+        source: /opt/horizonst/db/schema.sql
+        target: /docker-entrypoint-initdb.d/01-schema.sql
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /opt/horizonst/db/seed.sql
+        target: /docker-entrypoint-initdb.d/02-seed.sql
+        read_only: true
+        bind:
+          create_host_path: true
+  rfid_access:
+    build:
+      context: /opt/horizonst/rfid-access-service
+      dockerfile: Dockerfile
+    depends_on:
+      emqx:
+        condition: service_started
+        required: true
+      postgres:
+        condition: service_started
+        required: true
+    environment:
+      BASE_PATH: /elecnor
+      ECOORDINA_TIMEOUT_MS: "8000"
+      ECOORDINA_TOKEN: ""
+      ECOORDINA_URL: https://ws.e-coordina.com/1.4
+      ECOORDINA_USER: ""
+      HTTP_PORT: "3001"
+      MQTT_HOST: emqx
+      MQTT_PASS: Chanel_horizon@2024
+      MQTT_PORT: "1883"
+      MQTT_USER: Horizon@user2024
+      READER_BASE_URL: http://88.20.2.60
+      READER_DIGEST_REALM: realm
+      READER_GPO_LINES: 4,8
+      READER_GPO_PULSE_MS: "1000"
+      READER_PASSWORD: admin
+      READER_USERNAME: admin
+      RFID_DB_ADMIN_DB: postgres
+      RFID_DB_HOST: postgres
+      RFID_DB_NAME: rfid_access
+      RFID_DB_PASSWORD: horizonst
+      RFID_DB_PORT: "5432"
+      RFID_DB_SSL: "0"
+      RFID_DB_USER: horizonst
+      RFID_MAC_DNI_LOOKUP_STRATEGY: on-demand
+      RFID_MAC_DNI_REFRESH_MS: "300000"
+      RFID_WEB_ENABLED: "1"
+      RFID_WEB_HISTORY_SIZE: "50"
+      RFID_WEB_PASSWORD: admin
+      RFID_WEB_SESSION_SECRET: rfid-access-secret
+      RFID_WEB_USERNAME: admin
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -qO-
+        - http://127.0.0.1:3001/health
+      timeout: 3s
+      interval: 20s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 50m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 3001
+        published: "3001"
+        protocol: tcp
+    restart: unless-stopped
+  webmail:
+    depends_on:
+      mail:
+        condition: service_started
+        required: true
+    environment:
+      ROUNDCUBEMAIL_DB_TYPE: sqlite
+      ROUNDCUBEMAIL_DEFAULT_HOST: ssl://mail
+      ROUNDCUBEMAIL_DEFAULT_PORT: "993"
+      ROUNDCUBEMAIL_IMAP_CONN_OPTIONS: '{"ssl":{"verify_peer":false,"verify_peer_name":false}}'
+      ROUNDCUBEMAIL_REQUEST_PATH: /webmail/
+      ROUNDCUBEMAIL_SMTP_CONN_OPTIONS: '{"ssl":{"verify_peer":false,"verify_peer_name":false}}'
+      ROUNDCUBEMAIL_SMTP_PASS: '%p'
+      ROUNDCUBEMAIL_SMTP_PORT: "587"
+      ROUNDCUBEMAIL_SMTP_SERVER: tls://mail
+      ROUNDCUBEMAIL_SMTP_USER: '%u'
+    image: roundcube/roundcubemail:1.6.11-apache
+    logging:
+      driver: json-file
+      options:
+        max-file: "5"
+        max-size: 10m
+    networks:
+      horizonst: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 80
+        published: "8080"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: webmail_data
+        target: /var/roundcube
+        volume: {}
+      - type: bind
+        source: /opt/horizonst/mailserver/roundcube/20-horizonst.php
+        target: /var/roundcube/config/20-horizonst.php
+        read_only: true
+        bind:
+          create_host_path: true
+networks:
+  default:
+    name: horizonst_default
+  horizonst:
+    name: horizonst_horizonst
+    driver: bridge
+volumes:
+  mail_data:
+    name: horizonst_mail_data
+  mail_logs:
+    name: horizonst_mail_logs
+  mail_state:
+    name: horizonst_mail_state
+  postgres_data:
+    name: horizonst_postgres_data
+  webmail_data:
+    name: horizonst_webmail_data
