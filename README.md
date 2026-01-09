@@ -30,8 +30,24 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    cd horizonst
    ```
 
-2. **Configurar variables opcionales:**
-  - El contenedor de la app consume el fichero `backend/.env`. Incluye la configuración mínima para enlazar con EMQX dentro de la red de Docker y exponer las credenciales del panel para la integración de auditoría:
+2. **Configurar variables de entorno (fuera del repositorio):**
+   - Cree un `.env` en la raíz (o use secretos Docker) con las credenciales de infraestructura. Ejemplo mínimo:
+     ```env
+     DB_USER=horizonst
+     DB_PASSWORD=defina_un_secreto
+     MQTT_USER=defina_un_usuario
+     MQTT_PASS=defina_un_secreto
+     EMQX_DASHBOARD_USERNAME=admin
+     EMQX_DASHBOARD_PASSWORD=defina_un_secreto
+     EMQX_MGMT_USERNAME=admin
+     EMQX_MGMT_PASSWORD=defina_un_secreto
+     PGADMIN_DEFAULT_EMAIL=admin@horizonst.com.es
+     PGADMIN_DEFAULT_PASSWORD=defina_un_secreto
+     RFID_WEB_SESSION_SECRET=defina_un_secreto
+     RFID_WEB_USERNAME=admin
+     RFID_WEB_PASSWORD=defina_un_secreto
+     ```
+   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con EMQX dentro de la red de Docker y exponer las credenciales del panel para la integración de auditoría:
      ```env
      MQTT_HOST=emqx
      MQTT_PORT=1883
@@ -39,17 +55,17 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      EMQX_MGMT_HOST=emqx
      EMQX_MGMT_PORT=18083
      EMQX_MGMT_USERNAME=admin
-     EMQX_MGMT_PASSWORD=20025@BLELoRa
+     EMQX_MGMT_PASSWORD=defina_un_secreto
      EMQX_MGMT_SSL=false
      ```
-    El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`. Cambie a `MQTT_PERSISTENCE_MODE=emqx` únicamente si su instancia de EMQX dispone de conectores PostgreSQL (por ejemplo, la edición Enterprise) o ha configurado un bridge compatible manualmente. Si el broker rechaza el conector, la aplicación continuará automáticamente con la persistencia local.
-   - Para enrutar los envíos de correo desde la API configure además (los valores por defecto utilizan el buzón `no_reply@horizonst.com.es` para envíos automatizados):
+     El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`. Cambie a `MQTT_PERSISTENCE_MODE=emqx` únicamente si su instancia de EMQX dispone de conectores PostgreSQL (por ejemplo, la edición Enterprise) o ha configurado un bridge compatible manualmente. Si el broker rechaza el conector, la aplicación continuará automáticamente con la persistencia local.
+   - Para enrutar los envíos de correo desde la API configure además:
      ```env
      MAIL_HOST=mail
      MAIL_PORT=465
      MAIL_SECURE=true
      MAIL_USER=no_reply@horizonst.com.es
-     MAIL_PASSWORD=No_reply#2024
+     MAIL_PASSWORD=defina_un_secreto
      MAIL_FROM=no_reply@horizonst.com.es
      CONTACT_RECIPIENTS=contacto@horizonst.com.es,soporte@horizonst.com.es
      MAIL_EHLO_DOMAIN=horizonst.com.es
@@ -57,20 +73,27 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      ```
      El valor `MAIL_TLS_REJECT_UNAUTHORIZED=false` permite utilizar el certificado autofirmado generado por defecto en el contenedor `mail`. Cambie a `true` cuando cargue certificados emitidos por una CA.
 
-3. **Construir e iniciar todos los servicios de aplicación y datos:**
+3. **Construir e iniciar los servicios de aplicación y datos:**
    ```bash
    docker compose up --build -d
    ```
    Esto levantará:
-  - `app`: API y portal web (puerto interno 3000).
-  - `rfid_access`: microservicio Node.js que valida lecturas RFID frente a una API externa y gobierna los actuadores MQTT.
+   - `app`: API y portal web (puerto interno 3000).
+   - `rfid_access`: microservicio Node.js que valida lecturas RFID frente a una API externa y gobierna los actuadores MQTT.
    - `postgres`: base de datos PostgreSQL inicializada con `db/schema.sql` y `db/seed.sql`.
-   - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (usuario: `admin@horizonst.com.es`, contraseña: `admin`).
+   - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (credenciales definidas en `.env`).
    - `emqx`: broker MQTT expuesto en el puerto `1887` del host (sin TLS) y con dashboard interno en `http://127.0.0.1:18083/`.
+   - `mail` y `webmail` solo se levantan si activa el perfil `mail` (ver siguiente paso).
+
+4. **(Opcional) Levantar el stack de correo:**
+   ```bash
+   docker compose --profile mail up --build -d
+   ```
+   Esto levantará:
    - `mail`: servidor SMTP/IMAP basado en docker-mailserver expuesto en los puertos `25`, `465`, `587` y `993` del host.
    - `webmail`: interfaz Roundcube ligada a `http://127.0.0.1:8080/` (utilícela detrás de Nginx en producción mediante `/webmail/`).
 
-4. **(Opcional) Lanzar únicamente el microservicio RFID:**
+5. **(Opcional) Lanzar únicamente el microservicio RFID:**
    Si solo necesita depurar el flujo de validación RFID, puede emplear el `docker-compose.rfid-access.yml` incluido en la raíz
    del proyecto:
    ```bash
@@ -79,21 +102,27 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    Este archivo genera un contenedor aislado `rfid_access` dentro de su propia red `rfid_access_net`. Ajuste las variables de
    entorno `MQTT_HOST`, `MQTT_PORT`, `MQTT_USER` y `MQTT_PASS` si desea conectarse a un broker diferente al predeterminado.
 
-5. **Acceder al portal:**
+6. **Acceder al portal:**
    - Durante el desarrollo puede acceder a `http://127.0.0.1:3000/`. En producción debe hacerlo a través de Nginx por `https://horizonst.com.es/`.
-   - Inicie sesión con:
-     - Usuario: `admin@horizonst.com.es`
-     - Contraseña: `Admin@2024`
-   - Cambie la contraseña del administrador tras el primer inicio de sesión.
+   - Inicie sesión con las credenciales de administrador definidas en su configuración de entorno/seed y cámbielas tras el primer inicio de sesión.
 
 ### Servidor de correo HorizonST
 
 - La configuración de Docker Mailserver vive en `mailserver/`. El fichero `mailserver.env` habilita Fail2Ban y Managesieve y deja desactivados ClamAV/SpamAssassin para reducir consumo. Todos los datos persistentes se guardan en los volúmenes `mail_data`, `mail_state` y `mail_logs`.
-- `mailserver/config/postfix-accounts.cf` declara (con hashes `SHA512-CRYPT`) las cuentas `notificaciones@horizonst.com.es`, `admin@horizonst.com.es` y `no_reply@horizonst.com.es`. Regenerar los hashes con `docker compose exec mail setup password hash <usuario>` y compartir las contraseñas reales por un canal seguro; evite dejar texto plano en el repositorio.
+- `mailserver/config/postfix-accounts.cf` declara (con hashes `SHA512-CRYPT`) las cuentas `notificaciones@horizonst.com.es`, `admin@horizonst.com.es` y `no_reply@horizonst.com.es`. Regenerar los hashes con `docker compose --profile mail exec mail setup password hash <usuario>` y compartir las contraseñas reales por un canal seguro; evite dejar texto plano en el repositorio.
 - `mailserver/config/postfix-aliases.cf` enruta `contacto@horizonst.com.es` y `soporte@horizonst.com.es` hacia `notificaciones@horizonst.com.es` para centralizar las solicitudes del portal.
 - `mailserver/fail2ban/postfix.local` amplía la directiva `ignoreip` de Fail2Ban a la subred Docker (`172.18.0.0/16`) y evita falsos positivos al acceder desde los contenedores internos. El fichero se monta en `/etc/fail2ban/jail.d/postfix.local`.
 - `mailserver/roundcube/20-horizonst.php` se inyecta en `/var/roundcube/config/` y fuerza el prefijo `/webmail/`, además de indicar que TLS se termina en Nginx (`force_https = false`) y que Roundcube debe seguir usando IMAP/SMTP internos con certificados autofirmados mientras dure la fase de pruebas.
 - Roundcube se expone mediante la imagen oficial `roundcube/roundcubemail:1.6.11-apache`, con sus datos (`/var/roundcube`) persistidos en el volumen `webmail_data`. Tras Nginx se publica en `https://horizonst.com.es/webmail/` mediante el snippet `nginx/snippets/roundcube.conf`, por lo que todo el HTML debe generarse bajo `/webmail/`.
+- Para usar certificados reales (por ejemplo Let’s Encrypt), defina `MAIL_SSL_TYPE=manual`, `MAIL_SSL_CERT_PATH` y `MAIL_SSL_KEY_PATH` en `.env` y monte los ficheros del host en un `docker-compose.override.yml`, por ejemplo:
+  ```yaml
+  services:
+    mail:
+      volumes:
+        - /etc/letsencrypt/live/mail.horizonst.com.es/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
+        - /etc/letsencrypt/live/mail.horizonst.com.es/privkey.pem:/etc/ssl/private/privkey.pem:ro
+  ```
+  Después actualice `MAIL_SSL_CERT_PATH=/etc/ssl/certs/fullchain.pem` y `MAIL_SSL_KEY_PATH=/etc/ssl/private/privkey.pem`, y cambie `MAIL_TLS_REJECT_UNAUTHORIZED=true` en la app.
 - Para firmar DKIM ejecute una vez `docker compose exec mail setup config dkim` y publique el registro TXT indicado en su DNS (`mailserver/config/opendkim/keys/`).
 - Recuerde crear los registros DNS necesarios: `MX` apuntando a `mail.horizonst.com.es`, SPF (`v=spf1 mx ~all`) y, opcionalmente, DMARC (`_dmarc`). Abra en el cortafuegos los puertos TCP `25`, `465`, `587` y `993` hacia el host que ejecuta Docker.
 
@@ -103,8 +132,8 @@ Siga siempre los mismos pasos para aplicar cambios y evitar configuraciones dive
 
 1. `git pull`
 2. `docker compose pull && docker compose up -d`
-3. `docker compose exec mail setup reload` *(o reinicie el servicio mail si cambia la configuración base)*
-4. `docker compose exec webmail apachectl -k graceful`
+3. `docker compose --profile mail exec mail setup reload` *(solo si usa el stack de correo o reinicie el servicio mail si cambia la configuración base)*
+4. `docker compose --profile mail exec webmail apachectl -k graceful`
 5. `nginx -t && sudo systemctl reload nginx`
 
 ## Estructura del proyecto
