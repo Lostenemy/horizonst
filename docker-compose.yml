@@ -172,9 +172,9 @@ services:
       context: .
       dockerfile: Dockerfile.cert-init
     profiles:
-      - mail
+      - dev
     environment:
-      CERT_CN: mail.horizonst.com.es
+      CERT_CN: ${MAIL_FQDN:-mail.horizonst.com.es}
       SSL_DIR: /tmp/docker-mailserver/ssl
     volumes:
       - ./mailserver/config:/tmp/docker-mailserver:rw
@@ -197,9 +197,6 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_PTRACE
-    depends_on:
-      cert-init:
-        condition: service_completed_successfully
     volumes:
       - mail_data:/var/mail
       - mail_state:/var/mail-state
@@ -209,6 +206,7 @@ services:
       - mail_dovecot_conf:/etc/dovecot
       - dkim_conf:/etc/opendkim
       - mail_logs:/var/log/mail
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./mailserver/config:/tmp/docker-mailserver:rw
       - ./mailserver/fail2ban/postfix.local:/etc/fail2ban/jail.d/postfix.local:ro
     ports:
