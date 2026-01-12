@@ -188,7 +188,7 @@ services:
     profiles:
       - mail
     env_file:
-      - ./mailserver/mailserver.env
+      - ./.env
     environment:
       - SSL_TYPE=${MAIL_SSL_TYPE:-manual}
       - SSL_CERT_PATH=${MAIL_SSL_CERT_PATH:-/tmp/docker-mailserver/ssl/mail.horizonst.com.es-cert.pem}
