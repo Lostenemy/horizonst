@@ -194,7 +194,7 @@ export const config = {
     timeoutMs: parsePort(process.env.ECOORDINA_API_TIMEOUT, 7000)
   },
   subscriptions: {
-    topic: process.env.RFID_READER_TOPIC || 'rfid/readers/+/scan',
+    topic: process.env.RFID_READER_TOPIC || 'devices/RF1',
     qos: Number.parseInt(process.env.RFID_READER_QOS || '1', 10)
   },
   directory: buildDirectoryConfig(),
