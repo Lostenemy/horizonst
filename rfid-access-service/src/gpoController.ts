@@ -51,7 +51,7 @@ export class ReaderGpoController {
 
   private digestClient: any | null;
 
-  private readonly allowedLines = [4, 5, 6, 8];
+  private readonly allowedLines = [1, 2, 3, 4, 5, 6, 7, 8];
 
   private readonly config: ReaderControlConfig;
 
@@ -91,11 +91,11 @@ export class ReaderGpoController {
     }
 
     if (decision === 'GRANTED') {
-      return [await this.pulse(4, 5000)];
+      return [await this.pulse(1, 5000)];
     }
 
-    const [line5, line6] = await Promise.all([this.pulse(5, 10000), this.pulse(6, 5000)]);
-    return [line5, line6];
+    const [line2, line3] = await Promise.all([this.pulse(2, 10000), this.pulse(3, 5000)]);
+    return [line2, line3];
   }
 
   isEnabled(): boolean {
