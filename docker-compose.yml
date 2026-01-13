@@ -20,23 +20,22 @@ services:
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USER=horizonst
-      - DB_PASSWORD=horizonst
-      - DB_NAME=horizonst
-      - MQTT_USER=${MQTT_USER:-Horizon@user2024}
-      - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-horizonst}
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASS=${MQTT_PASS}
       - MQTT_PERSISTENCE_MODE=app
       - EMQX_MGMT_HOST=emqx
       - EMQX_MGMT_PORT=18083
-      - EMQX_MGMT_USERNAME=admin
-      - EMQX_MGMT_PASSWORD=20025@BLELoRa
+      - EMQX_MGMT_USERNAME=${EMQX_MGMT_USERNAME}
+      - EMQX_MGMT_PASSWORD=${EMQX_MGMT_PASSWORD}
       - EMQX_MGMT_SSL=false
       - EMQX_MGMT_MAX_RETRIES=20
       - EMQX_MGMT_RETRY_INTERVAL_MS=3000
     depends_on:
       - postgres
       - emqx
-      - mail
     restart: unless-stopped
     logging:
       driver: json-file
@@ -61,20 +60,20 @@ services:
     environment:
       - MQTT_HOST=emqx
       - MQTT_PORT=1883
-      - MQTT_USER=${MQTT_USER:-Horizon@user2024}
-      - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASS=${MQTT_PASS}
       - HTTP_PORT=${HTTP_PORT:-3001}
       - BASE_PATH=${BASE_PATH:-/elecnor}
       - RFID_WEB_ENABLED=${RFID_WEB_ENABLED:-1}
-      - RFID_WEB_SESSION_SECRET=${RFID_WEB_SESSION_SECRET:-rfid-access-secret}
-      - RFID_WEB_USERNAME=${RFID_WEB_USERNAME:-admin}
-      - RFID_WEB_PASSWORD=${RFID_WEB_PASSWORD:-admin}
+      - RFID_WEB_SESSION_SECRET=${RFID_WEB_SESSION_SECRET}
+      - RFID_WEB_USERNAME=${RFID_WEB_USERNAME}
+      - RFID_WEB_PASSWORD=${RFID_WEB_PASSWORD}
       - RFID_WEB_HISTORY_SIZE=${RFID_WEB_HISTORY_SIZE:-50}
       - RFID_DB_HOST=${RFID_DB_HOST:-postgres}
       - RFID_DB_PORT=${RFID_DB_PORT:-5432}
-      - RFID_DB_USER=${RFID_DB_USER:-horizonst}
-      - RFID_DB_PASSWORD=${RFID_DB_PASSWORD:-horizonst}
-      - RFID_DB_NAME=${RFID_DB_NAME:-rfid_access}
+      - RFID_DB_USER=${RFID_DB_USER}
+      - RFID_DB_PASSWORD=${RFID_DB_PASSWORD}
+      - RFID_DB_NAME=${RFID_DB_NAME}
       - RFID_DB_ADMIN_DB=${RFID_DB_ADMIN_DB:-postgres}
       - RFID_DB_SSL=${RFID_DB_SSL:-0}
     depends_on:
@@ -99,9 +98,9 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=horizonst
-      - POSTGRES_PASSWORD=horizonst
-      - POSTGRES_DB=horizonst
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-horizonst}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -125,8 +124,8 @@ services:
   pgadmin:
     image: dpage/pgadmin4:8.10
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@horizonst.com.es
-      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -143,15 +142,15 @@ services:
   emqx:
     image: emqx/emqx:5.5.0
     environment:
-      EMQX_ALLOW_ANONYMOUS: "false"
-      EMQX_AUTH__MNESIA__USER__1__PASSWORD: "${MQTT_PASS:-Chanel_horizon@2024}"
-      EMQX_AUTH__MNESIA__USER__1__USERNAME: "${MQTT_USER:-Horizon@user2024}"
-      EMQX_DASHBOARD__BASE_PATH: /emqx
-      EMQX_DASHBOARD__DEFAULT_PASSWORD: "20025@BLELoRa"
-      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
-      EMQX_DASHBOARD__PROXY: "true"
-      EMQX_LISTENERS__TCP__DEFAULT__BIND: "0.0.0.0:1883"
-      EMQX_NODE__NAME: emqx@127.0.0.1
+     - EMQX_ALLOW_ANONYMOUS="false"
+     - EMQX_AUTH__MNESIA__USER__1__PASSWORD=${MQTT_PASS}
+     - EMQX_AUTH__MNESIA__USER__1__USERNAME=${MQTT_USER}
+     - EMQX_DASHBOARD__BASE_PATH=/emqx
+     - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
+     - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USERNAME}
+     - EMQX_DASHBOARD__PROXY="true"
+     - EMQX_LISTENERS__TCP__DEFAULT__BIND=0.0.0.0:1883
+     - EMQX_NODE__NAME=emqx@127.0.0.1
     restart: unless-stopped
     logging:
       driver: json-file
@@ -159,7 +158,7 @@ services:
         max-size: "50m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 1883 || exit 1"]
+      test: ["CMD-SHELL", "emqx_ctl status"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -174,8 +173,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.cert-init
+    profiles:
+      - dev
     environment:
-      CERT_CN: mail.horizonst.com.es
+      CERT_CN: ${MAIL_FQDN:-mail.horizonst.com.es}
       SSL_DIR: /tmp/docker-mailserver/ssl
     volumes:
       - ./mailserver/config:/tmp/docker-mailserver:rw
@@ -186,23 +187,28 @@ services:
     hostname: mail
     domainname: horizonst.com.es
     container_name: mail
+    profiles:
+      - mail
     env_file:
-      - ./mailserver/mailserver.env
+      - ./.env
     environment:
-      - SSL_TYPE=manual
-      - SSL_CERT_PATH=/tmp/docker-mailserver/ssl/mail.horizonst.com.es-cert.pem
-      - SSL_KEY_PATH=/tmp/docker-mailserver/ssl/mail.horizonst.com.es-key.pem
+      - SSL_TYPE=${MAIL_SSL_TYPE:-manual}
+      - SSL_CERT_PATH=${MAIL_SSL_CERT_PATH:-/tmp/docker-mailserver/ssl/mail.horizonst.com.es-cert.pem}
+      - SSL_KEY_PATH=${MAIL_SSL_KEY_PATH:-/tmp/docker-mailserver/ssl/mail.horizonst.com.es-key.pem}
       - ENABLE_QUOTAS=1
     cap_add:
       - NET_ADMIN
       - SYS_PTRACE
-    depends_on:
-      cert-init:
-        condition: service_completed_successfully
     volumes:
       - mail_data:/var/mail
       - mail_state:/var/mail-state
+      - mail_dovecot:/var/lib/dovecot
+      - mail_spool:/var/spool/postfix
+      - mail_postfix_conf:/etc/postfix
+      - mail_dovecot_conf:/etc/dovecot
+      - dkim_conf:/etc/opendkim
       - mail_logs:/var/log/mail
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./mailserver/config:/tmp/docker-mailserver:rw
       - ./mailserver/fail2ban/postfix.local:/etc/fail2ban/jail.d/postfix.local:ro
     ports:
@@ -216,11 +222,18 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 587 && nc -z localhost 993"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
     networks:
       - horizonst
 
   webmail:
     image: roundcube/roundcubemail:1.6.11-apache
+    profiles:
+      - mail
     depends_on:
       - mail
     restart: unless-stopped
@@ -256,5 +269,10 @@ volumes:
   postgres_data:
   mail_data:
   mail_state:
+  mail_dovecot:
+  mail_spool:
+  mail_postfix_conf:
+  mail_dovecot_conf:
   mail_logs:
+  dkim_conf:
   webmail_data:
