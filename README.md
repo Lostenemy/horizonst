@@ -108,7 +108,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 
 ### Servidor de correo HorizonST
 
-- La configuración de Docker Mailserver vive en `mailserver/`. El fichero `mailserver.env` habilita Fail2Ban y Managesieve y deja desactivados ClamAV/SpamAssassin para reducir consumo. Todos los datos persistentes se guardan en los volúmenes `mail_data`, `mail_state` y `mail_logs`.
+- La configuración de Docker Mailserver vive en `mailserver/`. Los flags del servicio (Fail2Ban, Managesieve, ClamAV/SpamAssassin, etc.) se cargan desde el `.env` raíz: copie el bloque de correo de `.env.example` al `.env` real antes de recrear el contenedor para evitar cambios involuntarios. Todos los datos persistentes se guardan en los volúmenes `mail_data`, `mail_state` y `mail_logs`.
 - `mailserver/config/postfix-accounts.cf` declara (con hashes `SHA512-CRYPT`) las cuentas `notificaciones@horizonst.com.es`, `admin@horizonst.com.es` y `no_reply@horizonst.com.es`. Regenerar los hashes con `docker compose --profile mail exec mail setup password hash <usuario>` y compartir las contraseñas reales por un canal seguro; evite dejar texto plano en el repositorio.
 - `mailserver/config/postfix-aliases.cf` enruta `contacto@horizonst.com.es` y `soporte@horizonst.com.es` hacia `notificaciones@horizonst.com.es` para centralizar las solicitudes del portal.
 - `mailserver/fail2ban/postfix.local` amplía la directiva `ignoreip` de Fail2Ban a la subred Docker (`172.18.0.0/16`) y evita falsos positivos al acceder desde los contenedores internos. El fichero se monta en `/etc/fail2ban/jail.d/postfix.local`.
