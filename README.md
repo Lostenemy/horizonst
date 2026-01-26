@@ -59,6 +59,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      EMQX_MGMT_PASSWORD=defina_un_secreto
      EMQX_MGMT_SSL=false
      ```
+     Genere un valor largo y estable para `EMQX_NODE_COOKIE` (por ejemplo, `openssl rand -hex 32`) y no lo cambie tras el despliegue para evitar problemas de clustering o estado del nodo.
      El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`. Cambie a `MQTT_PERSISTENCE_MODE=emqx` únicamente si su instancia de EMQX dispone de conectores PostgreSQL (por ejemplo, la edición Enterprise) o ha configurado un bridge compatible manualmente. Si el broker rechaza el conector, la aplicación continuará automáticamente con la persistencia local.
    - Para enrutar los envíos de correo desde la API configure además:
      ```env
@@ -86,6 +87,30 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    - `emqx`: broker MQTT expuesto en el puerto `1887` del host (sin TLS) y con dashboard interno en `http://127.0.0.1:18083/`.
    - `mail` y `webmail` solo se levantan si activa el perfil `mail` (ver siguiente paso).
    - `emqx` usa PostgreSQL como backend de autenticación (`mqtt_user`) y autorización (`mqtt_acl`). Para bases de datos existentes, aplique manualmente `db/mqtt.sql` o mediante su sistema de migraciones antes del despliegue.
+
+### Migración en bases existentes (PostgreSQL)
+
+El script `db/mqtt.sql` solo se ejecuta automáticamente en bases nuevas. En entornos con volumen de PostgreSQL ya inicializado, ejecute la migración manualmente:
+
+```bash
+./scripts/migrate-mqtt.sh
+```
+
+### Ejemplos de usuarios y ACLs MQTT
+
+> Nota: EMQX espera hashes bcrypt completos en `password_hash` (incluyendo el salt en el propio hash). El campo `salt` puede dejarse vacío.
+
+```sql
+-- Usuario MQTT de ejemplo (reemplace por valores reales)
+INSERT INTO mqtt_user (username, password_hash, salt, is_superuser)
+VALUES ('device_client', '$2b$10$hash_bcrypt_de_ejemplo', '', false);
+
+-- ACLs mínimas de ejemplo para publicar/suscribirse a topics de dispositivos
+INSERT INTO mqtt_acl (username, permission, action, topic, qos, retain)
+VALUES
+  ('device_client', 'allow', 'subscribe', 'devices/#', 0, 0),
+  ('device_client', 'allow', 'publish', 'devices/#', 0, 0);
+```
 
 4. **(Opcional) Levantar el stack de correo:**
    ```bash
