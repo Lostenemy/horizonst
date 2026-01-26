@@ -105,6 +105,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ./db/mqtt.sql:/docker-entrypoint-initdb.d/03-mqtt.sql:ro
     restart: unless-stopped
     logging:
       driver: json-file
@@ -142,15 +143,18 @@ services:
   emqx:
     image: emqx/emqx:5.5.0
     environment:
-     - EMQX_ALLOW_ANONYMOUS="false"
-     - EMQX_AUTH__MNESIA__USER__1__PASSWORD=${MQTT_PASS}
-     - EMQX_AUTH__MNESIA__USER__1__USERNAME=${MQTT_USER}
-     - EMQX_DASHBOARD__BASE_PATH=/emqx
-     - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
-     - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USERNAME}
-     - EMQX_DASHBOARD__PROXY="true"
-     - EMQX_LISTENERS__TCP__DEFAULT__BIND=0.0.0.0:1883
-     - EMQX_NODE__NAME=emqx@127.0.0.1
+      - EMQX_ALLOW_ANONYMOUS="false"
+      - EMQX_DASHBOARD__BASE_PATH=/emqx
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USERNAME}
+      - EMQX_DASHBOARD__PROXY="true"
+      - EMQX_LISTENERS__TCP__DEFAULT__BIND=0.0.0.0:1883
+      - EMQX_NODE__NAME=emqx@127.0.0.1
+      - EMQX_PG_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+      - ./emqx/etc/emqx.conf:/opt/emqx/etc/emqx.conf:ro
     restart: unless-stopped
     logging:
       driver: json-file
@@ -277,3 +281,5 @@ volumes:
   mail_logs:
   dkim_conf:
   webmail_data:
+  emqx_data:
+  emqx_log:
