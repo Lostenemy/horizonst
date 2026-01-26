@@ -96,6 +96,12 @@ El script `db/mqtt.sql` solo se ejecuta automáticamente en bases nuevas. En ent
 ./scripts/migrate-mqtt.sh
 ```
 
+Si anteriormente se cargaron credenciales hardcodeadas en EMQX, elimine los overlays en el volumen antes de reiniciar para asegurar que la configuración declarativa y las variables de entorno sean la única fuente de verdad:
+
+```bash
+docker compose exec emqx rm -f /opt/emqx/data/configs/app.*.config
+```
+
 ### Ejemplos de usuarios y ACLs MQTT
 
 > Nota: EMQX espera hashes bcrypt completos en `password_hash` (incluyendo el salt en el propio hash). El campo `salt` puede dejarse vacío.
