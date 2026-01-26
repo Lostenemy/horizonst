@@ -41,6 +41,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      EMQX_DASHBOARD_PASSWORD=defina_un_secreto
      EMQX_MGMT_USERNAME=admin
      EMQX_MGMT_PASSWORD=defina_un_secreto
+     EMQX_NODE_COOKIE=defina_un_secreto_largo
      PGADMIN_DEFAULT_EMAIL=admin@horizonst.com.es
      PGADMIN_DEFAULT_PASSWORD=defina_un_secreto
      RFID_WEB_SESSION_SECRET=defina_un_secreto
@@ -84,6 +85,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (credenciales definidas en `.env`).
    - `emqx`: broker MQTT expuesto en el puerto `1887` del host (sin TLS) y con dashboard interno en `http://127.0.0.1:18083/`.
    - `mail` y `webmail` solo se levantan si activa el perfil `mail` (ver siguiente paso).
+   - `emqx` usa PostgreSQL como backend de autenticación (`mqtt_user`) y autorización (`mqtt_acl`). Para bases de datos existentes, aplique manualmente `db/mqtt.sql` o mediante su sistema de migraciones antes del despliegue.
 
 4. **(Opcional) Levantar el stack de correo:**
    ```bash
