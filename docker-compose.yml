@@ -211,6 +211,7 @@ services:
       - mail_logs:/var/log/mail
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./mailserver/config:/tmp/docker-mailserver:rw
+      - ./mailserver/postfix/postscreen_access.cidr:/etc/postfix/postscreen_access.cidr:ro
       - ./mailserver/fail2ban/postfix.local:/etc/fail2ban/jail.d/postfix.local:ro
     ports:
       - "25:25"
