@@ -195,7 +195,6 @@ services:
       - SSL_TYPE=${MAIL_SSL_TYPE:-manual}
       - SSL_CERT_PATH=${MAIL_SSL_CERT_PATH:-/tmp/docker-mailserver/ssl/mail.horizonst.com.es-cert.pem}
       - SSL_KEY_PATH=${MAIL_SSL_KEY_PATH:-/tmp/docker-mailserver/ssl/mail.horizonst.com.es-key.pem}
-      - POSTFIX_POSTSCREEN_ACCESS_LIST=permit_mynetworks,cidr:/etc/postfix/postscreen_access.cidr
       - ENABLE_QUOTAS=1
     cap_add:
       - NET_ADMIN
