@@ -26,16 +26,9 @@ services:
       - MQTT_USER=${MQTT_USER}
       - MQTT_PASS=${MQTT_PASS}
       - MQTT_PERSISTENCE_MODE=app
-      - EMQX_MGMT_HOST=emqx
-      - EMQX_MGMT_PORT=18083
-      - EMQX_MGMT_USERNAME=${EMQX_MGMT_USERNAME}
-      - EMQX_MGMT_PASSWORD=${EMQX_MGMT_PASSWORD}
-      - EMQX_MGMT_SSL=false
-      - EMQX_MGMT_MAX_RETRIES=20
-      - EMQX_MGMT_RETRY_INTERVAL_MS=3000
     depends_on:
       - postgres
-      - emqx
+      - vernemq
     restart: unless-stopped
     logging:
       driver: json-file
@@ -58,7 +51,7 @@ services:
     env_file:
       - ./rfid-access-service/.env
     environment:
-      - MQTT_HOST=emqx
+      - MQTT_HOST=vernemq
       - MQTT_PORT=1883
       - MQTT_USER=${MQTT_USER}
       - MQTT_PASS=${MQTT_PASS}
@@ -77,7 +70,7 @@ services:
       - RFID_DB_ADMIN_DB=${RFID_DB_ADMIN_DB:-postgres}
       - RFID_DB_SSL=${RFID_DB_SSL:-0}
     depends_on:
-      - emqx
+      - vernemq
       - postgres
     restart: unless-stopped
     logging:
@@ -105,6 +98,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ./db/mqtt.sql:/docker-entrypoint-initdb.d/03-mqtt.sql:ro
     restart: unless-stopped
     logging:
       driver: json-file
@@ -139,18 +133,28 @@ services:
     networks:
       - horizonst
 
-  emqx:
-    image: emqx/emqx:5.5.0
+  vernemq:
+    build:
+      context: .
+      dockerfile: vernemq/Dockerfile
     environment:
-     - EMQX_ALLOW_ANONYMOUS="false"
-     - EMQX_AUTH__MNESIA__USER__1__PASSWORD=${MQTT_PASS}
-     - EMQX_AUTH__MNESIA__USER__1__USERNAME=${MQTT_USER}
-     - EMQX_DASHBOARD__BASE_PATH=/emqx
-     - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
-     - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USERNAME}
-     - EMQX_DASHBOARD__PROXY="true"
-     - EMQX_LISTENERS__TCP__DEFAULT__BIND=0.0.0.0:1883
-     - EMQX_NODE__NAME=emqx@127.0.0.1
+      - DOCKER_VERNEMQ_ACCEPT_EULA=yes
+      - DOCKER_VERNEMQ_ALLOW_ANONYMOUS=off
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_PASSWD=off
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_ACL=off
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_DIVERSITY=on
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__SCRIPT__FILE=/vernemq/etc/vmq_diversity/auth.lua
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__HOST=postgres
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PORT=5432
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__DATABASE=${DB_NAME:-horizonst}
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__USER=${DB_USER}
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PASSWORD=${DB_PASSWORD}
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PASSWORD_HASH_METHOD=bcrypt
+    volumes:
+      - vernemq_data:/vernemq/data
+      - vernemq_log:/vernemq/log
+      - ./vernemq/vmq_diversity/auth.lua:/vernemq/etc/vmq_diversity/auth.lua:ro
+      - ./vernemq/vmq_diversity/bcrypt.lua:/vernemq/share/lua/bcrypt.lua:ro
     restart: unless-stopped
     logging:
       driver: json-file
@@ -158,12 +162,11 @@ services:
         max-size: "50m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "emqx_ctl status"]
+      test: ["CMD-SHELL", "vmq-admin status || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
     ports:
-      - "127.0.0.1:18083:18083"
       - "1887:1883"
     networks:
       - horizonst
@@ -277,3 +280,5 @@ volumes:
   mail_logs:
   dkim_conf:
   webmail_data:
+  vernemq_data:
+  vernemq_log:

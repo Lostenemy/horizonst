@@ -4,8 +4,8 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 
 - **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2` y `devices/MK3`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
 - **Portal web HTML5 + JavaScript** accesible a través de `www.horizonst.com.es` con funcionalidades diferenciadas para administradores y usuarios finales.
-- **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y EMQX. El proxy inverso Nginx se despliega
-  **fuera** de Docker y expone la web en HTTPS junto con los paneles de EMQX y pgAdmin.
+- **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y VerneMQ. El proxy inverso Nginx se despliega
+  **fuera** de Docker y expone la web en HTTPS junto con pgAdmin.
 - **Microservicio de control de accesos RFID (Elecnor)** con interfaz web propia, autenticación con sesiones HTTP, paneles de tarjetas/trabajadores/cuentas/accesos/seguimiento y persistencia en una base de datos PostgreSQL dedicada creada automáticamente.
 
 ## Estado del repositorio
@@ -37,28 +37,19 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      DB_PASSWORD=defina_un_secreto
      MQTT_USER=defina_un_usuario
      MQTT_PASS=defina_un_secreto
-     EMQX_DASHBOARD_USERNAME=admin
-     EMQX_DASHBOARD_PASSWORD=defina_un_secreto
-     EMQX_MGMT_USERNAME=admin
-     EMQX_MGMT_PASSWORD=defina_un_secreto
      PGADMIN_DEFAULT_EMAIL=admin@horizonst.com.es
      PGADMIN_DEFAULT_PASSWORD=defina_un_secreto
      RFID_WEB_SESSION_SECRET=defina_un_secreto
      RFID_WEB_USERNAME=admin
      RFID_WEB_PASSWORD=defina_un_secreto
      ```
-   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con EMQX dentro de la red de Docker y exponer las credenciales del panel para la integración de auditoría:
+   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con VerneMQ dentro de la red de Docker:
      ```env
-     MQTT_HOST=emqx
+     MQTT_HOST=vernemq
      MQTT_PORT=1883
      MQTT_PERSISTENCE_MODE=app
-     EMQX_MGMT_HOST=emqx
-     EMQX_MGMT_PORT=18083
-     EMQX_MGMT_USERNAME=admin
-     EMQX_MGMT_PASSWORD=defina_un_secreto
-     EMQX_MGMT_SSL=false
      ```
-     El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`. Cambie a `MQTT_PERSISTENCE_MODE=emqx` únicamente si su instancia de EMQX dispone de conectores PostgreSQL (por ejemplo, la edición Enterprise) o ha configurado un bridge compatible manualmente. Si el broker rechaza el conector, la aplicación continuará automáticamente con la persistencia local.
+     El modo `app` hace que la API se suscriba a todos los topics (`#`) y persista los mensajes en `mqtt_messages`.
    - Para enrutar los envíos de correo desde la API configure además:
      ```env
      MAIL_HOST=mail
@@ -82,8 +73,52 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    - `rfid_access`: microservicio Node.js que valida lecturas RFID frente a una API externa y gobierna los actuadores MQTT.
    - `postgres`: base de datos PostgreSQL inicializada con `db/schema.sql` y `db/seed.sql`.
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (credenciales definidas en `.env`).
-   - `emqx`: broker MQTT expuesto en el puerto `1887` del host (sin TLS) y con dashboard interno en `http://127.0.0.1:18083/`.
+   - `vernemq`: broker MQTT expuesto en el puerto `1887` del host (sin TLS).
    - `mail` y `webmail` solo se levantan si activa el perfil `mail` (ver siguiente paso).
+   - `vernemq` usa PostgreSQL como backend de autenticación (`mqtt_user`) y autorización (`mqtt_acl`) mediante `vmq_diversity`. Para bases de datos existentes, aplique manualmente `db/mqtt.sql` o mediante su sistema de migraciones antes del despliegue.
+
+### Migración en bases existentes (PostgreSQL)
+
+El script `db/mqtt.sql` solo se ejecuta automáticamente en bases nuevas. En entornos con volumen de PostgreSQL ya inicializado, ejecute la migración manualmente:
+
+```bash
+./scripts/migrate-mqtt.sh
+```
+
+### VerneMQ + PostgreSQL (vmq_diversity)
+
+Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script `vernemq/vmq_diversity/auth.lua`.
+
+```bash
+docker compose build vernemq
+docker compose up -d vernemq
+```
+
+VerneMQ utiliza el plugin `vmq_diversity` con el script `vernemq/vmq_diversity/auth.lua`. El script:
+
+- valida credenciales contra `mqtt_user` (bcrypt)
+- aplica ACLs en `mqtt_acl` con deny-by-default
+- no depende de `client_id`, solo de `username`
+
+Para garantizar que `vmq_diversity` localice `bcrypt`, se incluye el wrapper `vernemq/vmq_diversity/bcrypt.lua`, montado en `/vernemq/share/lua/bcrypt.lua`.
+
+> Nota sobre bcrypt: VerneMQ soporta hashes con prefijo `$2a$`. Si sus hashes actuales son `$2b$`, valide compatibilidad o migre los hashes.
+
+### Ejemplos de usuarios y ACLs MQTT
+
+> Nota: VerneMQ espera hashes bcrypt completos en `password_hash` (incluyendo el salt en el propio hash). El campo `salt` puede dejarse vacío.
+
+```sql
+-- Usuario MQTT de ejemplo (reemplace por valores reales)
+INSERT INTO mqtt_user (username, password_hash, salt, is_superuser)
+VALUES ('device_client', '$2b$10$hash_bcrypt_de_ejemplo', '', false);
+
+-- ACLs mínimas de ejemplo para publicar/suscribirse a topics de dispositivos
+INSERT INTO mqtt_acl (username, permission, action, topic, qos, retain)
+VALUES
+  ('device_client', 'allow', 'subscribe', 'devices/#', 0, 0),
+  ('device_client', 'allow', 'publish', 'devices/#', 0, 0);
+```
 
 4. **(Opcional) Levantar el stack de correo:**
    ```bash
@@ -177,24 +212,25 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 
 ## Arquitectura de despliegue
 
-- **Nginx (host):** sirve la aplicación en HTTPS y publica los paneles de EMQX (`/emqx`) y pgAdmin (`/pgadmin`). Redirige automáticamente las peticiones HTTP (80) a HTTPS (443).
+- **Nginx (host):** sirve la aplicación en HTTPS y publica pgAdmin (`/pgadmin`). Redirige automáticamente las peticiones HTTP (80) a HTTPS (443).
 - Incluya el snippet `nginx/snippets/roundcube.conf` dentro del `server` HTTPS (por ejemplo `include snippets/roundcube.conf;`) para servir `https://horizonst.com.es/webmail/` con `proxy_buffering off`, `client_max_body_size 25m` y las cabeceras `X-Forwarded-*`. Este bloque también termina TLS, motivo por el cual Roundcube mantiene `force_https = false` y confía en `X-Forwarded-Proto`/`X-Forwarded-Prefix`. Mantenga publicados los puertos TCP `25`, `465`, `587` y `993` del host para el servicio SMTP/IMAP.
-- **Docker Compose (loopback):** la app, PostgreSQL y pgAdmin solo escuchan en `127.0.0.1`. EMQX expone el puerto `1887` hacia el exterior sin TLS y mantiene el dashboard ligado al loopback (`127.0.0.1:18083`).
+- **Docker Compose (loopback):** la app, PostgreSQL y pgAdmin solo escuchan en `127.0.0.1`. VerneMQ expone el puerto `1887` hacia el exterior sin TLS.
 - **Supervisión:** la API expone `GET /health` y los servicios incluyen healthchecks y rotación de logs (`json-file`, 50 MB × 3).
 
-## MQTT Broker (EMQX)
+## MQTT Broker (VerneMQ)
 
 - **Acceso externo:** `mqtt://<dominio-o-ip>:1887` (sin TLS). Cree usuarios/contraseñas específicos para clientes finales.
-- **Acceso interno (app → EMQX):** `mqtt://emqx:1883` gracias al fichero `backend/.env`.
-- **Panel de control:** disponible en `https://horizonst.com.es/emqx/` tras Nginx. No abra el puerto 18083 de manera directa.
-- **Persistencia de mensajes:** por defecto la API guarda los payloads recibidos en `mqtt_messages`. Si configura `MQTT_PERSISTENCE_MODE=emqx` y el broker soporta conectores `pgsql`, el servicio intentará delegar la ingesta vía REST en EMQX; en caso contrario mantendrá el modo local sin bloquear el arranque.
-- **Pruebas rápidas (Windows):**
+- **Acceso interno (app → VerneMQ):** `mqtt://vernemq:1883` gracias al fichero `backend/.env`.
+- **Autenticación y ACL:** VerneMQ valida usuarios contra `mqtt_user` (bcrypt) y evalúa ACLs en `mqtt_acl` con política *deny by default* mediante `vmq_diversity`.
+- **Persistencia de mensajes:** por defecto la API guarda los payloads recibidos en `mqtt_messages`.
+- **Pruebas rápidas (Windows/Linux):**
   - *MQTTX:* configure un perfil con host `<dominio>` y puerto `1887`, suscríbase a `test/#` y publique en `test/ping`.
   - *Mosquitto CLI:*
-    ```powershell
+    ```bash
     mosquitto_sub -h <dominio> -p 1887 -t test/# -u <usuario> -P <contraseña>
     mosquitto_pub -h <dominio> -p 1887 -t test/ping -m "hello" -u <usuario> -P <contraseña>
     ```
+  - **Diagnóstico:** consulte logs con `docker compose logs -f vernemq` y reinicie el broker con `docker compose restart vernemq` si modifica las variables de entorno.
 
 ## Servicio de control de accesos RFID
 
@@ -234,7 +270,7 @@ El contenedor `rfid_access` procesa los eventos publicados por los lectores RFID
 
 ## Proxy inverso Nginx externo
 
-La carpeta `nginx/` contiene `horizonst.example.conf` como referencia. El bloque aplica redirección HTTP→HTTPS, cabeceras de seguridad y publica la app (`127.0.0.1:3000`) junto con `/emqx/` y `/pgadmin/`. Adapte certificados y rutas a su entorno y mantenga la configuración MQTT por TCP/1887 en el host.
+La carpeta `nginx/` contiene `horizonst.example.conf` como referencia. El bloque aplica redirección HTTP→HTTPS, cabeceras de seguridad y publica la app (`127.0.0.1:3000`) junto con `/pgadmin/`. Adapte certificados y rutas a su entorno y mantenga la configuración MQTT por TCP/1887 en el host.
 
 ## Scripts útiles
 
@@ -251,7 +287,7 @@ La carpeta `nginx/` contiene `horizonst.example.conf` como referencia. El bloque
 
 ## Seguridad
 
-- Cambie el secreto JWT (`JWT_SECRET`), los usuarios/contraseñas por defecto de la app, EMQX (panel y cuentas MQTT) y pgAdmin antes de llegar a producción.
+- Cambie el secreto JWT (`JWT_SECRET`), los usuarios/contraseñas por defecto de la app, las cuentas MQTT y pgAdmin antes de llegar a producción.
 - Mantenga expuestos únicamente los puertos 80/443/1887. El resto de servicios permanecen en `127.0.0.1` y detrás de Docker.
 - Añada el endpoint `/health` a sus comprobaciones y monitorice los healthchecks configurados en `docker-compose.yml`.
 - Revise periódicamente los logs rotados (`json-file`, 50 MB × 3) y establezca alertas según sus políticas corporativas.
