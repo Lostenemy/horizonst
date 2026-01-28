@@ -75,7 +75,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (credenciales definidas en `.env`).
    - `vernemq`: broker MQTT expuesto en el puerto `1887` del host (sin TLS).
    - `mail` y `webmail` solo se levantan si activa el perfil `mail` (ver siguiente paso).
-   - `vernemq` usa PostgreSQL como backend de autenticación (`mqtt_user`) y autorización (`mqtt_acl`). Para bases de datos existentes, aplique manualmente `db/mqtt.sql` o mediante su sistema de migraciones antes del despliegue.
+   - `vernemq` usa PostgreSQL como backend de autenticación (`mqtt_user`) y autorización (`mqtt_acl`) mediante `vmq_diversity`. Para bases de datos existentes, aplique manualmente `db/mqtt.sql` o mediante su sistema de migraciones antes del despliegue.
 
 ### Migración en bases existentes (PostgreSQL)
 
@@ -84,6 +84,16 @@ El script `db/mqtt.sql` solo se ejecuta automáticamente en bases nuevas. En ent
 ```bash
 ./scripts/migrate-mqtt.sh
 ```
+
+### VerneMQ + PostgreSQL (vmq_diversity)
+
+VerneMQ utiliza el plugin `vmq_diversity` con el script `vernemq/vmq_diversity/auth.lua`. El script:
+
+- valida credenciales contra `mqtt_user` (bcrypt)
+- aplica ACLs en `mqtt_acl` con deny-by-default
+- no depende de `client_id`, solo de `username`
+
+> Nota sobre bcrypt: VerneMQ soporta hashes con prefijo `$2a$`. Si sus hashes actuales son `$2b$`, valide compatibilidad o migre los hashes.
 
 ### Ejemplos de usuarios y ACLs MQTT
 
@@ -202,7 +212,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 
 - **Acceso externo:** `mqtt://<dominio-o-ip>:1887` (sin TLS). Cree usuarios/contraseñas específicos para clientes finales.
 - **Acceso interno (app → VerneMQ):** `mqtt://vernemq:1883` gracias al fichero `backend/.env`.
-- **Autenticación y ACL:** VerneMQ valida usuarios contra `mqtt_user` (bcrypt) y evalúa ACLs en `mqtt_acl` con política *deny by default*.
+- **Autenticación y ACL:** VerneMQ valida usuarios contra `mqtt_user` (bcrypt) y evalúa ACLs en `mqtt_acl` con política *deny by default* mediante `vmq_diversity`.
 - **Persistencia de mensajes:** por defecto la API guarda los payloads recibidos en `mqtt_messages`.
 - **Pruebas rápidas (Windows/Linux):**
   - *MQTTX:* configure un perfil con host `<dominio>` y puerto `1887`, suscríbase a `test/#` y publique en `test/ping`.

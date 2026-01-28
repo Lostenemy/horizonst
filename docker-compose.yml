@@ -139,18 +139,19 @@ services:
       - DOCKER_VERNEMQ_ACCEPT_EULA=yes
       - DOCKER_VERNEMQ_ALLOW_ANONYMOUS=off
       - DOCKER_VERNEMQ_PLUGINS__VMQ_PASSWD=off
-      - DOCKER_VERNEMQ_PLUGINS__VMQ_AUTH_POSTGRES=on
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__HOST=postgres
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__PORT=5432
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__DATABASE=${DB_NAME:-horizonst}
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__USER=${DB_USER}
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__PASSWORD=${DB_PASSWORD}
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__AUTH_QUERY=SELECT password_hash FROM mqtt_user WHERE username = $1
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__SUPER_QUERY=SELECT is_superuser FROM mqtt_user WHERE username = $1
-      - DOCKER_VERNEMQ_VMQ_AUTH_POSTGRES__ACL_QUERY=SELECT permission, action, topic, qos, retain FROM mqtt_acl WHERE username = $1
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_ACL=off
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_DIVERSITY=on
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__SCRIPT__FILE=/vernemq/etc/vmq_diversity/auth.lua
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__HOST=postgres
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PORT=5432
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__DATABASE=${DB_NAME:-horizonst}
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__USER=${DB_USER}
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PASSWORD=${DB_PASSWORD}
+      - DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PASSWORD_HASH_METHOD=bcrypt
     volumes:
       - vernemq_data:/vernemq/data
       - vernemq_log:/vernemq/log
+      - ./vernemq/vmq_diversity/auth.lua:/vernemq/etc/vmq_diversity/auth.lua:ro
     restart: unless-stopped
     logging:
       driver: json-file
