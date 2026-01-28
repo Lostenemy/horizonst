@@ -2,14 +2,14 @@ FROM vernemq/vernemq:1.13.0
 
 USER root
 
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     lua5.3 \
-    lua5.3-dev \
+    liblua5.3-dev \
     luarocks \
-    gcc \
-    make \
-    musl-dev \
-    openssl-dev
+    build-essential \
+    libssl-dev \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN luarocks install bcrypt \
   && lua -e "require('bcrypt')"
