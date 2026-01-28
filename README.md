@@ -100,6 +100,8 @@ VerneMQ utiliza el plugin `vmq_diversity` con el script `vernemq/vmq_diversity/a
 - aplica ACLs en `mqtt_acl` con deny-by-default
 - no depende de `client_id`, solo de `username`
 
+Para garantizar que `vmq_diversity` localice `bcrypt`, se incluye el wrapper `vernemq/vmq_diversity/bcrypt.lua`, montado en `/vernemq/share/lua/bcrypt.lua`.
+
 > Nota sobre bcrypt: VerneMQ soporta hashes con prefijo `$2a$`. Si sus hashes actuales son `$2b$`, valide compatibilidad o migre los hashes.
 
 ### Ejemplos de usuarios y ACLs MQTT
