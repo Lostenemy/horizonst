@@ -134,7 +134,9 @@ services:
       - horizonst
 
   vernemq:
-    image: vernemq/vernemq:1.13.0
+    build:
+      context: .
+      dockerfile: vernemq/Dockerfile
     environment:
       - DOCKER_VERNEMQ_ACCEPT_EULA=yes
       - DOCKER_VERNEMQ_ALLOW_ANONYMOUS=off

@@ -87,6 +87,13 @@ El script `db/mqtt.sql` solo se ejecuta automáticamente en bases nuevas. En ent
 
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
+Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script `vernemq/vmq_diversity/auth.lua`.
+
+```bash
+docker compose build vernemq
+docker compose up -d vernemq
+```
+
 VerneMQ utiliza el plugin `vmq_diversity` con el script `vernemq/vmq_diversity/auth.lua`. El script:
 
 - valida credenciales contra `mqtt_user` (bcrypt)
