@@ -17,6 +17,7 @@ RUN mkdir -p /vernemq/.luarocks \
 USER vernemq
 
 RUN luarocks --tree=/vernemq/.luarocks install bcrypt \
+  && eval "$(luarocks --tree=/vernemq/.luarocks path)" \
   && lua -e "require('bcrypt')"
 
 USER root
