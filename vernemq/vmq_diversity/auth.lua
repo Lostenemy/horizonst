@@ -1,4 +1,6 @@
-local bcrypt = require("bcrypt")
+local bcrypt_loader, bcrypt_err = package.loadlib("/vernemq/share/lua/bcrypt.so", "luaopen_bcrypt")
+assert(bcrypt_loader, "bcrypt loadlib failed: " .. tostring(bcrypt_err))
+local bcrypt = bcrypt_loader()
 local postgres = require("postgres")
 
 local function fetch_user(username)
