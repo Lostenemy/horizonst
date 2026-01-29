@@ -159,6 +159,7 @@ services:
     volumes:
       - vernemq_data:/vernemq/data
       - vernemq_log:/vernemq/log
+      - ./vernemq/vernemq.conf:/vernemq/etc/vernemq.conf:ro
     restart: unless-stopped
     logging:
       driver: json-file
