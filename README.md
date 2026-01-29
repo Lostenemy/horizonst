@@ -97,6 +97,20 @@ Si necesita conectarse como superusuario del contenedor:
 docker compose exec postgres psql -U postgres -d "${DB_NAME:-horizonst}"
 ```
 
+Para inicializar manualmente el esquema de `vmq_auth_acl` en entornos ya desplegados:
+
+```bash
+docker compose exec -T -e PGPASSWORD="${DB_PASSWORD}" postgres \
+  psql -U "${DB_USER}" -d "${DB_NAME:-horizonst}" < db/mqtt.sql
+```
+
+Verificación rápida:
+
+```bash
+docker compose exec -e PGPASSWORD="${DB_PASSWORD}" postgres \
+  psql -U "${DB_USER}" -d "${DB_NAME:-horizonst}" -c "\\dt vmq_auth_acl"
+```
+
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
 Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script oficial `auth/postgres.lua`.
@@ -127,7 +141,20 @@ VALUES (
   '[{"pattern": "devices/123/tx", "qos": 1}]',
   '[{"pattern": "devices/123/rx", "qos": 1}]'
 );
+
+-- ACLs amplias bajo un prefijo específico
+UPDATE vmq_auth_acl
+SET publish_acl = '[{"pattern":"gateways/gw-0001/#","qos":1}]'::jsonb,
+    subscribe_acl = '[{"pattern":"gateways/gw-0001/#","qos":1}]'::jsonb
+WHERE client_id = 'gw-0001';
 ```
+
+### Requisito del portal de administración (MQTT)
+
+El portal de administración debe gestionar `client_id` como identidad MQTT principal y mantener una fila en `vmq_auth_acl` por cada dispositivo/gateway. Recomendación:
+
+- exponer y permitir editar `client_id`
+- mantener `username` alineado con `client_id` (al menos mientras se use la estrategia username = client_id)
 
 4. **(Opcional) Levantar el stack de correo:**
    ```bash
