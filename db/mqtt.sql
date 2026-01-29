@@ -1,20 +1,11 @@
-CREATE TABLE IF NOT EXISTS mqtt_user (
-  id serial PRIMARY KEY,
-  username text NOT NULL UNIQUE,
-  password_hash text NOT NULL,
-  salt text NOT NULL DEFAULT '',
-  is_superuser boolean DEFAULT false,
-  created timestamp with time zone DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS mqtt_acl(
-  id serial PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS vmq_auth_acl (
+  mountpoint text NOT NULL DEFAULT '',
+  client_id text NOT NULL,
   username text NOT NULL,
-  permission text NOT NULL,  -- allow|deny
-  action text NOT NULL,      -- publish|subscribe|all
-  topic text NOT NULL,
-  qos smallint,
-  retain smallint
+  password text NOT NULL,
+  publish_acl jsonb NOT NULL DEFAULT '[]',
+  subscribe_acl jsonb NOT NULL DEFAULT '[]'
 );
 
-CREATE INDEX IF NOT EXISTS mqtt_acl_username_idx ON mqtt_acl(username);
+CREATE INDEX IF NOT EXISTS vmq_auth_acl_client_idx ON vmq_auth_acl(client_id);
+CREATE INDEX IF NOT EXISTS vmq_auth_acl_username_idx ON vmq_auth_acl(username);

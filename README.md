@@ -75,7 +75,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (credenciales definidas en `.env`).
    - `vernemq`: broker MQTT expuesto en el puerto `1887` del host (sin TLS).
    - `mail` y `webmail` solo se levantan si activa el perfil `mail` (ver siguiente paso).
-   - `vernemq` usa PostgreSQL como backend de autenticación (`mqtt_user`) y autorización (`mqtt_acl`) mediante `vmq_diversity`. Para bases de datos existentes, aplique manualmente `db/mqtt.sql` o mediante su sistema de migraciones antes del despliegue.
+   - `vernemq` usa PostgreSQL como backend de autenticación y autorización mediante `vmq_diversity` y la tabla `vmq_auth_acl`. Para bases de datos existentes, aplique manualmente `db/mqtt.sql` o mediante su sistema de migraciones antes del despliegue.
 
 ### Migración en bases existentes (PostgreSQL)
 
@@ -87,37 +87,34 @@ El script `db/mqtt.sql` solo se ejecuta automáticamente en bases nuevas. En ent
 
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
-Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script `vernemq/vmq_diversity/auth.lua`.
+Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script oficial `auth/postgres.lua`.
 
 ```bash
 docker compose build vernemq
 docker compose up -d vernemq
 ```
 
-VerneMQ utiliza el plugin `vmq_diversity` con el script `vernemq/vmq_diversity/auth.lua`. El script:
+VerneMQ utiliza el plugin `vmq_diversity` con el script oficial `/vernemq/share/lua/auth/postgres.lua`. Este script trabaja con la tabla `vmq_auth_acl` y exige `client_id` como parte de la identidad MQTT.
 
-- valida credenciales contra `mqtt_user` (bcrypt)
-- aplica ACLs en `mqtt_acl` con deny-by-default
-- no depende de `client_id`, solo de `username`
-
-La imagen personalizada instala y copia `bcrypt.so` en `/vernemq/share/lua/bcrypt.so`, y el script `auth.lua` lo carga mediante `package.loadlib`.
+La imagen personalizada instala y copia `bcrypt.so` en `/vernemq/share/lua/bcrypt.so`, y el script oficial lo carga para validar hashes bcrypt.
 
 > Nota sobre bcrypt: VerneMQ soporta hashes con prefijo `$2a$`. Si sus hashes actuales son `$2b$`, valide compatibilidad o migre los hashes.
 
-### Ejemplos de usuarios y ACLs MQTT
+### Ejemplos de usuarios y ACLs MQTT (vmq_auth_acl)
 
-> Nota: VerneMQ espera hashes bcrypt completos en `password_hash` (incluyendo el salt en el propio hash). El campo `salt` puede dejarse vacío.
+> Nota: VerneMQ espera hashes bcrypt completos en `password` (incluyendo el salt en el propio hash).
 
 ```sql
--- Usuario MQTT de ejemplo (reemplace por valores reales)
-INSERT INTO mqtt_user (username, password_hash, salt, is_superuser)
-VALUES ('device_client', '$2b$10$hash_bcrypt_de_ejemplo', '', false);
-
--- ACLs mínimas de ejemplo para publicar/suscribirse a topics de dispositivos
-INSERT INTO mqtt_acl (username, permission, action, topic, qos, retain)
-VALUES
-  ('device_client', 'allow', 'subscribe', 'devices/#', 0, 0),
-  ('device_client', 'allow', 'publish', 'devices/#', 0, 0);
+-- Dispositivo MQTT de ejemplo (reemplace por valores reales)
+INSERT INTO vmq_auth_acl (mountpoint, client_id, username, password, publish_acl, subscribe_acl)
+VALUES (
+  '',
+  'device-123',
+  'device-123',
+  '$2b$10$hash_bcrypt_de_ejemplo',
+  '[{"pattern": "devices/123/tx", "qos": 1}]',
+  '[{"pattern": "devices/123/rx", "qos": 1}]'
+);
 ```
 
 4. **(Opcional) Levantar el stack de correo:**
@@ -221,7 +218,7 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 
 - **Acceso externo:** `mqtt://<dominio-o-ip>:1887` (sin TLS). Cree usuarios/contraseñas específicos para clientes finales.
 - **Acceso interno (app → VerneMQ):** `mqtt://vernemq:1883` gracias al fichero `backend/.env`.
-- **Autenticación y ACL:** VerneMQ valida usuarios contra `mqtt_user` (bcrypt) y evalúa ACLs en `mqtt_acl` con política *deny by default* mediante `vmq_diversity`.
+- **Autenticación y ACL:** VerneMQ valida dispositivos contra `vmq_auth_acl` (bcrypt) y evalúa ACLs JSON con política *deny by default* mediante `vmq_diversity`.
 - **Persistencia de mensajes:** por defecto la API guarda los payloads recibidos en `mqtt_messages`.
 - **Pruebas rápidas (Windows/Linux):**
   - *MQTTX:* configure un perfil con host `<dominio>` y puerto `1887`, suscríbase a `test/#` y publique en `test/ping`.
