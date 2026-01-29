@@ -99,6 +99,7 @@ services:
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
       - ./db/mqtt.sql:/docker-entrypoint-initdb.d/03-mqtt.sql:ro
+      - ./db/mqtt-init.sh:/docker-entrypoint-initdb.d/04-mqtt-init.sh:ro
     restart: unless-stopped
     logging:
       driver: json-file

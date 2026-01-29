@@ -111,6 +111,16 @@ docker compose exec -e PGPASSWORD="${DB_PASSWORD}" postgres \
   psql -U "${DB_USER}" -d "${DB_NAME:-horizonst}" -c "\\dt vmq_auth_acl"
 ```
 
+Si quiere insertar automáticamente una identidad MQTT al crear la base de datos (solo en volúmenes nuevos), puede definir en el `.env`:
+
+- `MQTT_CLIENT_ID`
+- `MQTT_USERNAME`
+- `MQTT_PASSWORD_HASH` (bcrypt completo)
+- `MQTT_PUBLISH_ACL_JSON` (JSON)
+- `MQTT_SUBSCRIBE_ACL_JSON` (JSON)
+
+Con esas variables, el init script `db/mqtt-init.sh` inserta una fila en `vmq_auth_acl` durante el primer arranque.
+
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
 Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script oficial `auth/postgres.lua`.
