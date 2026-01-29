@@ -43,7 +43,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      RFID_WEB_USERNAME=admin
      RFID_WEB_PASSWORD=defina_un_secreto
      ```
-   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con VerneMQ dentro de la red de Docker:
+   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con VerneMQ dentro de la red de Docker. `MQTT_USER`/`MQTT_PASS` son para clientes internos (app, rfid_access) y `MQTT_USERNAME`/`MQTT_PASSWORD_HASH` se usan solo para el seed de `vmq_auth_acl` en PostgreSQL:
      ```env
      MQTT_HOST=vernemq
      MQTT_PORT=1883
