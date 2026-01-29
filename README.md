@@ -85,6 +85,18 @@ El script `db/mqtt.sql` solo se ejecuta automáticamente en bases nuevas. En ent
 ./scripts/migrate-mqtt.sh
 ```
 
+Para inspeccionar datos o ejecutar consultas manuales, use `psql` dentro del contenedor con los parámetros explícitos (evita errores tipo `role "root" does not exist`):
+
+```bash
+docker compose exec postgres psql -U "${DB_USER}" -d "${DB_NAME:-horizonst}"
+```
+
+Si necesita conectarse como superusuario del contenedor:
+
+```bash
+docker compose exec postgres psql -U postgres -d "${DB_NAME:-horizonst}"
+```
+
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
 Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script oficial `auth/postgres.lua`.
