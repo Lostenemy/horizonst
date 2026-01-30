@@ -1,1 +1,2 @@
 -name VerneMQ@vernemq.local
+-setcookie vmq
