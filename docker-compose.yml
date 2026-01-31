@@ -142,6 +142,8 @@ services:
       dockerfile: vernemq/Dockerfile
     command: ["/vernemq/bin/vernemq", "console"]
     hostname: vernemq.local
+    tty: true
+    stdin_open: true
     environment:
       - DOCKER_VERNEMQ_ACCEPT_EULA=yes
       - DOCKER_VERNEMQ_ALLOW_ANONYMOUS=off
