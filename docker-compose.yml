@@ -141,9 +141,11 @@ services:
       context: .
       dockerfile: vernemq/Dockerfile
     command: ["/vernemq/bin/vernemq", "start"]
+    hostname: vernemq.local
     environment:
       - DOCKER_VERNEMQ_ACCEPT_EULA=yes
       - DOCKER_VERNEMQ_ALLOW_ANONYMOUS=off
+      - WAIT_FOR_ERLANG=120
       - DOCKER_VERNEMQ_PLUGINS__VMQ_PASSWD=off
       - DOCKER_VERNEMQ_PLUGINS__VMQ_ACL=off
       - DOCKER_VERNEMQ_PLUGINS__VMQ_DIVERSITY=on
