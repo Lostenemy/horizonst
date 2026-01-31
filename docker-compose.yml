@@ -140,7 +140,7 @@ services:
     build:
       context: .
       dockerfile: vernemq/Dockerfile
-    command: ["/vernemq/bin/vernemq", "start"]
+    command: ["/vernemq/bin/vernemq", "console"]
     hostname: vernemq.local
     environment:
       - DOCKER_VERNEMQ_ACCEPT_EULA=yes
