@@ -278,6 +278,102 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
     ```
   - **Diagnóstico:** consulte logs con `docker compose logs -f vernemq` y reinicie el broker con `docker compose restart vernemq` si modifica las variables de entorno.
 
+### Arranque de VerneMQ (console mode)
+
+VerneMQ se ejecuta en modo consola para poder ver errores reales de Erlang. En Docker Compose esto requiere TTY y STDIN abiertos incluso en modo `-d`:
+
+```
+command:
+  - /vernemq/bin/vernemq
+  - console
+stdin_open: true
+tty: true
+```
+
+Sin TTY/STDIN el contenedor puede entrar en restart loop silencioso.
+
+### Hostname Erlang (FQDN obligatorio)
+
+VerneMQ usa Erlang distribuido y requiere hostname FQDN. Por eso:
+
+```
+hostname: vernemq.local
+```
+
+Y en `vernemq/vm.args`:
+
+```
+-name VerneMQ@vernemq.local
+-setcookie vmq
+```
+
+Sin FQDN, `vmq-admin` y el cluster fallan.
+
+### EULA de VerneMQ (bloqueante)
+
+Debe aceptarse la EULA para que VerneMQ arranque:
+
+```
+DOCKER_VERNEMQ_ACCEPT_EULA: "yes"
+```
+
+Y/o en `vernemq/vernemq.conf`:
+
+```
+accept_eula = yes
+```
+
+### Listener MQTT (no es automático)
+
+Si no se configura un listener, VerneMQ no expone MQTT. Configuración mínima:
+
+```
+listener.tcp.default = 0.0.0.0:1883
+listener.tcp.allowed_protocol_versions = 3,4,5
+```
+
+Puertos:
+
+- Interno: `1883`
+- Externo: `1887`
+
+### Healthcheck (crítico)
+
+El healthcheck correcto es:
+
+```
+healthcheck:
+  test: ["CMD", "/vernemq/bin/vmq-admin", "cluster", "show"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+```
+
+⚠️ `vmq-admin status` **NO existe** en esta versión y `vmq-admin` **no está en PATH**. El comando que devuelve exit 0 es `/vernemq/bin/vmq-admin cluster show`.
+
+### Verificación post-despliegue
+
+```bash
+# Estado del contenedor
+docker ps --filter "name=horizonst-vernemq"
+
+# Listener MQTT
+docker exec -it horizonst-vernemq-1 /vernemq/bin/vmq-admin listener show
+
+# Estado del cluster
+docker exec -it horizonst-vernemq-1 /vernemq/bin/vmq-admin cluster show
+```
+
+Resultado esperado:
+
+- Listener `tcp/default` en `0.0.0.0:1883`
+- Nodo `VerneMQ@vernemq.local` en `Running true`
+- Contenedor `healthy`
+
+### Nota de arquitectura
+
+VerneMQ no se expone directamente a Internet. La exposición exterior se hará vía Nginx (TCP stream) y TLS. El listener TLS (8883) se configurará en un paso posterior.
+
 ## Servicio de control de accesos RFID
 
 El contenedor `rfid_access` procesa los eventos publicados por los lectores RFID, consulta una API REST externa para validar el acceso y, según la respuesta, envía órdenes al actuador (luces verde/roja y alarma) mediante nuevos topics MQTT.
