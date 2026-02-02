@@ -176,7 +176,7 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "1887:1883"
+      - "127.0.0.1:1887:1883"
     networks:
       - horizonst
 
