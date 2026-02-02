@@ -171,7 +171,7 @@ services:
         max-size: "50m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "/vernemq/bin/vmq-admin", "status"]
+      test: ["CMD", "/vernemq/bin/vmq-admin", "cluster", "show"]
       interval: 10s
       timeout: 5s
       retries: 10
