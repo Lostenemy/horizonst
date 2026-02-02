@@ -13,6 +13,8 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 - `backend/`: API principal BLE/LoRa con el portal web incrustado en `backend/public` tras el build, ingestión MQTT y servicios de alarmas.
 - `frontend/`: código fuente del portal HTML5 que se copia a `backend/public` durante el empaquetado.
 - `rfid-access-service/`: microservicio Node.js independiente para los flujos Elecnor (accesos RFID), con frontend estático en `public/`, API Express en `src/` y persistencia en PostgreSQL.
+- `mqtt-ui/`: interfaz web ligera para observabilidad básica de VerneMQ.
+- `mqtt-ui-api/`: backend API (Express) que autentica usuarios y consume la HTTP Management API de VerneMQ.
 - `db/`: esquema y seed SQL del backend principal.
 - `docker-compose*.yml`: orquestaciones completas (`docker-compose.yml`) y específicas para el microservicio RFID (`docker-compose.rfid-access.yml`).
 - `nginx/` y `mailserver/`: configuraciones de referencia para el proxy inverso externo y el servidor de correo.
@@ -222,6 +224,8 @@ Siga siempre los mismos pasos para aplicar cambios y evitar configuraciones dive
 ```
 backend/             # Servidor Node.js + TypeScript
 frontend/public/     # Portal HTML5 + JS servido de forma estática
+mqtt-ui/             # UI propia para VerneMQ (frontend estático)
+mqtt-ui-api/         # Backend API para la UI (Express)
 nginx/               # Configuración de referencia para el proxy inverso externo
 rfid-access-service/ # Servicio independiente para control de accesos RFID mediante MQTT
 db/                  # Definiciones SQL de esquema y datos iniciales
@@ -230,6 +234,52 @@ docker-compose.rfid-access.yml
 ```
 
 El portal web se mantiene en `frontend/public` y se copia a `backend/public` durante el empaquetado para que las páginas estáticas acompañen a la API.
+
+## UI propia de VerneMQ (Opción C.2)
+
+La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqtt-ui-api`) que consulta la HTTP Management API de VerneMQ desde la red interna de Docker. El broker no se expone directamente.
+
+### Servicios Docker incluidos
+
+- `mqtt_ui`: sirve la UI en `http://127.0.0.1:8090`.
+- `mqtt_ui_api`: API protegida con JWT en `http://127.0.0.1:4010`.
+
+> En producción, publique ambos servicios detrás de Nginx en HTTPS y aplique autenticación solo en el backend.
+
+### Variables de entorno clave
+
+Defina en el `.env` de infraestructura (o secretos Docker):
+
+```env
+# Credenciales de acceso a la UI (backend)
+MQTT_UI_ADMIN_USER=admin
+MQTT_UI_ADMIN_PASSWORD=defina_un_secreto
+MQTT_UI_JWT_SECRET=defina_un_secreto_largo
+
+# URL interna de la HTTP Management API de VerneMQ
+VMQ_HTTP_BASE_URL=http://vernemq:8888/api/v1
+VMQ_HTTP_STATUS_PATH=/status
+VMQ_HTTP_METRICS_PATH=/metrics
+VMQ_HTTP_LISTENERS_PATH=/listeners
+VMQ_HTTP_CLUSTER_PATH=/cluster
+VMQ_HTTP_USER=
+VMQ_HTTP_PASSWORD=
+
+# Diagnóstico MQTT TLS
+MQTT_DIAG_HOST=mqtt.horizonst.com.es
+MQTT_DIAG_PORT=8883
+```
+
+> Ajuste las rutas si su despliegue de VerneMQ publica la API HTTP con prefijos distintos.
+
+### Endpoints expuestos por `mqtt_ui_api`
+
+- `POST /api/login` → devuelve JWT.
+- `GET /api/status` → estado del nodo y listeners (API HTTP).
+- `GET /api/metrics` → métricas (API HTTP).
+- `GET /api/diagnostics` → comprobación TLS contra `mqtt.horizonst.com.es:8883` y estado del cluster.
+
+La UI consume estos endpoints y nunca expone credenciales MQTT.
 
 ## Funcionalidades principales
 

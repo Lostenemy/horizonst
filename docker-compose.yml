@@ -88,6 +88,59 @@ services:
     networks:
       - horizonst
 
+  mqtt_ui_api:
+    build:
+      context: ./mqtt-ui-api
+    environment:
+      - PORT=4010
+      - UI_CORS_ORIGIN=${MQTT_UI_CORS_ORIGIN:-http://127.0.0.1:8090}
+      - UI_JWT_SECRET=${MQTT_UI_JWT_SECRET:-change_me}
+      - UI_ADMIN_USER=${MQTT_UI_ADMIN_USER:-admin}
+      - UI_ADMIN_PASSWORD=${MQTT_UI_ADMIN_PASSWORD:-admin}
+      - VMQ_HTTP_BASE_URL=${VMQ_HTTP_BASE_URL:-http://vernemq:8888/api/v1}
+      - VMQ_HTTP_STATUS_PATH=${VMQ_HTTP_STATUS_PATH:-/status}
+      - VMQ_HTTP_METRICS_PATH=${VMQ_HTTP_METRICS_PATH:-/metrics}
+      - VMQ_HTTP_LISTENERS_PATH=${VMQ_HTTP_LISTENERS_PATH:-/listeners}
+      - VMQ_HTTP_CLUSTER_PATH=${VMQ_HTTP_CLUSTER_PATH:-/cluster}
+      - VMQ_HTTP_USER=${VMQ_HTTP_USER:-}
+      - VMQ_HTTP_PASSWORD=${VMQ_HTTP_PASSWORD:-}
+      - MQTT_DIAG_HOST=${MQTT_DIAG_HOST:-mqtt.horizonst.com.es}
+      - MQTT_DIAG_PORT=${MQTT_DIAG_PORT:-8883}
+      - MQTT_DIAG_TIMEOUT_MS=${MQTT_DIAG_TIMEOUT_MS:-5000}
+    depends_on:
+      - vernemq
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4010/health || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+    ports:
+      - "127.0.0.1:4010:4010"
+    networks:
+      - horizonst
+
+  mqtt_ui:
+    build:
+      context: ./mqtt-ui
+    depends_on:
+      - mqtt_ui_api
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "127.0.0.1:8090:80"
+    networks:
+      - horizonst
+
   postgres:
     image: postgres:15-alpine
     env_file:

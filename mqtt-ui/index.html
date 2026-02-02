@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HorizonST MQTT UI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>HorizonST MQTT UI</h1>
+        <p>Observabilidad y operaciones básicas para VerneMQ</p>
+      </div>
+      <button id="logoutBtn" class="secondary" type="button">Cerrar sesión</button>
+    </header>
+
+    <main>
+      <section class="card" id="loginSection">
+        <h2>Acceso</h2>
+        <form id="loginForm">
+          <label>
+            Usuario
+            <input name="username" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            Contraseña
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">Entrar</button>
+          <p class="helper" id="loginError"></p>
+        </form>
+      </section>
+
+      <section class="grid" id="dashboard">
+        <article class="card">
+          <h2>Estado</h2>
+          <div class="row">
+            <button type="button" id="refreshStatus">Actualizar</button>
+            <span id="statusBadge" class="badge">Sin datos</span>
+          </div>
+          <pre id="statusOutput">—</pre>
+        </article>
+
+        <article class="card">
+          <h2>Métricas</h2>
+          <div class="row">
+            <button type="button" id="refreshMetrics">Actualizar</button>
+            <span id="metricsBadge" class="badge">Sin datos</span>
+          </div>
+          <pre id="metricsOutput">—</pre>
+        </article>
+
+        <article class="card">
+          <h2>Diagnóstico</h2>
+          <div class="row">
+            <button type="button" id="refreshDiagnostics">Actualizar</button>
+            <span id="diagnosticsBadge" class="badge">Sin datos</span>
+          </div>
+          <pre id="diagnosticsOutput">—</pre>
+        </article>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
