@@ -23,18 +23,16 @@ app.use(
 
 const port = Number.parseInt(process.env.PORT || "4010", 10);
 
-const jwtSecret = process.env.UI_JWT_SECRET || "change_me";
-const uiUser = process.env.UI_ADMIN_USER || "admin";
-const uiPassword = process.env.UI_ADMIN_PASSWORD || "admin";
+const jwtSecret = process.env.UI_JWT_SECRET || "";
+const uiUser = process.env.UI_ADMIN_USER || "";
+const uiPassword = process.env.UI_ADMIN_PASSWORD || "";
 
-const vmqBaseUrl = process.env.VMQ_HTTP_BASE_URL || "http://vernemq:8888/api/v1";
-const vmqStatusPath = process.env.VMQ_HTTP_STATUS_PATH || "/status";
-const vmqMetricsPath = process.env.VMQ_HTTP_METRICS_PATH || "/metrics";
-const vmqListenersPath = process.env.VMQ_HTTP_LISTENERS_PATH || "/listeners";
-const vmqClusterPath = process.env.VMQ_HTTP_CLUSTER_PATH || "/cluster";
-const vmqHttpUser = process.env.VMQ_HTTP_USER || "";
-const vmqHttpPassword = process.env.VMQ_HTTP_PASSWORD || "";
-const vmqHttpTimeoutMs = Number.parseInt(process.env.VMQ_HTTP_TIMEOUT_MS || "4000", 10);
+const observerBaseUrl = process.env.VMQ_OBSERVER_BASE_URL || "http://vernemq_observer:4040";
+const observerStatusPath = process.env.VMQ_OBSERVER_STATUS_PATH || "/status";
+const observerMetricsPath = process.env.VMQ_OBSERVER_METRICS_PATH || "/metrics";
+const observerListenersPath = process.env.VMQ_OBSERVER_LISTENERS_PATH || "/listeners";
+const observerClusterPath = process.env.VMQ_OBSERVER_CLUSTER_PATH || "/cluster";
+const observerTimeoutMs = Number.parseInt(process.env.VMQ_OBSERVER_TIMEOUT_MS || "4000", 10);
 
 const mqttHost = process.env.MQTT_DIAG_HOST || "mqtt.horizonst.com.es";
 const mqttPort = Number.parseInt(process.env.MQTT_DIAG_PORT || "8883", 10);
@@ -44,22 +42,15 @@ function buildUrl(path) {
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
-  return `${vmqBaseUrl.replace(/\/$/, "")}${path}`;
+  return `${observerBaseUrl.replace(/\/$/, "")}${path}`;
 }
 
 async function fetchJson(path) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), vmqHttpTimeoutMs);
-
-  const headers = {};
-  if (vmqHttpUser && vmqHttpPassword) {
-    const token = Buffer.from(`${vmqHttpUser}:${vmqHttpPassword}`).toString("base64");
-    headers.Authorization = `Basic ${token}`;
-  }
+  const timeout = setTimeout(() => controller.abort(), observerTimeoutMs);
 
   try {
     const response = await fetch(buildUrl(path), {
-      headers,
       signal: controller.signal
     });
 
@@ -94,6 +85,9 @@ app.get("/health", (req, res) => {
 });
 
 app.post("/api/login", (req, res) => {
+  if (!jwtSecret || !uiUser || !uiPassword) {
+    return res.status(500).json({ error: "auth_not_configured" });
+  }
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: "missing_credentials" });
@@ -109,8 +103,8 @@ app.post("/api/login", (req, res) => {
 
 app.get("/api/status", authenticateToken, async (req, res) => {
   const [statusResult, listenersResult] = await Promise.all([
-    fetchJson(vmqStatusPath),
-    fetchJson(vmqListenersPath)
+    fetchJson(observerStatusPath),
+    fetchJson(observerListenersPath)
   ]);
 
   const reachable = statusResult.ok || listenersResult.ok;
@@ -123,12 +117,12 @@ app.get("/api/status", authenticateToken, async (req, res) => {
 });
 
 app.get("/api/metrics", authenticateToken, async (req, res) => {
-  const metricsResult = await fetchJson(vmqMetricsPath);
+  const metricsResult = await fetchJson(observerMetricsPath);
   res.json(metricsResult);
 });
 
 app.get("/api/diagnostics", authenticateToken, async (req, res) => {
-  const clusterResult = await fetchJson(vmqClusterPath);
+  const clusterResult = await fetchJson(observerClusterPath);
   const tlsInfo = await checkTls(mqttHost, mqttPort, mqttDiagTimeoutMs);
 
   res.json({

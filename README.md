@@ -14,7 +14,8 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
 - `frontend/`: código fuente del portal HTML5 que se copia a `backend/public` durante el empaquetado.
 - `rfid-access-service/`: microservicio Node.js independiente para los flujos Elecnor (accesos RFID), con frontend estático en `public/`, API Express en `src/` y persistencia en PostgreSQL.
 - `mqtt-ui/`: interfaz web ligera para observabilidad básica de VerneMQ.
-- `mqtt-ui-api/`: backend API (Express) que autentica usuarios y consume la HTTP Management API de VerneMQ.
+- `mqtt-ui-api/`: backend API (Express) que autentica usuarios y consume el sidecar interno de observabilidad.
+- `vernemq-observer/`: sidecar interno que ejecuta `vmq-admin` y expone datos en JSON solo dentro de Docker.
 - `db/`: esquema y seed SQL del backend principal.
 - `docker-compose*.yml`: orquestaciones completas (`docker-compose.yml`) y específicas para el microservicio RFID (`docker-compose.rfid-access.yml`).
 - `nginx/` y `mailserver/`: configuraciones de referencia para el proxy inverso externo y el servidor de correo.
@@ -226,6 +227,7 @@ backend/             # Servidor Node.js + TypeScript
 frontend/public/     # Portal HTML5 + JS servido de forma estática
 mqtt-ui/             # UI propia para VerneMQ (frontend estático)
 mqtt-ui-api/         # Backend API para la UI (Express)
+vernemq-observer/    # Sidecar interno para ejecutar vmq-admin
 nginx/               # Configuración de referencia para el proxy inverso externo
 rfid-access-service/ # Servicio independiente para control de accesos RFID mediante MQTT
 db/                  # Definiciones SQL de esquema y datos iniciales
@@ -237,12 +239,13 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 
 ## UI propia de VerneMQ (Opción C.2)
 
-La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqtt-ui-api`) que consulta la HTTP Management API de VerneMQ desde la red interna de Docker. El broker no se expone directamente.
+La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqtt-ui-api`) que consulta un sidecar interno (`vernemq-observer`) basado en `vmq-admin`. El broker no se expone directamente.
 
 ### Servicios Docker incluidos
 
 - `mqtt_ui`: sirve la UI en `http://127.0.0.1:8090`.
 - `mqtt_ui_api`: API protegida con JWT en `http://127.0.0.1:4010`.
+- `vernemq_observer`: sidecar interno (sin puertos públicos) que ejecuta `vmq-admin`.
 
 > En producción, publique ambos servicios detrás de Nginx en HTTPS y aplique autenticación solo en el backend.
 
@@ -252,32 +255,35 @@ Defina en el `.env` de infraestructura (o secretos Docker):
 
 ```env
 # Credenciales de acceso a la UI (backend)
-MQTT_UI_ADMIN_USER=admin
+MQTT_UI_ADMIN_USER=defina_un_usuario
 MQTT_UI_ADMIN_PASSWORD=defina_un_secreto
 MQTT_UI_JWT_SECRET=defina_un_secreto_largo
 
-# URL interna de la HTTP Management API de VerneMQ
-VMQ_HTTP_BASE_URL=http://vernemq:8888/api/v1
-VMQ_HTTP_STATUS_PATH=/status
-VMQ_HTTP_METRICS_PATH=/metrics
-VMQ_HTTP_LISTENERS_PATH=/listeners
-VMQ_HTTP_CLUSTER_PATH=/cluster
-VMQ_HTTP_USER=
-VMQ_HTTP_PASSWORD=
+# Sidecar interno de observabilidad (vmq-admin)
+VMQ_OBSERVER_BASE_URL=http://vernemq_observer:4040
+VMQ_OBSERVER_STATUS_PATH=/status
+VMQ_OBSERVER_METRICS_PATH=/metrics
+VMQ_OBSERVER_LISTENERS_PATH=/listeners
+VMQ_OBSERVER_CLUSTER_PATH=/cluster
+VMQ_OBSERVER_TIMEOUT_MS=4000
+
+# Parámetros Erlang para vmq-admin (si se ajusta el nodo/cookie)
+VMQ_NODE=VerneMQ@vernemq.local
+VMQ_COOKIE=vmq
 
 # Diagnóstico MQTT TLS
 MQTT_DIAG_HOST=mqtt.horizonst.com.es
 MQTT_DIAG_PORT=8883
 ```
 
-> Ajuste las rutas si su despliegue de VerneMQ publica la API HTTP con prefijos distintos.
+> Si modifica el nodo Erlang o la cookie en VerneMQ, ajuste `VMQ_NODE`/`VMQ_COOKIE` para que el sidecar pueda consultar el cluster.
 
 ### Endpoints expuestos por `mqtt_ui_api`
 
 - `POST /api/login` → devuelve JWT.
-- `GET /api/status` → estado del nodo y listeners (API HTTP).
-- `GET /api/metrics` → métricas (API HTTP).
-- `GET /api/diagnostics` → comprobación TLS contra `mqtt.horizonst.com.es:8883` y estado del cluster.
+- `GET /api/status` → estado del nodo y listeners (sidecar vmq-admin).
+- `GET /api/metrics` → métricas (sidecar vmq-admin).
+- `GET /api/diagnostics` → comprobación TLS contra `mqtt.horizonst.com.es:8883` y estado del cluster (sidecar vmq-admin).
 
 La UI consume estos endpoints y nunca expone credenciales MQTT.
 
