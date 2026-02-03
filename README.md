@@ -237,19 +237,27 @@ docker-compose.rfid-access.yml
 
 El portal web se mantiene en `frontend/public` y se copia a `backend/public` durante el empaquetado para que las páginas estáticas acompañen a la API.
 
-## UI propia de VerneMQ (Opción C.2)
+## Observabilidad VerneMQ (UI)
 
 La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqtt-ui-api`) que consulta un sidecar interno (`vernemq-observer`) basado en `vmq-admin`. El broker no se expone directamente.
 
-### Servicios Docker incluidos
+### Arquitectura
 
-- `mqtt_ui`: sirve la UI en `http://127.0.0.1:8090`.
-- `mqtt_ui_api`: API protegida con JWT en `http://127.0.0.1:4010`.
-- `vernemq_observer`: sidecar interno (sin puertos públicos) que ejecuta `vmq-admin`.
+- **VerneMQ**: broker en ejecución sin API HTTP pública.
+- **vernemq_observer**: sidecar interno que ejecuta `vmq-admin` y expone JSON solo dentro de la red Docker.
+- **mqtt_ui_api**: backend protegido con JWT que consume el sidecar.
+- **mqtt_ui**: frontend estático que consulta la API.
 
-> En producción, publique ambos servicios detrás de Nginx en HTTPS y aplique autenticación solo en el backend.
+Flujo: `UI → API → Observer → vmq-admin`.
 
-### Variables de entorno clave
+### Puertos
+
+- UI: `127.0.0.1:8090`
+- API: `127.0.0.1:4010`
+
+> En producción, publique ambos servicios detrás de Nginx en HTTPS y no exponga `vernemq_observer`.
+
+### Variables de entorno necesarias
 
 Defina en el `.env` de infraestructura (o secretos Docker):
 
@@ -277,6 +285,11 @@ MQTT_DIAG_PORT=8883
 ```
 
 > Si modifica el nodo Erlang o la cookie en VerneMQ, ajuste `VMQ_NODE`/`VMQ_COOKIE` para que el sidecar pueda consultar el cluster.
+
+### Seguridad
+
+- La UI está protegida por JWT (login en `mqtt_ui_api`).
+- No exponga `vernemq_observer` fuera de la red Docker.
 
 ### Endpoints expuestos por `mqtt_ui_api`
 
