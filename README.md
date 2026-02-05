@@ -280,6 +280,11 @@ MQTT_UI_ADMIN_USER=defina_un_usuario
 MQTT_UI_ADMIN_PASSWORD=defina_un_secreto
 MQTT_UI_JWT_SECRET=defina_un_secreto_largo
 
+# Valores por defecto en .env.example
+# MQTT_UI_ADMIN_USER=admin
+# MQTT_UI_ADMIN_PASSWORD=20025@BLELoRa
+# MQTT_UI_JWT_SECRET=change_me_random_secret
+
 # Sidecar interno de observabilidad (vmq-admin)
 VMQ_OBSERVER_BASE_URL=http://vernemq_observer:4040
 VMQ_OBSERVER_STATUS_PATH=/status
@@ -300,10 +305,17 @@ MQTT_DIAG_PORT=8883
 - Usuario: `admin`
 - Contraseña: `20025@BLELoRa`
 
+### Flujo de login
+
+1. Acceda a `https://mqtt-ui.horizonst.com.es`.
+2. Inicie sesión con las credenciales definidas en `.env.example` (o sus secretos).
+3. La UI obtiene un JWT y lo envía como `Authorization: Bearer <token>` a `mqtt_ui_api`.
+
 ### Seguridad
 
 - La UI está protegida por JWT (login en `mqtt_ui_api`).
 - No exponga `vernemq_observer` fuera de la red Docker.
+- Cambie las credenciales por defecto en producción.
 
 ### Servicios involucrados
 
@@ -317,8 +329,15 @@ MQTT_DIAG_PORT=8883
 - `GET /api/status` → estado del nodo y listeners (sidecar vmq-admin).
 - `GET /api/metrics` → métricas (sidecar vmq-admin).
 - `GET /api/diagnostics` → comprobación TLS contra `mqtt.horizonst.com.es:8883` y estado del cluster (sidecar vmq-admin).
+- `GET /health` → estado de la API.
 
 La UI consume estos endpoints y nunca expone credenciales MQTT.
+
+### Compatibilidad de rutas (Nginx host)
+
+- `/` → `mqtt_ui` (8090)
+- `/api/*` → `mqtt_ui_api` (4010)
+- `/mqtt-ui-api/*` → `mqtt_ui_api` (compatibilidad del frontend actual)
 
 ## Funcionalidades principales
 
