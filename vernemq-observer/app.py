@@ -7,12 +7,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 HOST = os.environ.get("OBSERVER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("OBSERVER_PORT", "4040"))
 VMQ_ADMIN = os.environ.get("VMQ_ADMIN_BIN", "/vernemq/bin/vmq-admin")
-VMQ_NODE = os.environ.get("VMQ_NODE", "VerneMQ@vernemq.local")
-VMQ_COOKIE = os.environ.get("VMQ_COOKIE", "vmq")
 
 
 def run_vmq_admin(args):
-  cmd = [VMQ_ADMIN, "-n", VMQ_NODE, "-c", VMQ_COOKIE] + args
+  cmd = [VMQ_ADMIN] + args
   result = subprocess.run(cmd, capture_output=True, text=True)
   return {
     "ok": result.returncode == 0,

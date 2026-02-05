@@ -241,6 +241,10 @@ El portal web se mantiene en `frontend/public` y se copia a `backend/public` dur
 
 La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqtt-ui-api`) que consulta un sidecar interno (`vernemq-observer`) basado en `vmq-admin`. El broker no se expone directamente.
 
+### URL de acceso
+
+- `https://mqtt-ui.horizonst.com.es`
+
 ### Arquitectura
 
 - **VerneMQ**: broker en ejecución sin API HTTP pública.
@@ -256,6 +260,15 @@ Flujo: `UI → API → Observer → vmq-admin`.
 - API: `127.0.0.1:4010`
 
 > En producción, publique ambos servicios detrás de Nginx en HTTPS y no exponga `vernemq_observer`.
+
+### Flujo de despliegue (obligatorio)
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+No edite `.env` manualmente; los valores salen del `.env.example`.
 
 ### Variables de entorno necesarias
 
@@ -275,21 +288,28 @@ VMQ_OBSERVER_LISTENERS_PATH=/listeners
 VMQ_OBSERVER_CLUSTER_PATH=/cluster
 VMQ_OBSERVER_TIMEOUT_MS=4000
 
-# Parámetros Erlang para vmq-admin (si se ajusta el nodo/cookie)
-VMQ_NODE=VerneMQ@vernemq.local
-VMQ_COOKIE=vmq
-
 # Diagnóstico MQTT TLS
 MQTT_DIAG_HOST=mqtt.horizonst.com.es
 MQTT_DIAG_PORT=8883
 ```
 
-> Si modifica el nodo Erlang o la cookie en VerneMQ, ajuste `VMQ_NODE`/`VMQ_COOKIE` para que el sidecar pueda consultar el cluster.
+> Si modifica la configuración de red del broker, asegúrese de que el sidecar sigue pudiendo ejecutar `vmq-admin` localmente.
+
+### Credenciales por defecto
+
+- Usuario: `admin`
+- Contraseña: `20025@BLELoRa`
 
 ### Seguridad
 
 - La UI está protegida por JWT (login en `mqtt_ui_api`).
 - No exponga `vernemq_observer` fuera de la red Docker.
+
+### Servicios involucrados
+
+- `vernemq_observer`
+- `mqtt_ui_api`
+- `mqtt_ui`
 
 ### Endpoints expuestos por `mqtt_ui_api`
 

@@ -146,8 +146,6 @@ services:
       context: ./vernemq-observer
     environment:
       - OBSERVER_PORT=4040
-      - VMQ_NODE=${VMQ_NODE:-VerneMQ@vernemq.local}
-      - VMQ_COOKIE=${VMQ_COOKIE:-vmq}
     depends_on:
       - vernemq
     restart: unless-stopped
