@@ -308,9 +308,13 @@ GATT_MQTT_TLS=false
 GATT_MQTT_REJECT_UNAUTHORIZED=true
 GATT_MQTT_USERNAME=
 GATT_MQTT_PASSWORD=
-GATT_MQTT_CLIENT_ID=mqtt-ui-api-gatt
+GATT_MQTT_CLIENT_ID=
 GATT_MQTT_SUB_TOPIC_PATTERN=/MK110/{gatewayMac}/receive
 GATT_MQTT_PUB_TOPIC_SUBSCRIBE=/MK110/+/send
+GATT_CONNECT_EXPECTED_MSG_IDS=2500,3501
+GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS=2502,3502
+GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS=2504,3504
+GATT_SSE_TICKET_TTL_MS=60000
 ```
 
 > Si modifica la configuración de red del broker, asegúrese de que el sidecar sigue pudiendo ejecutar `vmq-admin` localmente.
@@ -336,7 +340,7 @@ GATT_MQTT_PUB_TOPIC_SUBSCRIBE=/MK110/+/send
 
 Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 usando MQTT:
 
-- Formulario con `Gateway MAC`, `Beacon MAC`, `password` y tipo de dispositivo (BXP-S/BXP-D/BXP-Tag).
+- Formulario con `Gateway MAC`, `Beacon MAC` y `password` (MVP BXP-S).
 - Acciones MVP:
   - `Connect (BXP-S)` → envía `msg_id: 1500` con `data.mac` + `data.passwd`.
   - `Inquire device info` → envía `msg_id: 1502`.
@@ -351,7 +355,7 @@ Flujo MQTT para MKGW3:
 - Downlink (cloud → gateway): publicación en `sub_topic` (por defecto `/MK110/<gatewayMac>/receive`).
 - Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `/MK110/+/send`).
 
-Correlación de respuestas: `gatewayMac` + `msg_id` + timeout (`GATT_TIMEOUT_MS`) y filtrado opcional por beacon en el stream SSE.
+Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`). Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
 
 ### Servicios involucrados
 
@@ -368,7 +372,8 @@ Correlación de respuestas: `gatewayMac` + `msg_id` + timeout (`GATT_TIMEOUT_MS`
 - `POST /api/gatt/connect` → publica `msg_id:1500` (connect beacon BXP-S) y espera reply.
 - `POST /api/gatt/inquire-device-info` → publica `msg_id:1502` y espera reply.
 - `POST /api/gatt/inquire-status` → publica `msg_id:1504` y espera reply.
-- `GET /api/gatt/stream` → SSE con requests/replies/notifies (requiere JWT).
+- `POST /api/gatt/stream-ticket` → emite ticket efímero para SSE (evita JWT en query param).
+- `GET /api/gatt/stream` → SSE con requests/replies/notifies (requiere ticket efímero).
 - `GET /health` → estado de la API.
 
 La UI consume estos endpoints y nunca expone credenciales MQTT.

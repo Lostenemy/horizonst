@@ -2,7 +2,8 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
-import net from "net";
+import crypto from "node:crypto";
+import mqtt from "mqtt";
 import pino from "pino";
 import tls from "tls";
 
@@ -49,227 +50,43 @@ const gattMqttTls = process.env.GATT_MQTT_TLS === "true";
 const gattMqttRejectUnauthorized = process.env.GATT_MQTT_REJECT_UNAUTHORIZED !== "false";
 const gattMqttUsername = process.env.GATT_MQTT_USERNAME || "";
 const gattMqttPassword = process.env.GATT_MQTT_PASSWORD || "";
-const gattMqttClientId = process.env.GATT_MQTT_CLIENT_ID || `mqtt-ui-api-gatt-${Math.random().toString(16).slice(2, 10)}`;
+const gattMqttClientId =
+  process.env.GATT_MQTT_CLIENT_ID || `mqtt-ui-api-gatt-${process.env.HOSTNAME || crypto.randomBytes(4).toString("hex")}`;
 const gattMqttSubTopicPattern = process.env.GATT_MQTT_SUB_TOPIC_PATTERN || "/MK110/{gatewayMac}/receive";
 const gattMqttPubTopicSubscribe = process.env.GATT_MQTT_PUB_TOPIC_SUBSCRIBE || "/MK110/+/send";
+const gattSseTicketTtlMs = Number.parseInt(process.env.GATT_SSE_TICKET_TTL_MS || "60000", 10);
 
-class SimpleMqttClient {
-  constructor(options) {
-    this.options = options;
-    this.connected = false;
-    this.socket = null;
-    this.readBuffer = Buffer.alloc(0);
-    this.packetId = 1;
-    this.handlers = { connect: [], message: [], error: [], close: [] };
-    this.reconnectTimer = null;
-  }
+const gattExpectedConnectMsgIds = parseMsgIdList(process.env.GATT_CONNECT_EXPECTED_MSG_IDS, [2500, 3501]);
+const gattExpectedInfoMsgIds = parseMsgIdList(process.env.GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS, [2502, 3502]);
+const gattExpectedStatusMsgIds = parseMsgIdList(process.env.GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS, [2504, 3504]);
 
-  on(eventName, handler) {
-    this.handlers[eventName].push(handler);
-  }
-
-  emit(eventName, ...args) {
-    for (const handler of this.handlers[eventName] || []) {
-      try {
-        handler(...args);
-      } catch (error) {
-        logger.error({ error }, "SimpleMqttClient handler failed");
-      }
-    }
-  }
-
-  start() {
-    this.connect();
-  }
-
-  connect() {
-    const socket = this.options.tls
-      ? tls.connect({
-          host: this.options.host,
-          port: this.options.port,
-          rejectUnauthorized: this.options.rejectUnauthorized
-        })
-      : net.connect({ host: this.options.host, port: this.options.port });
-
-    this.socket = socket;
-
-    socket.on("connect", () => {
-      socket.write(this.buildConnectPacket());
-    });
-
-    socket.on("data", (chunk) => {
-      this.readBuffer = Buffer.concat([this.readBuffer, chunk]);
-      this.processPackets();
-    });
-
-    socket.on("error", (error) => {
-      this.emit("error", error);
-    });
-
-    socket.on("close", () => {
-      this.connected = false;
-      this.emit("close");
-      this.scheduleReconnect();
-    });
-  }
-
-  scheduleReconnect() {
-    if (this.reconnectTimer) {
-      return;
-    }
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
-    }, 1500);
-  }
-
-  processPackets() {
-    while (this.readBuffer.length > 2) {
-      const header = this.readBuffer[0];
-      const type = header >> 4;
-      const { value: remainingLength, bytesUsed } = this.decodeRemainingLength(this.readBuffer, 1);
-      if (remainingLength == null) {
-        return;
-      }
-      const packetLength = 1 + bytesUsed + remainingLength;
-      if (this.readBuffer.length < packetLength) {
-        return;
-      }
-      const packet = this.readBuffer.slice(0, packetLength);
-      this.readBuffer = this.readBuffer.slice(packetLength);
-      this.handlePacket(type, packet.slice(1 + bytesUsed), header);
-    }
-  }
-
-  handlePacket(type, body, header) {
-    if (type === 2) {
-      const returnCode = body[1];
-      this.connected = returnCode === 0;
-      if (this.connected) {
-        this.emit("connect");
-      } else {
-        this.emit("error", new Error(`mqtt_connack_error_${returnCode}`));
-      }
-      return;
-    }
-
-    if (type === 3) {
-      const topicLength = body.readUInt16BE(0);
-      const topic = body.slice(2, 2 + topicLength).toString("utf8");
-      let offset = 2 + topicLength;
-      const qos = (header >> 1) & 0x03;
-      if (qos > 0) {
-        offset += 2;
-      }
-      const payload = body.slice(offset);
-      this.emit("message", topic, payload);
-      return;
-    }
-
-    if (type === 9 || type === 13) {
-      return;
-    }
-  }
-
-  decodeRemainingLength(buffer, offset) {
-    let multiplier = 1;
-    let value = 0;
-    let bytesUsed = 0;
-    while (offset + bytesUsed < buffer.length) {
-      const encodedByte = buffer[offset + bytesUsed];
-      value += (encodedByte & 127) * multiplier;
-      bytesUsed += 1;
-      if ((encodedByte & 128) === 0) {
-        return { value, bytesUsed };
-      }
-      multiplier *= 128;
-      if (multiplier > 128 * 128 * 128) {
-        break;
-      }
-    }
-    return { value: null, bytesUsed: 0 };
-  }
-
-  encodeString(value) {
-    const payload = Buffer.from(value, "utf8");
-    const len = Buffer.alloc(2);
-    len.writeUInt16BE(payload.length, 0);
-    return Buffer.concat([len, payload]);
-  }
-
-  encodeRemainingLength(value) {
-    const bytes = [];
-    let x = value;
-    do {
-      let encodedByte = x % 128;
-      x = Math.floor(x / 128);
-      if (x > 0) {
-        encodedByte = encodedByte | 128;
-      }
-      bytes.push(encodedByte);
-    } while (x > 0);
-    return Buffer.from(bytes);
-  }
-
-  buildConnectPacket() {
-    const protocol = this.encodeString("MQTT");
-    const protocolLevel = Buffer.from([0x04]);
-    let connectFlags = 0x02;
-    const payloadParts = [this.encodeString(this.options.clientId)];
-
-    if (this.options.username) {
-      connectFlags |= 0x80;
-      payloadParts.push(this.encodeString(this.options.username));
-    }
-    if (this.options.password) {
-      connectFlags |= 0x40;
-      payloadParts.push(this.encodeString(this.options.password));
-    }
-
-    const keepAlive = Buffer.from([0x00, 0x3c]);
-    const variableHeader = Buffer.concat([protocol, protocolLevel, Buffer.from([connectFlags]), keepAlive]);
-    const payload = Buffer.concat(payloadParts);
-    const fixed = Buffer.concat([Buffer.from([0x10]), this.encodeRemainingLength(variableHeader.length + payload.length)]);
-    return Buffer.concat([fixed, variableHeader, payload]);
-  }
-
-  subscribe(topic) {
-    if (!this.connected || !this.socket) {
-      throw new Error("mqtt_not_connected");
-    }
-    const topicBuffer = this.encodeString(topic);
-    const packetId = this.packetId++;
-    const payload = Buffer.concat([topicBuffer, Buffer.from([0x00])]);
-    const header = Buffer.alloc(2);
-    header.writeUInt16BE(packetId, 0);
-    const fixed = Buffer.concat([Buffer.from([0x82]), this.encodeRemainingLength(header.length + payload.length)]);
-    this.socket.write(Buffer.concat([fixed, header, payload]));
-  }
-
-  publish(topic, payloadText) {
-    if (!this.connected || !this.socket) {
-      throw new Error("mqtt_not_connected");
-    }
-    const topicBuffer = this.encodeString(topic);
-    const payloadBuffer = Buffer.from(payloadText, "utf8");
-    const fixed = Buffer.concat([Buffer.from([0x30]), this.encodeRemainingLength(topicBuffer.length + payloadBuffer.length)]);
-    this.socket.write(Buffer.concat([fixed, topicBuffer, payloadBuffer]));
-  }
-}
-
-const gattMqttClient = new SimpleMqttClient({
+const gattMqttClient = mqtt.connect({
   host: gattMqttHost,
   port: gattMqttPort,
-  tls: gattMqttTls,
+  protocol: gattMqttTls ? "mqtts" : "mqtt",
   rejectUnauthorized: gattMqttRejectUnauthorized,
-  username: gattMqttUsername || null,
-  password: gattMqttPassword || null,
-  clientId: gattMqttClientId
+  username: gattMqttUsername || undefined,
+  password: gattMqttPassword || undefined,
+  clientId: gattMqttClientId,
+  reconnectPeriod: 1500,
+  keepalive: 60
 });
 
 const pendingGattReplies = new Map();
 const gattSseClients = new Set();
 const gattRateLimitState = new Map();
+const gattSseTickets = new Map();
+
+function parseMsgIdList(raw, fallback) {
+  if (!raw) {
+    return fallback;
+  }
+  const values = String(raw)
+    .split(",")
+    .map((value) => Number.parseInt(value.trim(), 10))
+    .filter((value) => Number.isInteger(value));
+  return values.length > 0 ? values : fallback;
+}
 
 function buildTopic(pattern, gatewayMac) {
   return pattern.replaceAll("{gatewayMac}", gatewayMac.toUpperCase());
@@ -289,6 +106,28 @@ function toGatewayMac(value) {
 
 function isValidMac(value) {
   return /^[0-9A-F]{12}$/.test(toGatewayMac(value));
+}
+
+function pendingKey(gatewayMac, msgId, beaconMac) {
+  return `${gatewayMac}:${msgId}:${beaconMac || "*"}`;
+}
+
+function resolvePendingForMessage({ gatewayMac, msgId, beaconMac, topic, payload }) {
+  const exact = pendingKey(gatewayMac, msgId, beaconMac);
+  const wildcard = pendingKey(gatewayMac, msgId, "*");
+  for (const key of [exact, wildcard]) {
+    const waiters = pendingGattReplies.get(key);
+    if (!waiters || waiters.length === 0) {
+      continue;
+    }
+    const waiter = waiters.shift();
+    if (waiters.length === 0) {
+      pendingGattReplies.delete(key);
+    }
+    waiter.resolve({ topic, payload, gatewayMac, beaconMac, matchedKey: key });
+    return true;
+  }
+  return false;
 }
 
 function notifySseClients(eventName, payload) {
@@ -322,13 +161,43 @@ function extractBeaconMac(payload) {
   return toGatewayMac(payload?.data?.mac || "");
 }
 
+function issueSseTicket(username) {
+  const token = crypto.randomBytes(24).toString("hex");
+  gattSseTickets.set(token, {
+    username,
+    expiresAt: Date.now() + gattSseTicketTtlMs
+  });
+  return token;
+}
+
+function validateSseTicket(ticket, username) {
+  const record = gattSseTickets.get(ticket);
+  if (!record) {
+    return false;
+  }
+  if (record.expiresAt < Date.now() || record.username !== username) {
+    gattSseTickets.delete(ticket);
+    return false;
+  }
+  return true;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ticket, record] of gattSseTickets.entries()) {
+    if (record.expiresAt < now) {
+      gattSseTickets.delete(ticket);
+    }
+  }
+}, 30000).unref();
+
 gattMqttClient.on("connect", () => {
   logger.info({ topic: gattMqttPubTopicSubscribe }, "GATT MQTT connected");
-  try {
-    gattMqttClient.subscribe(gattMqttPubTopicSubscribe);
-  } catch (error) {
-    logger.error({ error }, "Failed to subscribe GATT pub_topic pattern");
-  }
+  gattMqttClient.subscribe(gattMqttPubTopicSubscribe, { qos: 1 }, (error) => {
+    if (error) {
+      logger.error({ error }, "Failed to subscribe GATT pub_topic pattern");
+    }
+  });
 });
 
 gattMqttClient.on("error", (error) => {
@@ -349,12 +218,7 @@ gattMqttClient.on("message", (topic, payloadBuffer) => {
   const msgId = Number(payload.msg_id);
 
   if (gatewayMac && Number.isInteger(msgId)) {
-    const pendingKey = `${gatewayMac}:${msgId}`;
-    const pending = pendingGattReplies.get(pendingKey);
-    if (pending) {
-      pending.resolve({ topic, payload, gatewayMac, beaconMac });
-      pendingGattReplies.delete(pendingKey);
-    }
+    resolvePendingForMessage({ gatewayMac, msgId, beaconMac, topic, payload });
   }
 
   notifySseClients("gatt-message", {
@@ -367,8 +231,6 @@ gattMqttClient.on("message", (topic, payloadBuffer) => {
     receivedAt: new Date().toISOString()
   });
 });
-
-gattMqttClient.start();
 
 function buildUrl(path) {
   if (path.startsWith("http://") || path.startsWith("https://")) {
@@ -398,7 +260,7 @@ async function fetchJson(path) {
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : req.query.token;
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
   if (!token) {
     return res.status(401).json({ error: "missing_token" });
@@ -410,6 +272,16 @@ function authenticateToken(req, res, next) {
   } catch (error) {
     return res.status(401).json({ error: "invalid_token" });
   }
+}
+
+function authenticateSseTicket(req, res, next) {
+  const ticket = String(req.query.ticket || "");
+  const username = String(req.query.username || "");
+  if (!ticket || !username || !validateSseTicket(ticket, username)) {
+    return res.status(401).json({ error: "invalid_stream_ticket" });
+  }
+  req.user = { username };
+  return next();
 }
 
 function enforceGattRateLimit(req, res, next) {
@@ -441,24 +313,38 @@ function validateGattRequest(req, res) {
   };
 }
 
-function waitForGattReply(gatewayMac, expectedMsgId, timeoutMs = gattTimeoutMs) {
+function waitForGattReply({ gatewayMac, beaconMac, expectedMsgIds, timeoutMs = gattTimeoutMs }) {
   return new Promise((resolve, reject) => {
-    const key = `${gatewayMac}:${expectedMsgId}`;
+    const bindings = [];
     const timeout = setTimeout(() => {
-      pendingGattReplies.delete(key);
+      for (const key of bindings) {
+        const waiters = pendingGattReplies.get(key) || [];
+        const next = waiters.filter((entry) => entry.resolve !== resolver);
+        if (next.length > 0) {
+          pendingGattReplies.set(key, next);
+        } else {
+          pendingGattReplies.delete(key);
+        }
+      }
       reject(new Error("timeout_waiting_reply"));
     }, timeoutMs);
 
-    pendingGattReplies.set(key, {
-      resolve: (value) => {
-        clearTimeout(timeout);
-        resolve(value);
-      }
-    });
+    const resolver = (value) => {
+      clearTimeout(timeout);
+      resolve(value);
+    };
+
+    for (const msgId of expectedMsgIds) {
+      const key = pendingKey(gatewayMac, msgId, beaconMac);
+      const waiters = pendingGattReplies.get(key) || [];
+      waiters.push({ resolve: resolver });
+      pendingGattReplies.set(key, waiters);
+      bindings.push(key);
+    }
   });
 }
 
-async function publishGattCommand({ gatewayMac, msgId, data }) {
+async function publishGattCommand({ gatewayMac, msgId, data, commandId }) {
   const topic = buildTopic(gattMqttSubTopicPattern, gatewayMac);
   const payload = {
     msg_id: msgId,
@@ -468,6 +354,7 @@ async function publishGattCommand({ gatewayMac, msgId, data }) {
 
   notifySseClients("gatt-request", {
     type: "request",
+    commandId,
     topic,
     gatewayMac,
     beaconMac: toGatewayMac(data?.mac),
@@ -475,7 +362,16 @@ async function publishGattCommand({ gatewayMac, msgId, data }) {
     sentAt: new Date().toISOString()
   });
 
-  gattMqttClient.publish(topic, JSON.stringify(payload));
+  await new Promise((resolve, reject) => {
+    gattMqttClient.publish(topic, JSON.stringify(payload), { qos: 1 }, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
   return payload;
 }
 
@@ -489,10 +385,17 @@ async function executeGattCommand(req, res, commandConfig) {
     return res.status(503).json({ error: "mqtt_not_connected" });
   }
 
+  const commandId = crypto.randomBytes(8).toString("hex");
+
   try {
     const commandData = commandConfig.buildData(parsed);
-    const waitForReply = waitForGattReply(parsed.gatewayMac, commandConfig.msgId);
+    const waitForReply = waitForGattReply({
+      gatewayMac: parsed.gatewayMac,
+      beaconMac: parsed.beaconMac,
+      expectedMsgIds: commandConfig.expectedMsgIds
+    });
     const requestPayload = await publishGattCommand({
+      commandId,
       gatewayMac: parsed.gatewayMac,
       msgId: commandConfig.msgId,
       data: commandData
@@ -501,12 +404,16 @@ async function executeGattCommand(req, res, commandConfig) {
 
     return res.json({
       ok: true,
+      commandId,
+      expectedMsgIds: commandConfig.expectedMsgIds,
       request: requestPayload,
       reply
     });
   } catch (error) {
     return res.status(504).json({
       ok: false,
+      commandId,
+      expectedMsgIds: commandConfig.expectedMsgIds,
       error: error.message || "gatt_command_failed"
     });
   }
@@ -563,7 +470,16 @@ app.get("/api/diagnostics", authenticateToken, async (req, res) => {
   });
 });
 
-app.get("/api/gatt/stream", authenticateToken, (req, res) => {
+app.post("/api/gatt/stream-ticket", authenticateToken, (req, res) => {
+  const ticket = issueSseTicket(req.user.username);
+  res.json({
+    ticket,
+    username: req.user.username,
+    expiresInMs: gattSseTicketTtlMs
+  });
+});
+
+app.get("/api/gatt/stream", authenticateSseTicket, (req, res) => {
   const gatewayMac = isValidMac(req.query.gatewayMac) ? toGatewayMac(req.query.gatewayMac) : "";
   const beaconMac = isValidMac(req.query.beaconMac) ? toGatewayMac(req.query.beaconMac) : "";
 
@@ -572,7 +488,7 @@ app.get("/api/gatt/stream", authenticateToken, (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders?.();
 
-  const client = { res, gatewayMac, beaconMac };
+  const client = { res, gatewayMac, beaconMac, username: req.user.username };
   gattSseClients.add(client);
 
   res.write(`event: ready\ndata: ${JSON.stringify({ connected: gattMqttClient.connected })}\n\n`);
@@ -585,6 +501,7 @@ app.get("/api/gatt/stream", authenticateToken, (req, res) => {
 app.post("/api/gatt/connect", authenticateToken, enforceGattRateLimit, async (req, res) => {
   return executeGattCommand(req, res, {
     msgId: 1500,
+    expectedMsgIds: gattExpectedConnectMsgIds,
     buildData: ({ beaconMac, password }) => ({ mac: beaconMac, passwd: password })
   });
 });
@@ -592,6 +509,7 @@ app.post("/api/gatt/connect", authenticateToken, enforceGattRateLimit, async (re
 app.post("/api/gatt/inquire-device-info", authenticateToken, enforceGattRateLimit, async (req, res) => {
   return executeGattCommand(req, res, {
     msgId: 1502,
+    expectedMsgIds: gattExpectedInfoMsgIds,
     buildData: ({ beaconMac }) => ({ mac: beaconMac })
   });
 });
@@ -599,6 +517,7 @@ app.post("/api/gatt/inquire-device-info", authenticateToken, enforceGattRateLimi
 app.post("/api/gatt/inquire-status", authenticateToken, enforceGattRateLimit, async (req, res) => {
   return executeGattCommand(req, res, {
     msgId: 1504,
+    expectedMsgIds: gattExpectedStatusMsgIds,
     buildData: ({ beaconMac }) => ({ mac: beaconMac })
   });
 });

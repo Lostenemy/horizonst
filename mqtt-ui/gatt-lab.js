@@ -38,7 +38,7 @@ function setLoggedIn(isLoggedIn) {
   gattSection.style.display = isLoggedIn ? "block" : "none";
   logoutBtn.style.display = isLoggedIn ? "inline-block" : "none";
   if (isLoggedIn) {
-    openStream();
+    void openStream();
   } else if (stream) {
     stream.close();
     stream = null;
@@ -68,8 +68,7 @@ function getFormPayload() {
   return {
     gatewayMac: normalizeMac(formData.get("gatewayMac")),
     beaconMac: normalizeMac(formData.get("beaconMac")),
-    password: formData.get("password"),
-    deviceType: formData.get("deviceType")
+    password: formData.get("password")
   };
 }
 
@@ -86,7 +85,7 @@ async function handleCommand(action) {
   try {
     const response = await apiRequest(endpoints[action], payload);
     appendLog(`Reply (${action})`, response);
-    openStream();
+    await openStream();
   } catch (error) {
     appendLog(`Error (${action})`, { error: error.message });
   }
@@ -115,16 +114,22 @@ async function handleLogin(event) {
   }
 }
 
-function openStream() {
+async function openStream() {
   if (!getToken()) {
     return;
   }
+
   if (stream) {
     stream.close();
   }
 
   const payload = getFormPayload();
-  const params = new URLSearchParams({ token: getToken() });
+  const ticketResponse = await apiRequest("/gatt/stream-ticket", {});
+  const params = new URLSearchParams({
+    ticket: ticketResponse.ticket,
+    username: ticketResponse.username
+  });
+
   if (payload.gatewayMac) {
     params.set("gatewayMac", payload.gatewayMac);
   }
@@ -163,12 +168,14 @@ logoutBtn.addEventListener("click", () => {
 });
 
 gattForm.querySelectorAll("button[data-action]").forEach((button) => {
-  button.addEventListener("click", () => handleCommand(button.dataset.action));
+  button.addEventListener("click", () => {
+    void handleCommand(button.dataset.action);
+  });
 });
 
 gattForm.addEventListener("change", () => {
   if (getToken()) {
-    openStream();
+    void openStream();
   }
 });
 
