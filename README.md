@@ -2,7 +2,7 @@
 
 HorizonST es una plataforma integral para la monitorización de dispositivos BLE capturados por gateways MQTT. El proyecto incluye:
 
-- **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2` y `devices/MK3`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
+- **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4` y `devices/RF1`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
 - **Portal web HTML5 + JavaScript** accesible a través de `www.horizonst.com.es` con funcionalidades diferenciadas para administradores y usuarios finales.
 - **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y VerneMQ. El proxy inverso Nginx se despliega
   **fuera** de Docker y expone la web en HTTPS junto con pgAdmin.
@@ -124,7 +124,7 @@ Si quiere insertar automáticamente una identidad MQTT al crear la base de datos
 
 Con esas variables, el init script `db/mqtt-init.sh` inserta una fila en `vmq_auth_acl` durante el primer arranque.
 
-El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para publicar en `/MK110/+/receive` y suscribirse a `/MK110/+/send`.
+El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para publicar en `devices/MK3/receive` (o `devices/MKX/receive`) y suscribirse a `devices/MK3/send` (o `devices/MKX/send`).
 
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
@@ -247,6 +247,21 @@ La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqt
 
 - `https://mqtt-ui.horizonst.com.es`
 
+### Canales MQTT oficiales (gateway type por topic)
+
+- `devices/MK1` → Gateway tipo MK1
+- `devices/MK2` → Gateway tipo MK2
+- `devices/MK3` → Gateway tipo MK3
+- `devices/MK4` → Gateway tipo MK4
+- `devices/RF1` → Gateway tipo RF
+
+Para GATT (mismo bus MQTT, sin canales legacy):
+
+- Downlink: `devices/MKX/receive` (cloud → gateway)
+- Uplink: `devices/MKX/send` (gateway → cloud)
+
+El tipo de gateway se determina exclusivamente por el topic MQTT (`devices/MKx` / `devices/RF1`).
+
 ### Arquitectura
 
 - **VerneMQ**: broker en ejecución sin API HTTP pública.
@@ -312,8 +327,8 @@ GATT_MQTT_USERNAME=
 GATT_MQTT_PASSWORD=
 # Si se dejan vacíos, mqtt_ui_api usa MQTT_USER / MQTT_PASS
 GATT_MQTT_CLIENT_ID=mqtt-ui-api-gatt
-GATT_MQTT_SUB_TOPIC_PATTERN=/MK110/{gatewayMac}/receive
-GATT_MQTT_PUB_TOPIC_SUBSCRIBE=/MK110/+/send
+GATT_MQTT_SUB_TOPIC_PATTERN=devices/{gatewayType}/receive
+GATT_MQTT_PUB_TOPIC_SUBSCRIBE=devices/+/send
 GATT_CONNECT_EXPECTED_MSG_IDS=2500,3501
 GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS=2502,3502
 GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS=2504,3504
@@ -343,7 +358,7 @@ GATT_SSE_TICKET_TTL_MS=60000
 
 Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 usando MQTT:
 
-- Formulario con `Gateway MAC`, `Beacon MAC` y `password` (MVP BXP-S).
+- Formulario con `Gateway type (MK1/MK2/MK3/MK4/RF1)`, `Gateway MAC`, `Beacon MAC` y `password` (MVP BXP-S).
 - Acciones MVP:
   - `Connect (BXP-S)` → envía `msg_id: 1500` con `data.mac` + `data.passwd`.
   - `Inquire device info` → envía `msg_id: 1502`.
@@ -355,11 +370,11 @@ Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 
 
 Flujo MQTT para MKGW3:
 
-- Downlink (cloud → gateway): publicación en `sub_topic` (por defecto `/MK110/<gatewayMac>/receive`).
-- Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `/MK110/+/send`).
+- Downlink (cloud → gateway): publicación en `sub_topic` (por defecto `devices/<MKX>/receive`, por ejemplo `devices/MK3/receive`).
+- Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `devices/+/send`, por ejemplo `devices/MK3/send`).
 
 - Autenticación MQTT: `mqtt_ui_api` reutiliza por defecto `MQTT_USER` / `MQTT_PASS` para conectar a VerneMQ interno (puede sobrescribirse con `GATT_MQTT_USERNAME` / `GATT_MQTT_PASSWORD`).
-- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas: publish `/MK110/+/receive` y subscribe `/MK110/+/send` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
+- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas: publish `devices/MKX/receive` y subscribe `devices/MKX/send` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
 
 Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`). Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
 

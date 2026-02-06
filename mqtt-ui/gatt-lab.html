@@ -37,7 +37,16 @@
               <label>Gateway MAC <input name="gatewayMac" placeholder="A1B2C3D4E5F6" required /></label>
               <label>Beacon MAC <input name="beaconMac" placeholder="112233445566" required /></label>
               <label>Password <input name="password" value="Moko4321" /></label>
-              
+              <label>Tipo gateway
+                <select name="gatewayType" required>
+                  <option value="MK1">MK1</option>
+                  <option value="MK2">MK2</option>
+                  <option value="MK3" selected>MK3</option>
+                  <option value="MK4">MK4</option>
+                  <option value="RF1">RF1</option>
+                </select>
+              </label>
+
               <div class="row wrap">
                 <button type="button" data-action="connect">Connect (BXP-S)</button>
                 <button type="button" data-action="inquire-device-info">Inquire device info</button>

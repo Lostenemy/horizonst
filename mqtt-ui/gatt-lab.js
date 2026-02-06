@@ -68,7 +68,8 @@ function getFormPayload() {
   return {
     gatewayMac: normalizeMac(formData.get("gatewayMac")),
     beaconMac: normalizeMac(formData.get("beaconMac")),
-    password: formData.get("password")
+    password: formData.get("password"),
+    gatewayType: String(formData.get("gatewayType") || "").toUpperCase()
   };
 }
 
@@ -130,6 +131,9 @@ async function openStream() {
     username: ticketResponse.username
   });
 
+  if (payload.gatewayType) {
+    params.set("gatewayType", payload.gatewayType);
+  }
   if (payload.gatewayMac) {
     params.set("gatewayMac", payload.gatewayMac);
   }

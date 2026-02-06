@@ -52,9 +52,10 @@ const gattMqttUsername = process.env.GATT_MQTT_USERNAME || process.env.MQTT_USER
 const gattMqttPassword = process.env.GATT_MQTT_PASSWORD || process.env.MQTT_PASS || "";
 const gattMqttClientId =
   process.env.GATT_MQTT_CLIENT_ID || "mqtt-ui-api-gatt";
-const gattMqttSubTopicPattern = process.env.GATT_MQTT_SUB_TOPIC_PATTERN || "/MK110/{gatewayMac}/receive";
-const gattMqttPubTopicSubscribe = process.env.GATT_MQTT_PUB_TOPIC_SUBSCRIBE || "/MK110/+/send";
+const gattMqttSubTopicPattern = process.env.GATT_MQTT_SUB_TOPIC_PATTERN || "devices/{gatewayType}/receive";
+const gattMqttPubTopicSubscribe = process.env.GATT_MQTT_PUB_TOPIC_SUBSCRIBE || "devices/+/send";
 const gattSseTicketTtlMs = Number.parseInt(process.env.GATT_SSE_TICKET_TTL_MS || "60000", 10);
+const supportedGatewayTypes = ["MK1", "MK2", "MK3", "MK4", "RF1"];
 
 const gattExpectedConnectMsgIds = parseMsgIdList(process.env.GATT_CONNECT_EXPECTED_MSG_IDS, [2500, 3501]);
 const gattExpectedInfoMsgIds = parseMsgIdList(process.env.GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS, [2502, 3502]);
@@ -88,8 +89,16 @@ function parseMsgIdList(raw, fallback) {
   return values.length > 0 ? values : fallback;
 }
 
-function buildTopic(pattern, gatewayMac) {
-  return pattern.replaceAll("{gatewayMac}", gatewayMac.toUpperCase());
+function buildTopic(pattern, gatewayType) {
+  return pattern.replaceAll("{gatewayType}", gatewayType.toUpperCase());
+}
+
+function normalizeGatewayType(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function isValidGatewayType(value) {
+  return supportedGatewayTypes.includes(normalizeGatewayType(value));
 }
 
 function parseJsonPayload(payloadBuffer) {
@@ -108,13 +117,13 @@ function isValidMac(value) {
   return /^[0-9A-F]{12}$/.test(toGatewayMac(value));
 }
 
-function pendingKey(gatewayMac, msgId, beaconMac) {
-  return `${gatewayMac}:${msgId}:${beaconMac || "*"}`;
+function pendingKey(gatewayType, gatewayMac, msgId, beaconMac) {
+  return `${gatewayType}:${gatewayMac}:${msgId}:${beaconMac || "*"}`;
 }
 
-function resolvePendingForMessage({ gatewayMac, msgId, beaconMac, topic, payload }) {
-  const exact = pendingKey(gatewayMac, msgId, beaconMac);
-  const wildcard = pendingKey(gatewayMac, msgId, "*");
+function resolvePendingForMessage({ gatewayType, gatewayMac, msgId, beaconMac, topic, payload }) {
+  const exact = pendingKey(gatewayType, gatewayMac, msgId, beaconMac);
+  const wildcard = pendingKey(gatewayType, gatewayMac, msgId, "*");
   for (const key of [exact, wildcard]) {
     const waiters = pendingGattReplies.get(key);
     if (!waiters || waiters.length === 0) {
@@ -133,6 +142,9 @@ function resolvePendingForMessage({ gatewayMac, msgId, beaconMac, topic, payload
 function notifySseClients(eventName, payload) {
   const serialized = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const client of gattSseClients) {
+    if (client.gatewayType && payload.gatewayType !== client.gatewayType) {
+      continue;
+    }
     if (client.gatewayMac && payload.gatewayMac !== client.gatewayMac) {
       continue;
     }
@@ -152,8 +164,8 @@ function topicMatchesPattern(topic, pattern) {
   return regex.test(topic);
 }
 
-function extractGatewayMacFromTopic(topic) {
-  const match = topic.match(/\/MK110\/([0-9A-Fa-f]{12})\//);
+function extractGatewayTypeFromTopic(topic) {
+  const match = topic.match(/^devices\/(MK[1-4]|RF1)\//i);
   return match ? match[1].toUpperCase() : null;
 }
 
@@ -213,12 +225,13 @@ gattMqttClient.on("message", (topic, payloadBuffer) => {
     return;
   }
 
-  const gatewayMac = toGatewayMac(payload?.device_info?.mac || extractGatewayMacFromTopic(topic));
+  const gatewayType = normalizeGatewayType(extractGatewayTypeFromTopic(topic));
+  const gatewayMac = toGatewayMac(payload?.device_info?.mac || "");
   const beaconMac = extractBeaconMac(payload);
   const msgId = Number(payload.msg_id);
 
-  if (gatewayMac && Number.isInteger(msgId)) {
-    resolvePendingForMessage({ gatewayMac, msgId, beaconMac, topic, payload });
+  if (gatewayType && gatewayMac && Number.isInteger(msgId)) {
+    resolvePendingForMessage({ gatewayType, gatewayMac, msgId, beaconMac, topic, payload });
   }
 
   notifySseClients("gatt-message", {
@@ -226,6 +239,7 @@ gattMqttClient.on("message", (topic, payloadBuffer) => {
     topic,
     payload,
     msgId,
+    gatewayType,
     gatewayMac,
     beaconMac,
     receivedAt: new Date().toISOString()
@@ -298,8 +312,14 @@ function enforceGattRateLimit(req, res, next) {
 }
 
 function validateGattRequest(req, res) {
+  const gatewayType = normalizeGatewayType(req.body?.gatewayType);
   const gatewayMac = toGatewayMac(req.body?.gatewayMac);
   const beaconMac = toGatewayMac(req.body?.beaconMac);
+
+  if (!isValidGatewayType(gatewayType)) {
+    res.status(400).json({ error: "invalid_gateway_type", message: `gatewayType debe ser uno de: ${supportedGatewayTypes.join(", ")}.` });
+    return null;
+  }
 
   if (!isValidMac(gatewayMac) || !isValidMac(beaconMac)) {
     res.status(400).json({ error: "invalid_mac", message: "gatewayMac y beaconMac deben tener 12 hex." });
@@ -307,13 +327,14 @@ function validateGattRequest(req, res) {
   }
 
   return {
+    gatewayType,
     gatewayMac,
     beaconMac,
     password: String(req.body?.password || gattDefaultPass)
   };
 }
 
-function waitForGattReply({ gatewayMac, beaconMac, expectedMsgIds, timeoutMs = gattTimeoutMs }) {
+function waitForGattReply({ gatewayType, gatewayMac, beaconMac, expectedMsgIds, timeoutMs = gattTimeoutMs }) {
   return new Promise((resolve, reject) => {
     const bindings = [];
     const timeout = setTimeout(() => {
@@ -335,7 +356,7 @@ function waitForGattReply({ gatewayMac, beaconMac, expectedMsgIds, timeoutMs = g
     };
 
     for (const msgId of expectedMsgIds) {
-      const key = pendingKey(gatewayMac, msgId, beaconMac);
+      const key = pendingKey(gatewayType, gatewayMac, msgId, beaconMac);
       const waiters = pendingGattReplies.get(key) || [];
       waiters.push({ resolve: resolver });
       pendingGattReplies.set(key, waiters);
@@ -344,8 +365,8 @@ function waitForGattReply({ gatewayMac, beaconMac, expectedMsgIds, timeoutMs = g
   });
 }
 
-async function publishGattCommand({ gatewayMac, msgId, data, commandId }) {
-  const topic = buildTopic(gattMqttSubTopicPattern, gatewayMac);
+async function publishGattCommand({ gatewayType, gatewayMac, msgId, data, commandId }) {
+  const topic = buildTopic(gattMqttSubTopicPattern, gatewayType);
   const payload = {
     msg_id: msgId,
     device_info: { mac: gatewayMac },
@@ -356,6 +377,7 @@ async function publishGattCommand({ gatewayMac, msgId, data, commandId }) {
     type: "request",
     commandId,
     topic,
+    gatewayType,
     gatewayMac,
     beaconMac: toGatewayMac(data?.mac),
     payload,
@@ -390,12 +412,14 @@ async function executeGattCommand(req, res, commandConfig) {
   try {
     const commandData = commandConfig.buildData(parsed);
     const waitForReply = waitForGattReply({
+      gatewayType: parsed.gatewayType,
       gatewayMac: parsed.gatewayMac,
       beaconMac: parsed.beaconMac,
       expectedMsgIds: commandConfig.expectedMsgIds
     });
     const requestPayload = await publishGattCommand({
       commandId,
+      gatewayType: parsed.gatewayType,
       gatewayMac: parsed.gatewayMac,
       msgId: commandConfig.msgId,
       data: commandData
@@ -480,6 +504,7 @@ app.post("/api/gatt/stream-ticket", authenticateToken, (req, res) => {
 });
 
 app.get("/api/gatt/stream", authenticateSseTicket, (req, res) => {
+  const gatewayType = isValidGatewayType(req.query.gatewayType) ? normalizeGatewayType(req.query.gatewayType) : "";
   const gatewayMac = isValidMac(req.query.gatewayMac) ? toGatewayMac(req.query.gatewayMac) : "";
   const beaconMac = isValidMac(req.query.beaconMac) ? toGatewayMac(req.query.beaconMac) : "";
 
@@ -488,7 +513,7 @@ app.get("/api/gatt/stream", authenticateSseTicket, (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders?.();
 
-  const client = { res, gatewayMac, beaconMac, username: req.user.username };
+  const client = { res, gatewayType, gatewayMac, beaconMac, username: req.user.username };
   gattSseClients.add(client);
 
   res.write(`event: ready\ndata: ${JSON.stringify({ connected: gattMqttClient.connected })}\n\n`);

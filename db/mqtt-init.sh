@@ -38,8 +38,8 @@ VALUES (
   :'gatt_client_id',
   :'gatt_username',
   crypt(:'gatt_password', gen_salt('bf', 10)),
-  '[{"pattern":"/MK110/+/receive","qos":1}]'::jsonb,
-  '[{"pattern":"/MK110/+/send","qos":1}]'::jsonb
+  '[{"pattern":"devices/+/receive","qos":1}]'::jsonb,
+  '[{"pattern":"devices/+/send","qos":1}]'::jsonb
 )
 ON CONFLICT (mountpoint, client_id, username)
 DO UPDATE SET
