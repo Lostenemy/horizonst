@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
+import { randomBytes } from "node:crypto";
 import mqtt from "mqtt";
 import pino from "pino";
 import tls from "tls";
@@ -161,7 +162,7 @@ function extractBeaconMac(payload) {
 }
 
 function issueSseTicket(username) {
-  const token = crypto.randomBytes(24).toString("hex");
+  const token = randomBytes(24).toString("hex");
   gattSseTickets.set(token, {
     username,
     expiresAt: Date.now() + gattSseTicketTtlMs
@@ -384,7 +385,7 @@ async function executeGattCommand(req, res, commandConfig) {
     return res.status(503).json({ error: "mqtt_not_connected" });
   }
 
-  const commandId = crypto.randomBytes(8).toString("hex");
+  const commandId = randomBytes(8).toString("hex");
 
   try {
     const commandData = commandConfig.buildData(parsed);
