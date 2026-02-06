@@ -2,7 +2,6 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
-import crypto from "node:crypto";
 import mqtt from "mqtt";
 import pino from "pino";
 import tls from "tls";
@@ -51,7 +50,7 @@ const gattMqttRejectUnauthorized = process.env.GATT_MQTT_REJECT_UNAUTHORIZED !==
 const gattMqttUsername = process.env.GATT_MQTT_USERNAME || process.env.MQTT_USER || "";
 const gattMqttPassword = process.env.GATT_MQTT_PASSWORD || process.env.MQTT_PASS || "";
 const gattMqttClientId =
-  process.env.GATT_MQTT_CLIENT_ID || `mqtt-ui-api-gatt-${process.env.HOSTNAME || crypto.randomBytes(4).toString("hex")}`;
+  process.env.GATT_MQTT_CLIENT_ID || "mqtt-ui-api-gatt";
 const gattMqttSubTopicPattern = process.env.GATT_MQTT_SUB_TOPIC_PATTERN || "/MK110/{gatewayMac}/receive";
 const gattMqttPubTopicSubscribe = process.env.GATT_MQTT_PUB_TOPIC_SUBSCRIBE || "/MK110/+/send";
 const gattSseTicketTtlMs = Number.parseInt(process.env.GATT_SSE_TICKET_TTL_MS || "60000", 10);

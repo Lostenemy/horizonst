@@ -124,6 +124,8 @@ Si quiere insertar automáticamente una identidad MQTT al crear la base de datos
 
 Con esas variables, el init script `db/mqtt-init.sh` inserta una fila en `vmq_auth_acl` durante el primer arranque.
 
+El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para publicar en `/MK110/+/receive` y suscribirse a `/MK110/+/send`.
+
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
 Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script oficial `auth/postgres.lua`.
@@ -309,7 +311,7 @@ GATT_MQTT_REJECT_UNAUTHORIZED=true
 GATT_MQTT_USERNAME=
 GATT_MQTT_PASSWORD=
 # Si se dejan vacíos, mqtt_ui_api usa MQTT_USER / MQTT_PASS
-GATT_MQTT_CLIENT_ID=
+GATT_MQTT_CLIENT_ID=mqtt-ui-api-gatt
 GATT_MQTT_SUB_TOPIC_PATTERN=/MK110/{gatewayMac}/receive
 GATT_MQTT_PUB_TOPIC_SUBSCRIBE=/MK110/+/send
 GATT_CONNECT_EXPECTED_MSG_IDS=2500,3501
@@ -357,6 +359,7 @@ Flujo MQTT para MKGW3:
 - Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `/MK110/+/send`).
 
 - Autenticación MQTT: `mqtt_ui_api` reutiliza por defecto `MQTT_USER` / `MQTT_PASS` para conectar a VerneMQ interno (puede sobrescribirse con `GATT_MQTT_USERNAME` / `GATT_MQTT_PASSWORD`).
+- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas: publish `/MK110/+/receive` y subscribe `/MK110/+/send` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
 
 Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`). Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
 
