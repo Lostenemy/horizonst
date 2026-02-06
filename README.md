@@ -308,6 +308,7 @@ GATT_MQTT_TLS=false
 GATT_MQTT_REJECT_UNAUTHORIZED=true
 GATT_MQTT_USERNAME=
 GATT_MQTT_PASSWORD=
+# Si se dejan vacíos, mqtt_ui_api usa MQTT_USER / MQTT_PASS
 GATT_MQTT_CLIENT_ID=
 GATT_MQTT_SUB_TOPIC_PATTERN=/MK110/{gatewayMac}/receive
 GATT_MQTT_PUB_TOPIC_SUBSCRIBE=/MK110/+/send
@@ -354,6 +355,8 @@ Flujo MQTT para MKGW3:
 
 - Downlink (cloud → gateway): publicación en `sub_topic` (por defecto `/MK110/<gatewayMac>/receive`).
 - Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `/MK110/+/send`).
+
+- Autenticación MQTT: `mqtt_ui_api` reutiliza por defecto `MQTT_USER` / `MQTT_PASS` para conectar a VerneMQ interno (puede sobrescribirse con `GATT_MQTT_USERNAME` / `GATT_MQTT_PASSWORD`).
 
 Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`). Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
 

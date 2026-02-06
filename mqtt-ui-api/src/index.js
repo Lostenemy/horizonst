@@ -48,8 +48,8 @@ const gattMqttHost = process.env.GATT_MQTT_HOST || "vernemq";
 const gattMqttPort = Number.parseInt(process.env.GATT_MQTT_PORT || "1883", 10);
 const gattMqttTls = process.env.GATT_MQTT_TLS === "true";
 const gattMqttRejectUnauthorized = process.env.GATT_MQTT_REJECT_UNAUTHORIZED !== "false";
-const gattMqttUsername = process.env.GATT_MQTT_USERNAME || "";
-const gattMqttPassword = process.env.GATT_MQTT_PASSWORD || "";
+const gattMqttUsername = process.env.GATT_MQTT_USERNAME || process.env.MQTT_USER || "";
+const gattMqttPassword = process.env.GATT_MQTT_PASSWORD || process.env.MQTT_PASS || "";
 const gattMqttClientId =
   process.env.GATT_MQTT_CLIENT_ID || `mqtt-ui-api-gatt-${process.env.HOSTNAME || crypto.randomBytes(4).toString("hex")}`;
 const gattMqttSubTopicPattern = process.env.GATT_MQTT_SUB_TOPIC_PATTERN || "/MK110/{gatewayMac}/receive";
