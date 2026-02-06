@@ -296,6 +296,21 @@ VMQ_OBSERVER_TIMEOUT_MS=4000
 # Diagnóstico MQTT TLS
 MQTT_DIAG_HOST=mqtt.horizonst.com.es
 MQTT_DIAG_PORT=8883
+
+# GATT Lab (MKGW3 via MQTT)
+GATT_DEFAULT_PASS=Moko4321
+GATT_TIMEOUT_MS=10000
+GATT_RATE_LIMIT_WINDOW_MS=60000
+GATT_RATE_LIMIT_MAX=20
+GATT_MQTT_HOST=vernemq
+GATT_MQTT_PORT=1883
+GATT_MQTT_TLS=false
+GATT_MQTT_REJECT_UNAUTHORIZED=true
+GATT_MQTT_USERNAME=
+GATT_MQTT_PASSWORD=
+GATT_MQTT_CLIENT_ID=mqtt-ui-api-gatt
+GATT_MQTT_SUB_TOPIC_PATTERN=/MK110/{gatewayMac}/receive
+GATT_MQTT_PUB_TOPIC_SUBSCRIBE=/MK110/+/send
 ```
 
 > Si modifica la configuración de red del broker, asegúrese de que el sidecar sigue pudiendo ejecutar `vmq-admin` localmente.
@@ -317,6 +332,27 @@ MQTT_DIAG_PORT=8883
 - No exponga `vernemq_observer` fuera de la red Docker.
 - Cambie las credenciales por defecto en producción.
 
+### GATT Lab (`/gatt-lab`)
+
+Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 usando MQTT:
+
+- Formulario con `Gateway MAC`, `Beacon MAC`, `password` y tipo de dispositivo (BXP-S/BXP-D/BXP-Tag).
+- Acciones MVP:
+  - `Connect (BXP-S)` → envía `msg_id: 1500` con `data.mac` + `data.passwd`.
+  - `Inquire device info` → envía `msg_id: 1502`.
+  - `Inquire status` → envía `msg_id: 1504`.
+- Consola en tiempo real con:
+  - request JSON enviado,
+  - ACK/reply directo (`result_code`/`result_msg` si los envía la gateway),
+  - notificaciones `3xxx` recibidas por `pub_topic`.
+
+Flujo MQTT para MKGW3:
+
+- Downlink (cloud → gateway): publicación en `sub_topic` (por defecto `/MK110/<gatewayMac>/receive`).
+- Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `/MK110/+/send`).
+
+Correlación de respuestas: `gatewayMac` + `msg_id` + timeout (`GATT_TIMEOUT_MS`) y filtrado opcional por beacon en el stream SSE.
+
 ### Servicios involucrados
 
 - `vernemq_observer`
@@ -329,6 +365,10 @@ MQTT_DIAG_PORT=8883
 - `GET /api/status` → estado del nodo y listeners (sidecar vmq-admin).
 - `GET /api/metrics` → métricas (sidecar vmq-admin).
 - `GET /api/diagnostics` → comprobación TLS contra `mqtt.horizonst.com.es:8883` y estado del cluster (sidecar vmq-admin).
+- `POST /api/gatt/connect` → publica `msg_id:1500` (connect beacon BXP-S) y espera reply.
+- `POST /api/gatt/inquire-device-info` → publica `msg_id:1502` y espera reply.
+- `POST /api/gatt/inquire-status` → publica `msg_id:1504` y espera reply.
+- `GET /api/gatt/stream` → SSE con requests/replies/notifies (requiere JWT).
 - `GET /health` → estado de la API.
 
 La UI consume estos endpoints y nunca expone credenciales MQTT.

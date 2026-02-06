@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HorizonST MQTT UI · GATT Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>GATT Lab</h1>
+        <p>Pruebas GATT sobre MKGW3 vía MQTT</p>
+      </div>
+      <div class="row">
+        <a class="secondary link-btn" href="/">Volver al panel</a>
+        <button id="logoutBtn" class="secondary" type="button">Cerrar sesión</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="card" id="loginSection">
+        <h2>Acceso</h2>
+        <form id="loginForm">
+          <label>Usuario <input name="username" type="text" required /></label>
+          <label>Contraseña <input name="password" type="password" required /></label>
+          <button type="submit">Entrar</button>
+          <p class="helper" id="loginError"></p>
+        </form>
+      </section>
+
+      <section id="gattSection" style="display:none">
+        <div class="grid">
+          <article class="card">
+            <h2>Comandos</h2>
+            <form id="gattForm">
+              <label>Gateway MAC <input name="gatewayMac" placeholder="A1B2C3D4E5F6" required /></label>
+              <label>Beacon MAC <input name="beaconMac" placeholder="112233445566" required /></label>
+              <label>Password <input name="password" value="Moko4321" /></label>
+              <label>Tipo de dispositivo
+                <select name="deviceType">
+                  <option value="BXP-S">BXP-S</option>
+                  <option value="BXP-D">BXP-D</option>
+                  <option value="BXP-Tag">BXP-Tag</option>
+                </select>
+              </label>
+              <div class="row wrap">
+                <button type="button" data-action="connect">Connect (BXP-S)</button>
+                <button type="button" data-action="inquire-device-info">Inquire device info</button>
+                <button type="button" data-action="inquire-status">Inquire status</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card">
+            <h2>Logs / Respuestas</h2>
+            <div class="row">
+              <span id="streamBadge" class="badge">Sin stream</span>
+              <button id="clearLogs" type="button">Limpiar</button>
+            </div>
+            <pre id="logsOutput">—</pre>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="gatt-lab.js"></script>
+  </body>
+</html>
