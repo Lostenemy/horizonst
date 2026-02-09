@@ -33,7 +33,7 @@ export const initMqtt = async (): Promise<void> => {
   }
 
   return new Promise((resolve, reject) => {
-    const clientId = `${config.mqtt.clientPrefix}${Math.random().toString(16).slice(2)}`;
+    const clientId = config.mqtt.clientId;
     const url = `mqtt://${config.mqtt.host}:${config.mqtt.port}`;
     const options: IClientOptions = {
       username: config.mqtt.username,

@@ -68,6 +68,7 @@ interface MqttConfig {
   clean: boolean;
   connectTimeout: number;
   clientPrefix: string;
+  clientId: string;
   persistenceMode: 'app' | 'emqx';
   required: boolean;
   reconnectMaxPeriod: number;
@@ -169,6 +170,9 @@ export const config: AppConfig = {
     clean: parseBoolean(process.env.MQTT_CLEAN, true),
     connectTimeout: parseNumber(process.env.MQTT_CONNECT_TIMEOUT, 10000),
     clientPrefix: process.env.MQTT_CLIENT_PREFIX || 'acces_control_server_',
+    clientId:
+      process.env.MQTT_CLIENT_ID ||
+      `${process.env.MQTT_CLIENT_PREFIX || 'acces_control_server_'}backend`,
     persistenceMode: process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app',
     required: parseBoolean(process.env.MQTT_REQUIRED, false),
     reconnectMaxPeriod: Math.max(

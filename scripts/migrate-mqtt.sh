@@ -14,13 +14,47 @@ ${compose_bin} exec -T postgres psql \
   -d "${DB_NAME:-horizonst}" \
   -f /docker-entrypoint-initdb.d/03-mqtt.sql
 
+app_client_id="${MQTT_CLIENT_ID:-${MQTT_CLIENT_PREFIX:-acces_control_server_}backend}"
+app_username="${MQTT_USER:-}"
+app_password="${MQTT_PASS:-}"
+
+if [[ -n "${app_username}" && -n "${app_password}" ]]; then
+  echo "Upserting backend app identity in vmq_auth_acl (client_id=${app_client_id})..."
+  ${compose_bin} exec -T postgres psql \
+    -v ON_ERROR_STOP=1 \
+    -v app_client_id="${app_client_id}" \
+    -v app_username="${app_username}" \
+    -v app_password="${app_password}" \
+    -U "${DB_USER:-horizonst}" \
+    -d "${DB_NAME:-horizonst}" <<'EOFSQL'
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+INSERT INTO vmq_auth_acl (mountpoint, client_id, username, password, publish_acl, subscribe_acl)
+VALUES (
+  '',
+  :'app_client_id',
+  :'app_username',
+  crypt(:'app_password', gen_salt('bf', 10)),
+  '[]'::jsonb,
+  '[{"pattern":"devices/MK1","qos":1},{"pattern":"devices/MK2","qos":1},{"pattern":"devices/MK3","qos":1},{"pattern":"devices/MK4","qos":1},{"pattern":"devices/RF1","qos":1}]'::jsonb
+)
+ON CONFLICT (mountpoint, client_id, username)
+DO UPDATE SET
+  password = EXCLUDED.password,
+  publish_acl = EXCLUDED.publish_acl,
+  subscribe_acl = EXCLUDED.subscribe_acl;
+EOFSQL
+else
+  echo "Skipping backend app identity migration: define MQTT_USER/MQTT_PASS." >&2
+fi
+
 gatt_client_id="${GATT_MQTT_CLIENT_ID:-mqtt-ui-api-gatt}"
 gatt_username="${GATT_MQTT_USERNAME:-${MQTT_USER:-}}"
 gatt_password="${GATT_MQTT_PASSWORD:-${MQTT_PASS:-}}"
 
 if [[ -z "${gatt_username}" || -z "${gatt_password}" ]]; then
   echo "Skipping GATT identity migration: define GATT_MQTT_USERNAME/GATT_MQTT_PASSWORD or MQTT_USER/MQTT_PASS." >&2
-  echo "Done (schema only)."
+  echo "Done (schema/backend identity only)."
   exit 0
 fi
 

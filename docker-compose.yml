@@ -25,8 +25,7 @@ services:
       - DB_NAME=${DB_NAME:-horizonst}
       - MQTT_USER=${MQTT_USER}
       - MQTT_PASS=${MQTT_PASS}
-      - MQTT_USERNAME=${MQTT_USERNAME:-}
-      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-acces_control_server_backend}
       - MQTT_REQUIRED=${MQTT_REQUIRED:-false}
       - PORT=${APP_PORT:-3000}
       - MQTT_PERSISTENCE_MODE=app

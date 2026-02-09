@@ -46,7 +46,7 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      RFID_WEB_USERNAME=admin
      RFID_WEB_PASSWORD=defina_un_secreto
      ```
-   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con VerneMQ dentro de la red de Docker. `MQTT_USER`/`MQTT_PASS` son para clientes internos (app, rfid_access) y `MQTT_USERNAME`/`MQTT_PASSWORD_HASH` se usan solo para el seed de `vmq_auth_acl` en PostgreSQL:
+   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con VerneMQ dentro de la red de Docker. `MQTT_USER`/`MQTT_PASS` son para clientes internos (app, rfid_access). Defina además `MQTT_CLIENT_ID` fijo para `horizonst-app` (ej. `acces_control_server_backend`). Para el seed técnico de `vmq_auth_acl` use `MQTT_SEED_CLIENT_ID` + `MQTT_USERNAME`/`MQTT_PASSWORD_HASH`:
      ```env
      MQTT_HOST=vernemq
      MQTT_PORT=1883
@@ -116,7 +116,7 @@ docker compose exec -e PGPASSWORD="${DB_PASSWORD}" postgres \
 
 Si quiere insertar automáticamente una identidad MQTT al crear la base de datos (solo en volúmenes nuevos), puede definir en el `.env`:
 
-- `MQTT_CLIENT_ID`
+- `MQTT_SEED_CLIENT_ID` (o `MQTT_CLIENT_ID` legacy)
 - `MQTT_USERNAME`
 - `MQTT_PASSWORD_HASH` (bcrypt completo)
 - `MQTT_PUBLISH_ACL_JSON` (JSON)
@@ -124,7 +124,7 @@ Si quiere insertar automáticamente una identidad MQTT al crear la base de datos
 
 Con esas variables, el init script `db/mqtt-init.sh` inserta una fila en `vmq_auth_acl` durante el primer arranque.
 
-El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para publicar en `devices/MK3/receive` (o `devices/MKX/receive`) y suscribirse a `devices/MK3/send` (o `devices/MKX/send`).
+El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de backend (`MQTT_CLIENT_ID` + `MQTT_USER`) y la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para publicar en `devices/MK3/receive` (o `devices/MKX/receive`) y suscribirse a `devices/MK3/send` (o `devices/MKX/send`).
 
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
