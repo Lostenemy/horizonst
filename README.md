@@ -2,7 +2,7 @@
 
 HorizonST es una plataforma integral para la monitorización de dispositivos BLE capturados por gateways MQTT. El proyecto incluye:
 
-- **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2` y `devices/MK3`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
+- **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4` y `devices/RF1`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
 - **Portal web HTML5 + JavaScript** accesible a través de `www.horizonst.com.es` con funcionalidades diferenciadas para administradores y usuarios finales.
 - **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y VerneMQ. El proxy inverso Nginx se despliega
   **fuera** de Docker y expone la web en HTTPS junto con pgAdmin.
@@ -123,6 +123,8 @@ Si quiere insertar automáticamente una identidad MQTT al crear la base de datos
 - `MQTT_SUBSCRIBE_ACL_JSON` (JSON)
 
 Con esas variables, el init script `db/mqtt-init.sh` inserta una fila en `vmq_auth_acl` durante el primer arranque.
+
+El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para publicar en `devices/MK3/receive` (o `devices/MKX/receive`) y suscribirse a `devices/MK3/send` (o `devices/MKX/send`).
 
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
@@ -245,6 +247,21 @@ La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqt
 
 - `https://mqtt-ui.horizonst.com.es`
 
+### Canales MQTT oficiales (gateway type por topic)
+
+- `devices/MK1` → Gateway tipo MK1
+- `devices/MK2` → Gateway tipo MK2
+- `devices/MK3` → Gateway tipo MK3
+- `devices/MK4` → Gateway tipo MK4
+- `devices/RF1` → Gateway tipo RF
+
+Para GATT (mismo bus MQTT, sin canales legacy):
+
+- Downlink: `devices/MKX/receive` (cloud → gateway)
+- Uplink: `devices/MKX/send` (gateway → cloud)
+
+El tipo de gateway se determina exclusivamente por el topic MQTT (`devices/MKx` / `devices/RF1`).
+
 ### Arquitectura
 
 - **VerneMQ**: broker en ejecución sin API HTTP pública.
@@ -268,7 +285,13 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-No edite `.env` manualmente; los valores salen del `.env.example`.
+En producción **no sobrescriba** su `.env` real con `.env.example`. Use `.env.example` solo como plantilla y aplique cambios de variables nuevas de forma controlada (por ejemplo, con `scripts/migrate-mqtt.sh` para la parte de ACL/identidades MQTT).
+
+### Variables a mantener en `.env` real (producción)
+
+- Mantenga sus credenciales reales en `.env` (`MQTT_USER`, `MQTT_PASS`, secretos JWT, etc.).
+- No reemplace `.env` por `.env.example` en entornos en uso.
+- Cuando se introduzcan nuevas variables (por ejemplo de GATT Lab), añádalas explícitamente y ejecute `scripts/migrate-mqtt.sh` para alinear `vmq_auth_acl` sin perder configuración existente.
 
 ### Variables de entorno necesarias
 
@@ -296,6 +319,26 @@ VMQ_OBSERVER_TIMEOUT_MS=4000
 # Diagnóstico MQTT TLS
 MQTT_DIAG_HOST=mqtt.horizonst.com.es
 MQTT_DIAG_PORT=8883
+
+# GATT Lab (MKGW3 via MQTT)
+GATT_DEFAULT_PASS=Moko4321
+GATT_TIMEOUT_MS=10000
+GATT_RATE_LIMIT_WINDOW_MS=60000
+GATT_RATE_LIMIT_MAX=20
+GATT_MQTT_HOST=vernemq
+GATT_MQTT_PORT=1883
+GATT_MQTT_TLS=false
+GATT_MQTT_REJECT_UNAUTHORIZED=true
+GATT_MQTT_USERNAME=
+GATT_MQTT_PASSWORD=
+# Si se dejan vacíos, mqtt_ui_api usa MQTT_USER / MQTT_PASS
+GATT_MQTT_CLIENT_ID=mqtt-ui-api-gatt
+GATT_MQTT_SUB_TOPIC_PATTERN=devices/{gatewayType}/receive
+GATT_MQTT_PUB_TOPIC_SUBSCRIBE=devices/+/send
+GATT_CONNECT_EXPECTED_MSG_IDS=2500,3501
+GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS=2502,3502
+GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS=2504,3504
+GATT_SSE_TICKET_TTL_MS=60000
 ```
 
 > Si modifica la configuración de red del broker, asegúrese de que el sidecar sigue pudiendo ejecutar `vmq-admin` localmente.
@@ -317,6 +360,30 @@ MQTT_DIAG_PORT=8883
 - No exponga `vernemq_observer` fuera de la red Docker.
 - Cambie las credenciales por defecto en producción.
 
+### GATT Lab (`/gatt-lab`)
+
+Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 usando MQTT:
+
+- Formulario con `Gateway type (MK1/MK2/MK3/MK4/RF1)`, `Gateway MAC`, `Beacon MAC` y `password` (MVP BXP-S).
+- Acciones MVP:
+  - `Connect (BXP-S)` → envía `msg_id: 1500` con `data.mac` + `data.passwd`.
+  - `Inquire device info` → envía `msg_id: 1502`.
+  - `Inquire status` → envía `msg_id: 1504`.
+- Consola en tiempo real con:
+  - request JSON enviado,
+  - ACK/reply directo (`result_code`/`result_msg` si los envía la gateway),
+  - notificaciones `3xxx` recibidas por `pub_topic`.
+
+Flujo MQTT para MKGW3:
+
+- Downlink (cloud → gateway): publicación en `sub_topic` (por defecto `devices/<MKX>/receive`, por ejemplo `devices/MK3/receive`).
+- Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `devices/+/send`, por ejemplo `devices/MK3/send`).
+
+- Autenticación MQTT: `mqtt_ui_api` reutiliza por defecto `MQTT_USER` / `MQTT_PASS` para conectar a VerneMQ interno (puede sobrescribirse con `GATT_MQTT_USERNAME` / `GATT_MQTT_PASSWORD`).
+- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas: publish `devices/MKX/receive` y subscribe `devices/MKX/send` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
+
+Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`). Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
+
 ### Servicios involucrados
 
 - `vernemq_observer`
@@ -329,6 +396,11 @@ MQTT_DIAG_PORT=8883
 - `GET /api/status` → estado del nodo y listeners (sidecar vmq-admin).
 - `GET /api/metrics` → métricas (sidecar vmq-admin).
 - `GET /api/diagnostics` → comprobación TLS contra `mqtt.horizonst.com.es:8883` y estado del cluster (sidecar vmq-admin).
+- `POST /api/gatt/connect` → publica `msg_id:1500` (connect beacon BXP-S) y espera reply.
+- `POST /api/gatt/inquire-device-info` → publica `msg_id:1502` y espera reply.
+- `POST /api/gatt/inquire-status` → publica `msg_id:1504` y espera reply.
+- `POST /api/gatt/stream-ticket` → emite ticket efímero para SSE (evita JWT en query param).
+- `GET /api/gatt/stream` → SSE con requests/replies/notifies (requiere ticket efímero).
 - `GET /health` → estado de la API.
 
 La UI consume estos endpoints y nunca expone credenciales MQTT.
@@ -343,7 +415,7 @@ La UI consume estos endpoints y nunca expone credenciales MQTT.
 
 ### Ingesta y procesamiento MQTT
 
-- Suscripción automática a `devices/MK1`, `devices/MK2`, `devices/MK3` mediante un cliente MQTT configurado con las credenciales proporcionadas.
+- Suscripción automática a `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4` y `devices/RF1` mediante un cliente MQTT configurado con las credenciales proporcionadas.
 - Monitorización adicional de `devices/RF1` para lecturas RFID procedentes de los lectores Elecnor.
 - Decodificadores específicos para cada canal, normalizando campos como `BaTtVol`/`BattVoltage`.
 - Validación de gateways y dispositivos registrados antes de persistir lecturas.

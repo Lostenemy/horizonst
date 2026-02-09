@@ -147,7 +147,7 @@ export const config: AppConfig = {
     database: process.env.DB_NAME || 'horizonst'
   },
   mqtt: {
-    host: process.env.MQTT_HOST || 'emqx',
+    host: process.env.MQTT_HOST || 'vernemq',
     port: parseNumber(process.env.MQTT_PORT, 1883),
     username: process.env.MQTT_USER,
     password: process.env.MQTT_PASS,
@@ -161,7 +161,7 @@ export const config: AppConfig = {
     persistenceMode: process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app'
   },
   emqx: {
-    host: process.env.EMQX_MGMT_HOST || process.env.MQTT_HOST || 'emqx',
+    host: process.env.EMQX_MGMT_HOST || process.env.MQTT_HOST || 'vernemq',
     port: parseNumber(process.env.EMQX_MGMT_PORT, 18083),
     username: process.env.EMQX_MGMT_USERNAME || 'admin',
     password: process.env.EMQX_MGMT_PASSWORD || '20025@BLELoRa',
@@ -196,7 +196,7 @@ export const config: AppConfig = {
   })(),
   rfidAccess: (() => {
     const enabled = parseBoolean(process.env.RFID_ACCESS_ENABLED, true);
-    const topic = process.env.RFID_ACCESS_TOPIC || 'devices/RF1';
+    const topic = 'devices/RF1';
     const defaultReaderId = process.env.RFID_ACCESS_DEFAULT_READER || 'RF1';
     const api: RfidAccessApiConfig = {
       url: process.env.RFID_ACCESS_API_URL || 'https://ws.e-coordina.com/1.4',

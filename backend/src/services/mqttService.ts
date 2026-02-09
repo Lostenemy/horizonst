@@ -10,15 +10,7 @@ import { handleRfidScanMessage } from './rfidAccess';
 
 let client: MqttClient | null = null;
 
-const BASE_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3'];
-const TOPICS = (() => {
-  if (config.rfidAccess.enabled) {
-    const set = new Set(BASE_TOPICS);
-    set.add(config.rfidAccess.topic);
-    return Array.from(set);
-  }
-  return BASE_TOPICS;
-})();
+const OFFICIAL_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK4', 'devices/RF1'];
 
 export const initMqtt = async (): Promise<void> => {
   if (client) {
@@ -43,7 +35,7 @@ export const initMqtt = async (): Promise<void> => {
 
     client.on('connect', () => {
       console.log('Connected to MQTT broker');
-      client?.subscribe(TOPICS, (error?: Error) => {
+      client?.subscribe(OFFICIAL_TOPICS, (error?: Error) => {
         if (error) {
           console.error('Failed to subscribe to topics', error);
           reject(error);
@@ -64,7 +56,7 @@ export const initMqtt = async (): Promise<void> => {
       const payloadText = messageBuffer.toString();
       const payloadHex = messageBuffer.toString('hex');
       const payloadBase64 = messageBuffer.toString('base64');
-      const isRfidTopic = config.rfidAccess.enabled && topic === config.rfidAccess.topic;
+      const isRfidTopic = config.rfidAccess.enabled && topic === 'devices/RF1';
       const payloadEncoding = topic === 'devices/MK2' ? 'hex' : 'utf8';
       const storedPayload = topic === 'devices/MK2' ? payloadHex : payloadText;
       let records: ProcessedDeviceRecord[] = [];
@@ -76,6 +68,8 @@ export const initMqtt = async (): Promise<void> => {
             records = decodeMk2(messageBuffer);
           } else if (topic === 'devices/MK3') {
             records = decodeMk3(payloadText);
+          } else if (topic === 'devices/MK4') {
+            records = decodeMk2(messageBuffer);
           }
         } catch (error) {
           console.error('Failed to decode payload', error);
