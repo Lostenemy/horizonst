@@ -285,7 +285,13 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-No edite `.env` manualmente; los valores salen del `.env.example`.
+En producción **no sobrescriba** su `.env` real con `.env.example`. Use `.env.example` solo como plantilla y aplique cambios de variables nuevas de forma controlada (por ejemplo, con `scripts/migrate-mqtt.sh` para la parte de ACL/identidades MQTT).
+
+### Variables a mantener en `.env` real (producción)
+
+- Mantenga sus credenciales reales en `.env` (`MQTT_USER`, `MQTT_PASS`, secretos JWT, etc.).
+- No reemplace `.env` por `.env.example` en entornos en uso.
+- Cuando se introduzcan nuevas variables (por ejemplo de GATT Lab), añádalas explícitamente y ejecute `scripts/migrate-mqtt.sh` para alinear `vmq_auth_acl` sin perder configuración existente.
 
 ### Variables de entorno necesarias
 
@@ -409,7 +415,7 @@ La UI consume estos endpoints y nunca expone credenciales MQTT.
 
 ### Ingesta y procesamiento MQTT
 
-- Suscripción automática a `devices/MK1`, `devices/MK2`, `devices/MK3` mediante un cliente MQTT configurado con las credenciales proporcionadas.
+- Suscripción automática a `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4` y `devices/RF1` mediante un cliente MQTT configurado con las credenciales proporcionadas.
 - Monitorización adicional de `devices/RF1` para lecturas RFID procedentes de los lectores Elecnor.
 - Decodificadores específicos para cada canal, normalizando campos como `BaTtVol`/`BattVoltage`.
 - Validación de gateways y dispositivos registrados antes de persistir lecturas.
