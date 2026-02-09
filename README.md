@@ -360,9 +360,9 @@ GATT_SSE_TICKET_TTL_MS=60000
 - No exponga `vernemq_observer` fuera de la red Docker.
 - Cambie las credenciales por defecto en producción.
 
-### GATT Lab (`/gatt-lab`)
+### GATT Lab (`/gatt-lab` o `/gatt-lab/`)
 
-Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 usando MQTT:
+Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 usando MQTT. En `mqtt-ui/nginx.conf` la ruta `/gatt-lab` se resuelve explícitamente a `gatt-lab.html` (no a la home de la SPA):
 
 - Formulario con `Gateway type (MK1/MK2/MK3/MK4/RF1)`, `Gateway MAC`, `Beacon MAC` y `password` (MVP BXP-S).
 - Acciones MVP:
