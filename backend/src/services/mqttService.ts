@@ -9,8 +9,23 @@ import { ProcessedDeviceRecord } from '../types';
 import { handleRfidScanMessage } from './rfidAccess';
 
 let client: MqttClient | null = null;
+let mqttConnected = false;
+let mqttLastError: string | null = null;
+let reconnectDelay = config.mqtt.reconnectPeriod;
 
 const OFFICIAL_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK4', 'devices/RF1'];
+
+const isBadCredentialsError = (error: Error): boolean => {
+  const message = `${error.name} ${error.message}`.toLowerCase();
+  return message.includes('bad username or password') || message.includes('not authorized');
+};
+
+export const getMqttStatus = () => ({
+  connected: mqttConnected,
+  required: config.mqtt.required,
+  lastError: mqttLastError,
+  reconnectDelay
+});
 
 export const initMqtt = async (): Promise<void> => {
   if (client) {
@@ -31,24 +46,86 @@ export const initMqtt = async (): Promise<void> => {
       connectTimeout: config.mqtt.connectTimeout,
       clientId
     };
+
+    if (!config.mqtt.username || !config.mqtt.password) {
+      const warning = 'MQTT credentials are empty. Configure MQTT_USER/MQTT_PASS (or MQTT_USERNAME/MQTT_PASSWORD).';
+      mqttLastError = warning;
+      console.warn(warning);
+      if (config.mqtt.required) {
+        reject(new Error(warning));
+        return;
+      }
+    }
+
+    let settled = false;
+    const settleResolve = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    const settleReject = (error: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    };
+
     client = mqtt.connect(url, options);
 
     client.on('connect', () => {
+      mqttConnected = true;
+      mqttLastError = null;
+      reconnectDelay = config.mqtt.reconnectPeriod;
+      if (client) {
+        client.options.reconnectPeriod = reconnectDelay;
+      }
       console.log('Connected to MQTT broker');
       client?.subscribe(OFFICIAL_TOPICS, (error?: Error) => {
         if (error) {
+          mqttLastError = error.message;
           console.error('Failed to subscribe to topics', error);
-          reject(error);
+          if (config.mqtt.required) {
+            settleReject(error);
+          }
         } else {
           console.log('Subscribed to MQTT topics');
-          resolve();
+          settleResolve();
         }
       });
     });
 
-    client.on('error', (error: Error) => {
-      console.error('MQTT error', error);
+    client.on('close', () => {
+      mqttConnected = false;
     });
+
+    client.on('reconnect', () => {
+      mqttConnected = false;
+      reconnectDelay = Math.min(config.mqtt.reconnectMaxPeriod, reconnectDelay * 2);
+      if (client) {
+        client.options.reconnectPeriod = reconnectDelay;
+      }
+      console.warn(`MQTT reconnect scheduled in ${reconnectDelay}ms`);
+    });
+
+    client.on('error', (error: Error) => {
+      mqttLastError = error.message;
+      console.error('MQTT error', error);
+      if (config.mqtt.required && isBadCredentialsError(error)) {
+        settleReject(error);
+      }
+    });
+
+    if (!config.mqtt.required) {
+      console.warn('MQTT is running in optional mode. HTTP server startup is not blocked by broker connectivity.');
+      settleResolve();
+    } else {
+      setTimeout(() => {
+        if (!mqttConnected) {
+          settleReject(new Error('Timed out while waiting for required MQTT connection.'));
+        }
+      }, Math.max(config.mqtt.connectTimeout, 5000));
+    }
 
     const shouldPersistLocally = config.mqtt.persistenceMode === 'app';
 

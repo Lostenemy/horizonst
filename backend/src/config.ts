@@ -10,6 +10,15 @@ const parseNumber = (value: string | undefined, defaultValue: number): number =>
   return Number.isFinite(parsed) ? parsed : defaultValue;
 };
 
+const firstNonEmpty = (...values: Array<string | undefined>): string | undefined => {
+  for (const value of values) {
+    if (value && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
 const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
   if (value === undefined) {
     return defaultValue;
@@ -60,6 +69,8 @@ interface MqttConfig {
   connectTimeout: number;
   clientPrefix: string;
   persistenceMode: 'app' | 'emqx';
+  required: boolean;
+  reconnectMaxPeriod: number;
 }
 
 interface AppConfig {
@@ -149,16 +160,21 @@ export const config: AppConfig = {
   mqtt: {
     host: process.env.MQTT_HOST || 'vernemq',
     port: parseNumber(process.env.MQTT_PORT, 1883),
-    username: process.env.MQTT_USER,
-    password: process.env.MQTT_PASS,
+    username: firstNonEmpty(process.env.MQTT_USER, process.env.MQTT_USERNAME),
+    password: firstNonEmpty(process.env.MQTT_PASS, process.env.MQTT_PASSWORD),
     keepalive: parseNumber(process.env.MQTT_KEEPALIVE, 60),
-    reconnectPeriod: parseNumber(process.env.MQTT_RECONNECT_PERIOD, 1000),
+    reconnectPeriod: Math.max(500, parseNumber(process.env.MQTT_RECONNECT_PERIOD, 1000)),
     protocolId: parseProtocolId(process.env.MQTT_PROTOCOL_ID),
     protocolVersion: parseProtocolVersion(process.env.MQTT_PROTOCOL_VERSION),
     clean: parseBoolean(process.env.MQTT_CLEAN, true),
     connectTimeout: parseNumber(process.env.MQTT_CONNECT_TIMEOUT, 10000),
     clientPrefix: process.env.MQTT_CLIENT_PREFIX || 'acces_control_server_',
-    persistenceMode: process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app'
+    persistenceMode: process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app',
+    required: parseBoolean(process.env.MQTT_REQUIRED, false),
+    reconnectMaxPeriod: Math.max(
+      2000,
+      parseNumber(process.env.MQTT_RECONNECT_MAX_PERIOD, 30000)
+    )
   },
   emqx: {
     host: process.env.EMQX_MGMT_HOST || process.env.MQTT_HOST || 'vernemq',

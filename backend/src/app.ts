@@ -12,6 +12,7 @@ import alarmRouter from './routes/alarms';
 import messageRouter from './routes/messages';
 import contactRouter from './routes/contact';
 import rfidRouter from './routes/rfid';
+import { getMqttStatus } from './services/mqttService';
 
 const app = express();
 
@@ -37,7 +38,12 @@ const adminBasePath = '/administracion';
 app.use(adminBasePath, express.static(publicDir));
 
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok' });
+  const mqtt = getMqttStatus();
+  const statusCode = mqtt.required && !mqtt.connected ? 503 : 200;
+  res.status(statusCode).json({
+    status: statusCode === 200 ? 'ok' : 'degraded',
+    mqtt
+  });
 });
 
 app.get(adminBasePath, (_req, res) => {

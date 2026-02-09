@@ -25,6 +25,10 @@ services:
       - DB_NAME=${DB_NAME:-horizonst}
       - MQTT_USER=${MQTT_USER}
       - MQTT_PASS=${MQTT_PASS}
+      - MQTT_USERNAME=${MQTT_USERNAME:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_REQUIRED=${MQTT_REQUIRED:-false}
+      - PORT=${APP_PORT:-3000}
       - MQTT_PERSISTENCE_MODE=app
     depends_on:
       - postgres
@@ -36,12 +40,12 @@ services:
         max-size: "50m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${APP_PORT:-3000}/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:${APP_PORT:-3000}"
     networks:
       - horizonst
 
