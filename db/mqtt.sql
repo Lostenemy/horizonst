@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS vmq_auth_acl (
 
 CREATE INDEX IF NOT EXISTS vmq_auth_acl_client_idx ON vmq_auth_acl(client_id);
 CREATE INDEX IF NOT EXISTS vmq_auth_acl_username_idx ON vmq_auth_acl(username);
+
+CREATE UNIQUE INDEX IF NOT EXISTS vmq_auth_acl_mount_client_unique ON vmq_auth_acl(mountpoint, client_id);

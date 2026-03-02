@@ -14,3 +14,11 @@ export function normalizeMacAddress(input: unknown): string | null {
 export function isValidMacAddress(input: unknown): boolean {
   return normalizeMacAddress(input) !== null;
 }
+
+export function buildMk3ClientId(input: unknown): string | null {
+  const normalized = normalizeMacAddress(input);
+  if (!normalized) {
+    return null;
+  }
+  return `mk3-${normalized.toLowerCase()}`;
+}

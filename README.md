@@ -124,7 +124,7 @@ Si quiere insertar automáticamente una identidad MQTT al crear la base de datos
 
 Con esas variables, el init script `db/mqtt-init.sh` inserta una fila en `vmq_auth_acl` durante el primer arranque.
 
-El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de backend (`MQTT_CLIENT_ID` + `MQTT_USER`) y la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para publicar en `devices/MK3/receive` (o `devices/MKX/receive`) y suscribirse a `devices/MK3/send` (o `devices/MKX/send`).
+El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de backend (`MQTT_CLIENT_ID` + `MQTT_USER`) y la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para MK3: publicar en `devices/MK3/{clientId}/recieve` (compat temporal `devices/MK3/receive`) y suscribirse a `devices/MK3/{clientId}/send` (compat temporal `devices/MK3/send`).
 
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
@@ -378,11 +378,11 @@ Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 
 
 Flujo MQTT para MKGW3:
 
-- Downlink (cloud → gateway): publicación en `sub_topic` (por defecto `devices/<MKX>/receive`, por ejemplo `devices/MK3/receive`).
-- Uplink (gateway → cloud): escucha en `pub_topic` (por defecto patrón `devices/+/send`, por ejemplo `devices/MK3/send`).
+- Downlink (cloud → gateway): publicación en `sub_topic`. Para MK3, por defecto `devices/MK3/{clientId}/recieve` (compat temporal opcional `devices/MK3/receive`).
+- Uplink (gateway → cloud): escucha en `pub_topic`. Para MK3, por defecto patrón `devices/MK3/+/send` (compat temporal `devices/MK3/send`).
 
 - Autenticación MQTT: `mqtt_ui_api` reutiliza por defecto `MQTT_USER` / `MQTT_PASS` para conectar a VerneMQ interno (puede sobrescribirse con `GATT_MQTT_USERNAME` / `GATT_MQTT_PASSWORD`).
-- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas: publish `devices/MKX/receive` y subscribe `devices/MKX/send` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
+- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas para MK3: publish `devices/MK3/+/recieve` y subscribe `devices/MK3/+/send` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
 
 Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`). Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
 
