@@ -41,9 +41,9 @@ VALUES (
   :'app_username',
   crypt(:'app_password', gen_salt('bf', 10)),
   '[]'::jsonb,
-  '[{"pattern":"devices/MK1","qos":1},{"pattern":"devices/MK2","qos":1},{"pattern":"devices/MK3","qos":1},{"pattern":"devices/MK4","qos":1},{"pattern":"devices/RF1","qos":1}]'::jsonb
+  '[{"pattern":"devices/MK1","qos":1},{"pattern":"devices/MK2","qos":1},{"pattern":"devices/MK3","qos":1},{"pattern":"devices/MK3/+/send","qos":1},{"pattern":"devices/MK4","qos":1},{"pattern":"devices/RF1","qos":1}]'::jsonb
 )
-ON CONFLICT (mountpoint, client_id, username)
+ON CONFLICT (mountpoint, client_id)
 DO UPDATE SET
   password = EXCLUDED.password,
   publish_acl = EXCLUDED.publish_acl,
@@ -71,10 +71,10 @@ VALUES (
   :'gatt_client_id',
   :'gatt_username',
   crypt(:'gatt_password', gen_salt('bf', 10)),
-  '[{"pattern":"devices/+/receive","qos":1}]'::jsonb,
-  '[{"pattern":"devices/+/send","qos":1}]'::jsonb
+  '[{"pattern":"devices/MK3/+/recieve","qos":1},{"pattern":"devices/MK3/receive","qos":1}]'::jsonb,
+  '[{"pattern":"devices/MK3/+/send","qos":1},{"pattern":"devices/MK3/send","qos":1}]'::jsonb
 )
-ON CONFLICT (mountpoint, client_id, username)
+ON CONFLICT (mountpoint, client_id)
 DO UPDATE SET
   password = EXCLUDED.password,
   publish_acl = EXCLUDED.publish_acl,

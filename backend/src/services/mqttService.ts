@@ -13,7 +13,7 @@ let mqttConnected = false;
 let mqttLastError: string | null = null;
 let reconnectDelay = config.mqtt.reconnectPeriod;
 
-const OFFICIAL_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK4', 'devices/RF1'];
+const OFFICIAL_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK3/+/send', 'devices/MK4', 'devices/RF1'];
 
 const isBadCredentialsError = (error: Error): boolean => {
   const message = `${error.name} ${error.message}`.toLowerCase();
@@ -143,8 +143,8 @@ export const initMqtt = async (): Promise<void> => {
             records = decodeMk1(payloadText);
           } else if (topic === 'devices/MK2') {
             records = decodeMk2(messageBuffer);
-          } else if (topic === 'devices/MK3') {
-            records = decodeMk3(payloadText);
+          } else if (topic === 'devices/MK3' || /^devices\/MK3\/[^/]+\/send$/i.test(topic)) {
+            records = decodeMk3(payloadText).map((record) => ({ ...record, topic }));
           } else if (topic === 'devices/MK4') {
             records = decodeMk2(messageBuffer);
           }
