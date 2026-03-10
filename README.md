@@ -124,7 +124,7 @@ Si quiere insertar automáticamente una identidad MQTT al crear la base de datos
 
 Con esas variables, el init script `db/mqtt-init.sh` inserta una fila en `vmq_auth_acl` durante el primer arranque.
 
-El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de backend (`MQTT_CLIENT_ID` + `MQTT_USER`) y la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para MK3: publicar en `devices/MK3/{clientId}/recieve` (compat temporal `devices/MK3/receive`) y suscribirse a `devices/MK3/{clientId}/send` (compat temporal `devices/MK3/send`).
+El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente la identidad de backend (`MQTT_CLIENT_ID` + `MQTT_USER`) y la identidad de GATT Lab (`client_id` por defecto `mqtt-ui-api-gatt`) con ACL mínimas para MK3: publicar en `gw/{gatewayMac}/subscribe` y suscribirse a `gw/{gatewayMac}/publish`.
 
 ### VerneMQ + PostgreSQL (vmq_diversity)
 
@@ -325,6 +325,7 @@ GATT_DEFAULT_PASS=Moko4321
 GATT_TIMEOUT_MS=10000
 GATT_RATE_LIMIT_WINDOW_MS=60000
 GATT_RATE_LIMIT_MAX=20
+GATT_MIN_RSSI=-70
 GATT_MQTT_HOST=vernemq
 GATT_MQTT_PORT=1883
 GATT_MQTT_TLS=false
@@ -333,11 +334,12 @@ GATT_MQTT_USERNAME=
 GATT_MQTT_PASSWORD=
 # Si se dejan vacíos, mqtt_ui_api usa MQTT_USER / MQTT_PASS
 GATT_MQTT_CLIENT_ID=mqtt-ui-api-gatt
-GATT_MQTT_SUB_TOPIC_PATTERN=devices/{gatewayType}/receive
-GATT_MQTT_PUB_TOPIC_SUBSCRIBE=devices/+/send
-GATT_CONNECT_EXPECTED_MSG_IDS=2500,3501
-GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS=2502,3502
-GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS=2504,3504
+GATT_MQTT_COMMAND_TOPIC_TEMPLATE=gw/{gatewayMac}/subscribe
+GATT_MQTT_RESPONSE_TOPIC_TEMPLATE=gw/{gatewayMac}/publish
+GATT_MQTT_PUB_TOPIC_SUBSCRIBE=gw/+/publish
+GATT_CONNECT_EXPECTED_MSG_IDS=1100,3100
+GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS=2002,3002
+GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS=1102,3102
 GATT_SSE_TICKET_TTL_MS=60000
 ```
 
@@ -368,23 +370,23 @@ Nueva pantalla de laboratorio para pruebas BLE/GATT a través de gateways MKGW3 
 
 - Formulario con `Gateway type (MK1/MK2/MK3/MK4/RF1)`, `Gateway MAC`, `Beacon MAC` y `password` (MVP BXP-S).
 - Acciones MVP:
-  - `Connect (BXP-S)` → envía `msg_id: 1500` con `data.mac` + `data.passwd`.
-  - `Inquire device info` → envía `msg_id: 1502`.
-  - `Inquire status` → envía `msg_id: 1504`.
+  - `Connect` → envía `msg_id: 1100` con `data.mac` + `data.passwd`.
+  - `Inquire device info` → envía `msg_id: 2002`.
+  - `Inquire status` → envía `msg_id: 1102` con `data.min_rssi` por defecto `-70`.
 - Consola en tiempo real con:
   - request JSON enviado,
-  - ACK/reply directo (`result_code`/`result_msg` si los envía la gateway),
-  - notificaciones `3xxx` recibidas por `pub_topic`.
+  - ACK/reply directo (`result_code`/`result_msg`),
+  - notificaciones `3xxx` recibidas por topic de respuesta.
 
 Flujo MQTT para MKGW3:
 
-- Downlink (cloud → gateway): publicación en `sub_topic`. Para MK3, por defecto `devices/MK3/{clientId}/recieve` (compat temporal opcional `devices/MK3/receive`).
-- Uplink (gateway → cloud): escucha en `pub_topic`. Para MK3, por defecto patrón `devices/MK3/+/send` (compat temporal `devices/MK3/send`).
+- Downlink (cloud → gateway): publicación en `gw/{gatewayMac}/subscribe`.
+- Uplink (gateway → cloud): escucha en `gw/{gatewayMac}/publish` (patrón `gw/+/publish`).
 
 - Autenticación MQTT: `mqtt_ui_api` reutiliza por defecto `MQTT_USER` / `MQTT_PASS` para conectar a VerneMQ interno (puede sobrescribirse con `GATT_MQTT_USERNAME` / `GATT_MQTT_PASSWORD`).
-- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas para MK3: publish `devices/MK3/+/recieve` y subscribe `devices/MK3/+/send` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
+- `client_id` MQTT de GATT Lab: por defecto `mqtt-ui-api-gatt`. Debe existir en `vmq_auth_acl` con ACL mínimas para MK3: publish `gw/+/subscribe` y subscribe `gw/+/publish` (el script `scripts/migrate-mqtt.sh` lo aplica de forma idempotente).
 
-Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`). Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
+Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + timeout (`GATT_TIMEOUT_MS`), validando `device_info.mac` y descartando mismatches. Para cada comando se aceptan IDs de ACK/notify configurables (`GATT_*_EXPECTED_MSG_IDS`).
 
 ### Servicios involucrados
 
@@ -398,9 +400,9 @@ Correlación de respuestas: `gatewayMac` + `beaconMac` + `msg_id esperado` + tim
 - `GET /api/status` → estado del nodo y listeners (sidecar vmq-admin).
 - `GET /api/metrics` → métricas (sidecar vmq-admin).
 - `GET /api/diagnostics` → comprobación TLS contra `mqtt.horizonst.com.es:8883` y estado del cluster (sidecar vmq-admin).
-- `POST /api/gatt/connect` → publica `msg_id:1500` (connect beacon BXP-S) y espera reply.
-- `POST /api/gatt/inquire-device-info` → publica `msg_id:1502` y espera reply.
-- `POST /api/gatt/inquire-status` → publica `msg_id:1504` y espera reply.
+- `POST /api/gatt/connect` → publica `msg_id:1100` (connect beacon) y espera reply.
+- `POST /api/gatt/inquire-device-info` → publica `msg_id:2002` y espera reply.
+- `POST /api/gatt/inquire-status` → publica `msg_id:1102` y espera reply.
 - `POST /api/gatt/stream-ticket` → emite ticket efímero para SSE (evita JWT en query param).
 - `GET /api/gatt/stream` → SSE con requests/replies/notifies (requiere ticket efímero).
 - `GET /health` → estado de la API.

@@ -74,8 +74,8 @@ VALUES (
   :'gatt_client_id',
   :'gatt_username',
   crypt(:'gatt_password', gen_salt('bf', 10)),
-  '[{"pattern":"devices/MK3/+/recieve","qos":1},{"pattern":"devices/MK3/receive","qos":1}]'::jsonb,
-  '[{"pattern":"devices/MK3/+/send","qos":1},{"pattern":"devices/MK3/send","qos":1}]'::jsonb
+  '[{"pattern":"gw/+/subscribe","qos":1}]'::jsonb,
+  '[{"pattern":"gw/+/publish","qos":1}]'::jsonb
 )
 ON CONFLICT (mountpoint, client_id)
 DO UPDATE SET
