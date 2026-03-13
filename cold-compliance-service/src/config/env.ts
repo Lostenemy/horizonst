@@ -11,7 +11,7 @@ const schema = z.object({
   DB_PORT: z.coerce.number().default(5432),
   DB_USER: z.string().default('horizonst'),
   DB_PASSWORD: z.string().default('horizonst'),
-  DB_NAME: z.string().default('horizonst'),
+  DB_NAME: z.string().default('cold_compliance'),
   MQTT_URL: z.string().default('mqtt://vernemq:1883'),
   MQTT_USERNAME: z.string().optional(),
   MQTT_PASSWORD: z.string().optional(),

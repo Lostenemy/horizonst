@@ -87,6 +87,22 @@ Se correlaciona por `msg_id + gateway_mac` y se interpreta `result_code`:
 
 Estados de comando: `pending`, `sent`, `ack_ok`, `ack_error`, `timeout`, `failed`.
 
+## Database
+
+This service must use a **dedicated PostgreSQL database**.
+
+Example:
+
+```env
+DB_NAME=cold_compliance
+```
+
+Do **NOT** use the main `horizonst` database, because table names overlap (`gateways`, `workers`, `tags`, etc.) and schema types differ.
+
+Migrations in this service create their own operational schema (`plants`, `workers`, `tags`, `gateways`, `cold_rooms`, `cold_room_sessions`, `alerts`, `incidents`, and related tables), so they must run against an empty/dedicated DB for this microservice.
+
+To coexist safely with HorizonST core, keep core table names unchanged and isolate this service at database level.
+
 ## Ejecución local
 
 ```bash
@@ -172,3 +188,13 @@ Servicio ya integrado en `docker-compose.yml` raíz como `cold_compliance_servic
 - Express usa `trust proxy = true`, por lo que respeta `X-Forwarded-For` y `X-Forwarded-Proto`.
 - Rutas mínimas para monitorización desde Nginx/upstream: `/health` y `/ready`.
 - Dominio objetivo de publicación: `horneo.horizonst.com.es` (configurado fuera de este servicio).
+
+## Optional DB bootstrap (shared PostgreSQL host)
+
+If the database does not exist yet, create it once with a privileged role:
+
+```sql
+CREATE DATABASE cold_compliance OWNER horizonst;
+```
+
+A helper script is included at `scripts/create-database.sql`.

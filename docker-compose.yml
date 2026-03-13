@@ -101,7 +101,7 @@ services:
       - DB_PORT=5432
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME:-horizonst}
+      - DB_NAME=${COLD_COMPLIANCE_DB_NAME:-cold_compliance}
       - MQTT_URL=${COLD_MQTT_URL:-mqtt://vernemq:1883}
       - MQTT_USERNAME=${MQTT_USER}
       - MQTT_PASSWORD=${MQTT_PASS}
