@@ -27,6 +27,12 @@ export function mqttPublish(topic: string, payload: Record<string, unknown>): Pr
   });
 }
 
+function isGatewayCommandReply(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return typeof p.msg_id === 'number' && typeof p.result_code === 'number';
+}
+
 export function startMqttConsumer(): void {
   client = mqtt.connect(env.MQTT_URL, {
     username: env.MQTT_USERNAME,
@@ -49,9 +55,13 @@ export function startMqttConsumer(): void {
   client.on('message', async (topic: string, payload: Buffer) => {
     try {
       if (topic.endsWith('/publish')) {
-        const events = parseGatewayPayload(topic, payload);
-        for (const event of events) {
-          await ingestPresenceEvent(event);
+        let asJson: unknown = null;
+        try { asJson = JSON.parse(payload.toString('utf8')); } catch { asJson = null; }
+        if (!isGatewayCommandReply(asJson)) {
+          const events = parseGatewayPayload(topic, payload);
+          for (const event of events) {
+            await ingestPresenceEvent(event);
+          }
         }
       }
     } catch (err) {

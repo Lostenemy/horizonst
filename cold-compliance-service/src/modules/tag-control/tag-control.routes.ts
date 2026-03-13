@@ -41,6 +41,13 @@ tagControlRouter.post('/vibration', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+
+tagControlRouter.post('/custom', async (req, res, next) => {
+  try {
+    const parsed = targetSchema.extend({ templateCode: z.string().min(1), reason: z.string().min(2).optional() }).parse(req.body);
+    res.status(202).json(await sendTagCommand({ ...parsed, templateCode: parsed.templateCode, triggerSource: 'user', triggerReason: parsed.reason ?? 'manual custom template alert' }));
+  } catch (e) { next(e); }
+});
 tagControlRouter.post('/custom-alert', async (req, res, next) => {
   try {
     const parsed = targetSchema.extend({ templateCode: z.string().min(1), reason: z.string().min(2).optional() }).parse(req.body);

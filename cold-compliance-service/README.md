@@ -136,7 +136,8 @@ npm run dev
 - `POST /tag-control/led`
 - `POST /tag-control/buzzer`
 - `POST /tag-control/vibration`
-- `POST /tag-control/custom-alert`
+- `POST /tag-control/custom`
+- `POST /tag-control/custom-alert` (alias legacy)
 - `GET /tag-control/commands`
 - `GET /tag-control/commands/active`
 - `GET /tag-control/commands/:id`
@@ -163,3 +164,11 @@ npm run dev
 ## Docker Compose
 
 Servicio ya integrado en `docker-compose.yml` raíz como `cold_compliance_service`.
+
+## Reverse proxy (Nginx)
+
+- El servicio **no configura Nginx automáticamente**.
+- Escucha en `PORT` interno (por defecto `3100`) y está preparado para publicarse detrás de proxy inverso.
+- Express usa `trust proxy = true`, por lo que respeta `X-Forwarded-For` y `X-Forwarded-Proto`.
+- Rutas mínimas para monitorización desde Nginx/upstream: `/health` y `/ready`.
+- Dominio objetivo de publicación: `horneo.horizonst.com.es` (configurado fuera de este servicio).

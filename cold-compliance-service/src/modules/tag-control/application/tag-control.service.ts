@@ -3,7 +3,7 @@ import { env } from '../../../config/env';
 import { appendAuditLog } from '../../audit/audit.service';
 import { mqttPublish } from '../../mqtt/mqtt.service';
 import { sleep } from '../../../utils/sleep';
-import { buildCommandPayload, commandMsgId } from '../domain/command-builder';
+import { buildCommandPayload, commandCode } from '../domain/command-builder';
 import { nextMsgId } from '../domain/msg-id.service';
 import { SendTagCommandInput } from '../domain/types';
 import { findRecentByDedupKey, createAttempt, createTagCommand, getCommand, listActiveCommands, listCommands, markAttemptResult, updateCommandStatus } from '../infrastructure/tag-command.repository';
@@ -58,7 +58,8 @@ export async function sendTagCommand(input: SendTagCommandInput) {
     };
   } else {
     if (!input.commandKind || !input.commandData) throw new Error('commandKind and commandData are required');
-    const msgId = commandMsgId(input.commandKind);
+    const msgId = await nextMsgId();
+    const code = commandCode(input.commandKind);
     commandType = input.commandKind;
     payload = buildCommandPayload({
       msgId,
@@ -67,6 +68,7 @@ export async function sendTagCommand(input: SendTagCommandInput) {
       kind: input.commandKind,
       data: input.commandData as any
     });
+    payload.command_code = code;
   }
 
   const timeoutMs = input.timeoutMs ?? env.TAG_CONTROL_DEFAULT_TIMEOUT_MS;

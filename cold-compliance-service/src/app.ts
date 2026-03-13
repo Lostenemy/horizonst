@@ -12,6 +12,7 @@ import { workersRouter } from './modules/workers/workers.routes';
 
 export function buildApp() {
   const app = express();
+  app.set('trust proxy', true);
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));

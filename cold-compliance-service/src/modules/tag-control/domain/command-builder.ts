@@ -1,7 +1,7 @@
 import { buzzerSchema, ledSchema, vibrationSchema } from './validators';
 import { BuzzerCommandData, CommandKind, LedCommandData, VibrationCommandData } from './types';
 
-export function commandMsgId(kind: CommandKind): number {
+export function commandCode(kind: CommandKind): number {
   if (kind === 'led') return 1101;
   if (kind === 'buzzer') return 1102;
   return 1103;
