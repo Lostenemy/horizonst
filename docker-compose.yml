@@ -91,6 +91,41 @@ services:
     networks:
       - horizonst
 
+  cold_compliance_service:
+    build:
+      context: ./cold-compliance-service
+    env_file:
+      - ./cold-compliance-service/.env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-horizonst}
+      - MQTT_URL=${COLD_MQTT_URL:-mqtt://vernemq:1883}
+      - MQTT_USERNAME=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASS}
+      - MQTT_SUB_TOPICS=${COLD_MQTT_SUB_TOPICS:-gw/+/publish}
+      - PORT=${COLD_COMPLIANCE_PORT:-3100}
+    depends_on:
+      - postgres
+      - vernemq
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${COLD_COMPLIANCE_PORT:-3100}/health || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+    ports:
+      - "127.0.0.1:${COLD_COMPLIANCE_PORT:-3100}:${COLD_COMPLIANCE_PORT:-3100}"
+    networks:
+      - horizonst
+
   mqtt_ui_api:
     build:
       context: ./mqtt-ui-api
