@@ -103,3 +103,8 @@ Implementado en esta iteración:
   - Alta operativa de trabajadores añadida en UI para desbloquear flujo de asignación de tags.
   - Alta/promoción a `superadministrador` bloqueada en UI y endurecida en backend.
   - Configuraciones de ejemplo saneadas sin secretos reales versionados.
+
+- Ajustes finales de despliegue/operación:
+  - `docker-compose.yml`: alias interno `mail.horizonst.com.es` en red Docker para validar TLS SMTP por hostname correcto.
+  - Presencia MQTT: parser robustecido para formatos MK3/Moko con campos alternativos de tag.
+  - Alarmas temporales: evaluación continua sobre sesiones activas desde la entrada en cámara según `alarm_rules` activas.

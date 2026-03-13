@@ -59,6 +59,9 @@ export function startMqttConsumer(): void {
         try { asJson = JSON.parse(payload.toString('utf8')); } catch { asJson = null; }
         if (!isGatewayCommandReply(asJson)) {
           const events = parseGatewayPayload(topic, payload);
+          if (!events.length) {
+            logger.debug({ topic }, 'mqtt payload without detectable tag identifiers, skipping');
+          }
           for (const event of events) {
             await ingestPresenceEvent(event);
           }

@@ -249,3 +249,5 @@ A helper script is included at `scripts/create-database.sql`.
 - Restricción de roles en creación de usuarios:
   - La UI no ofrece `superadministrador` como rol de alta.
   - Backend rechaza creación/edición de usuarios a `superadministrador` vía `/users`.
+
+- SMTP interno recomendado en Docker: usar `MAIL_HOST=mail.horizonst.com.es` y alias de red en el servicio `mail` para validar TLS por nombre de host.

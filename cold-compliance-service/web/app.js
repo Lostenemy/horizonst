@@ -48,7 +48,9 @@ async function login() {
   currentUser = data.user;
   localStorage.setItem('cc_token', token);
   q('loginView').hidden = true;
+  q('loginView').style.display = 'none';
   q('appView').hidden = false;
+  q('appView').style.display = 'block';
   setSessionText();
   startRealtime();
   showSection('dashboard');
@@ -61,7 +63,9 @@ async function logout() {
   localStorage.removeItem('cc_token');
   if (realtimeSource) realtimeSource.close();
   q('loginView').hidden = false;
+  q('loginView').style.display = 'flex';
   q('appView').hidden = true;
+  q('appView').style.display = 'none';
 }
 
 async function forgotPassword() {
@@ -326,7 +330,9 @@ function startRealtime() {
   try {
     currentUser = await api('/auth/me');
     q('loginView').hidden = true;
+    q('loginView').style.display = 'none';
     q('appView').hidden = false;
+    q('appView').style.display = 'block';
     setSessionText();
     startRealtime();
     showSection('dashboard');
