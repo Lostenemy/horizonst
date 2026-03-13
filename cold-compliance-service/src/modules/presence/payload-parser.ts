@@ -24,6 +24,39 @@ function normalizeTagId(value: unknown): string | null {
   return v.replace(/[:-]/g, '').toLowerCase();
 }
 
+function isLikelyMac(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const normalized = value.replace(/[:-]/g, '').toLowerCase();
+  return /^[0-9a-f]{12}$/.test(normalized);
+}
+
+function deepFindTagIdentifier(node: unknown, depth = 0): string | null {
+  if (depth > 5 || node === null || node === undefined) return null;
+  if (typeof node === 'string' && isLikelyMac(node)) return normalizeTagId(node);
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = deepFindTagIdentifier(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof node === 'object') {
+    const obj = node as Record<string, unknown>;
+    for (const [k, v] of Object.entries(obj)) {
+      const lk = k.toLowerCase();
+      if ((lk.includes('tag') || lk.includes('ble') || lk.includes('mac') || lk.includes('address') || lk.includes('addr')) && typeof v === 'string') {
+        const normalized = normalizeTagId(v);
+        if (normalized) return normalized;
+      }
+    }
+    for (const v of Object.values(obj)) {
+      const found = deepFindTagIdentifier(v, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 function pickTagIdentifier(item: any): string | null {
   const candidates = [
     item.tagId,
@@ -60,14 +93,7 @@ function pickTagIdentifier(item: any): string | null {
     if (normalized) return normalized;
   }
 
-  if (Array.isArray(item.devices)) {
-    for (const d of item.devices) {
-      const normalized = pickTagIdentifier(d);
-      if (normalized) return normalized;
-    }
-  }
-
-  return null;
+  return deepFindTagIdentifier(item);
 }
 
 function toItems(payload: any): any[] {

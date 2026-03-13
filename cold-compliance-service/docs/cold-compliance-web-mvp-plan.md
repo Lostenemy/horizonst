@@ -108,3 +108,17 @@ Implementado en esta iteración:
   - `docker-compose.yml`: alias interno `mail.horizonst.com.es` en red Docker para validar TLS SMTP por hostname correcto.
   - Presencia MQTT: parser robustecido para formatos MK3/Moko con campos alternativos de tag.
   - Alarmas temporales: evaluación continua sobre sesiones activas desde la entrada en cámara según `alarm_rules` activas.
+
+
+## Diagnóstico y corrección dashboard (usuarios/alertas activas)
+- Causa principal detectada: desalineación de normalización entre identificadores MQTT (`tag/gateway` sin separadores) y datos persistidos (`tag_uid`/`gateway_mac` potencialmente con `:` o `-`), impidiendo enlazar detección→tag→sesión.
+- Causa secundaria: consultas de dashboard/realtime hacían `JOIN` estricto a `workers` por `session.worker_id`; si faltaba ese valor en sesión, no aparecía presencia activa.
+- Corrección aplicada:
+  - Matching normalizado en `compliance` usando `regexp_replace(lower(...), '[-:]', '', 'g')` para tags y gateways.
+  - Parser MQTT ampliado para formatos reales y campos alternativos del identificador.
+  - Dashboard/realtime con `LEFT JOIN` y fallback a `worker_tag_assignments` para calcular presencia activa.
+  - Alarmas por tiempo: evaluación continua desde `started_at` de sesión activa frente a `alarm_rules`.
+- Validación recomendada:
+  1. `GET /realtime/snapshot` debe devolver `workersInside` y `activeAlerts` coherentes.
+  2. Publicar detección MQTT válida en `gw/{gateway}/publish` y confirmar creación/actualización de sesión activa.
+  3. Verificar en UI que el dashboard refleja filas y contadores sin desajuste de claves JSON.

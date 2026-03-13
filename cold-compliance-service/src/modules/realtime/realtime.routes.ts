@@ -8,15 +8,21 @@ realtimeRouter.use(requireAuth);
 async function loadOperationalSnapshot() {
   const [presence, alerts] = await Promise.all([
     db.query(
-      `SELECT s.id, s.worker_id, w.full_name, w.dni, COALESCE(t.tag_uid, '') AS tag_uid,
-              s.started_at, EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
+      `SELECT s.id,
+              COALESCE(s.worker_id, wta.worker_id) AS worker_id,
+              COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
+              COALESCE(w.dni, '-') AS dni,
+              COALESCE(t.tag_uid, '') AS tag_uid,
+              s.started_at,
+              EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
               CASE WHEN EXISTS(
                 SELECT 1 FROM alerts a
-                WHERE a.worker_id = s.worker_id AND a.acknowledged_at IS NULL
+                WHERE a.worker_id = COALESCE(s.worker_id, wta.worker_id) AND a.acknowledged_at IS NULL
               ) THEN 'alarma' ELSE 'dentro' END AS presence_status
        FROM cold_room_sessions s
-       JOIN workers w ON w.id = s.worker_id
        LEFT JOIN tags t ON t.id = s.tag_id
+       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
+       LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
        WHERE s.ended_at IS NULL
        ORDER BY s.started_at ASC`
     ),

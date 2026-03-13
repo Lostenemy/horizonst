@@ -121,9 +121,9 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
             coalesce(cr.max_daily_minutes, $5) as max_daily_minutes
      FROM tags t
      LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
-     LEFT JOIN gateways g ON g.gateway_mac = $1
+     LEFT JOIN gateways g ON regexp_replace(lower(g.gateway_mac), '[-:]', '', 'g') = $1
      LEFT JOIN cold_rooms cr ON cr.id = g.cold_room_id
-     WHERE t.tag_uid = $6`,
+     WHERE regexp_replace(lower(t.tag_uid), '[-:]', '', 'g') = $6`,
     [event.gatewayMac, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.REQUIRED_BREAK_MINUTES, env.MAX_DAILY_MINUTES, event.tagId]
   );
 
