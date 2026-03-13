@@ -58,7 +58,7 @@ usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']),
   }
 });
 
-usersRouter.post('/:id/deactivate', requireRoles(['supervisor', 'administrador', 'superadministrador']), async (req, res, next) => {
+usersRouter.post('/:id/deactivate', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
     const result = await db.query(
       `UPDATE app_users SET status = 'inactive', updated_at = NOW() WHERE id = $1

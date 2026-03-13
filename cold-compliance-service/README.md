@@ -235,9 +235,10 @@ A helper script is included at `scripts/create-database.sql`.
   - contraseña inicial: `20025@BLELoRa?`
 - Endpoints funcionales añadidos para MVP:
   - Auth: `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`
-  - Usuarios: `/users`
+    - Recuperación de contraseña con correo SMTP real (token + enlace); no depende de logs manuales.
+  - Usuarios: `/users` (desactivación solo `administrador` y `superadministrador`; borrado solo `superadministrador`)
   - Dashboard: `/dashboard/presence`, `/dashboard/alerts`
   - Alarmas configurables: `/alarm-rules`
   - Inventario: `/gateways`, `/tags`
-  - Tiempo real (SSE): `/realtime/stream`
+  - Tiempo real operativo: `/realtime/snapshot` y `/realtime/stream` (SSE con detalle de trabajadores dentro, tiempo, tag y alertas activas)
   - Informes inspección: `/reports/inspection.pdf`, `/reports/inspection.xlsx`

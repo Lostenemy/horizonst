@@ -20,7 +20,9 @@ declare global {
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const auth = req.header('authorization');
-    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+    const bearerToken = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+    const queryToken = typeof req.query.access_token === 'string' ? req.query.access_token : null;
+    const token = bearerToken ?? queryToken;
     if (!token) return res.status(401).json({ error: 'unauthorized' });
 
     const result = await db.query(

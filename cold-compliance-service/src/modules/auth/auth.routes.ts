@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { db } from '../../db/pool';
-import { logger } from '../../utils/logger';
 import { requireAuth } from '../../middleware/auth';
+import { env } from '../../config/env';
+import { sendMail } from '../../utils/mail';
 
 export const authRouter = Router();
 
@@ -46,15 +47,27 @@ authRouter.get('/me', requireAuth, async (req, res) => {
 authRouter.post('/forgot-password', async (req, res, next) => {
   try {
     const { email } = req.body;
-    const userResult = await db.query('SELECT id, email FROM app_users WHERE email = $1 LIMIT 1', [String(email ?? '')]);
+    const userResult = await db.query('SELECT id, email, first_name FROM app_users WHERE email = $1 AND status = $2 LIMIT 1', [String(email ?? ''), 'active']);
     if (userResult.rowCount) {
       const token = crypto.randomBytes(24).toString('hex');
       await db.query(
         'INSERT INTO password_reset_tokens(user_id, token, expires_at) VALUES($1, $2, NOW() + INTERVAL \'30 minutes\')',
         [userResult.rows[0].id, token]
       );
-      logger.info({ email, resetToken: token }, 'password reset token generated');
+
+      const resetUrl = `${env.APP_BASE_URL}/?reset_token=${token}`;
+      const text = [
+        `Hola ${userResult.rows[0].first_name},`,
+        '',
+        'Se ha solicitado el restablecimiento de tu contraseña en HorizonST Cold Compliance.',
+        `Abre este enlace para continuar (válido 30 minutos): ${resetUrl}`,
+        '',
+        'Si no has solicitado este cambio, ignora este correo.'
+      ].join('\n');
+
+      await sendMail(userResult.rows[0].email, 'Recuperación de contraseña HorizonST', text);
     }
+
     res.json({ status: 'ok' });
   } catch (error) {
     next(error);

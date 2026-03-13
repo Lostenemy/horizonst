@@ -1,8 +1,60 @@
-<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Horneo Cold Compliance</title><link rel="stylesheet" href="/web/styles.css"></head><body>
-<header><h1>Horneo · Cold Compliance</h1><div id="session"></div></header>
-<main>
-<section id="login" class="card"><h2>Login</h2><input id="username" placeholder="Usuario/email"/><input id="password" type="password" placeholder="Contraseña"/><button onclick="login()">Entrar</button><details><summary>Recuperar contraseña</summary><input id="fpEmail" placeholder="Email"/><button onclick="forgot()">Enviar recuperación</button><input id="rpToken" placeholder="Token"/><input id="rpPass" type="password" placeholder="Nueva contraseña"/><button onclick="resetPass()">Cambiar contraseña</button></details></section>
-<section id="app" hidden>
-<nav><button onclick="loadDashboard()">Inicio</button><button onclick="loadUsers()">Usuarios</button><button onclick="loadTagsGateways()">Gateways y Tags</button><button onclick="loadAssignments()">Asignaciones</button><button onclick="loadAlarms()">Alarmas</button><button onclick="loadReports()">Informes</button></nav>
-<div id="content" class="card"></div>
-</section></main><script src="/web/app.js"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Horneo | Cold Compliance</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Horneo · Cold Compliance</h1>
+      <p class="subtitle">Control de presencia y alertas en cámara frigorífica</p>
+    </div>
+    <div id="sessionBox"></div>
+  </header>
+
+  <main class="container">
+    <section id="loginView" class="panel">
+      <h2>Acceso</h2>
+      <div class="grid two">
+        <input id="username" placeholder="Usuario o email" />
+        <input id="password" type="password" placeholder="Contraseña" />
+      </div>
+      <button onclick="login()">Entrar</button>
+
+      <details class="mt-12">
+        <summary>Recuperar contraseña</summary>
+        <div class="grid two mt-12">
+          <input id="fpEmail" placeholder="Email de cuenta" />
+          <button onclick="forgotPassword()">Enviar enlace de recuperación</button>
+          <input id="rpToken" placeholder="Token de recuperación" />
+          <input id="rpPass" type="password" placeholder="Nueva contraseña" />
+        </div>
+        <button class="mt-12" onclick="resetPassword()">Aplicar nueva contraseña</button>
+      </details>
+    </section>
+
+    <section id="appView" hidden>
+      <nav class="tabs">
+        <button onclick="showSection('dashboard')">Inicio</button>
+        <button onclick="showSection('users')">Usuarios</button>
+        <button onclick="showSection('inventory')">Gateways y tags</button>
+        <button onclick="showSection('assignments')">Asignaciones</button>
+        <button onclick="showSection('alarms')">Alarmas</button>
+        <button onclick="showSection('reports')">Informes</button>
+      </nav>
+
+      <section id="dashboard" class="panel"></section>
+      <section id="users" class="panel" hidden></section>
+      <section id="inventory" class="panel" hidden></section>
+      <section id="assignments" class="panel" hidden></section>
+      <section id="alarms" class="panel" hidden></section>
+      <section id="reports" class="panel" hidden></section>
+    </section>
+  </main>
+
+  <script src="/web/app.js"></script>
+</body>
+</html>

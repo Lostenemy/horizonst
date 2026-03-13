@@ -87,3 +87,12 @@ Implementado en esta iteración:
 ## PASO 7 · Implementación
 - Web MVP integrada y operativa en el contenedor `cold_compliance_service`.
 - Preparado para publicación detrás de Nginx sin romper servicios existentes.
+
+## Ajustes de iteración (alineación funcional)
+- Recuperación de contraseña ahora usa envío SMTP real (`MAIL_*`) con enlace de reset, eliminando dependencia de logs.
+- Realtime ampliado: snapshot y SSE con detalle operativo (trabajadores dentro, tiempo, tag, estado operativo y alertas activas).
+- Permisos de usuarios corregidos: supervisor ya no puede desactivar usuarios autenticables.
+- UI web ampliada para operación MVP completa: dashboard priorizado, usuarios, inventario, asignaciones, alarmas e informes con descarga autenticada.
+- Separación explícita de estados:
+  - Usuario autenticable: `active/inactive` (tabla `app_users`).
+  - Estado operativo de presencia: `dentro/fuera/alarma` (derivado de sesiones y alertas).

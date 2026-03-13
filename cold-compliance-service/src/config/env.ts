@@ -32,7 +32,17 @@ const schema = z.object({
   TAG_CONTROL_MSG_ID_START: z.coerce.number().default(1100),
   TAG_CONTROL_REQUIRE_REPLY: z.coerce.boolean().default(true),
   TAG_CONTROL_DEDUP_WINDOW_MS: z.coerce.number().default(10000),
-  TAG_CONTROL_GATEWAY_STRATEGY: z.enum(['last_seen', 'camera_assigned', 'hybrid']).default('hybrid')
+  TAG_CONTROL_GATEWAY_STRATEGY: z.enum(['last_seen', 'camera_assigned', 'hybrid']).default('hybrid'),
+  MAIL_ENABLED: z.coerce.boolean().default(true),
+  MAIL_HOST: z.string().default('mail'),
+  MAIL_PORT: z.coerce.number().default(465),
+  MAIL_SECURE: z.coerce.boolean().default(true),
+  MAIL_USER: z.string().default('no_reply@horizonst.com.es'),
+  MAIL_PASSWORD: z.string().default('No_reply#2024'),
+  MAIL_FROM: z.string().default('no_reply@horizonst.com.es'),
+  MAIL_EHLO_DOMAIN: z.string().default('horizonst.com.es'),
+  MAIL_TLS_REJECT_UNAUTHORIZED: z.coerce.boolean().default(false),
+  APP_BASE_URL: z.string().default('https://horneo.horizonst.com.es')
 });
 
 export const env = schema.parse(process.env);
