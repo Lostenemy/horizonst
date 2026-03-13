@@ -1,16 +1,21 @@
 # cold_compliance_service
 
-Servicio desacoplado para cumplimiento normativo en cámaras frigoríficas dentro del ecosistema HorizonST.
+Servicio desacoplado para cumplimiento normativo en cámaras frigoríficas dentro del ecosistema HorizonST, con soporte de **alertado activo sobre tags MK-Button (BXP-B-CR)** vía gateway MKGW3.
 
 ## Arquitectura
 
-- **Ingesta MQTT (`gw/{mac}/publish`)**: cliente robusto con reconexión e idempotencia por `event_id`.
+- **Ingesta MQTT (`gw/{mac}/publish`)**: cliente robusto con reconexión, handler chain e idempotencia por `event_id`.
 - **Parser adaptable**: soporta payloads heterogéneos (MOKO/MKx) sin acoplar la lógica normativa.
 - **Dominio de cumplimiento**: reglas 45/15, acumulado diario, batería baja, incidencias.
-- **Persistencia jurídica**: eventos append-only (`presence_events`, `audit_log`, `incident_notes`) + sesiones trazables.
-- **Modo offline/sync**: cola `sync_queue` para sincronización diferida y reintentos.
+- **Tag control desacoplado**:
+  - `compliance` decide cuándo alertar;
+  - `tag-control` traduce a comando MQTT y gestiona reintentos/timeout/correlación;
+  - `mqtt` transporta;
+  - `audit` registra trazabilidad.
+- **Persistencia jurídica**: eventos append-only (`presence_events`, `audit_log`, `incident_notes`) + historial de comandos (`tag_commands`, `tag_command_attempts`, `tag_command_responses`).
+- **Modo offline/sync**: `sync_queue` para sincronización diferida y reintentos.
 
-## Estructura
+## Árbol principal
 
 ```txt
 src/
@@ -28,9 +33,59 @@ src/
     reports/
     audit/
     sync/
+    tag-control/
+      application/
+      domain/
+      infrastructure/
   middleware/
   utils/
+migrations/
 ```
+
+## MQTT (sin romper esquema productivo)
+
+- **App → Gateway (comandos)**: `gw/{gatewayMac}/subscribe`
+- **Gateway → App (reply + eventos)**: `gw/{gatewayMac}/publish`
+
+## Formato de comandos soportados
+
+### LED (1101)
+```json
+{
+  "msg_id": 1101,
+  "device_info": { "mac": "4C11AE8BE624" },
+  "data": { "mac": "AABBCCDDEEFF", "led_state": 1, "duration": 5000 }
+}
+```
+
+### Buzzer (1102)
+```json
+{
+  "msg_id": 1102,
+  "device_info": { "mac": "4C11AE8BE624" },
+  "data": { "mac": "AABBCCDDEEFF", "buzzer_state": 1, "frequency": 2000, "duration": 3000 }
+}
+```
+
+### Vibración (1103)
+```json
+{
+  "msg_id": 1103,
+  "device_info": { "mac": "4C11AE8BE624" },
+  "data": { "mac": "AABBCCDDEEFF", "vibration_state": 1, "intensity": 100, "duration": 2000 }
+}
+```
+
+## Correlación y resultados gateway
+
+Se correlaciona por `msg_id + gateway_mac` y se interpreta `result_code`:
+- `0`: success
+- `1`: length error
+- `2`: type error
+- `3`: range error
+- `4`: no object error
+
+Estados de comando: `pending`, `sent`, `ack_ok`, `ack_error`, `timeout`, `failed`.
 
 ## Ejecución local
 
@@ -40,76 +95,71 @@ npm ci
 npm run dev
 ```
 
-## Variables de entorno clave
+## Variables clave
 
+### Core
 - `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`
 - `MQTT_SUB_TOPICS=gw/+/publish`
+- `MQTT_COMMAND_TOPIC_TEMPLATE=gw/{gatewayMac}/subscribe`
+
+### Compliance
 - `MAX_CONTINUOUS_MINUTES=45`
+- `PRE_ALERT_MINUTES=40`
 - `REQUIRED_BREAK_MINUTES=15`
 - `MAX_DAILY_MINUTES=360`
-- `BATTERY_ALERT_THRESHOLD=20`
+
+### Tag-control
+- `TAG_CONTROL_ENABLED=true`
+- `TAG_CONTROL_DEFAULT_TIMEOUT_MS=8000`
+- `TAG_CONTROL_MAX_RETRIES=2`
+- `TAG_CONTROL_MSG_ID_START=1100`
+- `TAG_CONTROL_REQUIRE_REPLY=true`
+- `TAG_CONTROL_DEDUP_WINDOW_MS=10000`
+- `TAG_CONTROL_GATEWAY_STRATEGY=hybrid` (`last_seen|camera_assigned|hybrid`)
 
 ## Endpoints
 
+### Salud
 - `GET /health`
 - `GET /ready`
-- `POST /workers`, `GET /workers`, `PATCH /workers/:id`
-- `POST /workers/:id/assign-tag`
+
+### Gestión base
+- `POST /workers`, `GET /workers`, `PATCH /workers/:id`, `POST /workers/:id/assign-tag`
 - `POST /tags`, `GET /tags`
 - `POST /cameras`, `GET /cameras`
 - `GET /events/presence`, `GET /events/active-sessions`, `GET /events/workday/:workerId`
 - `GET /alerts/active`, `GET /alerts/history?severity=warning`
 - `GET /incidents`, `POST /incidents/:id/notes`, `POST /incidents/:id/close`
-- `GET /reports/daily-summary.xlsx`
-- `GET /reports/incidents.pdf`
+- `GET /reports/daily-summary.xlsx`, `GET /reports/incidents.pdf`
 
-## Flujo funcional de ejemplo
+### Tag-control
+- `POST /tag-control/led`
+- `POST /tag-control/buzzer`
+- `POST /tag-control/vibration`
+- `POST /tag-control/custom-alert`
+- `GET /tag-control/commands`
+- `GET /tag-control/commands/active`
+- `GET /tag-control/commands/:id`
+- `GET /tag-control/templates`
+- `POST /tag-control/templates`
+- `PATCH /tag-control/templates/:id`
 
-1. Gateway publica en `gw/007007e0c804/publish`.
-2. Parser detecta tag y evento `enter`.
-3. Se guarda `presence_event` (idempotente).
-4. Se abre sesión en `cold_room_sessions`.
-5. Al evento `exit`, se cierra sesión y se acumula jornada.
-6. Si excede límites, se crean alertas/incidencias y traza de auditoría.
+## Flujo comando-respuesta completo
 
-## Supuestos del MVP
+1. `compliance` o API manual solicita alerta de tag.
+2. `tag-control` resuelve trabajador/tag/gateway (estrategia configurable).
+3. Valida parámetros y construye payload.
+4. Publica en `gw/{gatewayMac}/subscribe`.
+5. Espera reply en `gw/{gatewayMac}/publish`.
+6. Persiste intentos, response y estado final.
+7. Registra auditoría de resultado.
 
-- El parser infiere `enter/exit` desde `eventType`, `zoneEvent` o `inZone`.
-- `gateway_mac` se mapea a cámara vía tabla `gateways`.
-- Sincronización cloud es placeholder: marca como `synced` para validar pipeline.
+## Supuestos de protocolo
 
-## Despliegue en Docker Compose
+- El gateway MKGW3 actúa como puente BLE.
+- El ACK del gateway confirma recepción/parseo del comando MQTT, **no garantiza siempre** la ejecución física final en periférico si firmware no expone confirmación profunda.
+- Parámetros exactos y semántica final pueden variar por firmware BXP-B-CR; el servicio queda preparado para ajustar templates y validadores.
 
-Añadir servicio:
+## Docker Compose
 
-```yaml
-cold_compliance_service:
-  build:
-    context: ./cold-compliance-service
-  env_file:
-    - ./cold-compliance-service/.env
-  environment:
-    - DB_HOST=postgres
-    - DB_PORT=5432
-    - DB_USER=${DB_USER}
-    - DB_PASSWORD=${DB_PASSWORD}
-    - DB_NAME=${DB_NAME:-horizonst}
-    - MQTT_URL=${COLD_MQTT_URL:-mqtt://vernemq:1883}
-    - MQTT_USERNAME=${MQTT_USER}
-    - MQTT_PASSWORD=${MQTT_PASS}
-    - MQTT_SUB_TOPICS=${COLD_MQTT_SUB_TOPICS:-gw/+/publish}
-    - PORT=${COLD_COMPLIANCE_PORT:-3100}
-  depends_on:
-    - postgres
-    - vernemq
-  restart: unless-stopped
-  healthcheck:
-    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${COLD_COMPLIANCE_PORT:-3100}/health || exit 1"]
-    interval: 20s
-    timeout: 4s
-    retries: 5
-  ports:
-    - "127.0.0.1:${COLD_COMPLIANCE_PORT:-3100}:${COLD_COMPLIANCE_PORT:-3100}"
-  networks:
-    - horizonst
-```
+Servicio ya integrado en `docker-compose.yml` raíz como `cold_compliance_service`.

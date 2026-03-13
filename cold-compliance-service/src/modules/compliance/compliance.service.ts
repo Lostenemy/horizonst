@@ -3,6 +3,8 @@ import { db } from '../../db/pool';
 import { createAlert } from '../alerts/alerts.service';
 import { openIncident } from '../incidents/incidents.service';
 import { ParsedPresenceEvent } from '../presence/types';
+import { sendCriticalExposureAlert, sendEarlyReentryBlockedAlert, sendPreLimitAlert } from '../tag-control/application/tag-control.service';
+import { logger } from '../../utils/logger';
 
 interface ActiveSession {
   id: string;
@@ -62,6 +64,9 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
           reason: 'Intento de reentrada sin descanso reglamentario',
           metadata: { minutesOutside, requiredBreakMinutes: Number(tag.required_break_minutes) }
         });
+        await sendEarlyReentryBlockedAlert({ workerId: tag.worker_id ?? undefined, tagId: tag.id, reason: 'Reentrada no permitida por descanso incompleto' }).catch((error) => {
+          logger.warn({ error }, 'failed to send early reentry blocked tag alert');
+        });
       }
     }
 
@@ -103,14 +108,20 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
     );
 
     if (durationMinutes >= Number(tag.pre_alert_minutes)) {
+      const prelimit = durationMinutes < Number(tag.max_continuous_minutes);
       await createAlert({
         workerId: session.worker_id ?? undefined,
         tagId: tag.id,
         coldRoomId: session.cold_room_id ?? undefined,
-        severity: durationMinutes >= Number(tag.max_continuous_minutes) ? 'critical' : 'warning',
-        alertType: durationMinutes >= Number(tag.max_continuous_minutes) ? 'continuous_limit_exceeded' : 'continuous_limit_prewarning',
+        severity: prelimit ? 'warning' : 'critical',
+        alertType: prelimit ? 'continuous_limit_prewarning' : 'continuous_limit_exceeded',
         message: `Permanencia en cámara: ${Math.round(durationMinutes)} min`,
         metadata: { durationMinutes, limitMinutes: Number(tag.max_continuous_minutes) }
+      });
+
+      const sender = prelimit ? sendPreLimitAlert : sendCriticalExposureAlert;
+      await sender({ workerId: session.worker_id ?? undefined, tagId: tag.id, reason: prelimit ? 'Pre-límite continuo alcanzado' : 'Límite continuo excedido' }).catch((error) => {
+        logger.warn({ error }, 'failed to send tag-control compliance alert');
       });
     }
 
@@ -122,6 +133,9 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
         incidentType: 'continuous_exposure_breach',
         reason: 'Exceso de permanencia continuada en cámara frigorífica',
         metadata: { durationMinutes }
+      });
+      await sendCriticalExposureAlert({ workerId: session.worker_id ?? undefined, tagId: tag.id, reason: 'Persistencia >2 min tras límite de permanencia' }).catch((error) => {
+        logger.warn({ error }, 'failed to send escalation alert');
       });
     }
 

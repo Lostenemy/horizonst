@@ -17,6 +17,7 @@ const schema = z.object({
   MQTT_PASSWORD: z.string().optional(),
   MQTT_CLIENT_ID: z.string().default('cold-compliance-service'),
   MQTT_SUB_TOPICS: z.string().default('gw/+/publish'),
+  MQTT_COMMAND_TOPIC_TEMPLATE: z.string().default('gw/{gatewayMac}/subscribe'),
   MAX_CONTINUOUS_MINUTES: z.coerce.number().default(45),
   PRE_ALERT_MINUTES: z.coerce.number().default(40),
   REQUIRED_BREAK_MINUTES: z.coerce.number().default(15),
@@ -24,7 +25,14 @@ const schema = z.object({
   INCIDENT_GRACE_MINUTES: z.coerce.number().default(2),
   DEAD_MAN_DEFAULT_MINUTES: z.coerce.number().default(3),
   BATTERY_ALERT_THRESHOLD: z.coerce.number().default(20),
-  SYNC_BATCH_SIZE: z.coerce.number().default(100)
+  SYNC_BATCH_SIZE: z.coerce.number().default(100),
+  TAG_CONTROL_ENABLED: z.coerce.boolean().default(true),
+  TAG_CONTROL_DEFAULT_TIMEOUT_MS: z.coerce.number().default(8000),
+  TAG_CONTROL_MAX_RETRIES: z.coerce.number().default(2),
+  TAG_CONTROL_MSG_ID_START: z.coerce.number().default(1100),
+  TAG_CONTROL_REQUIRE_REPLY: z.coerce.boolean().default(true),
+  TAG_CONTROL_DEDUP_WINDOW_MS: z.coerce.number().default(10000),
+  TAG_CONTROL_GATEWAY_STRATEGY: z.enum(['last_seen', 'camera_assigned', 'hybrid']).default('hybrid')
 });
 
 export const env = schema.parse(process.env);

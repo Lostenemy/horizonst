@@ -7,6 +7,7 @@ import { incidentsRouter } from './modules/incidents/incidents.routes';
 import { eventsRouter } from './modules/presence/events.routes';
 import { reportsRouter } from './modules/reports/reports.routes';
 import { tagsRouter } from './modules/tags/tags.routes';
+import { tagControlRouter } from './modules/tag-control/tag-control.routes';
 import { workersRouter } from './modules/workers/workers.routes';
 
 export function buildApp() {
@@ -26,6 +27,7 @@ export function buildApp() {
   app.use('/incidents', incidentsRouter);
   app.use('/alerts', alertsRouter);
   app.use('/reports', reportsRouter);
+  app.use('/tag-control', tagControlRouter);
 
   app.use(errorHandler);
   return app;
