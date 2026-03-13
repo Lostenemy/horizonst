@@ -122,3 +122,7 @@ Implementado en esta iteración:
   1. `GET /realtime/snapshot` debe devolver `workersInside` y `activeAlerts` coherentes.
   2. Publicar detección MQTT válida en `gw/{gateway}/publish` y confirmar creación/actualización de sesión activa.
   3. Verificar en UI que el dashboard refleja filas y contadores sin desajuste de claves JSON.
+
+- Clarificación funcional dashboard:
+  - `Incidencias activas` ≠ `reglas activas`.
+  - Se muestran ambos datos por separado en home para evitar ambigüedad operativa.

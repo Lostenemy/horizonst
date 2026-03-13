@@ -251,3 +251,8 @@ A helper script is included at `scripts/create-database.sql`.
   - Backend rechaza creación/edición de usuarios a `superadministrador` vía `/users`.
 
 - SMTP interno recomendado en Docker: usar `MAIL_HOST=mail.horizonst.com.es` y alias de red en el servicio `mail` para validar TLS por nombre de host.
+
+- Semántica dashboard:
+  - `Trabajadores detectados dentro` se calcula desde sesiones activas (`cold_room_sessions.ended_at IS NULL`).
+  - `Incidencias activas` son alertas disparadas (`alerts.acknowledged_at IS NULL`).
+  - `Reglas de alarma activas` son configuraciones habilitadas en `alarm_rules`.

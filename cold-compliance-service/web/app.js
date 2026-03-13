@@ -14,6 +14,16 @@ async function api(url, options = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     }
   });
+  if (res.status === 401 && token) {
+    localStorage.removeItem('cc_token');
+    token = '';
+    if (realtimeSource) realtimeSource.close();
+    q('loginView').hidden = false;
+    q('loginView').style.display = 'flex';
+    q('appView').hidden = true;
+    q('appView').style.display = 'none';
+    throw new Error('unauthorized');
+  }
   if (!res.ok) throw new Error(await res.text());
   return res.status === 204 ? null : res.json();
 }
@@ -106,18 +116,23 @@ async function renderDashboard(snapshot) {
     stateBadge(w.presence_status)
   ]);
   const alertsRows = data.activeAlerts.map((a) => [a.alert_type, a.severity, a.message, new Date(a.created_at).toLocaleString()]);
+  const alarmRuleRows = (data.activeAlarmRules || []).map((r) => [r.description, r.buzzer_shaker_minutes, r.alarm_minutes]);
 
   q('dashboard').innerHTML = `
     <h2>Dashboard operativo</h2>
     <div class="metrics">
-      <div class="metric"><small>Trabajadores dentro</small><b>${data.totals.workersInside}</b></div>
-      <div class="metric"><small>Alertas activas</small><b>${data.totals.activeAlerts}</b></div>
+      <div class="metric"><small>Trabajadores detectados dentro</small><b>${data.totals.workersInside}</b></div>
+      <div class="metric"><small>Incidencias activas (disparadas)</small><b>${data.totals.activeAlerts}</b></div>
+      <div class="metric"><small>Reglas de alarma activas</small><b>${data.totals.activeAlarmRules ?? 0}</b></div>
       <div class="metric"><small>Última actualización</small><b style="font-size:14px">${new Date(data.ts).toLocaleTimeString()}</b></div>
     </div>
-    <h3>Trabajadores dentro (prioridad operativa)</h3>
+    <p class="muted">Nota: “Incidencias activas” muestra alertas disparadas sin reconocer. “Reglas de alarma activas” muestra configuración habilitada.</p>
+    <h3>Trabajadores dentro (presencia real)</h3>
     ${table(['Trabajador', 'DNI', 'Tag', 'Min dentro', 'Estado'], workersRows)}
-    <h3 class="mt-12">Alertas activas</h3>
+    <h3 class="mt-12">Incidencias activas (disparadas)</h3>
     ${table(['Tipo', 'Severidad', 'Mensaje', 'Fecha'], alertsRows)}
+    <h3 class="mt-12">Reglas de alarma activas (configuración)</h3>
+    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma'], alarmRuleRows)}
   `;
 }
 
