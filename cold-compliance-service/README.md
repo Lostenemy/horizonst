@@ -226,3 +226,18 @@ CREATE DATABASE cold_compliance OWNER horizonst;
 ```
 
 A helper script is included at `scripts/create-database.sql`.
+
+## Web MVP integrado
+
+- UI servida por el propio servicio en `/` (estáticos en `/web/*`).
+- Credencial inicial obligatoria:
+  - usuario: `super`
+  - contraseña inicial: `20025@BLELoRa?`
+- Endpoints funcionales añadidos para MVP:
+  - Auth: `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`
+  - Usuarios: `/users`
+  - Dashboard: `/dashboard/presence`, `/dashboard/alerts`
+  - Alarmas configurables: `/alarm-rules`
+  - Inventario: `/gateways`, `/tags`
+  - Tiempo real (SSE): `/realtime/stream`
+  - Informes inspección: `/reports/inspection.pdf`, `/reports/inspection.xlsx`

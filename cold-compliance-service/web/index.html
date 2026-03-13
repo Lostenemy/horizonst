@@ -1,0 +1,8 @@
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Horneo Cold Compliance</title><link rel="stylesheet" href="/web/styles.css"></head><body>
+<header><h1>Horneo · Cold Compliance</h1><div id="session"></div></header>
+<main>
+<section id="login" class="card"><h2>Login</h2><input id="username" placeholder="Usuario/email"/><input id="password" type="password" placeholder="Contraseña"/><button onclick="login()">Entrar</button><details><summary>Recuperar contraseña</summary><input id="fpEmail" placeholder="Email"/><button onclick="forgot()">Enviar recuperación</button><input id="rpToken" placeholder="Token"/><input id="rpPass" type="password" placeholder="Nueva contraseña"/><button onclick="resetPass()">Cambiar contraseña</button></details></section>
+<section id="app" hidden>
+<nav><button onclick="loadDashboard()">Inicio</button><button onclick="loadUsers()">Usuarios</button><button onclick="loadTagsGateways()">Gateways y Tags</button><button onclick="loadAssignments()">Asignaciones</button><button onclick="loadAlarms()">Alarmas</button><button onclick="loadReports()">Informes</button></nav>
+<div id="content" class="card"></div>
+</section></main><script src="/web/app.js"></script></body></html>

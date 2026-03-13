@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
+import { requireAuth, requireRoles } from '../../middleware/auth';
 
 export const camerasRouter = Router();
+camerasRouter.use(requireAuth);
 
-camerasRouter.post('/', async (req, res, next) => {
+camerasRouter.post('/', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
     const result = await db.query(
       `INSERT INTO cold_rooms(plant_id, code, name, target_temperature, max_continuous_minutes, pre_alert_minutes, required_break_minutes, max_daily_minutes, dead_man_enabled, dead_man_minutes)
