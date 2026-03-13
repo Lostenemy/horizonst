@@ -6,6 +6,18 @@ import { randomBytes } from "node:crypto";
 import mqtt from "mqtt";
 import pino from "pino";
 import tls from "tls";
+import {
+  GATT_PROTOCOL,
+  buildGattCommandTopic,
+  buildGattResponseTopic,
+  hasExpectedGatewayMac,
+  isValidMac,
+  parseGatewayMacFromTopic,
+  parseMsgIdList,
+  parseTopicPatterns,
+  toGatewayMac,
+  topicMatchesPattern
+} from "./gattProtocol.js";
 
 const logger = pino({
   level: process.env.LOG_LEVEL || "info"
@@ -52,18 +64,19 @@ const gattMqttUsername = process.env.GATT_MQTT_USERNAME || process.env.MQTT_USER
 const gattMqttPassword = process.env.GATT_MQTT_PASSWORD || process.env.MQTT_PASS || "";
 const gattMqttClientId =
   process.env.GATT_MQTT_CLIENT_ID || "mqtt-ui-api-gatt";
-const gattMqttLegacySubTopicPattern =
-  process.env.GATT_MQTT_SUB_TOPIC_PATTERN || "devices/{gatewayType}/receive";
-const gattMqttMk3SubTopicPattern =
-  process.env.GATT_MQTT_MK3_SUB_TOPIC_PATTERN || "devices/MK3/{clientId}/recieve";
+const gattCommandTopicTemplate =
+  process.env.GATT_MQTT_COMMAND_TOPIC_TEMPLATE || GATT_PROTOCOL.commandTopicTemplate;
+const gattResponseTopicTemplate =
+  process.env.GATT_MQTT_RESPONSE_TOPIC_TEMPLATE || GATT_PROTOCOL.responseTopicTemplate;
 const gattMqttPubTopicSubscribe =
-  process.env.GATT_MQTT_PUB_TOPIC_SUBSCRIBE || "devices/MK3/+/send,devices/MK3/send,devices/+/send";
+  process.env.GATT_MQTT_PUB_TOPIC_SUBSCRIBE || buildGattResponseTopic("+", gattResponseTopicTemplate);
+const gattMinRssi = Number.parseInt(process.env.GATT_MIN_RSSI || "-70", 10);
 const gattSseTicketTtlMs = Number.parseInt(process.env.GATT_SSE_TICKET_TTL_MS || "60000", 10);
 const supportedGatewayTypes = ["MK1", "MK2", "MK3", "MK4", "RF1"];
 
-const gattExpectedConnectMsgIds = parseMsgIdList(process.env.GATT_CONNECT_EXPECTED_MSG_IDS, [2500, 3501]);
-const gattExpectedInfoMsgIds = parseMsgIdList(process.env.GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS, [2502, 3502]);
-const gattExpectedStatusMsgIds = parseMsgIdList(process.env.GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS, [2504, 3504]);
+const gattExpectedConnectMsgIds = parseMsgIdList(process.env.GATT_CONNECT_EXPECTED_MSG_IDS, [1100, 3100]);
+const gattExpectedInfoMsgIds = parseMsgIdList(process.env.GATT_INQUIRE_DEVICE_INFO_EXPECTED_MSG_IDS, [2002, 3002]);
+const gattExpectedStatusMsgIds = parseMsgIdList(process.env.GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS, [1102, 3102]);
 
 const gattMqttClient = mqtt.connect({
   host: gattMqttHost,
@@ -82,46 +95,6 @@ const gattSseClients = new Set();
 const gattRateLimitState = new Map();
 const gattSseTickets = new Map();
 
-function parseMsgIdList(raw, fallback) {
-  if (!raw) {
-    return fallback;
-  }
-  const values = String(raw)
-    .split(",")
-    .map((value) => Number.parseInt(value.trim(), 10))
-    .filter((value) => Number.isInteger(value));
-  return values.length > 0 ? values : fallback;
-}
-
-function toGatewayClientId(gatewayType, gatewayMac) {
-  const normalizedType = normalizeGatewayType(gatewayType);
-  const normalizedMac = toGatewayMac(gatewayMac).toLowerCase();
-  if (!normalizedType || !normalizedMac) {
-    return "";
-  }
-  return `${normalizedType.toLowerCase()}-${normalizedMac}`;
-}
-
-function buildTopic(pattern, gatewayType, gatewayMac) {
-  return pattern
-    .replaceAll("{gatewayType}", gatewayType.toUpperCase())
-    .replaceAll("{clientId}", toGatewayClientId(gatewayType, gatewayMac));
-}
-
-function buildGattCommandTopic(gatewayType, gatewayMac) {
-  if (normalizeGatewayType(gatewayType) === "MK3") {
-    return buildTopic(gattMqttMk3SubTopicPattern, gatewayType, gatewayMac);
-  }
-  return buildTopic(gattMqttLegacySubTopicPattern, gatewayType, gatewayMac);
-}
-
-function parseTopicPatterns(value) {
-  return String(value || "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
 function normalizeGatewayType(value) {
   return String(value || "").trim().toUpperCase();
 }
@@ -138,19 +111,15 @@ function parseJsonPayload(payloadBuffer) {
   }
 }
 
-function toGatewayMac(value) {
-  return String(value || "").replace(/[^0-9a-fA-F]/g, "").toUpperCase();
-}
-
-function isValidMac(value) {
-  return /^[0-9A-F]{12}$/.test(toGatewayMac(value));
-}
-
 function pendingKey(gatewayType, gatewayMac, msgId, beaconMac) {
   return `${gatewayType}:${gatewayMac}:${msgId}:${beaconMac || "*"}`;
 }
 
 function resolvePendingForMessage({ gatewayType, gatewayMac, msgId, beaconMac, topic, payload }) {
+  if (!hasExpectedGatewayMac(gatewayMac, payload?.device_info?.mac)) {
+    logger.warn({ gatewayMac, payloadGatewayMac: toGatewayMac(payload?.device_info?.mac || ""), topic, msgId }, "Ignoring GATT reply due to gateway MAC mismatch");
+    return false;
+  }
   const exact = pendingKey(gatewayType, gatewayMac, msgId, beaconMac);
   const wildcard = pendingKey(gatewayType, gatewayMac, msgId, "*");
   for (const key of [exact, wildcard]) {
@@ -184,21 +153,7 @@ function notifySseClients(eventName, payload) {
   }
 }
 
-function topicMatchesPattern(topic, pattern) {
-  const escaped = pattern
-    .split("+")
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("[^/]+");
-  const regex = new RegExp(`^${escaped}$`);
-  return regex.test(topic);
-}
-
 const gattMqttPubTopicPatterns = parseTopicPatterns(gattMqttPubTopicSubscribe);
-
-function extractGatewayTypeFromTopic(topic) {
-  const match = topic.match(/^devices\/(MK[1-4]|RF1)\//i);
-  return match ? match[1].toUpperCase() : null;
-}
 
 function extractBeaconMac(payload) {
   return toGatewayMac(payload?.data?.mac || "");
@@ -235,7 +190,7 @@ setInterval(() => {
 }, 30000).unref();
 
 gattMqttClient.on("connect", () => {
-  logger.info({ topics: gattMqttPubTopicPatterns }, "GATT MQTT connected");
+  logger.info({ topics: gattMqttPubTopicPatterns, commandTopicTemplate: gattCommandTopicTemplate, responseTopicTemplate: gattResponseTopicTemplate, minRssi: gattMinRssi }, "GATT MQTT connected");
   gattMqttClient.subscribe(gattMqttPubTopicPatterns, { qos: 1 }, (error) => {
     if (error) {
       logger.error({ error }, "Failed to subscribe GATT pub_topic pattern");
@@ -256,20 +211,37 @@ gattMqttClient.on("message", (topic, payloadBuffer) => {
     return;
   }
 
-  const gatewayType = normalizeGatewayType(extractGatewayTypeFromTopic(topic));
-  const gatewayMac = toGatewayMac(payload?.device_info?.mac || "");
+  const gatewayMacFromTopic = parseGatewayMacFromTopic(topic, gattResponseTopicTemplate);
+  const gatewayMacFromPayload = toGatewayMac(payload?.device_info?.mac || "");
+  const gatewayMac = gatewayMacFromTopic || gatewayMacFromPayload;
   const beaconMac = extractBeaconMac(payload);
   const msgId = Number(payload.msg_id);
+  const resultCode = Number(payload?.result_code);
+  const gatewayType = normalizeGatewayType(payload?.gateway_type || "MK3");
+  const recordRssi = Number(payload?.data?.rssi);
+
+  if (Number.isFinite(recordRssi) && recordRssi < gattMinRssi) {
+    logger.debug({ topic, gatewayMac, beaconMac, msgId, recordRssi, minRssi: gattMinRssi }, "Dropping GATT message below RSSI threshold");
+    return;
+  }
+
+  if (gatewayMacFromTopic && gatewayMacFromPayload && gatewayMacFromTopic !== gatewayMacFromPayload) {
+    logger.warn({ topic, gatewayMacFromTopic, gatewayMacFromPayload, msgId }, "GATT reply gateway MAC mismatch between topic and payload");
+    return;
+  }
 
   if (gatewayType && gatewayMac && Number.isInteger(msgId)) {
     resolvePendingForMessage({ gatewayType, gatewayMac, msgId, beaconMac, topic, payload });
   }
+
+  logger.info({ gatewayMac, topic, msgId, resultCode: Number.isInteger(resultCode) ? resultCode : null }, "Processed GATT response message");
 
   notifySseClients("gatt-message", {
     type: msgId >= 3000 ? "notify" : "reply",
     topic,
     payload,
     msgId,
+    resultCode: Number.isInteger(resultCode) ? resultCode : null,
     gatewayType,
     gatewayMac,
     beaconMac,
@@ -397,7 +369,7 @@ function waitForGattReply({ gatewayType, gatewayMac, beaconMac, expectedMsgIds, 
 }
 
 async function publishGattCommand({ gatewayType, gatewayMac, msgId, data, commandId }) {
-  const topic = buildGattCommandTopic(gatewayType, gatewayMac);
+  const topic = buildGattCommandTopic(gatewayMac, gattCommandTopicTemplate);
   const payload = {
     msg_id: msgId,
     device_info: { mac: gatewayMac },
@@ -414,6 +386,8 @@ async function publishGattCommand({ gatewayType, gatewayMac, msgId, data, comman
     payload,
     sentAt: new Date().toISOString()
   });
+
+  logger.info({ gatewayMac, topic, msgId, commandId }, "Publishing GATT command");
 
   await new Promise((resolve, reject) => {
     gattMqttClient.publish(topic, JSON.stringify(payload), { qos: 1 }, (error) => {
@@ -556,7 +530,7 @@ app.get("/api/gatt/stream", authenticateSseTicket, (req, res) => {
 
 app.post("/api/gatt/connect", authenticateToken, enforceGattRateLimit, async (req, res) => {
   return executeGattCommand(req, res, {
-    msgId: 1500,
+    msgId: GATT_PROTOCOL.commandMsgIds.connect,
     expectedMsgIds: gattExpectedConnectMsgIds,
     buildData: ({ beaconMac, password }) => ({ mac: beaconMac, passwd: password })
   });
@@ -564,15 +538,15 @@ app.post("/api/gatt/connect", authenticateToken, enforceGattRateLimit, async (re
 
 app.post("/api/gatt/inquire-device-info", authenticateToken, enforceGattRateLimit, async (req, res) => {
   return executeGattCommand(req, res, {
-    msgId: 1502,
+    msgId: GATT_PROTOCOL.commandMsgIds.systemInfo,
     expectedMsgIds: gattExpectedInfoMsgIds,
-    buildData: ({ beaconMac }) => ({ mac: beaconMac })
+    buildData: ({ beaconMac }) => ({ mac: beaconMac, min_rssi: gattMinRssi })
   });
 });
 
 app.post("/api/gatt/inquire-status", authenticateToken, enforceGattRateLimit, async (req, res) => {
   return executeGattCommand(req, res, {
-    msgId: 1504,
+    msgId: GATT_PROTOCOL.commandMsgIds.readSensors,
     expectedMsgIds: gattExpectedStatusMsgIds,
     buildData: ({ beaconMac }) => ({ mac: beaconMac })
   });
