@@ -91,6 +91,50 @@ services:
     networks:
       - horizonst
 
+  cold_compliance_service:
+    build:
+      context: ./cold-compliance-service
+    env_file:
+      - ./cold-compliance-service/.env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${COLD_COMPLIANCE_DB_NAME:-cold_compliance}
+      - MQTT_URL=${COLD_MQTT_URL:-mqtt://vernemq:1883}
+      - MQTT_USERNAME=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASS}
+      - MQTT_CLIENT_ID=${COLD_MQTT_CLIENT_ID:-cold-compliance-service}
+      - MQTT_SUB_TOPICS=${COLD_MQTT_SUB_TOPICS:-gw/+/publish}
+      - MQTT_COMMAND_TOPIC_TEMPLATE=${COLD_MQTT_COMMAND_TOPIC_TEMPLATE:-gw/{gatewayMac}/subscribe}
+      - PORT=${COLD_COMPLIANCE_PORT:-3100}
+      - TAG_CONTROL_ENABLED=${TAG_CONTROL_ENABLED:-true}
+      - TAG_CONTROL_DEFAULT_TIMEOUT_MS=${TAG_CONTROL_DEFAULT_TIMEOUT_MS:-8000}
+      - TAG_CONTROL_MAX_RETRIES=${TAG_CONTROL_MAX_RETRIES:-2}
+      - TAG_CONTROL_MSG_ID_START=${TAG_CONTROL_MSG_ID_START:-1100}
+      - TAG_CONTROL_REQUIRE_REPLY=${TAG_CONTROL_REQUIRE_REPLY:-true}
+      - TAG_CONTROL_DEDUP_WINDOW_MS=${TAG_CONTROL_DEDUP_WINDOW_MS:-10000}
+      - TAG_CONTROL_GATEWAY_STRATEGY=${TAG_CONTROL_GATEWAY_STRATEGY:-hybrid}
+    depends_on:
+      - postgres
+      - vernemq
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${COLD_COMPLIANCE_PORT:-3100}/health || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+    ports:
+      - "127.0.0.1:${COLD_COMPLIANCE_PORT:-3100}:${COLD_COMPLIANCE_PORT:-3100}"
+    networks:
+      - horizonst
+
   mqtt_ui_api:
     build:
       context: ./mqtt-ui-api
