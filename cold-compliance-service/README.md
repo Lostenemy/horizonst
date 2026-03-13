@@ -47,6 +47,22 @@ migrations/
 - **App → Gateway (comandos)**: `gw/{gatewayMac}/subscribe`
 - **Gateway → App (reply + eventos)**: `gw/{gatewayMac}/publish`
 
+## MQTT configuration
+
+This service requires a VerneMQ `client_id` registered in `vmq_auth_acl` (VerneMQ + `vmq_diversity` + PostgreSQL).
+
+Required identity:
+- `client_id`: `cold-compliance-service`
+- `username`: `Horizon@user2024`
+- password stored as bcrypt in broker DB (`crypt(..., gen_salt('bf'))`)
+
+Required topics (ACL):
+- subscribe: `gw/+/publish`
+- publish: `gw/+/subscribe`
+
+> HorizonST enforces ACL by `client_id`, not only by username/password.
+> The service will not work unless this broker registration exists.
+
 ## Formato de comandos soportados
 
 ### LED (1101)
@@ -114,7 +130,7 @@ npm run dev
 ## Variables clave
 
 ### Core
-- `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`
+- `MQTT_URL`, `MQTT_CLIENT_ID`, `MQTT_USERNAME`, `MQTT_PASSWORD`
 - `MQTT_SUB_TOPICS=gw/+/publish`
 - `MQTT_COMMAND_TOPIC_TEMPLATE=gw/{gatewayMac}/subscribe`
 
@@ -180,6 +196,18 @@ npm run dev
 ## Docker Compose
 
 Servicio ya integrado en `docker-compose.yml` raíz como `cold_compliance_service`.
+
+## Deployment
+
+Minimum deployment sequence:
+
+1. Create dedicated DB for the service:
+   - `CREATE DATABASE cold_compliance OWNER horizonst;`
+2. Register MQTT identity in `vmq_auth_acl` (client + ACL for both topics).
+3. Configure `cold-compliance-service/.env` (`DB_*`, `MQTT_CLIENT_ID`, `MQTT_USERNAME`, `MQTT_PASSWORD`).
+4. Start container with Docker Compose.
+
+A SQL helper template is included at `scripts/register-mqtt-client.sql`.
 
 ## Reverse proxy (Nginx)
 

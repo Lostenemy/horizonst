@@ -105,6 +105,7 @@ services:
       - MQTT_URL=${COLD_MQTT_URL:-mqtt://vernemq:1883}
       - MQTT_USERNAME=${MQTT_USER}
       - MQTT_PASSWORD=${MQTT_PASS}
+      - MQTT_CLIENT_ID=${COLD_MQTT_CLIENT_ID:-cold-compliance-service}
       - MQTT_SUB_TOPICS=${COLD_MQTT_SUB_TOPICS:-gw/+/publish}
       - MQTT_COMMAND_TOPIC_TEMPLATE=${COLD_MQTT_COMMAND_TOPIC_TEMPLATE:-gw/{gatewayMac}/subscribe}
       - PORT=${COLD_COMPLIANCE_PORT:-3100}
