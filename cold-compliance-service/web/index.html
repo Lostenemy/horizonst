@@ -16,24 +16,27 @@
   </header>
 
   <main class="container">
-    <section id="loginView" class="panel">
-      <h2>Acceso</h2>
-      <div class="grid two">
-        <input id="username" placeholder="Usuario o email" />
-        <input id="password" type="password" placeholder="Contraseña" />
-      </div>
-      <button onclick="login()">Entrar</button>
-
-      <details class="mt-12">
-        <summary>Recuperar contraseña</summary>
-        <div class="grid two mt-12">
-          <input id="fpEmail" placeholder="Email de cuenta" />
-          <button onclick="forgotPassword()">Enviar enlace de recuperación</button>
-          <input id="rpToken" placeholder="Token de recuperación" />
-          <input id="rpPass" type="password" placeholder="Nueva contraseña" />
+    <section id="loginView" class="login-wrap">
+      <form id="loginForm" class="panel login-card">
+        <h2>Acceso al sistema</h2>
+        <p class="muted">Introduce tus credenciales para continuar.</p>
+        <div class="grid one">
+          <input id="username" autocomplete="username" placeholder="Usuario o email" required />
+          <input id="password" autocomplete="current-password" type="password" placeholder="Contraseña" required />
         </div>
-        <button class="mt-12" onclick="resetPassword()">Aplicar nueva contraseña</button>
-      </details>
+        <button type="submit" class="mt-12 full">Entrar</button>
+
+        <details class="mt-12">
+          <summary>Recuperar contraseña</summary>
+          <div class="grid one mt-12">
+            <input id="fpEmail" placeholder="Email de cuenta" />
+            <button type="button" onclick="forgotPassword()">Enviar enlace de recuperación</button>
+            <input id="rpToken" placeholder="Token de recuperación" />
+            <input id="rpPass" type="password" placeholder="Nueva contraseña" />
+            <button type="button" onclick="resetPassword()">Aplicar nueva contraseña</button>
+          </div>
+        </details>
+      </form>
     </section>
 
     <section id="appView" hidden>

@@ -131,7 +131,7 @@ async function renderUsers() {
       <input id="uEmail" placeholder="Email" />
       <input id="uTelefono" placeholder="Teléfono" />
       <input id="uDni" placeholder="DNI" />
-      <select id="uRol"><option value="supervisor">supervisor</option><option value="administrador">administrador</option><option value="superadministrador">superadministrador</option></select>
+      <select id="uRol"><option value="supervisor">supervisor</option><option value="administrador">administrador</option></select>
       <select id="uEstado"><option value="active">active</option><option value="inactive">inactive</option></select>
       <input id="uPass" placeholder="Contraseña" />
       <input id="uTurno" placeholder="Turno" />
@@ -203,14 +203,35 @@ async function renderAssignments() {
   q('assignments').innerHTML = `
     <h2>Asignación de tags a trabajadores</h2>
     <p>Un trabajador no puede tener dos tags simultáneos. El cambio cierra la asignación anterior.</p>
+
+    <h3>Alta rápida de trabajador</h3>
+    <div class="grid three">
+      <input id="wDni" placeholder="DNI" />
+      <input id="wName" placeholder="Nombre completo" />
+      <button onclick="createWorker()">Crear trabajador</button>
+    </div>
+
+    <h3 class="mt-12">Asignar tag</h3>
     <div class="grid two">
       <select id="asWorker">${workers.map((w) => `<option value="${w.id}">${w.full_name} (${w.dni})</option>`).join('')}</select>
       <select id="asTag">${tags.filter((t) => t.active).map((t) => `<option value="${t.id}">${t.tag_uid}</option>`).join('')}</select>
     </div>
     <button class="mt-12" onclick="assignTag()">Asignar tag</button>
-    <h3 class="mt-12">Histórico</h3>
+
+    <h3 class="mt-12">Trabajadores registrados</h3>
+    ${table(['Nombre', 'DNI', 'Activo'], workers.map((w) => [w.full_name, w.dni, w.active ? 'sí' : 'no']))}
+
+    <h3 class="mt-12">Histórico de asignaciones</h3>
     ${table(['Trabajador', 'Tag', 'Inicio', 'Fin'], history.map((h) => [h.worker_name, h.tag_mac, new Date(h.assigned_at).toLocaleString(), h.unassigned_at ? new Date(h.unassigned_at).toLocaleString() : '-']))}
   `;
+}
+
+async function createWorker() {
+  await api('/workers', {
+    method: 'POST',
+    body: JSON.stringify({ dni: q('wDni').value, fullName: q('wName').value, role: 'trabajador' })
+  });
+  renderAssignments();
 }
 
 async function assignTag() {
@@ -287,7 +308,20 @@ function startRealtime() {
   });
 }
 
+(function wireLoginForm() {
+  const form = q('loginForm');
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await login();
+  });
+})();
+
 (async function bootstrap() {
+  const resetToken = new URLSearchParams(window.location.search).get('reset_token');
+  if (resetToken) {
+    q('rpToken').value = resetToken;
+  }
+
   if (!token) return;
   try {
     currentUser = await api('/auth/me');
@@ -296,14 +330,6 @@ function startRealtime() {
     setSessionText();
     startRealtime();
     showSection('dashboard');
-
-    const resetToken = new URLSearchParams(window.location.search).get('reset_token');
-    if (resetToken) {
-      q('rpToken').value = resetToken;
-      q('loginView').hidden = false;
-      q('appView').hidden = true;
-      alert('Introduce la nueva contraseña para completar la recuperación.');
-    }
   } catch {
     localStorage.removeItem('cc_token');
     token = '';

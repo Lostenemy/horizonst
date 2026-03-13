@@ -96,3 +96,10 @@ Implementado en esta iteración:
 - Separación explícita de estados:
   - Usuario autenticable: `active/inactive` (tabla `app_users`).
   - Estado operativo de presencia: `dentro/fuera/alarma` (derivado de sesiones y alertas).
+
+- Correcciones de validación real aplicadas:
+  - SMTP DATA finalizado correctamente con terminación `\r\n.\r\n` para evitar `lost connection after DATA`.
+  - Login compacto y envío por Enter en formulario (`submit`).
+  - Alta operativa de trabajadores añadida en UI para desbloquear flujo de asignación de tags.
+  - Alta/promoción a `superadministrador` bloqueada en UI y endurecida en backend.
+  - Configuraciones de ejemplo saneadas sin secretos reales versionados.

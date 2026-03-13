@@ -242,3 +242,10 @@ A helper script is included at `scripts/create-database.sql`.
   - Inventario: `/gateways`, `/tags`
   - Tiempo real operativo: `/realtime/snapshot` y `/realtime/stream` (SSE con detalle de trabajadores dentro, tiempo, tag y alertas activas)
   - Informes inspección: `/reports/inspection.pdf`, `/reports/inspection.xlsx`
+
+- Seguridad de credenciales:
+  - `.env.example` solo incluye placeholders (`change_me` / `example.invalid`).
+  - No se versionan secretos reales ni credenciales productivas.
+- Restricción de roles en creación de usuarios:
+  - La UI no ofrece `superadministrador` como rol de alta.
+  - Backend rechaza creación/edición de usuarios a `superadministrador` vía `/users`.

@@ -62,11 +62,11 @@ class SmtpClient {
       'Content-Type: text/plain; charset="utf-8"',
       'Content-Transfer-Encoding: 8bit',
       '',
-      text.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..'),
-      '.'
+      text.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..')
     ].join('\r\n');
 
-    await this.write(body);
+    const dataPayload = `${body}\r\n.\r\n`;
+    await this.write(dataPayload);
     this.expect(await this.readResponse(), [250]);
   }
 

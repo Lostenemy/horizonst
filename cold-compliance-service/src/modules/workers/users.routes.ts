@@ -6,6 +6,14 @@ export const usersRouter = Router();
 
 usersRouter.use(requireAuth);
 
+function assertRoleAllowedForManagement(role: unknown): void {
+  if (role === 'superadministrador') {
+    const error = new Error('role_not_allowed');
+    (error as Error & { statusCode?: number }).statusCode = 400;
+    throw error;
+  }
+}
+
 usersRouter.get('/', requireRoles(['administrador', 'superadministrador']), async (_req, res, next) => {
   try {
     const result = await db.query(
@@ -21,6 +29,7 @@ usersRouter.get('/', requireRoles(['administrador', 'superadministrador']), asyn
 usersRouter.post('/', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
     const { nombre, apellidos, email, telefono, dni, rol, estado, password, turno } = req.body;
+    assertRoleAllowedForManagement(rol);
     const result = await db.query(
       `INSERT INTO app_users(first_name,last_name,email,phone,dni,role,status,password_hash,shift)
        VALUES($1,$2,$3,$4,$5,$6,$7,crypt($8, gen_salt('bf')),$9)
@@ -36,6 +45,9 @@ usersRouter.post('/', requireRoles(['administrador', 'superadministrador']), asy
 usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
     const { nombre, apellidos, email, telefono, dni, rol, estado, password, turno } = req.body;
+    if (rol !== undefined && rol !== null) {
+      assertRoleAllowedForManagement(rol);
+    }
     const result = await db.query(
       `UPDATE app_users
        SET first_name = COALESCE($2, first_name),

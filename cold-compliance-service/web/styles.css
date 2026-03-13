@@ -13,12 +13,17 @@ body { margin: 0; font-family: Inter, Arial, sans-serif; background: var(--bg); 
 .subtitle { margin: 4px 0 0; opacity: .9; font-size: 13px; }
 .container { max-width: 1200px; margin: 16px auto; padding: 0 12px; }
 .panel { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: 0 2px 14px rgba(15,61,94,.1); margin-bottom: 14px; }
+.login-wrap { min-height: calc(100vh - 170px); display: flex; align-items: center; justify-content: center; }
+.login-card { width: 100%; max-width: 440px; }
+.muted { color: #5f6b7a; margin-top: -6px; margin-bottom: 10px; }
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 button { border: 0; background: var(--accent); color: white; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
 button.secondary { background: #607d8b; }
 button.danger { background: var(--danger); }
+button.full { width: 100%; }
 input, select { width: 100%; padding: 8px; border: 1px solid #d1d9e6; border-radius: 8px; }
 .grid { display: grid; gap: 8px; }
+.grid.one { grid-template-columns: 1fr; }
 .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .mt-12 { margin-top: 12px; }
@@ -26,11 +31,12 @@ input, select { width: 100%; padding: 8px; border: 1px solid #d1d9e6; border-rad
 .metric { background: #edf4fb; border: 1px solid #d9e7f5; border-radius: 8px; padding: 10px; }
 .metric b { font-size: 22px; display: block; }
 table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-th, td { border-bottom: 1px solid #e4e9f1; padding: 8px; text-align: left; }
+th, td { border-bottom: 1px solid #e4e9f1; padding: 8px; text-align: left; vertical-align: top; }
 .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
 .badge.ok { background: #e5f6e8; color: #1f7a2f; }
 .badge.warn { background: #fff4e5; color: #ad6200; }
 .badge.alert { background: #ffe5e5; color: #af1e1e; }
 @media (max-width: 860px) {
   .grid.two, .grid.three, .metrics { grid-template-columns: 1fr; }
+  .login-wrap { min-height: auto; }
 }
