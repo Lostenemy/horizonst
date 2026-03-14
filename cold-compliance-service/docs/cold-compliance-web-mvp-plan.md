@@ -126,3 +126,7 @@ Implementado en esta iteración:
 - Clarificación funcional dashboard:
   - `Incidencias activas` ≠ `reglas activas`.
   - Se muestran ambos datos por separado en home para evitar ambigüedad operativa.
+
+- Ajuste final de criterio operativo:
+  - Dashboard: muestra solo alarmas/ incidencias disparadas activas (`alerts` sin reconocer).
+  - Gestión de alarmas: muestra reglas configuradas con estados `encendida`/`apagada` y estado operativo `activa` cuando ya disparó.

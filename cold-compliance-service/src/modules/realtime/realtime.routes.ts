@@ -6,7 +6,7 @@ export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
 
 async function loadOperationalSnapshot() {
-  const [presence, alerts, rules] = await Promise.all([
+  const [presence, alerts] = await Promise.all([
     db.query(
       `SELECT s.id,
               COALESCE(s.worker_id, wta.worker_id) AS worker_id,
@@ -32,24 +32,15 @@ async function loadOperationalSnapshot() {
        WHERE acknowledged_at IS NULL
        ORDER BY created_at DESC
        LIMIT 200`
-    ),
-    db.query(
-      `SELECT id, description, buzzer_shaker_minutes, alarm_minutes
-       FROM alarm_rules
-       WHERE active = true
-       ORDER BY created_at DESC
-       LIMIT 100`
     )
   ]);
 
   return {
     workersInside: presence.rows,
     activeAlerts: alerts.rows,
-    activeAlarmRules: rules.rows,
     totals: {
       workersInside: presence.rowCount,
-      activeAlerts: alerts.rowCount,
-      activeAlarmRules: rules.rowCount
+      activeAlerts: alerts.rowCount
     },
     ts: new Date().toISOString()
   };

@@ -254,5 +254,5 @@ A helper script is included at `scripts/create-database.sql`.
 
 - Semántica dashboard:
   - `Trabajadores detectados dentro` se calcula desde sesiones activas (`cold_room_sessions.ended_at IS NULL`).
-  - `Incidencias activas` son alertas disparadas (`alerts.acknowledged_at IS NULL`).
-  - `Reglas de alarma activas` son configuraciones habilitadas en `alarm_rules`.
+  - `Alarmas activas (disparadas)` son alertas/incidencias abiertas (`alerts.acknowledged_at IS NULL`).
+  - La configuración de reglas (`encendida`/`apagada`) y su estado operativo (`activa`) se consulta en la pantalla de gestión de alarmas.

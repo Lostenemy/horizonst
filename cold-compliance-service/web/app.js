@@ -116,23 +116,19 @@ async function renderDashboard(snapshot) {
     stateBadge(w.presence_status)
   ]);
   const alertsRows = data.activeAlerts.map((a) => [a.alert_type, a.severity, a.message, new Date(a.created_at).toLocaleString()]);
-  const alarmRuleRows = (data.activeAlarmRules || []).map((r) => [r.description, r.buzzer_shaker_minutes, r.alarm_minutes]);
 
   q('dashboard').innerHTML = `
     <h2>Dashboard operativo</h2>
     <div class="metrics">
       <div class="metric"><small>Trabajadores detectados dentro</small><b>${data.totals.workersInside}</b></div>
-      <div class="metric"><small>Incidencias activas (disparadas)</small><b>${data.totals.activeAlerts}</b></div>
-      <div class="metric"><small>Reglas de alarma activas</small><b>${data.totals.activeAlarmRules ?? 0}</b></div>
+      <div class="metric"><small>Alarmas activas (disparadas)</small><b>${data.totals.activeAlerts}</b></div>
       <div class="metric"><small>Última actualización</small><b style="font-size:14px">${new Date(data.ts).toLocaleTimeString()}</b></div>
     </div>
-    <p class="muted">Nota: “Incidencias activas” muestra alertas disparadas sin reconocer. “Reglas de alarma activas” muestra configuración habilitada.</p>
+    <p class="muted">Nota: este panel muestra alarmas/incidencias realmente disparadas, no reglas de configuración.</p>
     <h3>Trabajadores dentro (presencia real)</h3>
     ${table(['Trabajador', 'DNI', 'Tag', 'Min dentro', 'Estado'], workersRows)}
-    <h3 class="mt-12">Incidencias activas (disparadas)</h3>
+    <h3 class="mt-12">Alarmas activas (disparadas)</h3>
     ${table(['Tipo', 'Severidad', 'Mensaje', 'Fecha'], alertsRows)}
-    <h3 class="mt-12">Reglas de alarma activas (configuración)</h3>
-    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma'], alarmRuleRows)}
   `;
 }
 
@@ -271,12 +267,13 @@ async function renderAlarms() {
       <input id="aAlarm" type="number" min="1" placeholder="Minutos alarma" />
     </div>
     <button class="mt-12" onclick="createAlarmRule()">Crear alarma</button>
-    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Estado', 'Acciones'], rules.map((r) => [
+    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Configuración', 'Estado operativo', 'Acciones'], rules.map((r) => [
       r.description,
       r.buzzer_shaker_minutes,
       r.alarm_minutes,
-      r.active ? 'activa' : 'desactiva',
-      `<button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Desactivar' : 'Activar'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`
+      r.active ? 'encendida' : 'apagada',
+      r.operational_status || (r.active ? 'encendida' : 'apagada'),
+      `<button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`
     ]))}
   `;
 }

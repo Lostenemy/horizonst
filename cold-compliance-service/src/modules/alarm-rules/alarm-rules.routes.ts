@@ -7,7 +7,22 @@ alarmRulesRouter.use(requireAuth);
 
 alarmRulesRouter.get('/', async (_req, res, next) => {
   try {
-    res.json((await db.query('SELECT * FROM alarm_rules ORDER BY created_at DESC')).rows);
+    const result = await db.query(
+      `SELECT r.*,
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM alerts a
+                  WHERE a.acknowledged_at IS NULL
+                    AND (a.alert_type IN ('alarm_rule_warning','alarm_rule_alarm'))
+                    AND a.metadata @> jsonb_build_object('ruleId', r.id)::jsonb
+                ) THEN 'activa'
+                WHEN r.active = true THEN 'encendida'
+                ELSE 'apagada'
+              END AS operational_status
+       FROM alarm_rules r
+       ORDER BY r.created_at DESC`
+    );
+    res.json(result.rows);
   } catch (error) {
     next(error);
   }
