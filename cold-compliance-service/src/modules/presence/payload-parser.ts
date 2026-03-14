@@ -17,6 +17,37 @@ function inferEventType(payload: any): ParsedPresenceEvent['eventType'] {
   return 'heartbeat';
 }
 
+
+function normalizeTimestamp(value: unknown): string {
+  if (value === null || value === undefined) return new Date().toISOString();
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const abs = Math.abs(value);
+    if (abs > 1e12) return new Date(value).toISOString();
+    if (abs > 1e9) return new Date(value * 1000).toISOString();
+    return new Date(value).toISOString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return new Date().toISOString();
+
+    if (/^\d+$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        const abs = Math.abs(numeric);
+        if (abs > 1e12) return new Date(numeric).toISOString();
+        if (abs > 1e9) return new Date(numeric * 1000).toISOString();
+      }
+    }
+
+    const parsed = Date.parse(trimmed);
+    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+  }
+
+  return new Date().toISOString();
+}
+
 function normalizeMac(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const v = String(value).trim();
@@ -116,7 +147,7 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer): ParsedPr
   list.forEach((item: any, idx: number) => {
     if (isGatewaySelfDescription(item)) return;
 
-    const timestamp = item.timestamp ?? item.ts ?? item.created_at ?? new Date().toISOString();
+    const timestamp = normalizeTimestamp(item.timestamp ?? item.ts ?? item.created_at);
     const tagId = pickTagIdentifier(item, gatewayMac);
     if (!tagId) return;
 

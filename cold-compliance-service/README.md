@@ -259,3 +259,5 @@ A helper script is included at `scripts/create-database.sql`.
 
 - Parser MQTT de presencia: se ignoran mensajes de autodescripción de gateway (device_name/company_name/product_model/firmware...) para no usar `ble_mac` de gateway como `tag_uid`.
 - En payloads `data[]` se priorizan detecciones beacon/tag reales (`mac`, `type=bxp-button`, `type_code=7`) para abrir sesiones válidas de trabajador.
+
+- Timestamp MQTT normalizado: soporta epoch en ms/segundos e ISO-8601 antes de persistir `presence_events` y evaluar compliance.
