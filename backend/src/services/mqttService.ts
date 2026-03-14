@@ -13,7 +13,14 @@ let mqttConnected = false;
 let mqttLastError: string | null = null;
 let reconnectDelay = config.mqtt.reconnectPeriod;
 
-const OFFICIAL_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK3/+/send', 'devices/MK4', 'devices/RF1'];
+const OFFICIAL_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK3/+/send', 'devices/MK4', 'devices/RF1', 'gw/+/publish'];
+
+
+const parseGatewayMacFromTopic = (topic: string): string | null => {
+  const match = topic.match(/^gw\/([^/]+)\/publish$/i);
+  if (!match) return null;
+  return String(match[1]).replace(/[:-]/g, '').toLowerCase();
+};
 
 const isBadCredentialsError = (error: Error): boolean => {
   const message = `${error.name} ${error.message}`.toLowerCase();
@@ -153,7 +160,7 @@ export const initMqtt = async (): Promise<void> => {
         }
       }
 
-      const gatewayMac = records[0]?.gatewayMac || null;
+      const gatewayMac = records[0]?.gatewayMac || parseGatewayMacFromTopic(topic) || null;
       try {
         if (shouldPersistLocally) {
           await pool.query(
