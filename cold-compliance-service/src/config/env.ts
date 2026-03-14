@@ -10,7 +10,7 @@ const schema = z.object({
   DB_HOST: z.string().default('postgres'),
   DB_PORT: z.coerce.number().default(5432),
   DB_USER: z.string().default('horizonst'),
-  DB_PASSWORD: z.string().default('horizonst'),
+  DB_PASSWORD: z.string().default('change_me'),
   DB_NAME: z.string().default('cold_compliance'),
   MQTT_URL: z.string().default('mqtt://vernemq:1883'),
   MQTT_USERNAME: z.string().optional(),
@@ -32,7 +32,17 @@ const schema = z.object({
   TAG_CONTROL_MSG_ID_START: z.coerce.number().default(1100),
   TAG_CONTROL_REQUIRE_REPLY: z.coerce.boolean().default(true),
   TAG_CONTROL_DEDUP_WINDOW_MS: z.coerce.number().default(10000),
-  TAG_CONTROL_GATEWAY_STRATEGY: z.enum(['last_seen', 'camera_assigned', 'hybrid']).default('hybrid')
+  TAG_CONTROL_GATEWAY_STRATEGY: z.enum(['last_seen', 'camera_assigned', 'hybrid']).default('hybrid'),
+  MAIL_ENABLED: z.coerce.boolean().default(true),
+  MAIL_HOST: z.string().default('mail'),
+  MAIL_PORT: z.coerce.number().default(465),
+  MAIL_SECURE: z.coerce.boolean().default(true),
+  MAIL_USER: z.string().default('no_reply@example.invalid'),
+  MAIL_PASSWORD: z.string().default('change_me'),
+  MAIL_FROM: z.string().default('no_reply@example.invalid'),
+  MAIL_EHLO_DOMAIN: z.string().default('example.invalid'),
+  MAIL_TLS_REJECT_UNAUTHORIZED: z.coerce.boolean().default(false),
+  APP_BASE_URL: z.string().default('http://localhost:3100')
 });
 
 export const env = schema.parse(process.env);

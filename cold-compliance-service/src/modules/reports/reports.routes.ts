@@ -1,52 +1,49 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { Request, Response, Router } from 'express';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { db } from '../../db/pool';
+import { requireAuth, requireRoles } from '../../middleware/auth';
 
-interface DailySummaryRow {
-  full_name: string;
-  dni: string;
-  cold_room: string | null;
-  accumulated_seconds: number | string;
-}
-
-interface IncidentReportRow {
-  created_at: string;
-  incident_type: string;
-  reason: string;
-  status: string;
+interface InspectionRow {
+  worker_name: string;
+  worker_dni: string;
+  tag_mac: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_minutes: number;
 }
 
 export const reportsRouter = Router();
-const outDir = path.resolve(process.cwd(), 'tmp-reports');
-fs.mkdirSync(outDir, { recursive: true });
+reportsRouter.use(requireAuth, requireRoles(['administrador', 'superadministrador']));
 
-reportsRouter.get('/daily-summary.xlsx', async (req: Request, res: Response, next) => {
+async function loadInspectionRows(): Promise<InspectionRow[]> {
+  return (
+    await db.query<InspectionRow>(
+      `SELECT w.full_name as worker_name,
+              w.dni as worker_dni,
+              COALESCE(t.tag_uid, '') as tag_mac,
+              s.started_at,
+              s.ended_at,
+              COALESCE(ROUND((EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))/60)::numeric, 2), 0)::float as duration_minutes
+       FROM cold_room_sessions s
+       JOIN workers w ON w.id = s.worker_id
+       LEFT JOIN tags t ON t.id = s.tag_id
+       ORDER BY s.started_at DESC
+       LIMIT 2000`
+    )
+  ).rows;
+}
+
+reportsRouter.get('/inspection.xlsx', async (_req: Request, res: Response, next) => {
   try {
-    const date = String(req.query.date ?? new Date().toISOString().slice(0, 10));
-    const rows = (
-      await db.query<DailySummaryRow>(
-        `SELECT w.full_name, w.dni, cr.name as cold_room, wa.accumulated_seconds
-         FROM workday_accumulators wa
-         JOIN workers w ON w.id = wa.worker_id
-         LEFT JOIN cold_rooms cr ON cr.id = wa.cold_room_id
-         WHERE wa.workday_date = $1
-         ORDER BY wa.accumulated_seconds DESC`,
-        [date]
-      )
-    ).rows;
-
+    const rows = await loadInspectionRows();
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Resumen diario');
-    ws.addRow(['Trabajador', 'DNI', 'Cámara', 'Minutos efectivos']);
-    rows.forEach((row: DailySummaryRow) => {
-      ws.addRow([row.full_name, row.dni, row.cold_room ?? '', Number(row.accumulated_seconds) / 60]);
-    });
+    const ws = wb.addWorksheet('Inspeccion');
+    ws.addRow(['Trabajador', 'DNI', 'Tag MAC', 'Entrada', 'Salida', 'Minutos']);
+    rows.forEach((row) => ws.addRow([row.worker_name, row.worker_dni, row.tag_mac, row.started_at, row.ended_at ?? '', row.duration_minutes]));
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="daily-summary-${date}.xlsx"`);
+    res.setHeader('Content-Disposition', 'attachment; filename="inspection.xlsx"');
     await wb.xlsx.write(res);
     res.end();
   } catch (error) {
@@ -54,22 +51,17 @@ reportsRouter.get('/daily-summary.xlsx', async (req: Request, res: Response, nex
   }
 });
 
-reportsRouter.get('/incidents.pdf', async (_req: Request, res: Response, next) => {
+reportsRouter.get('/inspection.pdf', async (_req: Request, res: Response, next) => {
   try {
-    const rows = (await db.query<IncidentReportRow>(
-      `SELECT created_at, incident_type, reason, status FROM incidents ORDER BY created_at DESC LIMIT 200`
-    )).rows;
-
+    const rows = await loadInspectionRows();
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="incidents.pdf"');
-    const doc = new PDFDocument({ margin: 40 });
+    res.setHeader('Content-Disposition', 'attachment; filename="inspection.pdf"');
+    const doc = new PDFDocument({ margin: 30 });
     doc.pipe(res);
-    doc.fontSize(16).text('Informe de incidencias PRL', { underline: true });
+    doc.fontSize(14).text('Informe inspección RD 1561/1995');
     doc.moveDown();
-    rows.forEach((row: IncidentReportRow) => {
-      doc.fontSize(10).text(`${new Date(row.created_at).toISOString()} | ${row.incident_type} | ${row.status}`);
-      doc.text(`Motivo: ${row.reason}`);
-      doc.moveDown(0.5);
+    rows.forEach((row) => {
+      doc.fontSize(9).text(`${row.worker_name} | ${row.worker_dni} | ${row.tag_mac} | ${row.started_at} | ${row.ended_at ?? '-'} | ${row.duration_minutes}`);
     });
     doc.end();
   } catch (error) {

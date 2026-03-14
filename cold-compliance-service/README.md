@@ -226,3 +226,38 @@ CREATE DATABASE cold_compliance OWNER horizonst;
 ```
 
 A helper script is included at `scripts/create-database.sql`.
+
+## Web MVP integrado
+
+- UI servida por el propio servicio en `/` (estáticos en `/web/*`).
+- Credencial inicial obligatoria:
+  - usuario: `super`
+  - contraseña inicial: `20025@BLELoRa?`
+- Endpoints funcionales añadidos para MVP:
+  - Auth: `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`
+    - Recuperación de contraseña con correo SMTP real (token + enlace); no depende de logs manuales.
+  - Usuarios: `/users` (desactivación solo `administrador` y `superadministrador`; borrado solo `superadministrador`)
+  - Dashboard: `/dashboard/presence`, `/dashboard/alerts`
+  - Alarmas configurables: `/alarm-rules`
+  - Inventario: `/gateways`, `/tags`
+  - Tiempo real operativo: `/realtime/snapshot` y `/realtime/stream` (SSE con detalle de trabajadores dentro, tiempo, tag y alertas activas)
+  - Informes inspección: `/reports/inspection.pdf`, `/reports/inspection.xlsx`
+
+- Seguridad de credenciales:
+  - `.env.example` solo incluye placeholders (`change_me` / `example.invalid`).
+  - No se versionan secretos reales ni credenciales productivas.
+- Restricción de roles en creación de usuarios:
+  - La UI no ofrece `superadministrador` como rol de alta.
+  - Backend rechaza creación/edición de usuarios a `superadministrador` vía `/users`.
+
+- SMTP interno recomendado en Docker: usar `MAIL_HOST=mail.horizonst.com.es` y alias de red en el servicio `mail` para validar TLS por nombre de host.
+
+- Semántica dashboard:
+  - `Trabajadores detectados dentro` se calcula desde sesiones activas (`cold_room_sessions.ended_at IS NULL`).
+  - `Alarmas activas (disparadas)` son alertas/incidencias abiertas (`alerts.acknowledged_at IS NULL`).
+  - La configuración de reglas (`encendida`/`apagada`) y su estado operativo (`activa`) se consulta en la pantalla de gestión de alarmas.
+
+- Parser MQTT de presencia: se ignoran mensajes de autodescripción de gateway (device_name/company_name/product_model/firmware...) para no usar `ble_mac` de gateway como `tag_uid`.
+- En payloads `data[]` se priorizan detecciones beacon/tag reales (`mac`, `type=bxp-button`, `type_code=7`) para abrir sesiones válidas de trabajador.
+
+- Timestamp MQTT normalizado: soporta epoch en ms/segundos e ISO-8601 antes de persistir `presence_events` y evaluar compliance.

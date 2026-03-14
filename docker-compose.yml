@@ -116,6 +116,16 @@ services:
       - TAG_CONTROL_REQUIRE_REPLY=${TAG_CONTROL_REQUIRE_REPLY:-true}
       - TAG_CONTROL_DEDUP_WINDOW_MS=${TAG_CONTROL_DEDUP_WINDOW_MS:-10000}
       - TAG_CONTROL_GATEWAY_STRATEGY=${TAG_CONTROL_GATEWAY_STRATEGY:-hybrid}
+      - MAIL_ENABLED=${COLD_MAIL_ENABLED:-true}
+      - MAIL_HOST=${COLD_MAIL_HOST:-mail.horizonst.com.es}
+      - MAIL_PORT=${COLD_MAIL_PORT:-465}
+      - MAIL_SECURE=${COLD_MAIL_SECURE:-true}
+      - MAIL_USER=${COLD_MAIL_USER}
+      - MAIL_PASSWORD=${COLD_MAIL_PASSWORD}
+      - MAIL_FROM=${COLD_MAIL_FROM:-no_reply@horizonst.com.es}
+      - MAIL_EHLO_DOMAIN=${COLD_MAIL_EHLO_DOMAIN:-horizonst.com.es}
+      - MAIL_TLS_REJECT_UNAUTHORIZED=${COLD_MAIL_TLS_REJECT_UNAUTHORIZED:-true}
+      - APP_BASE_URL=${COLD_APP_BASE_URL:-https://horneo.horizonst.com.es}
     depends_on:
       - postgres
       - vernemq
@@ -383,7 +393,9 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - horizonst
+      horizonst:
+        aliases:
+          - mail.horizonst.com.es
 
   webmail:
     image: roundcube/roundcubemail:1.6.11-apache

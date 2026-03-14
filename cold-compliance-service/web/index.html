@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Horneo | Cold Compliance</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Horneo · Cold Compliance</h1>
+      <p class="subtitle">Control de presencia y alertas en cámara frigorífica</p>
+    </div>
+    <div id="sessionBox"></div>
+  </header>
+
+  <main class="container">
+    <section id="loginView" class="login-wrap">
+      <form id="loginForm" class="panel login-card">
+        <h2>Acceso al sistema</h2>
+        <p class="muted">Introduce tus credenciales para continuar.</p>
+        <div class="grid one">
+          <input id="username" autocomplete="username" placeholder="Usuario o email" required />
+          <input id="password" autocomplete="current-password" type="password" placeholder="Contraseña" required />
+        </div>
+        <button type="submit" class="mt-12 full">Entrar</button>
+
+        <details class="mt-12">
+          <summary>Recuperar contraseña</summary>
+          <div class="grid one mt-12">
+            <input id="fpEmail" placeholder="Email de cuenta" />
+            <button type="button" onclick="forgotPassword()">Enviar enlace de recuperación</button>
+            <input id="rpToken" placeholder="Token de recuperación" />
+            <input id="rpPass" type="password" placeholder="Nueva contraseña" />
+            <button type="button" onclick="resetPassword()">Aplicar nueva contraseña</button>
+          </div>
+        </details>
+      </form>
+    </section>
+
+    <section id="appView" hidden>
+      <nav class="tabs">
+        <button onclick="showSection('dashboard')">Inicio</button>
+        <button onclick="showSection('users')">Usuarios</button>
+        <button onclick="showSection('inventory')">Gateways y tags</button>
+        <button onclick="showSection('assignments')">Asignaciones</button>
+        <button onclick="showSection('alarms')">Alarmas</button>
+        <button onclick="showSection('reports')">Informes</button>
+      </nav>
+
+      <section id="dashboard" class="panel"></section>
+      <section id="users" class="panel" hidden></section>
+      <section id="inventory" class="panel" hidden></section>
+      <section id="assignments" class="panel" hidden></section>
+      <section id="alarms" class="panel" hidden></section>
+      <section id="reports" class="panel" hidden></section>
+    </section>
+  </main>
+
+  <script src="/web/app.js"></script>
+</body>
+</html>
