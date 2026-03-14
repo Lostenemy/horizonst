@@ -27,6 +27,7 @@ function normalizeMac(value: unknown): string | null {
 
 function toItems(payload: any): any[] {
   if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
   if (Array.isArray(payload.tags)) return payload.tags;
   if (Array.isArray(payload.events)) return payload.events;
   if (Array.isArray(payload.devices)) return payload.devices;
@@ -36,49 +37,69 @@ function toItems(payload: any): any[] {
   return [payload];
 }
 
+function isGatewaySelfDescription(item: any): boolean {
+  if (!item || typeof item !== 'object') return false;
+  const hasGatewayDescriptor = Boolean(
+    item.device_name ||
+      item.company_name ||
+      item.product_model ||
+      item.firmware_version ||
+      item.hardware_version ||
+      item.software_version
+  );
+  const hasGatewayMacFields = Boolean(item.ble_mac || item.eth_mac);
+  const hasTagHint = Boolean(item.tagId || item.tag_uid || item.tag_mac || item.mac || item.type_code === 7 || String(item.type ?? '').toLowerCase().includes('bxp'));
+  return hasGatewayDescriptor && hasGatewayMacFields && !hasTagHint;
+}
+
 function pickTagIdentifier(item: any, gatewayMac: string): string | null {
-  const preferredCandidates = [
+  const typeCode = Number(item?.type_code ?? item?.typeCode ?? -1);
+  const typeText = String(item?.type ?? '').toLowerCase();
+
+  const explicitTagCandidates = [
     item.tagId,
     item.tag_id,
     item.tagUid,
     item.tag_uid,
     item.tagMac,
     item.tag_mac,
-    item.ble_mac,
-    item.bleMac,
-    item.deviceAddress,
-    item.device_address,
-    item.addr,
-    item.address,
     item?.data?.tagId,
     item?.data?.tag_id,
     item?.data?.tag_uid,
     item?.data?.tag_mac,
-    item?.data?.ble_mac,
-    item?.beacon?.mac,
-    item?.beacon?.address,
-    item?.adv?.mac,
     item?.payload?.tagId,
-    item?.payload?.tag_uid,
-    item?.payload?.ble_mac
+    item?.payload?.tag_uid
   ];
 
-  for (const candidate of preferredCandidates) {
+  for (const candidate of explicitTagCandidates) {
     const normalized = normalizeMac(candidate);
     if (normalized && normalized !== gatewayMac) return normalized;
   }
 
-  const genericCandidates = [
+  const likelyBeaconCandidates = [
     item.mac,
-    item.deviceId,
-    item.device_id,
     item?.data?.mac,
-    item?.payload?.mac
+    item?.payload?.mac,
+    item.beacon?.mac,
+    item.adv?.mac,
+    item.deviceAddress,
+    item.device_address,
+    item.addr,
+    item.address
   ];
 
-  for (const candidate of genericCandidates) {
+  const looksLikeTagEvent = typeCode === 7 || typeText.includes('bxp-button') || typeText.includes('beacon') || typeText.includes('tag');
+  if (looksLikeTagEvent) {
+    for (const candidate of likelyBeaconCandidates) {
+      const normalized = normalizeMac(candidate);
+      if (normalized && normalized !== gatewayMac) return normalized;
+    }
+  }
+
+  const bleCandidates = [item.ble_mac, item.bleMac, item?.data?.ble_mac, item?.payload?.ble_mac];
+  for (const candidate of bleCandidates) {
     const normalized = normalizeMac(candidate);
-    if (normalized && normalized !== gatewayMac) return normalized;
+    if (normalized && normalized !== gatewayMac && looksLikeTagEvent) return normalized;
   }
 
   return null;
@@ -93,6 +114,8 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer): ParsedPr
   const events: ParsedPresenceEvent[] = [];
 
   list.forEach((item: any, idx: number) => {
+    if (isGatewaySelfDescription(item)) return;
+
     const timestamp = item.timestamp ?? item.ts ?? item.created_at ?? new Date().toISOString();
     const tagId = pickTagIdentifier(item, gatewayMac);
     if (!tagId) return;

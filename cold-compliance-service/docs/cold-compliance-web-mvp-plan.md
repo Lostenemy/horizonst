@@ -130,3 +130,6 @@ Implementado en esta iteración:
 - Ajuste final de criterio operativo:
   - Dashboard: muestra solo alarmas/ incidencias disparadas activas (`alerts` sin reconocer).
   - Gestión de alarmas: muestra reglas configuradas con estados `encendida`/`apagada` y estado operativo `activa` cuando ya disparó.
+
+- Parser MQTT de presencia: se ignoran mensajes de autodescripción de gateway (device_name/company_name/product_model/firmware...) para no usar `ble_mac` de gateway como `tag_uid`.
+- En payloads `data[]` se priorizan detecciones beacon/tag reales (`mac`, `type=bxp-button`, `type_code=7`) para abrir sesiones válidas de trabajador.

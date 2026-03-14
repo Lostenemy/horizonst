@@ -256,3 +256,6 @@ A helper script is included at `scripts/create-database.sql`.
   - `Trabajadores detectados dentro` se calcula desde sesiones activas (`cold_room_sessions.ended_at IS NULL`).
   - `Alarmas activas (disparadas)` son alertas/incidencias abiertas (`alerts.acknowledged_at IS NULL`).
   - La configuración de reglas (`encendida`/`apagada`) y su estado operativo (`activa`) se consulta en la pantalla de gestión de alarmas.
+
+- Parser MQTT de presencia: se ignoran mensajes de autodescripción de gateway (device_name/company_name/product_model/firmware...) para no usar `ble_mac` de gateway como `tag_uid`.
+- En payloads `data[]` se priorizan detecciones beacon/tag reales (`mac`, `type=bxp-button`, `type_code=7`) para abrir sesiones válidas de trabajador.
