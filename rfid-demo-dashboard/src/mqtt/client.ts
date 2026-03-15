@@ -5,7 +5,7 @@ import { logger } from '../logger.js';
 export const startMqttClient = (
   onMessage: (topic: string, payload: Buffer) => Promise<void>
 ): MqttClient => {
-  const clientId = `${config.mqtt.clientIdPrefix}${Math.random().toString(16).slice(2, 10)}`;
+  const clientId = config.mqtt.clientId;
   const url = `mqtt://${config.mqtt.host}:${config.mqtt.port}`;
   const options: IClientOptions = {
     username: config.mqtt.username,

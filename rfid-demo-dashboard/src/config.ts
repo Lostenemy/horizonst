@@ -25,7 +25,7 @@ export const config = {
     port: parseNumber(process.env.RFID_DEMO_MQTT_PORT, 1883),
     username: process.env.RFID_DEMO_MQTT_USER,
     password: process.env.RFID_DEMO_MQTT_PASS,
-    clientIdPrefix: process.env.RFID_DEMO_MQTT_CLIENT_ID_PREFIX || 'rfid_demo_dashboard_',
+    clientId: process.env.RFID_DEMO_MQTT_CLIENT_ID || 'rfid_demo_dashboard',
     topic: process.env.RFID_DEMO_MQTT_TOPIC || 'devices/RF1',
     qos: parseNumber(process.env.RFID_DEMO_MQTT_QOS, 1) as 0 | 1 | 2,
     protocolVersion: parseNumber(process.env.RFID_DEMO_MQTT_PROTOCOL_VERSION, 5) as 3 | 4 | 5,

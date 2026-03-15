@@ -37,6 +37,16 @@ Valores por defecto válidos para Docker en HorizonST:
 - `RFID_DEMO_MQTT_HOST=vernemq`
 - `RFID_DEMO_MQTT_PORT=1883`
 
+### Autenticación MQTT en HorizonST (vmq_auth_acl)
+
+En HorizonST el broker valida credenciales contra PostgreSQL (`vmq_auth_acl`) y requiere `client_id` fijo.
+
+Variables MQTT requeridas:
+
+- `RFID_DEMO_MQTT_USER`
+- `RFID_DEMO_MQTT_PASS`
+- `RFID_DEMO_MQTT_CLIENT_ID`
+
 ## Docker / Docker Compose
 
 El contenedor está preparado para ejecutarse sin pasos manuales extra:
