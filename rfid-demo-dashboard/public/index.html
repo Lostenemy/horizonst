@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RFID Demo Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <h1>HorizonST · RFID Demo Dashboard</h1>
+      <div class="status">
+        <span id="mqttStatus" class="badge">Conectando...</span>
+        <span id="clock"></span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card kpi">
+        <h2>Inventario activo</h2>
+        <div class="kpi-number" id="activeCount">0</div>
+        <div class="kpi-sub">
+          <span>Registradas: <strong id="registeredActiveCount">0</strong></span>
+          <span>No registradas: <strong id="unregisteredActiveCount">0</strong></span>
+          <span>Lecturas 24h: <strong id="readings24h">0</strong></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Inventario activo (toggle)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>EPC</th>
+                <th>Estado</th>
+                <th>Tipo</th>
+                <th>Lector</th>
+                <th>Última lectura</th>
+              </tr>
+            </thead>
+            <tbody id="activeTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Últimas lecturas</h2>
+        <ul id="readingsList" class="list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>No registradas</h2>
+        <ul id="unregisteredList" class="list"></ul>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
