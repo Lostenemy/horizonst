@@ -37,7 +37,7 @@ export const config = {
     port: parseNumber(process.env.RFID_DEMO_DB_PORT, 5432),
     user: process.env.RFID_DEMO_DB_USER || 'horizonst',
     password: process.env.RFID_DEMO_DB_PASSWORD || 'horizonst',
-    database: process.env.RFID_DEMO_DB_NAME || 'horizonst',
+    database: process.env.RFID_DEMO_DB_NAME || 'rfid_demo',
     ssl: parseBoolean(process.env.RFID_DEMO_DB_SSL, false)
   },
   business: {

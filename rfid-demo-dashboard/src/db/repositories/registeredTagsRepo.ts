@@ -3,18 +3,14 @@ import { pool } from '../pool.js';
 
 export const findRegisteredTag = async (epc: string): Promise<RegisteredTagInfo | null> => {
   const { rows } = await pool.query<{
-    card_uid: string;
-    dni: string;
-    first_name: string;
-    last_name: string;
-    company_name: string;
-    company_cif: string;
-    center_code: string;
+    epc: string;
+    name: string | null;
+    description: string | null;
     active: boolean;
   }>(
-    `SELECT card_uid, dni, first_name, last_name, company_name, company_cif, center_code, active
-     FROM public.rfid_cards
-     WHERE card_uid = $1
+    `SELECT epc, name, description, active
+     FROM public.rfid_demo_tags
+     WHERE epc = $1
      LIMIT 1`,
     [epc]
   );
@@ -25,13 +21,9 @@ export const findRegisteredTag = async (epc: string): Promise<RegisteredTagInfo 
   }
 
   return {
-    cardUid: row.card_uid,
-    dni: row.dni,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    companyName: row.company_name,
-    companyCif: row.company_cif,
-    centerCode: row.center_code,
+    epc: row.epc,
+    name: row.name,
+    description: row.description,
     active: row.active
   };
 };

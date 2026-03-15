@@ -39,3 +39,11 @@ CREATE INDEX IF NOT EXISTS idx_rfid_demo_inventory_state_active_updated
 
 CREATE INDEX IF NOT EXISTS idx_rfid_demo_inventory_state_registered_updated
   ON public.rfid_demo_inventory_state (is_registered, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.rfid_demo_tags (
+  epc VARCHAR(128) PRIMARY KEY,
+  name TEXT,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  active BOOLEAN NOT NULL DEFAULT TRUE
+);

@@ -10,13 +10,9 @@ export interface ParsedRead {
 }
 
 export interface RegisteredTagInfo {
-  cardUid: string;
-  dni: string;
-  firstName: string;
-  lastName: string;
-  companyName: string;
-  companyCif: string;
-  centerCode: string;
+  epc: string;
+  name: string | null;
+  description: string | null;
   active: boolean;
 }
 
