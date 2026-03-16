@@ -5,6 +5,7 @@ export interface ParsedRead {
   epc: string;
   readerMac: string;
   antenna: number | null;
+  rssi?: number | null;
   eventTs: Date;
   rawPayload: Record<string, unknown>;
 }
