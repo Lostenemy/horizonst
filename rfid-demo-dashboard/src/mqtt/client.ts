@@ -14,7 +14,9 @@ export const startMqttClient = (
     reconnectPeriod: config.mqtt.reconnectMs,
     protocolVersion: config.mqtt.protocolVersion,
     clientId,
-    clean: true
+    clean: config.mqtt.cleanSession,
+    resubscribe: true,
+    connectTimeout: config.mqtt.connectTimeoutMs
   };
 
   const client = mqtt.connect(url, options);
@@ -37,11 +39,34 @@ export const startMqttClient = (
   });
 
   client.on('reconnect', () => {
-    logger.warn('MQTT reconnecting');
+    logger.warn('MQTT reconnecting', { clientId, reconnectMs: config.mqtt.reconnectMs });
+  });
+
+  client.on('close', () => {
+    logger.warn('MQTT connection closed', { clientId });
+  });
+
+  client.on('offline', () => {
+    logger.warn('MQTT client offline', { clientId });
   });
 
   client.on('error', (error) => {
-    logger.error('MQTT error', { err: String(error) });
+    const errMessage = String(error);
+    logger.error('MQTT error', {
+      err: errMessage,
+      clientId,
+      protocolVersion: config.mqtt.protocolVersion,
+      host: config.mqtt.host,
+      topic: config.mqtt.topic
+    });
+
+    if (errMessage.includes('ECONNRESET')) {
+      logger.warn('MQTT connection reset by peer', {
+        hint: 'Revisar protocolVersion/clientId duplicado/ACL y cleanSession',
+        protocolVersion: config.mqtt.protocolVersion,
+        cleanSession: config.mqtt.cleanSession
+      });
+    }
   });
 
   return client;

@@ -14,6 +14,12 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 };
 
+const parseMqttProtocolVersion = (value: string | undefined): 3 | 4 | 5 => {
+  const parsed = parseNumber(value, 4);
+  if (parsed === 3 || parsed === 4 || parsed === 5) return parsed;
+  return 4;
+};
+
 
 const parseReaderAliases = (value: string | undefined): Record<string, string> => {
   const defaults: Record<string, string> = {
@@ -52,9 +58,11 @@ export const config = {
     clientId: process.env.RFID_DEMO_MQTT_CLIENT_ID || 'rfid_demo_dashboard',
     topic: process.env.RFID_DEMO_MQTT_TOPIC || 'devices/RF1',
     qos: parseNumber(process.env.RFID_DEMO_MQTT_QOS, 1) as 0 | 1 | 2,
-    protocolVersion: parseNumber(process.env.RFID_DEMO_MQTT_PROTOCOL_VERSION, 5) as 3 | 4 | 5,
+    protocolVersion: parseMqttProtocolVersion(process.env.RFID_DEMO_MQTT_PROTOCOL_VERSION),
     keepalive: parseNumber(process.env.RFID_DEMO_MQTT_KEEPALIVE, 60),
     reconnectMs: parseNumber(process.env.RFID_DEMO_MQTT_RECONNECT_MS, 1000),
+    cleanSession: parseBoolean(process.env.RFID_DEMO_MQTT_CLEAN, true),
+    connectTimeoutMs: parseNumber(process.env.RFID_DEMO_MQTT_CONNECT_TIMEOUT_MS, 30000),
     readerAliases: parseReaderAliases(process.env.RFID_DEMO_READER_ALIASES)
   },
   db: {
