@@ -66,37 +66,16 @@ const regBadge = (isRegistered) =>
 
 const renderEmptyRow = (colspan, message) => `<tr><td colspan="${colspan}"><div class="empty-state">${message}</div></td></tr>`;
 const renderEmptyList = (message) => `<li class="empty-state empty-list">${message}</li>`;
-const toCsv = (headers, rows) => {
-  const esc = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
-  return [headers.map(esc).join(','), ...rows.map((row) => row.map(esc).join(','))].join('\n');
-};
-
-const downloadCsv = (filename, csvContent) => {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
+const exportExecutiveExcel = () => {
   const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
+  link.href = '/api/export/executive-report.xlsx';
+  link.download = '';
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
 };
 
-const exportCurrentView = () => {
-  const ts = new Date().toISOString().replaceAll(':', '-');
-  const rows = [...state.activeInventory.values()].map((row) => [
-    row.epc,
-    row.isRegistered ? 'registrada' : 'no registrada',
-    row.lastDirection,
-    row.lastReaderMac,
-    row.lastAntenna ?? '',
-    row.lastEventTs
-  ]);
-  downloadCsv(`rfid-inventario-activo-${ts}.csv`, toCsv(['epc', 'tipo', 'direccion', 'lector', 'antena', 'lastEventTs'], rows));
-};
-
-exportBtnEl.addEventListener('click', exportCurrentView);
+exportBtnEl.addEventListener('click', exportExecutiveExcel);
 
 const setPresentationMode = (enabled) => {
   document.body.classList.toggle('presentation-mode', enabled);
@@ -194,7 +173,7 @@ const renderTags = () => {
   );
 
   if (rows.length === 0) {
-    tagsTableBodyEl.innerHTML = renderEmptyRow(4, 'No hay activos registrados en el sistema.');
+    tagsTableBodyEl.innerHTML = renderEmptyRow(5, 'No hay activos registrados en el sistema.');
     return;
   }
 
@@ -206,6 +185,7 @@ const renderTags = () => {
         <td>${escapeHtml(tag.name || '-')}</td>
         <td>${escapeHtml(tag.description || '-')}</td>
         <td>${fmtDate(tag.createdAt)}</td>
+        <td><button class="btn-danger" type="button" data-action="delete-tag" data-epc="${escapeHtml(tag.epc)}">Borrar</button></td>
       </tr>`
     )
     .join('');
@@ -261,6 +241,39 @@ tagFormEl.addEventListener('submit', async (event) => {
     setFormMessage(`Activo ${payload.item.epc} registrado correctamente.`);
   } catch (error) {
     setFormMessage(String(error), true);
+  }
+});
+
+
+tagsTableBodyEl.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  const actionButton = target.closest('[data-action="delete-tag"]');
+  if (!(actionButton instanceof HTMLButtonElement)) return;
+
+  const epc = actionButton.dataset.epc;
+  if (!epc) return;
+
+  const confirmed = window.confirm(`¿Seguro que quieres borrar el activo ${epc}?`);
+  if (!confirmed) return;
+
+  actionButton.disabled = true;
+
+  try {
+    const response = await fetch(`/api/tags/${encodeURIComponent(epc)}`, { method: 'DELETE' });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'No se pudo borrar el activo');
+    }
+
+    state.registeredTags.delete(epc);
+    renderTags();
+    setFormMessage(`Activo ${epc} borrado correctamente.`);
+  } catch (error) {
+    setFormMessage(String(error), true);
+  } finally {
+    actionButton.disabled = false;
   }
 });
 

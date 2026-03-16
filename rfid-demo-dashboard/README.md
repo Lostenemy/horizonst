@@ -87,6 +87,8 @@ docker run --rm -p 3200:3200 --env-file .env rfid-demo-dashboard:local
 - `GET /api/dashboard/unregistered`
 - `GET /api/tags?limit=500`
 - `POST /api/tags`
+- `DELETE /api/tags/:epc`
+- `GET /api/export/executive-report.xlsx`
 
 ## Eventos Socket.IO
 
@@ -119,3 +121,11 @@ psql -h <host> -U <user> -d rfid_demo -f migrations/seed_demo_tags.sql
 
 Este seed inserta EPCs plausibles orientados a trazabilidad/protección y hace upsert por EPC.
 Incluye EPCs `000000000000000000000617` y `000000000000000000000616` para que lecturas reales frecuentes aparezcan como registradas durante la demo, además de EPCs adicionales (`...701` a `...704`) para enriquecer la presentación.
+
+Para cargar actividad reciente verosímil (últimas lecturas + estado de inventario), ejecuta además:
+
+```bash
+psql -h <host> -U <user> -d rfid_demo -f migrations/seed_demo_activity.sql
+```
+
+Este segundo seed crea eventos recientes con naming operativo de lectores (`Lector-Puerta-Almacén-01`, `Lector-Acceso-360P`, `Lector-Zona-Carga-A`) y combina activos identificados y un activo sin identificar para demo realista.

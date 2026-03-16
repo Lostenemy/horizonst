@@ -60,3 +60,17 @@ export const upsertRegisteredTag = async (input: UpsertRegisteredTagInput): Prom
 
   return mapTag(rows[0]);
 };
+
+
+export const deactivateRegisteredTag = async (epc: string): Promise<RegisteredTagInfo | null> => {
+  const { rows } = await pool.query<RegisteredTagRow>(
+    `UPDATE public.rfid_demo_tags
+     SET active = FALSE
+     WHERE epc = $1
+     RETURNING epc, name, description, active, created_at`,
+    [epc]
+  );
+
+  const row = rows[0];
+  return row ? mapTag(row) : null;
+};
