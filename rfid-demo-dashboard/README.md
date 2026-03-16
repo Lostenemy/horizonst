@@ -46,6 +46,7 @@ Variables MQTT requeridas:
 - `RFID_DEMO_MQTT_USER`
 - `RFID_DEMO_MQTT_PASS`
 - `RFID_DEMO_MQTT_CLIENT_ID`
+- `RFID_DEMO_READER_ALIASES` (JSON opcional para mapear IDs técnicos de lector a nombres operativos en el dashboard)
 
 ## Docker / Docker Compose
 
@@ -116,4 +117,5 @@ Si quieres mostrar datos variados de tags registradas en una demo:
 psql -h <host> -U <user> -d rfid_demo -f migrations/seed_demo_tags.sql
 ```
 
-Este seed inserta EPCs plausibles con nombres de activos verosímiles y hace upsert por EPC.
+Este seed inserta EPCs plausibles con nombres operativos logísticos/institucionales y hace upsert por EPC.
+Incluye EPCs `000000000000000000000617` y `000000000000000000000616` para que lecturas reales frecuentes aparezcan como registradas durante la demo.

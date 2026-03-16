@@ -22,6 +22,7 @@ const tagFormEl = document.getElementById('tagForm');
 const tagFormMessageEl = document.getElementById('tagFormMessage');
 const exportBtnEl = document.getElementById('exportBtn');
 const presentationBtnEl = document.getElementById('presentationBtn');
+const presentationExitBtnEl = document.getElementById('presentationExitBtn');
 const footerVersionEl = document.getElementById('footerVersion');
 const tabs = [...document.querySelectorAll('.tab[data-view]')];
 const views = {
@@ -31,6 +32,18 @@ const views = {
 
 const appVersion = document.body.dataset.appVersion || 'v1.0.0';
 footerVersionEl.textContent = appVersion;
+
+
+const READER_LABELS = {
+  'demo-reader-01': 'Lector-Puerta-Principal',
+  'demo-reader-02': 'Lector-Acceso-Almacén'
+};
+
+const readerLabel = (value) => {
+  const key = String(value || '').trim().toLowerCase();
+  return READER_LABELS[key] || String(value || '-');
+};
+
 
 const fmtDate = (value) => {
   const date = new Date(value);
@@ -112,11 +125,21 @@ const exportCurrentView = () => {
 
 exportBtnEl.addEventListener('click', exportCurrentView);
 
+const setPresentationMode = (enabled) => {
+  document.body.classList.toggle('presentation-mode', enabled);
+  presentationBtnEl.textContent = enabled ? 'Salir de presentación' : 'Modo presentación';
+};
+
 presentationBtnEl.addEventListener('click', () => {
-  document.body.classList.toggle('presentation-mode');
-  presentationBtnEl.textContent = document.body.classList.contains('presentation-mode')
-    ? 'Salir de presentación'
-    : 'Modo presentación';
+  setPresentationMode(!document.body.classList.contains('presentation-mode'));
+});
+
+presentationExitBtnEl.addEventListener('click', () => setPresentationMode(false));
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && document.body.classList.contains('presentation-mode')) {
+    setPresentationMode(false);
+  }
 });
 
 const renderSummary = (summary) => {
@@ -143,7 +166,7 @@ const renderActive = () => {
         <td>${escapeHtml(row.epc)}</td>
         <td>${directionBadge(row.lastDirection)}</td>
         <td>${regBadge(row.isRegistered)}</td>
-        <td>${escapeHtml(row.lastReaderMac)}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</td>
+        <td>${escapeHtml(readerLabel(row.lastReaderMac))}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</td>
         <td>${fmtDate(row.lastEventTs)}</td>
       </tr>`
     )
@@ -162,7 +185,7 @@ const renderReadings = () => {
       (event) => `
       <li>
         <div><strong>${escapeHtml(event.epc)}</strong> ${directionBadge(event.direction)} ${regBadge(event.isRegistered)}</div>
-        <div>Lector: ${escapeHtml(event.readerMac)}${event.antenna !== null ? ` / Ant ${event.antenna}` : ''}</div>
+        <div>Lector: ${escapeHtml(readerLabel(event.readerMac))}${event.antenna !== null ? ` / Ant ${event.antenna}` : ''}</div>
         <div>Hora: ${fmtDate(event.eventTs)}</div>
       </li>`
     )
@@ -175,7 +198,7 @@ const renderUnregistered = () => {
   );
 
   if (rows.length === 0) {
-    unregisteredListEl.innerHTML = renderEmptyList('No hay tags no registradas actualmente.');
+    unregisteredListEl.innerHTML = renderEmptyList('No hay activos no registrados actualmente.');
     return;
   }
 
@@ -185,7 +208,7 @@ const renderUnregistered = () => {
       (row) => `
       <li>
         <div><strong>${escapeHtml(row.epc)}</strong> ${row.isActive ? '<span class="badge in">ACTIVA</span>' : '<span class="badge out">INACTIVA</span>'}</div>
-        <div>Lector: ${escapeHtml(row.lastReaderMac)}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</div>
+        <div>Lector: ${escapeHtml(readerLabel(row.lastReaderMac))}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</div>
         <div>Última lectura: ${fmtDate(row.lastSeenAt)}</div>
       </li>`
     )
@@ -198,7 +221,7 @@ const renderTags = () => {
   );
 
   if (rows.length === 0) {
-    tagsTableBodyEl.innerHTML = renderEmptyRow(4, 'No hay tags registradas todavía.');
+    tagsTableBodyEl.innerHTML = renderEmptyRow(4, 'No hay activos registrados todavía.');
     return;
   }
 
@@ -224,7 +247,7 @@ const loadTags = async () => {
   try {
     const response = await fetch('/api/tags?limit=1000');
     if (!response.ok) {
-      throw new Error('No se pudo cargar listado de tags');
+      throw new Error('No se pudo cargar listado de activos');
     }
 
     const payload = await response.json();
@@ -238,7 +261,7 @@ const loadTags = async () => {
 
 tagFormEl.addEventListener('submit', async (event) => {
   event.preventDefault();
-  setFormMessage('Registrando tag...');
+  setFormMessage('Registrando activo...');
 
   const formData = new FormData(tagFormEl);
   const body = {
@@ -256,13 +279,13 @@ tagFormEl.addEventListener('submit', async (event) => {
 
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.error || 'No se pudo registrar la etiqueta');
+      throw new Error(payload.error || 'No se pudo registrar el activo');
     }
 
     state.registeredTags.set(payload.item.epc, payload.item);
     renderTags();
     tagFormEl.reset();
-    setFormMessage(`Etiqueta ${payload.item.epc} registrada correctamente.`);
+    setFormMessage(`Activo ${payload.item.epc} registrado correctamente.`);
   } catch (error) {
     setFormMessage(String(error), true);
   }

@@ -14,6 +14,29 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 };
 
+
+const parseReaderAliases = (value: string | undefined): Record<string, string> => {
+  const defaults: Record<string, string> = {
+    'demo-reader-01': 'Lector-Puerta-Principal',
+    'demo-reader-02': 'Lector-Acceso-Almacén'
+  };
+
+  if (!value?.trim()) return defaults;
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, string>;
+    const normalized = Object.entries(parsed).reduce<Record<string, string>>((acc, [key, label]) => {
+      if (!key || typeof label !== 'string' || !label.trim()) return acc;
+      acc[key.trim().toLowerCase()] = label.trim();
+      return acc;
+    }, {});
+
+    return { ...defaults, ...normalized };
+  } catch {
+    return defaults;
+  }
+};
+
 export const config = {
   app: {
     port: parseNumber(process.env.RFID_DEMO_PORT, 3200),
@@ -30,7 +53,8 @@ export const config = {
     qos: parseNumber(process.env.RFID_DEMO_MQTT_QOS, 1) as 0 | 1 | 2,
     protocolVersion: parseNumber(process.env.RFID_DEMO_MQTT_PROTOCOL_VERSION, 5) as 3 | 4 | 5,
     keepalive: parseNumber(process.env.RFID_DEMO_MQTT_KEEPALIVE, 60),
-    reconnectMs: parseNumber(process.env.RFID_DEMO_MQTT_RECONNECT_MS, 1000)
+    reconnectMs: parseNumber(process.env.RFID_DEMO_MQTT_RECONNECT_MS, 1000),
+    readerAliases: parseReaderAliases(process.env.RFID_DEMO_READER_ALIASES)
   },
   db: {
     host: process.env.RFID_DEMO_DB_HOST || 'postgres',

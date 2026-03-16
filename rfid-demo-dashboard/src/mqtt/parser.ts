@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { ParsedRead } from '../types.js';
 
 const normalizeEpc = (value: unknown): string | null => {
@@ -25,6 +26,8 @@ const normalizeReaderMac = (value: unknown): string | null => {
 
   return raw;
 };
+
+const mapReaderAlias = (value: string): string => config.mqtt.readerAliases[value] || value;
 
 const normalizeAntenna = (value: unknown): number | null => {
   if (value === undefined || value === null) return null;
@@ -61,7 +64,7 @@ const parseSimplePayload = (parsed: Record<string, unknown>): ParsedRead[] => {
   return [
     {
       epc,
-      readerMac: normalizeReaderMac(parsed.readerMac ?? parsed.devmac ?? parsed.mac) || 'unknown_reader',
+      readerMac: mapReaderAlias(normalizeReaderMac(parsed.readerMac ?? parsed.devmac ?? parsed.mac) || 'unknown_reader'),
       antenna: normalizeAntenna(parsed.antenna ?? parsed.antennaId ?? parsed.antena),
       eventTs: parseTimestamp(parsed.timestamp ?? parsed.ts ?? parsed.time) || new Date(),
       rawPayload: parsed
@@ -75,7 +78,7 @@ const parseReaderPayload = (parsed: Record<string, unknown>): ParsedRead[] => {
     return [];
   }
 
-  const readerMac = normalizeReaderMac(parsed.devmac ?? parsed.readerMac ?? parsed.mac) || 'unknown_reader';
+  const readerMac = mapReaderAlias(normalizeReaderMac(parsed.devmac ?? parsed.readerMac ?? parsed.mac) || 'unknown_reader');
 
   return reads
     .map((entry) => {
@@ -124,7 +127,7 @@ export const parseRfidMessage = (payload: Buffer): ParsedRead[] => {
     return [
       {
         epc,
-        readerMac: 'unknown_reader',
+        readerMac: mapReaderAlias('unknown_reader'),
         antenna: null,
         eventTs: new Date(),
         rawPayload: { raw }

@@ -1,13 +1,14 @@
--- Optional seed data for commercial demos.
--- Run manually on rfid_demo DB when you need realistic registered tags.
+-- Optional seed data for executive demos (logistics / institutional).
+-- Run manually on rfid_demo DB when you need realistic registered assets.
 
 INSERT INTO public.rfid_demo_tags (epc, name, description, active)
 VALUES
-  ('E2000017221101441890C101', 'Palet farmacéutico A-12', 'Zona picking norte · Lote 2026-03', TRUE),
-  ('E2000017221101441890C102', 'Caja cadena frío B-07', 'Expedición hospitalaria · Ruta Madrid', TRUE),
-  ('E2000017221101441890C103', 'Contenedor instrumental C-03', 'Material quirúrgico estéril', TRUE),
-  ('E2000017221101441890C104', 'Activo móvil logística D-21', 'Carro de reparto interno', TRUE),
-  ('E2000017221101441890C105', 'Kit diagnóstico E-09', 'Laboratorio central · Inventario crítico', TRUE)
+  ('000000000000000000000617', 'Caja munición 5.56 · B17', 'Lote logístico ALFA · tránsito controlado', TRUE),
+  ('000000000000000000000616', 'Contenedor repuestos MRO · C09', 'Repuestos críticos de mantenimiento', TRUE),
+  ('E2000017221101441890C101', 'Palé raciones operativas · R12', 'Suministro de campaña · sector norte', TRUE),
+  ('E2000017221101441890C102', 'Kit comunicaciones tácticas · K04', 'Equipo radio cifrado listo para despliegue', TRUE),
+  ('E2000017221101441890C103', 'Botiquín avanzado · M21', 'Material sanitario de intervención', TRUE),
+  ('E2000017221101441890C104', 'Unidad energía móvil · E08', 'Módulo baterías para operación remota', TRUE)
 ON CONFLICT (epc)
 DO UPDATE SET
   name = EXCLUDED.name,
