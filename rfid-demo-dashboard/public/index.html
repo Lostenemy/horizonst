@@ -18,10 +18,10 @@
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img">
-            <path d="M32 3L56 12V30C56 44.5 45.5 56.8 32 61C18.5 56.8 8 44.5 8 30V12L32 3Z" fill="#0D0D0D" stroke="#F0C800" stroke-width="3" />
-            <path d="M23 44V20H35.5C40.7 20 44 22.9 44 28C44 33.1 40.7 36 35.5 36H30.2V44H23Z" fill="#F0C800" />
-            <path d="M30.2 30.6H34.6C36.5 30.6 37.6 29.7 37.6 28C37.6 26.3 36.5 25.4 34.6 25.4H30.2V30.6Z" fill="#0D0D0D" />
-            <text x="45" y="47" fill="#F0C800" font-size="9" font-family="Barlow Condensed, sans-serif" font-weight="800">360</text>
+            <path d="M32 3L56 12V30C56 44.5 45.5 56.8 32 61C18.5 56.8 8 44.5 8 30V12L32 3Z" fill="#F0C800" stroke="#111111" stroke-width="3" />
+            <path d="M23 44V20H35.5C40.7 20 44 22.9 44 28C44 33.1 40.7 36 35.5 36H30.2V44H23Z" fill="#111111" />
+            <path d="M30.2 30.6H34.6C36.5 30.6 37.6 29.7 37.6 28C37.6 26.3 36.5 25.4 34.6 25.4H30.2V30.6Z" fill="#F0C800" />
+            <text x="45" y="47" fill="#111111" font-size="9" font-family="Barlow Condensed, sans-serif" font-weight="800">360</text>
           </svg>
         </div>
         <div>
@@ -37,9 +37,8 @@
       </div>
     </header>
 
-    <nav class="tabs" aria-label="Vistas del panel">
-      <button class="tab is-active" data-view="dashboard">Dashboard</button>
-      <button class="tab" data-view="tags">Gestión de activos</button>
+    <nav class="tabs" aria-label="Acciones del panel">
+      <button class="tab is-active" type="button">Dashboard</button>
       <div class="toolbar-actions">
         <button id="presentationBtn" class="tab tab-ghost" type="button">Modo presentación</button>
         <button id="exportBtn" class="tab tab-ghost" type="button">Exportar CSV</button>
@@ -47,89 +46,87 @@
     </nav>
 
     <main>
-      <section id="viewDashboard" class="view is-active">
-        <div class="layout">
-          <section class="card hero-card">
-            <h2>Activos en seguimiento</h2>
-            <div class="kpi-grid">
-              <article class="kpi-item">
-                <span class="kpi-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 18.5A1.5 1.5 0 1 0 12 21.5A1.5 1.5 0 1 0 12 18.5Z" fill="currentColor" />
-                    <path d="M7.76 15.4A6 6 0 0 1 16.24 15.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                    <path d="M4.93 12.57A10 10 0 0 1 19.07 12.57" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                    <path d="M2.1 9.73C4.67 7.16 8.15 5.72 12 5.72C15.85 5.72 19.33 7.16 21.9 9.73" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                  </svg>
-                </span>
-                <span class="label">Activos en zona</span>
-                <strong class="kpi-value" id="activeCount">0</strong>
-              </article>
-              <article class="kpi-item">
-                <span class="kpi-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 21C16.97 21 21 16.97 21 12C21 7.03 16.97 3 12 3C7.03 3 3 7.03 3 12C3 16.97 7.03 21 12 21Z" stroke="currentColor" stroke-width="1.8" />
-                    <path d="M8 12.5L10.7 15.2L16.4 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
-                <span class="label">Activos registrados</span>
-                <strong class="kpi-value" id="registeredActiveCount">0</strong>
-              </article>
-              <article class="kpi-item">
-                <span class="kpi-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 9V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                    <path d="M12 17H12.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                    <path d="M10.27 4.86L3.37 17.36C2.6 18.76 3.58 20.5 5.18 20.5H18.82C20.42 20.5 21.4 18.76 20.63 17.36L13.73 4.86C12.93 3.41 11.07 3.41 10.27 4.86Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
-                <span class="label">Sin identificar</span>
-                <strong class="kpi-value" id="unregisteredActiveCount">0</strong>
-              </article>
-              <article class="kpi-item">
-                <span class="kpi-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M4 19.5H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                    <path d="M7 15L11 11L14 14L19 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                    <path d="M16.5 8H19V10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
-                <span class="label">Eventos 24h</span>
-                <strong class="kpi-value" id="readings24h">0</strong>
-              </article>
-            </div>
-          </section>
+      <section class="layout">
+        <section class="card hero-card">
+          <h2>Activos en seguimiento</h2>
+          <div class="kpi-grid">
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 18.5A1.5 1.5 0 1 0 12 21.5A1.5 1.5 0 1 0 12 18.5Z" fill="currentColor" />
+                  <path d="M7.76 15.4A6 6 0 0 1 16.24 15.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M4.93 12.57A10 10 0 0 1 19.07 12.57" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M2.1 9.73C4.67 7.16 8.15 5.72 12 5.72C15.85 5.72 19.33 7.16 21.9 9.73" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="label">Activos en zona</span>
+              <strong class="kpi-value" id="activeCount">0</strong>
+            </article>
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 21C16.97 21 21 16.97 21 12C21 7.03 16.97 3 12 3C7.03 3 3 7.03 3 12C3 16.97 7.03 21 12 21Z" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M8 12.5L10.7 15.2L16.4 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="label">Activos registrados</span>
+              <strong class="kpi-value" id="registeredActiveCount">0</strong>
+            </article>
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 9V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M12 17H12.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M10.27 4.86L3.37 17.36C2.6 18.76 3.58 20.5 5.18 20.5H18.82C20.42 20.5 21.4 18.76 20.63 17.36L13.73 4.86C12.93 3.41 11.07 3.41 10.27 4.86Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="label">Sin identificar</span>
+              <strong class="kpi-value" id="unregisteredActiveCount">0</strong>
+            </article>
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 19.5H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M7 15L11 11L14 14L19 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M16.5 8H19V10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="label">Eventos 24h</span>
+              <strong class="kpi-value" id="readings24h">0</strong>
+            </article>
+          </div>
+        </section>
 
-          <section class="card">
-            <h2>Detalle de activos en seguimiento</h2>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>EPC</th>
-                    <th>Estado</th>
-                    <th>Tipo</th>
-                    <th>Lector</th>
-                    <th>Última lectura</th>
-                  </tr>
-                </thead>
-                <tbody id="activeTableBody"></tbody>
-              </table>
-            </div>
-          </section>
+        <section class="card">
+          <h2>Detalle de activos en seguimiento</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>EPC</th>
+                  <th>Estado</th>
+                  <th>Tipo</th>
+                  <th>Lector</th>
+                  <th>Última lectura</th>
+                </tr>
+              </thead>
+              <tbody id="activeTableBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-          <section class="card">
-            <h2>Últimas lecturas</h2>
-            <ul id="readingsList" class="list"></ul>
-          </section>
+        <section class="card">
+          <h2>Últimas lecturas</h2>
+          <ul id="readingsList" class="list"></ul>
+        </section>
 
-          <section class="card">
-            <h2>Sin identificar</h2>
-            <ul id="unregisteredList" class="list"></ul>
-          </section>
-        </div>
+        <section class="card">
+          <h2>Sin identificar</h2>
+          <ul id="unregisteredList" class="list"></ul>
+        </section>
       </section>
 
-      <section id="viewTags" class="view tags-view">
+      <section class="tags-view">
         <section class="card form-card">
           <h2>Alta rápida de activo trazable</h2>
           <p class="subtitle">Asocia EPCs a activos para trazabilidad operativa y protección de mercancías.</p>

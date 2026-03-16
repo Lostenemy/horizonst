@@ -4,8 +4,7 @@ const state = {
   activeInventory: new Map(),
   unregistered: new Map(),
   readings: [],
-  registeredTags: new Map(),
-  currentView: 'dashboard'
+  registeredTags: new Map()
 };
 
 const activeCountEl = document.getElementById('activeCount');
@@ -24,11 +23,6 @@ const exportBtnEl = document.getElementById('exportBtn');
 const presentationBtnEl = document.getElementById('presentationBtn');
 const presentationExitBtnEl = document.getElementById('presentationExitBtn');
 const footerVersionEl = document.getElementById('footerVersion');
-const tabs = [...document.querySelectorAll('.tab[data-view]')];
-const views = {
-  dashboard: document.getElementById('viewDashboard'),
-  tags: document.getElementById('viewTags')
-};
 
 const appVersion = document.body.dataset.appVersion || 'v1.0.0';
 footerVersionEl.textContent = appVersion;
@@ -72,22 +66,6 @@ const regBadge = (isRegistered) =>
 
 const renderEmptyRow = (colspan, message) => `<tr><td colspan="${colspan}"><div class="empty-state">${message}</div></td></tr>`;
 const renderEmptyList = (message) => `<li class="empty-state empty-list">${message}</li>`;
-
-const switchView = (nextView) => {
-  state.currentView = nextView;
-  tabs.forEach((tab) => {
-    tab.classList.toggle('is-active', tab.dataset.view === nextView);
-  });
-
-  Object.entries(views).forEach(([viewName, element]) => {
-    element.classList.toggle('is-active', viewName === nextView);
-  });
-};
-
-tabs.forEach((tab) => {
-  tab.addEventListener('click', () => switchView(tab.dataset.view));
-});
-
 const toCsv = (headers, rows) => {
   const esc = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
   return [headers.map(esc).join(','), ...rows.map((row) => row.map(esc).join(','))].join('\n');
@@ -107,12 +85,6 @@ const downloadCsv = (filename, csvContent) => {
 
 const exportCurrentView = () => {
   const ts = new Date().toISOString().replaceAll(':', '-');
-  if (state.currentView === 'tags') {
-    const rows = [...state.registeredTags.values()].map((tag) => [tag.epc, tag.name || '', tag.description || '', tag.createdAt]);
-    downloadCsv(`rfid-activos-registrados-${ts}.csv`, toCsv(['epc', 'nombre', 'descripcion', 'createdAt'], rows));
-    return;
-  }
-
   const rows = [...state.activeInventory.values()].map((row) => [
     row.epc,
     row.isRegistered ? 'registrada' : 'no registrada',
