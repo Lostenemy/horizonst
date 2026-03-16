@@ -17,8 +17,9 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
 
 const parseReaderAliases = (value: string | undefined): Record<string, string> => {
   const defaults: Record<string, string> = {
-    'demo-reader-01': 'Lector-Puerta-Principal',
-    'demo-reader-02': 'Lector-Acceso-Almacén'
+    'demo-reader-01': 'Lector-Puerta-Almacén-01',
+    'demo-reader-02': 'Lector-Acceso-360P',
+    'demo-reader-03': 'Lector-Zona-Carga-A'
   };
 
   if (!value?.trim()) return defaults;

@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HorizonST RFID Live Experience</title>
+    <title>360 PROTECTIVE · Trazabilidad RFID en vivo</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon-360p.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body data-app-version="v1.1.0">
@@ -11,20 +18,16 @@
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img">
-            <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#grad)" />
-            <path d="M19 22h7v8h12v-8h7v20h-7v-7H26v7h-7z" fill="white" />
-            <defs>
-              <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#22d3ee" />
-                <stop offset="100%" stop-color="#2563eb" />
-              </linearGradient>
-            </defs>
+            <path d="M32 3L56 12V30C56 44.5 45.5 56.8 32 61C18.5 56.8 8 44.5 8 30V12L32 3Z" fill="#0D0D0D" stroke="#F0C800" stroke-width="3" />
+            <path d="M23 44V20H35.5C40.7 20 44 22.9 44 28C44 33.1 40.7 36 35.5 36H30.2V44H23Z" fill="#F0C800" />
+            <path d="M30.2 30.6H34.6C36.5 30.6 37.6 29.7 37.6 28C37.6 26.3 36.5 25.4 34.6 25.4H30.2V30.6Z" fill="#0D0D0D" />
+            <text x="45" y="47" fill="#F0C800" font-size="9" font-family="Barlow Condensed, sans-serif" font-weight="800">360</text>
           </svg>
         </div>
         <div>
-          <p class="eyebrow">IoT visibility suite</p>
-          <h1>HorizonST · RFID Live Experience</h1>
-          <p class="subtitle">Control de inventario en tiempo real y alta ágil de activos RFID.</p>
+          <p class="eyebrow">TRAZABILIDAD Y PROTECCIÓN DE ACTIVOS</p>
+          <h1>360 PROTECTIVE · RFID Live</h1>
+          <p class="subtitle">Trazabilidad en tiempo real de mercancías y activos críticos.</p>
         </div>
       </div>
 
@@ -47,7 +50,7 @@
       <section id="viewDashboard" class="view is-active">
         <div class="layout">
           <section class="card hero-card">
-            <h2>Resumen de inventario</h2>
+            <h2>Activos en seguimiento</h2>
             <div class="kpi-grid">
               <article class="kpi-item">
                 <span class="kpi-icon" aria-hidden="true">
@@ -58,7 +61,7 @@
                     <path d="M2.1 9.73C4.67 7.16 8.15 5.72 12 5.72C15.85 5.72 19.33 7.16 21.9 9.73" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                   </svg>
                 </span>
-                <span class="label">Activos online</span>
+                <span class="label">Activos en zona</span>
                 <strong class="kpi-value" id="activeCount">0</strong>
               </article>
               <article class="kpi-item">
@@ -68,7 +71,7 @@
                     <path d="M8 12.5L10.7 15.2L16.4 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
                 </span>
-                <span class="label">Registradas</span>
+                <span class="label">Activos registrados</span>
                 <strong class="kpi-value" id="registeredActiveCount">0</strong>
               </article>
               <article class="kpi-item">
@@ -79,7 +82,7 @@
                     <path d="M10.27 4.86L3.37 17.36C2.6 18.76 3.58 20.5 5.18 20.5H18.82C20.42 20.5 21.4 18.76 20.63 17.36L13.73 4.86C12.93 3.41 11.07 3.41 10.27 4.86Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
                 </span>
-                <span class="label">No registradas</span>
+                <span class="label">Sin identificar</span>
                 <strong class="kpi-value" id="unregisteredActiveCount">0</strong>
               </article>
               <article class="kpi-item">
@@ -90,14 +93,14 @@
                     <path d="M16.5 8H19V10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
                 </span>
-                <span class="label">Lecturas 24h</span>
+                <span class="label">Eventos 24h</span>
                 <strong class="kpi-value" id="readings24h">0</strong>
               </article>
             </div>
           </section>
 
           <section class="card">
-            <h2>Activos en zona</h2>
+            <h2>Detalle de activos en seguimiento</h2>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -120,7 +123,7 @@
           </section>
 
           <section class="card">
-            <h2>No registradas</h2>
+            <h2>Sin identificar</h2>
             <ul id="unregisteredList" class="list"></ul>
           </section>
         </div>
@@ -128,20 +131,20 @@
 
       <section id="viewTags" class="view tags-view">
         <section class="card form-card">
-          <h2>Alta rápida de activo RFID</h2>
-          <p class="subtitle">Asocia EPCs a activos para trazabilidad y control de inventario.</p>
+          <h2>Alta rápida de activo trazable</h2>
+          <p class="subtitle">Asocia EPCs a activos para trazabilidad operativa y protección de mercancías.</p>
           <form id="tagForm" class="tag-form">
             <label>
               EPC / ID RFID
-              <input id="tagEpc" name="epc" required maxlength="128" placeholder="E2000017221101441890C101" />
+              <input id="tagEpc" name="epc" required maxlength="128" placeholder="000000000000000000000701" />
             </label>
             <label>
               Nombre del activo
-              <input id="tagName" name="name" maxlength="120" placeholder="Palet farmacéutico A-12" />
+              <input id="tagName" name="name" maxlength="120" placeholder="Contenedor frigorífico C-07" />
             </label>
             <label>
               Descripción
-              <input id="tagDescription" name="description" maxlength="240" placeholder="Zona picking norte · Lote 2026-03" />
+              <input id="tagDescription" name="description" maxlength="240" placeholder="Zona carga A · Ruta Madrid-Valencia · Lote 2026-03" />
             </label>
             <button type="submit" class="btn-primary">Registrar activo</button>
           </form>
@@ -168,9 +171,12 @@
     </main>
 
     <footer class="footer">
-      <span>HorizonST</span>
+      <span class="footer-brand">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1L14 3.3V7.8C14 11 11.6 13.7 8 15C4.4 13.7 2 11 2 7.8V3.3L8 1Z" fill="currentColor"/></svg>
+        360 PROTECTIVE
+      </span>
       <span id="footerVersion">v1.1.0</span>
-      <span>Soluciones IoT B2B para trazabilidad en tiempo real.</span>
+      <span>Soluciones de trazabilidad y protección de mercancías</span>
     </footer>
 
     <button id="presentationExitBtn" class="presentation-exit" type="button" aria-label="Salir del modo presentación">

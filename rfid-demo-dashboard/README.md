@@ -1,6 +1,6 @@
 # RFID Demo Dashboard
 
-Módulo independiente para demo RFID de inventario en tiempo real sobre HorizonST.
+Módulo independiente para demo RFID de inventario en tiempo real (rebranding comercial 360 PROTECTIVE).
 
 ## Qué hace
 
@@ -111,11 +111,11 @@ docker run --rm -p 3200:3200 --env-file .env rfid-demo-dashboard:local
 
 ## Seed opcional para demo comercial
 
-Si quieres mostrar datos variados de tags registradas en una demo:
+Si quieres mostrar datos variados de activos registrados en una demo:
 
 ```bash
 psql -h <host> -U <user> -d rfid_demo -f migrations/seed_demo_tags.sql
 ```
 
-Este seed inserta EPCs plausibles con nombres operativos logísticos/institucionales y hace upsert por EPC.
-Incluye EPCs `000000000000000000000617` y `000000000000000000000616` para que lecturas reales frecuentes aparezcan como registradas durante la demo.
+Este seed inserta EPCs plausibles orientados a trazabilidad/protección y hace upsert por EPC.
+Incluye EPCs `000000000000000000000617` y `000000000000000000000616` para que lecturas reales frecuentes aparezcan como registradas durante la demo, además de EPCs adicionales (`...701` a `...704`) para enriquecer la presentación.

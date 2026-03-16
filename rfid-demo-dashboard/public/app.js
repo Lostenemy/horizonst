@@ -35,8 +35,9 @@ footerVersionEl.textContent = appVersion;
 
 
 const READER_LABELS = {
-  'demo-reader-01': 'Lector-Puerta-Principal',
-  'demo-reader-02': 'Lector-Acceso-Almacén'
+  'demo-reader-01': 'Lector-Puerta-Almacén-01',
+  'demo-reader-02': 'Lector-Acceso-360P',
+  'demo-reader-03': 'Lector-Zona-Carga-A'
 };
 
 const readerLabel = (value) => {
@@ -67,7 +68,7 @@ const directionBadge = (direction) => {
 const regBadge = (isRegistered) =>
   isRegistered
     ? '<span class="badge registered">REGISTRADA</span>'
-    : '<span class="badge unregistered">NO REGISTRADA</span>';
+    : '<span class="badge unregistered">SIN IDENTIFICAR</span>';
 
 const renderEmptyRow = (colspan, message) => `<tr><td colspan="${colspan}"><div class="empty-state">${message}</div></td></tr>`;
 const renderEmptyList = (message) => `<li class="empty-state empty-list">${message}</li>`;
@@ -108,7 +109,7 @@ const exportCurrentView = () => {
   const ts = new Date().toISOString().replaceAll(':', '-');
   if (state.currentView === 'tags') {
     const rows = [...state.registeredTags.values()].map((tag) => [tag.epc, tag.name || '', tag.description || '', tag.createdAt]);
-    downloadCsv(`rfid-tags-${ts}.csv`, toCsv(['epc', 'nombre', 'descripcion', 'createdAt'], rows));
+    downloadCsv(`rfid-activos-registrados-${ts}.csv`, toCsv(['epc', 'nombre', 'descripcion', 'createdAt'], rows));
     return;
   }
 
@@ -198,7 +199,7 @@ const renderUnregistered = () => {
   );
 
   if (rows.length === 0) {
-    unregisteredListEl.innerHTML = renderEmptyList('No hay activos no registrados actualmente.');
+    unregisteredListEl.innerHTML = renderEmptyList('No hay activos sin identificar actualmente.');
     return;
   }
 
@@ -221,7 +222,7 @@ const renderTags = () => {
   );
 
   if (rows.length === 0) {
-    tagsTableBodyEl.innerHTML = renderEmptyRow(4, 'No hay activos registrados todavía.');
+    tagsTableBodyEl.innerHTML = renderEmptyRow(4, 'No hay activos registrados en el sistema.');
     return;
   }
 
@@ -292,12 +293,12 @@ tagFormEl.addEventListener('submit', async (event) => {
 });
 
 socket.on('connect', () => {
-  mqttStatusEl.textContent = 'Realtime conectado';
+  mqttStatusEl.textContent = 'Realtime operativo';
   mqttStatusEl.className = 'badge realtime in pulse';
 });
 
 socket.on('disconnect', () => {
-  mqttStatusEl.textContent = 'Realtime desconectado';
+  mqttStatusEl.textContent = 'Realtime sin conexión';
   mqttStatusEl.className = 'badge realtime out';
 });
 
