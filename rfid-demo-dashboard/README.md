@@ -1,6 +1,6 @@
 # RFID Demo Dashboard
 
-Módulo independiente para demo RFID de inventario en tiempo real sobre HorizonST.
+Módulo independiente para demo RFID de inventario en tiempo real (rebranding comercial 360 PROTECTIVE).
 
 ## Qué hace
 
@@ -46,6 +46,20 @@ Variables MQTT requeridas:
 - `RFID_DEMO_MQTT_USER`
 - `RFID_DEMO_MQTT_PASS`
 - `RFID_DEMO_MQTT_CLIENT_ID`
+- `RFID_DEMO_READER_ALIASES` (JSON opcional para mapear IDs técnicos de lector a nombres operativos en el dashboard)
+
+
+### Credenciales MQTT obligatorias (entorno HorizonST actual)
+
+Para evitar bucles `ECONNRESET`, el dashboard debe usar el usuario alternativo ya provisionado en `vmq_auth_acl`:
+
+- `RFID_DEMO_MQTT_USER=rfid_demo_dashboard_alt`
+- `RFID_DEMO_MQTT_PASS=rfidpass2026`
+- `RFID_DEMO_MQTT_CLIENT_ID=rfid_demo_dashboard_alt`
+- `RFID_DEMO_MQTT_PROTOCOL_VERSION=4`
+- `RFID_DEMO_MQTT_TOPIC=devices/RF1`
+
+No reutilizar credenciales históricas (`rfid_demo_dashboard` / `RfidDemoMQTT_2026`).
 
 ## Docker / Docker Compose
 
@@ -84,6 +98,10 @@ docker run --rm -p 3200:3200 --env-file .env rfid-demo-dashboard:local
 - `GET /api/dashboard/events?limit=50`
 - `GET /api/dashboard/active`
 - `GET /api/dashboard/unregistered`
+- `GET /api/tags?limit=500`
+- `POST /api/tags`
+- `DELETE /api/tags/:epc`
+- `GET /api/export/executive-report.xlsx`
 
 ## Eventos Socket.IO
 
@@ -104,3 +122,23 @@ docker run --rm -p 3200:3200 --env-file .env rfid-demo-dashboard:local
 - No modifica tablas existentes de HorizonST.
 - Usa tablas nuevas: `rfid_demo_read_events`, `rfid_demo_inventory_state` y `rfid_demo_tags`.
 - `rfid_demo_tags` define qué EPC se considera registrada.
+
+
+## Seed opcional para demo comercial
+
+Si quieres mostrar datos variados de activos registrados en una demo:
+
+```bash
+psql -h <host> -U <user> -d rfid_demo -f migrations/seed_demo_tags.sql
+```
+
+Este seed inserta EPCs plausibles orientados a trazabilidad/protección y hace upsert por EPC.
+Incluye EPCs `000000000000000000000617` y `000000000000000000000616` para que lecturas reales frecuentes aparezcan como registradas durante la demo, además de EPCs adicionales (`...701` a `...704`) para enriquecer la presentación.
+
+Para cargar actividad reciente verosímil (últimas lecturas + estado de inventario), ejecuta además:
+
+```bash
+psql -h <host> -U <user> -d rfid_demo -f migrations/seed_demo_activity.sql
+```
+
+Este segundo seed crea eventos recientes con naming operativo de lectores (`Lector-Puerta-Almacén-01`, `Lector-Acceso-360P`, `Lector-Zona-Carga-A`) y combina activos identificados y un activo sin identificar para demo realista.

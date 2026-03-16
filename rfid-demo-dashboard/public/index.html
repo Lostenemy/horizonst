@@ -3,57 +3,183 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RFID Demo Dashboard</title>
+    <title>360 PROTECTIVE · Trazabilidad RFID en vivo</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon-360p.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body data-app-version="v1.1.0">
     <header class="header">
-      <h1>HorizonST · RFID Demo Dashboard</h1>
-      <div class="status">
-        <span id="mqttStatus" class="badge">Conectando...</span>
-        <span id="clock"></span>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img">
+            <path d="M32 3L56 12V30C56 44.5 45.5 56.8 32 61C18.5 56.8 8 44.5 8 30V12L32 3Z" fill="#F0C800" stroke="#111111" stroke-width="3" />
+            <path d="M23 44V20H35.5C40.7 20 44 22.9 44 28C44 33.1 40.7 36 35.5 36H30.2V44H23Z" fill="#111111" />
+            <path d="M30.2 30.6H34.6C36.5 30.6 37.6 29.7 37.6 28C37.6 26.3 36.5 25.4 34.6 25.4H30.2V30.6Z" fill="#F0C800" />
+            <text x="45" y="47" fill="#111111" font-size="9" font-family="Barlow Condensed, sans-serif" font-weight="800">360</text>
+          </svg>
+        </div>
+        <div>
+          <p class="eyebrow">TRAZABILIDAD Y PROTECCIÓN DE ACTIVOS</p>
+          <h1>360 PROTECTIVE · RFID Live</h1>
+          <p class="subtitle">Trazabilidad en tiempo real de mercancías y activos críticos.</p>
+        </div>
+      </div>
+
+      <div class="status-area">
+        <span id="mqttStatus" class="badge realtime">Conectando...</span>
+        <span id="clock" class="clock"></span>
       </div>
     </header>
 
-    <main class="layout">
-      <section class="card kpi">
-        <h2>Inventario activo</h2>
-        <div class="kpi-number" id="activeCount">0</div>
-        <div class="kpi-sub">
-          <span>Registradas: <strong id="registeredActiveCount">0</strong></span>
-          <span>No registradas: <strong id="unregisteredActiveCount">0</strong></span>
-          <span>Lecturas 24h: <strong id="readings24h">0</strong></span>
-        </div>
+    <nav class="tabs" aria-label="Acciones del panel">
+      <button class="tab is-active" type="button">Dashboard</button>
+      <div class="toolbar-actions">
+        <button id="presentationBtn" class="tab tab-ghost" type="button">Modo presentación</button>
+        <button id="exportBtn" class="tab tab-ghost" type="button">Exportar CSV</button>
+      </div>
+    </nav>
+
+    <main>
+      <section class="layout">
+        <section class="card hero-card">
+          <h2>Activos en seguimiento</h2>
+          <div class="kpi-grid">
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 18.5A1.5 1.5 0 1 0 12 21.5A1.5 1.5 0 1 0 12 18.5Z" fill="currentColor" />
+                  <path d="M7.76 15.4A6 6 0 0 1 16.24 15.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M4.93 12.57A10 10 0 0 1 19.07 12.57" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M2.1 9.73C4.67 7.16 8.15 5.72 12 5.72C15.85 5.72 19.33 7.16 21.9 9.73" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="label">Activos en zona</span>
+              <strong class="kpi-value" id="activeCount">0</strong>
+            </article>
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 21C16.97 21 21 16.97 21 12C21 7.03 16.97 3 12 3C7.03 3 3 7.03 3 12C3 16.97 7.03 21 12 21Z" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M8 12.5L10.7 15.2L16.4 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="label">Activos registrados</span>
+              <strong class="kpi-value" id="registeredActiveCount">0</strong>
+            </article>
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 9V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M12 17H12.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M10.27 4.86L3.37 17.36C2.6 18.76 3.58 20.5 5.18 20.5H18.82C20.42 20.5 21.4 18.76 20.63 17.36L13.73 4.86C12.93 3.41 11.07 3.41 10.27 4.86Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="label">Sin identificar</span>
+              <strong class="kpi-value" id="unregisteredActiveCount">0</strong>
+            </article>
+            <article class="kpi-item">
+              <span class="kpi-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 19.5H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M7 15L11 11L14 14L19 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M16.5 8H19V10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="label">Eventos 24h</span>
+              <strong class="kpi-value" id="readings24h">0</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Detalle de activos en seguimiento</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>EPC</th>
+                  <th>Estado</th>
+                  <th>Tipo</th>
+                  <th>Lector</th>
+                  <th>Última lectura</th>
+                </tr>
+              </thead>
+              <tbody id="activeTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Últimas lecturas</h2>
+          <ul id="readingsList" class="list"></ul>
+        </section>
+
+        <section class="card">
+          <h2>Sin identificar</h2>
+          <ul id="unregisteredList" class="list"></ul>
+        </section>
       </section>
 
-      <section class="card">
-        <h2>Inventario activo (toggle)</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>EPC</th>
-                <th>Estado</th>
-                <th>Tipo</th>
-                <th>Lector</th>
-                <th>Última lectura</th>
-              </tr>
-            </thead>
-            <tbody id="activeTableBody"></tbody>
-          </table>
-        </div>
-      </section>
+      <section class="tags-view">
+        <section class="card form-card">
+          <h2>Alta rápida de activo trazable</h2>
+          <p class="subtitle">Asocia EPCs a activos para trazabilidad operativa y protección de mercancías.</p>
+          <form id="tagForm" class="tag-form">
+            <label>
+              EPC / ID RFID
+              <input id="tagEpc" name="epc" required maxlength="128" placeholder="000000000000000000000701" />
+            </label>
+            <label>
+              Nombre del activo
+              <input id="tagName" name="name" maxlength="120" placeholder="Contenedor frigorífico C-07" />
+            </label>
+            <label>
+              Descripción
+              <input id="tagDescription" name="description" maxlength="240" placeholder="Zona carga A · Ruta Madrid-Valencia · Lote 2026-03" />
+            </label>
+            <button type="submit" class="btn-primary">Registrar activo</button>
+          </form>
+          <p id="tagFormMessage" class="form-message" role="status" aria-live="polite"></p>
+        </section>
 
-      <section class="card">
-        <h2>Últimas lecturas</h2>
-        <ul id="readingsList" class="list"></ul>
-      </section>
-
-      <section class="card">
-        <h2>No registradas</h2>
-        <ul id="unregisteredList" class="list"></ul>
+        <section class="card">
+          <h2>Activos registrados</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>EPC</th>
+                  <th>Nombre</th>
+                  <th>Descripción</th>
+                  <th>Alta</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tagsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
+
+    <footer class="footer">
+      <span class="footer-brand">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1L14 3.3V7.8C14 11 11.6 13.7 8 15C4.4 13.7 2 11 2 7.8V3.3L8 1Z" fill="currentColor"/></svg>
+        360 PROTECTIVE
+      </span>
+      <span id="footerVersion">v1.1.0</span>
+      <span>Soluciones de trazabilidad y protección de mercancías</span>
+    </footer>
+
+    <button id="presentationExitBtn" class="presentation-exit" type="button" aria-label="Salir del modo presentación">
+      Salir del modo presentación
+    </button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/app.js"></script>
