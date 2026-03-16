@@ -14,6 +14,15 @@ export interface RegisteredTagInfo {
   name: string | null;
   description: string | null;
   active: boolean;
+  createdAt: string;
+}
+
+export interface RegisteredTagRow {
+  epc: string;
+  name: string | null;
+  description: string | null;
+  active: boolean;
+  created_at: Date;
 }
 
 export interface InventoryStateRow {
@@ -96,5 +105,12 @@ export interface DashboardInitialPayload {
     lastAntenna: number | null;
     lastDirection: 'IN' | 'OUT';
     lastSeenAt: string;
+  }>;
+  registeredTags: Array<{
+    epc: string;
+    name: string | null;
+    description: string | null;
+    active: boolean;
+    createdAt: string;
   }>;
 }

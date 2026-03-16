@@ -3,55 +3,108 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RFID Demo Dashboard</title>
+    <title>HorizonST RFID Live Experience</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="header">
-      <h1>HorizonST · RFID Demo Dashboard</h1>
+      <div>
+        <p class="eyebrow">IoT visibility suite</p>
+        <h1>HorizonST · RFID Live Experience</h1>
+        <p class="subtitle">Control de inventario en tiempo real y onboarding rápido de tags para demos comerciales.</p>
+      </div>
       <div class="status">
         <span id="mqttStatus" class="badge">Conectando...</span>
-        <span id="clock"></span>
+        <span id="clock" class="clock"></span>
       </div>
     </header>
 
-    <main class="layout">
-      <section class="card kpi">
-        <h2>Inventario activo</h2>
-        <div class="kpi-number" id="activeCount">0</div>
-        <div class="kpi-sub">
-          <span>Registradas: <strong id="registeredActiveCount">0</strong></span>
-          <span>No registradas: <strong id="unregisteredActiveCount">0</strong></span>
-          <span>Lecturas 24h: <strong id="readings24h">0</strong></span>
+    <nav class="tabs" aria-label="Vistas del panel">
+      <button id="tabDashboard" class="tab is-active" data-view="dashboard">Dashboard</button>
+      <button id="tabTags" class="tab" data-view="tags">Gestión de tags</button>
+    </nav>
+
+    <main>
+      <section id="viewDashboard" class="view is-active">
+        <div class="layout">
+          <section class="card hero-card">
+            <h2>Inventario activo</h2>
+            <div class="kpi-number" id="activeCount">0</div>
+            <div class="kpi-grid">
+              <div><span class="label">Registradas</span><strong id="registeredActiveCount">0</strong></div>
+              <div><span class="label">No registradas</span><strong id="unregisteredActiveCount">0</strong></div>
+              <div><span class="label">Lecturas 24h</span><strong id="readings24h">0</strong></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Inventario activo (toggle)</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>EPC</th>
+                    <th>Estado</th>
+                    <th>Tipo</th>
+                    <th>Lector</th>
+                    <th>Última lectura</th>
+                  </tr>
+                </thead>
+                <tbody id="activeTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Últimas lecturas</h2>
+            <ul id="readingsList" class="list"></ul>
+          </section>
+
+          <section class="card">
+            <h2>No registradas</h2>
+            <ul id="unregisteredList" class="list"></ul>
+          </section>
         </div>
       </section>
 
-      <section class="card">
-        <h2>Inventario activo (toggle)</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>EPC</th>
-                <th>Estado</th>
-                <th>Tipo</th>
-                <th>Lector</th>
-                <th>Última lectura</th>
-              </tr>
-            </thead>
-            <tbody id="activeTableBody"></tbody>
-          </table>
-        </div>
-      </section>
+      <section id="viewTags" class="view tags-view">
+        <section class="card form-card">
+          <h2>Alta rápida de etiqueta RFID</h2>
+          <p class="subtitle">Registra EPCs en segundos para convertir lecturas desconocidas en activos trazables.</p>
+          <form id="tagForm" class="tag-form">
+            <label>
+              EPC / Tag ID
+              <input id="tagEpc" name="epc" required maxlength="128" placeholder="E2000017221101441890BEEF" />
+            </label>
+            <label>
+              Nombre comercial
+              <input id="tagName" name="name" maxlength="120" placeholder="Palet Demo #01" />
+            </label>
+            <label>
+              Descripción
+              <input id="tagDescription" name="description" maxlength="240" placeholder="Producto premium / lote campaña" />
+            </label>
+            <button type="submit" class="btn-primary">Registrar tag</button>
+          </form>
+          <p id="tagFormMessage" class="form-message" role="status" aria-live="polite"></p>
+        </section>
 
-      <section class="card">
-        <h2>Últimas lecturas</h2>
-        <ul id="readingsList" class="list"></ul>
-      </section>
-
-      <section class="card">
-        <h2>No registradas</h2>
-        <ul id="unregisteredList" class="list"></ul>
+        <section class="card">
+          <h2>Tags registrados</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>EPC</th>
+                  <th>Nombre</th>
+                  <th>Descripción</th>
+                  <th>Alta</th>
+                </tr>
+              </thead>
+              <tbody id="tagsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
 

@@ -3,7 +3,8 @@ const socket = io();
 const state = {
   activeInventory: new Map(),
   unregistered: new Map(),
-  readings: []
+  readings: [],
+  registeredTags: new Map()
 };
 
 const activeCountEl = document.getElementById('activeCount');
@@ -15,11 +16,27 @@ const readingsListEl = document.getElementById('readingsList');
 const unregisteredListEl = document.getElementById('unregisteredList');
 const mqttStatusEl = document.getElementById('mqttStatus');
 const clockEl = document.getElementById('clock');
+const tagsTableBodyEl = document.getElementById('tagsTableBody');
+const tagFormEl = document.getElementById('tagForm');
+const tagFormMessageEl = document.getElementById('tagFormMessage');
+const tabs = [...document.querySelectorAll('.tab')];
+const views = {
+  dashboard: document.getElementById('viewDashboard'),
+  tags: document.getElementById('viewTags')
+};
 
 const fmtDate = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('es-ES');
 };
+
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 
 const directionBadge = (direction) => {
   if (direction === 'IN') return '<span class="badge in">ENTRA</span>';
@@ -31,6 +48,20 @@ const regBadge = (isRegistered) =>
   isRegistered
     ? '<span class="badge registered">REGISTRADA</span>'
     : '<span class="badge unregistered">NO REGISTRADA</span>';
+
+const switchView = (nextView) => {
+  tabs.forEach((tab) => {
+    tab.classList.toggle('is-active', tab.dataset.view === nextView);
+  });
+
+  Object.entries(views).forEach(([viewName, element]) => {
+    element.classList.toggle('is-active', viewName === nextView);
+  });
+};
+
+tabs.forEach((tab) => {
+  tab.addEventListener('click', () => switchView(tab.dataset.view));
+});
 
 const renderSummary = (summary) => {
   activeCountEl.textContent = summary.activeCount;
@@ -48,10 +79,10 @@ const renderActive = () => {
     .map(
       (row) => `
       <tr>
-        <td>${row.epc}</td>
+        <td>${escapeHtml(row.epc)}</td>
         <td>${directionBadge(row.lastDirection)}</td>
         <td>${regBadge(row.isRegistered)}</td>
-        <td>${row.lastReaderMac}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</td>
+        <td>${escapeHtml(row.lastReaderMac)}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</td>
         <td>${fmtDate(row.lastEventTs)}</td>
       </tr>`
     )
@@ -64,8 +95,8 @@ const renderReadings = () => {
     .map(
       (event) => `
       <li>
-        <div><strong>${event.epc}</strong> ${directionBadge(event.direction)} ${regBadge(event.isRegistered)}</div>
-        <div>Lector: ${event.readerMac}${event.antenna !== null ? ` / Ant ${event.antenna}` : ''}</div>
+        <div><strong>${escapeHtml(event.epc)}</strong> ${directionBadge(event.direction)} ${regBadge(event.isRegistered)}</div>
+        <div>Lector: ${escapeHtml(event.readerMac)}${event.antenna !== null ? ` / Ant ${event.antenna}` : ''}</div>
         <div>Hora: ${fmtDate(event.eventTs)}</div>
       </li>`
     )
@@ -82,13 +113,84 @@ const renderUnregistered = () => {
     .map(
       (row) => `
       <li>
-        <div><strong>${row.epc}</strong> ${row.isActive ? '<span class="badge in">ACTIVA</span>' : '<span class="badge out">INACTIVA</span>'}</div>
-        <div>Lector: ${row.lastReaderMac}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</div>
+        <div><strong>${escapeHtml(row.epc)}</strong> ${row.isActive ? '<span class="badge in">ACTIVA</span>' : '<span class="badge out">INACTIVA</span>'}</div>
+        <div>Lector: ${escapeHtml(row.lastReaderMac)}${row.lastAntenna !== null ? ` / Ant ${row.lastAntenna}` : ''}</div>
         <div>Última lectura: ${fmtDate(row.lastSeenAt)}</div>
       </li>`
     )
     .join('');
 };
+
+const renderTags = () => {
+  const rows = [...state.registeredTags.values()].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  tagsTableBodyEl.innerHTML = rows
+    .map(
+      (tag) => `
+      <tr>
+        <td>${escapeHtml(tag.epc)}</td>
+        <td>${escapeHtml(tag.name || '-')}</td>
+        <td>${escapeHtml(tag.description || '-')}</td>
+        <td>${fmtDate(tag.createdAt)}</td>
+      </tr>`
+    )
+    .join('');
+};
+
+const setFormMessage = (text, isError = false) => {
+  tagFormMessageEl.textContent = text;
+  tagFormMessageEl.classList.toggle('is-error', isError);
+};
+
+const loadTags = async () => {
+  try {
+    const response = await fetch('/api/tags?limit=1000');
+    if (!response.ok) {
+      throw new Error('No se pudo cargar listado de tags');
+    }
+
+    const payload = await response.json();
+    state.registeredTags.clear();
+    payload.items.forEach((tag) => state.registeredTags.set(tag.epc, tag));
+    renderTags();
+  } catch (error) {
+    setFormMessage(String(error), true);
+  }
+};
+
+tagFormEl.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  setFormMessage('Registrando tag...');
+
+  const formData = new FormData(tagFormEl);
+  const body = {
+    epc: String(formData.get('epc') || '').trim(),
+    name: String(formData.get('name') || '').trim(),
+    description: String(formData.get('description') || '').trim()
+  };
+
+  try {
+    const response = await fetch('/api/tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'No se pudo registrar la etiqueta');
+    }
+
+    state.registeredTags.set(payload.item.epc, payload.item);
+    renderTags();
+    tagFormEl.reset();
+    setFormMessage(`Etiqueta ${payload.item.epc} registrada correctamente.`);
+  } catch (error) {
+    setFormMessage(String(error), true);
+  }
+});
 
 socket.on('connect', () => {
   mqttStatusEl.textContent = 'Realtime conectado';
@@ -113,6 +215,10 @@ socket.on('dashboard:init', (payload) => {
   state.unregistered.clear();
   payload.unregistered.forEach((item) => state.unregistered.set(item.epc, item));
   renderUnregistered();
+
+  state.registeredTags.clear();
+  payload.registeredTags.forEach((tag) => state.registeredTags.set(tag.epc, tag));
+  renderTags();
 });
 
 socket.on('reading:new', (event) => {
@@ -153,6 +259,8 @@ socket.on('inventory:delta', (delta) => {
       lastDirection: delta.direction,
       lastSeenAt: delta.lastSeenAt
     });
+  } else {
+    state.unregistered.delete(delta.epc);
   }
 
   renderActive();
@@ -162,3 +270,5 @@ socket.on('inventory:delta', (delta) => {
 setInterval(() => {
   clockEl.textContent = new Date().toLocaleString('es-ES');
 }, 1000);
+
+loadTags();
