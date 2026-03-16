@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { listRecentEvents } from '../db/repositories/eventsRepo.js';
+import { listRegisteredTags } from '../db/repositories/registeredTagsRepo.js';
 import { getSummary, listActiveInventory, listUnregistered } from '../db/repositories/stateRepo.js';
 import type { DashboardInitialPayload, InventoryStateRow, ReadEventRow, ReadingEventPayload } from '../types.js';
 
@@ -38,18 +39,20 @@ const mapUnregistered = (row: InventoryStateRow) => ({
 });
 
 export const buildDashboardInitial = async (): Promise<DashboardInitialPayload> => {
-  const [summary, activeInventory, lastReadings, unregistered] = await Promise.all([
+  const [summary, activeInventory, lastReadings, unregistered, registeredTags] = await Promise.all([
     getSummary(),
     listActiveInventory(config.business.activeLimit),
     listRecentEvents(config.business.recentEventsLimit),
-    listUnregistered(config.business.activeLimit)
+    listUnregistered(config.business.activeLimit),
+    listRegisteredTags(config.business.activeLimit)
   ]);
 
   return {
     summary,
     activeInventory: activeInventory.map(mapActive),
     lastReadings: lastReadings.map((event) => mapEvent(event)),
-    unregistered: unregistered.map(mapUnregistered)
+    unregistered: unregistered.map(mapUnregistered),
+    registeredTags
   };
 };
 
