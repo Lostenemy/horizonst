@@ -84,6 +84,8 @@ docker run --rm -p 3200:3200 --env-file .env rfid-demo-dashboard:local
 - `GET /api/dashboard/events?limit=50`
 - `GET /api/dashboard/active`
 - `GET /api/dashboard/unregistered`
+- `GET /api/tags?limit=500`
+- `POST /api/tags`
 
 ## Eventos Socket.IO
 
@@ -104,3 +106,14 @@ docker run --rm -p 3200:3200 --env-file .env rfid-demo-dashboard:local
 - No modifica tablas existentes de HorizonST.
 - Usa tablas nuevas: `rfid_demo_read_events`, `rfid_demo_inventory_state` y `rfid_demo_tags`.
 - `rfid_demo_tags` define qué EPC se considera registrada.
+
+
+## Seed opcional para demo comercial
+
+Si quieres mostrar datos variados de tags registradas en una demo:
+
+```bash
+psql -h <host> -U <user> -d rfid_demo -f migrations/seed_demo_tags.sql
+```
+
+Este seed inserta EPCs plausibles con nombres de activos verosímiles y hace upsert por EPC.

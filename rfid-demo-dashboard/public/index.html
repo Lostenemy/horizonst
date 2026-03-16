@@ -3,57 +3,151 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RFID Demo Dashboard</title>
+    <title>HorizonST RFID Live Experience</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body data-app-version="v1.1.0">
     <header class="header">
-      <h1>HorizonST · RFID Demo Dashboard</h1>
-      <div class="status">
-        <span id="mqttStatus" class="badge">Conectando...</span>
-        <span id="clock"></span>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img">
+            <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#grad)" />
+            <path d="M19 22h7v8h12v-8h7v20h-7v-7H26v7h-7z" fill="white" />
+            <defs>
+              <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#22d3ee" />
+                <stop offset="100%" stop-color="#2563eb" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <p class="eyebrow">IoT visibility suite</p>
+          <h1>HorizonST · RFID Live Experience</h1>
+          <p class="subtitle">Control de inventario en tiempo real y alta ágil de activos RFID.</p>
+        </div>
+      </div>
+
+      <div class="status-area">
+        <span id="mqttStatus" class="badge realtime">Conectando...</span>
+        <span id="clock" class="clock"></span>
       </div>
     </header>
 
-    <main class="layout">
-      <section class="card kpi">
-        <h2>Inventario activo</h2>
-        <div class="kpi-number" id="activeCount">0</div>
-        <div class="kpi-sub">
-          <span>Registradas: <strong id="registeredActiveCount">0</strong></span>
-          <span>No registradas: <strong id="unregisteredActiveCount">0</strong></span>
-          <span>Lecturas 24h: <strong id="readings24h">0</strong></span>
+    <nav class="tabs" aria-label="Vistas del panel">
+      <button class="tab is-active" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="tags">Gestión de tags</button>
+      <div class="toolbar-actions">
+        <button id="presentationBtn" class="tab tab-ghost" type="button">Modo presentación</button>
+        <button id="exportBtn" class="tab tab-ghost" type="button">Exportar CSV</button>
+      </div>
+    </nav>
+
+    <main>
+      <section id="viewDashboard" class="view is-active">
+        <div class="layout">
+          <section class="card hero-card">
+            <h2>Inventario activo</h2>
+            <div class="kpi-grid">
+              <article class="kpi-item">
+                <span class="kpi-icon">📡</span>
+                <span class="label">Activos online</span>
+                <strong class="kpi-value" id="activeCount">0</strong>
+              </article>
+              <article class="kpi-item">
+                <span class="kpi-icon">✅</span>
+                <span class="label">Registradas</span>
+                <strong class="kpi-value" id="registeredActiveCount">0</strong>
+              </article>
+              <article class="kpi-item">
+                <span class="kpi-icon">⚠️</span>
+                <span class="label">No registradas</span>
+                <strong class="kpi-value" id="unregisteredActiveCount">0</strong>
+              </article>
+              <article class="kpi-item">
+                <span class="kpi-icon">📈</span>
+                <span class="label">Lecturas 24h</span>
+                <strong class="kpi-value" id="readings24h">0</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Inventario activo</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>EPC</th>
+                    <th>Estado</th>
+                    <th>Tipo</th>
+                    <th>Lector</th>
+                    <th>Última lectura</th>
+                  </tr>
+                </thead>
+                <tbody id="activeTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Últimas lecturas</h2>
+            <ul id="readingsList" class="list"></ul>
+          </section>
+
+          <section class="card">
+            <h2>No registradas</h2>
+            <ul id="unregisteredList" class="list"></ul>
+          </section>
         </div>
       </section>
 
-      <section class="card">
-        <h2>Inventario activo (toggle)</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>EPC</th>
-                <th>Estado</th>
-                <th>Tipo</th>
-                <th>Lector</th>
-                <th>Última lectura</th>
-              </tr>
-            </thead>
-            <tbody id="activeTableBody"></tbody>
-          </table>
-        </div>
-      </section>
+      <section id="viewTags" class="view tags-view">
+        <section class="card form-card">
+          <h2>Alta rápida de etiqueta RFID</h2>
+          <p class="subtitle">Asocia EPCs a activos para trazabilidad y control de inventario.</p>
+          <form id="tagForm" class="tag-form">
+            <label>
+              EPC / Tag ID
+              <input id="tagEpc" name="epc" required maxlength="128" placeholder="E2000017221101441890C101" />
+            </label>
+            <label>
+              Nombre del activo
+              <input id="tagName" name="name" maxlength="120" placeholder="Palet farmacéutico A-12" />
+            </label>
+            <label>
+              Descripción
+              <input id="tagDescription" name="description" maxlength="240" placeholder="Zona picking norte · Lote 2026-03" />
+            </label>
+            <button type="submit" class="btn-primary">Registrar tag</button>
+          </form>
+          <p id="tagFormMessage" class="form-message" role="status" aria-live="polite"></p>
+        </section>
 
-      <section class="card">
-        <h2>Últimas lecturas</h2>
-        <ul id="readingsList" class="list"></ul>
-      </section>
-
-      <section class="card">
-        <h2>No registradas</h2>
-        <ul id="unregisteredList" class="list"></ul>
+        <section class="card">
+          <h2>Tags registrados</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>EPC</th>
+                  <th>Nombre</th>
+                  <th>Descripción</th>
+                  <th>Alta</th>
+                </tr>
+              </thead>
+              <tbody id="tagsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
+
+    <footer class="footer">
+      <span>HorizonST</span>
+      <span id="footerVersion">v1.1.0</span>
+      <span>Soluciones IoT B2B para trazabilidad en tiempo real.</span>
+    </footer>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/app.js"></script>
