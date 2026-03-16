@@ -48,6 +48,19 @@ Variables MQTT requeridas:
 - `RFID_DEMO_MQTT_CLIENT_ID`
 - `RFID_DEMO_READER_ALIASES` (JSON opcional para mapear IDs técnicos de lector a nombres operativos en el dashboard)
 
+
+### Credenciales MQTT obligatorias (entorno HorizonST actual)
+
+Para evitar bucles `ECONNRESET`, el dashboard debe usar el usuario alternativo ya provisionado en `vmq_auth_acl`:
+
+- `RFID_DEMO_MQTT_USER=rfid_demo_dashboard_alt`
+- `RFID_DEMO_MQTT_PASS=rfidpass2026`
+- `RFID_DEMO_MQTT_CLIENT_ID=rfid_demo_dashboard_alt`
+- `RFID_DEMO_MQTT_PROTOCOL_VERSION=4`
+- `RFID_DEMO_MQTT_TOPIC=devices/RF1`
+
+No reutilizar credenciales históricas (`rfid_demo_dashboard` / `RfidDemoMQTT_2026`).
+
 ## Docker / Docker Compose
 
 El contenedor está preparado para ejecutarse sin pasos manuales extra:
