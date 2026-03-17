@@ -7,6 +7,7 @@ import { createSocketServer } from './web/socketServer.js';
 import { startMqttClient } from './mqtt/client.js';
 import { parseRfidMessage } from './mqtt/parser.js';
 import { ToggleService } from './services/toggleService.js';
+import { buildDashboardInitial } from './services/dashboardStateService.js';
 
 const start = async (): Promise<void> => {
   await runMigrations();
@@ -14,6 +15,20 @@ const start = async (): Promise<void> => {
   const httpServer = createHttpServer();
   const io = createSocketServer(httpServer);
   const toggleService = new ToggleService();
+
+
+  const cycleMonitor = setInterval(() => {
+    toggleService
+      .closeCycleIfInactive(new Date())
+      .then(async (closed) => {
+        if (!closed) return;
+        const snapshot = await buildDashboardInitial();
+        io.emit('dashboard:init', snapshot);
+      })
+      .catch((error) => {
+        logger.error('Cycle monitor failed', { err: String(error) });
+      });
+  }, 10_000);
 
   const mqttClient = startMqttClient(async (_topic, payload) => {
     const reads = parseRfidMessage(payload);
@@ -26,7 +41,10 @@ const start = async (): Promise<void> => {
       const result = await toggleService.processRead(read);
       io.emit('reading:new', result.reading);
       io.emit('dashboard:summary', result.summary);
-      if (result.inventoryDelta) {
+      if (result.cycleClosed) {
+        const snapshot = await buildDashboardInitial();
+        io.emit('dashboard:init', snapshot);
+      } else if (result.inventoryDelta) {
         io.emit('inventory:delta', result.inventoryDelta);
       }
     }
@@ -42,6 +60,7 @@ const start = async (): Promise<void> => {
 
   const shutdown = async (): Promise<void> => {
     logger.info('Shutdown requested');
+    clearInterval(cycleMonitor);
     mqttClient.end(true);
     io.close();
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));

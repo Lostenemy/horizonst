@@ -16,14 +16,7 @@
   <body data-app-version="v1.1.0">
     <header class="header">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img">
-            <path d="M32 3L56 12V30C56 44.5 45.5 56.8 32 61C18.5 56.8 8 44.5 8 30V12L32 3Z" fill="#F0C800" stroke="#111111" stroke-width="3" />
-            <path d="M23 44V20H35.5C40.7 20 44 22.9 44 28C44 33.1 40.7 36 35.5 36H30.2V44H23Z" fill="#111111" />
-            <path d="M30.2 30.6H34.6C36.5 30.6 37.6 29.7 37.6 28C37.6 26.3 36.5 25.4 34.6 25.4H30.2V30.6Z" fill="#F0C800" />
-            <text x="45" y="47" fill="#111111" font-size="9" font-family="Barlow Condensed, sans-serif" font-weight="800">360</text>
-          </svg>
-        </div>
+        <img class="brand-logo" src="/logo-360-protective.svg" alt="360 Protective" />
         <div>
           <p class="eyebrow">TRAZABILIDAD Y PROTECCIÓN DE ACTIVOS</p>
           <h1>360 PROTECTIVE · RFID Live</h1>
@@ -124,6 +117,12 @@
           <h2>Sin identificar</h2>
           <ul id="unregisteredList" class="list"></ul>
         </section>
+
+
+        <section class="card">
+          <h2>Histórico de ciclos (5 min sin actividad)</h2>
+          <ul id="cycleHistoryList" class="list"></ul>
+        </section>
       </section>
 
       <section class="tags-view">
@@ -170,8 +169,7 @@
 
     <footer class="footer">
       <span class="footer-brand">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1L14 3.3V7.8C14 11 11.6 13.7 8 15C4.4 13.7 2 11 2 7.8V3.3L8 1Z" fill="currentColor"/></svg>
-        360 PROTECTIVE
+        <img src="/logo-360-protective.svg" alt="360 Protective" />
       </span>
       <span id="footerVersion">v1.1.0</span>
       <span>Soluciones de trazabilidad y protección de mercancías</span>

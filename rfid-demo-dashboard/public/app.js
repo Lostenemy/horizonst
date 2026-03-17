@@ -4,7 +4,8 @@ const state = {
   activeInventory: new Map(),
   unregistered: new Map(),
   readings: [],
-  registeredTags: new Map()
+  registeredTags: new Map(),
+  cycleHistory: []
 };
 
 const activeCountEl = document.getElementById('activeCount');
@@ -14,6 +15,7 @@ const readings24hEl = document.getElementById('readings24h');
 const activeTableBodyEl = document.getElementById('activeTableBody');
 const readingsListEl = document.getElementById('readingsList');
 const unregisteredListEl = document.getElementById('unregisteredList');
+const cycleHistoryListEl = document.getElementById('cycleHistoryList');
 const mqttStatusEl = document.getElementById('mqttStatus');
 const clockEl = document.getElementById('clock');
 const tagsTableBodyEl = document.getElementById('tagsTableBody');
@@ -139,6 +141,7 @@ const renderReadings = () => {
         <div><strong>${escapeHtml(event.epc)}</strong> ${directionBadge(event.direction)} ${regBadge(event.isRegistered)}</div>
         <div>Lector: ${escapeHtml(readerLabel(event.readerMac))}${event.antenna !== null ? ` / Ant ${event.antenna}` : ''}</div>
         <div>Hora: ${fmtDate(event.eventTs)}</div>
+        ${event.ignoredReason ? `<div>Motivo: rebote RFID (${event.ignoredReason})</div>` : ''}
       </li>`
     )
     .join('');
@@ -164,6 +167,23 @@ const renderUnregistered = () => {
         <div>Última lectura: ${fmtDate(row.lastSeenAt)}</div>
       </li>`
     )
+    .join('');
+};
+
+
+const renderCycleHistory = () => {
+  const cycles = state.cycleHistory.slice(0, 20);
+  if (cycles.length === 0) {
+    cycleHistoryListEl.innerHTML = renderEmptyList('Aún no se ha cerrado ningún ciclo por inactividad.');
+    return;
+  }
+
+  cycleHistoryListEl.innerHTML = cycles
+    .map((cycle) => `
+      <li>
+        <div><strong>Ciclo #${cycle.id}</strong> · Inicio ${fmtDate(cycle.cycleStartedAt)} · Cierre ${fmtDate(cycle.cycleClosedAt)}</div>
+        <div>Inactividad: ${Math.round(cycle.inactivityMs / 1000)} s · Tags: ${cycle.activeTagsCount}</div>
+      </li>`)
     .join('');
 };
 
@@ -304,6 +324,9 @@ socket.on('dashboard:init', (payload) => {
   state.registeredTags.clear();
   payload.registeredTags.forEach((tag) => state.registeredTags.set(tag.epc, tag));
   renderTags();
+
+  state.cycleHistory = payload.cycleHistory || [];
+  renderCycleHistory();
 });
 
 socket.on('reading:new', (event) => {

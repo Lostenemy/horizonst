@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { listRecentEvents } from '../db/repositories/eventsRepo.js';
 import { listRegisteredTags } from '../db/repositories/registeredTagsRepo.js';
-import { getSummary, listActiveInventory, listUnregistered } from '../db/repositories/stateRepo.js';
+import { getSummary, listActiveInventory, listCycleHistory, listUnregistered } from '../db/repositories/stateRepo.js';
 import type { DashboardInitialPayload, InventoryStateRow, ReadEventRow, ReadingEventPayload } from '../types.js';
 
 const mapEvent = (row: ReadEventRow, isActiveNow: boolean | null = null): ReadingEventPayload => ({
@@ -13,6 +13,7 @@ const mapEvent = (row: ReadEventRow, isActiveNow: boolean | null = null): Readin
   isRegistered: row.is_registered,
   isActiveNow,
   ignoredByDebounce: row.ignored_by_debounce,
+  ignoredReason: row.ignored_by_debounce ? 'DEBOUNCE' : null,
   eventTs: row.event_ts.toISOString(),
   processedAt: row.processed_at.toISOString()
 });
@@ -39,12 +40,13 @@ const mapUnregistered = (row: InventoryStateRow) => ({
 });
 
 export const buildDashboardInitial = async (): Promise<DashboardInitialPayload> => {
-  const [summary, activeInventory, lastReadings, unregistered, registeredTags] = await Promise.all([
+  const [summary, activeInventory, lastReadings, unregistered, registeredTags, cycleHistory] = await Promise.all([
     getSummary(),
     listActiveInventory(config.business.activeLimit),
     listRecentEvents(config.business.recentEventsLimit),
     listUnregistered(config.business.activeLimit),
-    listRegisteredTags(config.business.activeLimit)
+    listRegisteredTags(config.business.activeLimit),
+    listCycleHistory(20)
   ]);
 
   return {
@@ -52,7 +54,17 @@ export const buildDashboardInitial = async (): Promise<DashboardInitialPayload> 
     activeInventory: activeInventory.map(mapActive),
     lastReadings: lastReadings.map((event) => mapEvent(event)),
     unregistered: unregistered.map(mapUnregistered),
-    registeredTags
+    registeredTags,
+    cycleHistory: cycleHistory.map((item) => ({
+      id: item.id,
+      cycleStartedAt: item.cycle_started_at.toISOString(),
+      cycleClosedAt: item.cycle_closed_at.toISOString(),
+      inactivityMs: item.inactivity_ms,
+      activeTagsCount: item.active_tags_count,
+      eventCount: item.event_count,
+      snapshot: item.snapshot,
+      createdAt: item.created_at.toISOString()
+    }))
   };
 };
 

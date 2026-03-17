@@ -74,7 +74,8 @@ export const config = {
     ssl: parseBoolean(process.env.RFID_DEMO_DB_SSL, false)
   },
   business: {
-    debounceMs: Math.max(0, parseNumber(process.env.RFID_DEMO_DEBOUNCE_MS, 1200)),
+    debounceMs: Math.max(0, parseNumber(process.env.RFID_DEMO_DEBOUNCE_MS, 20000)),
+    cycleResetAfterMs: Math.max(0, parseNumber(process.env.RFID_DEMO_CYCLE_RESET_AFTER_MS, 300000)),
     recentEventsLimit: Math.max(1, parseNumber(process.env.RFID_DEMO_RECENT_EVENTS_LIMIT, 100)),
     activeLimit: Math.max(1, parseNumber(process.env.RFID_DEMO_ACTIVE_LIMIT, 500))
   }

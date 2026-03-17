@@ -1,5 +1,6 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type InventoryDirection = 'IN' | 'OUT' | 'IGNORED';
+export type IgnoredReason = 'DEBOUNCE';
 
 export interface ParsedRead {
   epc: string;
@@ -53,6 +54,24 @@ export interface ReadEventRow {
   debounce_window_ms: number;
 }
 
+export interface CycleHistoryRow {
+  id: number;
+  cycle_started_at: Date;
+  cycle_closed_at: Date;
+  inactivity_ms: number;
+  active_tags_count: number;
+  event_count: number;
+  snapshot: Array<{
+    epc: string;
+    status: 'IN' | 'OUT';
+    firstSeenAt: string;
+    lastSeenAt: string;
+    lastEventTs: string;
+    isRegistered: boolean;
+  }>;
+  created_at: Date;
+}
+
 export interface ReadingEventPayload {
   id: number;
   epc: string;
@@ -62,6 +81,7 @@ export interface ReadingEventPayload {
   isRegistered: boolean;
   isActiveNow: boolean | null;
   ignoredByDebounce: boolean;
+  ignoredReason: IgnoredReason | null;
   eventTs: string;
   processedAt: string;
 }
@@ -112,6 +132,23 @@ export interface DashboardInitialPayload {
     name: string | null;
     description: string | null;
     active: boolean;
+    createdAt: string;
+  }>;
+  cycleHistory: Array<{
+    id: number;
+    cycleStartedAt: string;
+    cycleClosedAt: string;
+    inactivityMs: number;
+    activeTagsCount: number;
+    eventCount: number;
+    snapshot: Array<{
+      epc: string;
+      status: 'IN' | 'OUT';
+      firstSeenAt: string;
+      lastSeenAt: string;
+      lastEventTs: string;
+      isRegistered: boolean;
+    }>;
     createdAt: string;
   }>;
 }
