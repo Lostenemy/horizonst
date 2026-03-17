@@ -37,6 +37,13 @@ body {
   align-items: center;
 }
 
+.brand-logo {
+  width: 220px;
+  height: auto;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+
 .brand-mark {
   width: 56px;
   height: 56px;
