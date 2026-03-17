@@ -47,3 +47,18 @@ CREATE TABLE IF NOT EXISTS public.rfid_demo_tags (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   active BOOLEAN NOT NULL DEFAULT TRUE
 );
+
+
+CREATE TABLE IF NOT EXISTS public.rfid_demo_cycle_history (
+  id BIGSERIAL PRIMARY KEY,
+  cycle_started_at TIMESTAMPTZ NOT NULL,
+  cycle_closed_at TIMESTAMPTZ NOT NULL,
+  inactivity_ms INTEGER NOT NULL,
+  active_tags_count INTEGER NOT NULL,
+  event_count INTEGER NOT NULL,
+  snapshot JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rfid_demo_cycle_history_closed_at
+  ON public.rfid_demo_cycle_history (cycle_closed_at DESC);
