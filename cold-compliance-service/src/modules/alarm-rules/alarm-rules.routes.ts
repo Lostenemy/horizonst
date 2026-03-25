@@ -64,6 +64,22 @@ alarmRulesRouter.patch('/:id', requireRoles(['supervisor', 'administrador', 'sup
 
 alarmRulesRouter.delete('/:id', requireRoles(['supervisor', 'administrador', 'superadministrador']), async (req, res, next) => {
   try {
+    const deps = await db.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM alerts WHERE metadata @> jsonb_build_object('ruleId', $1)::jsonb) AS alerts`,
+      [req.params.id]
+    );
+
+    const alertsCount = Number(deps.rows[0]?.alerts ?? 0);
+    if (alertsCount > 0) {
+      return res.status(409).json({
+        error: 'dependency_conflict',
+        entity: 'alarm_rule',
+        dependencies: [{ relation: 'alerts', count: alertsCount }],
+        message: `No se puede borrar la regla porque está vinculada a alertas (${alertsCount})`
+      });
+    }
+
     await db.query('DELETE FROM alarm_rules WHERE id = $1', [req.params.id]);
     res.status(204).send();
   } catch (error) {

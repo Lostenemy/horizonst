@@ -27,7 +27,16 @@ function updateInlineEdit(scope, field, value) {
 }
 
 function esc(value) {
-  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');
+}
+
+function apiErrorMessage(error) {
+  const raw = String(error && error.message ? error.message : error || '');
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.message) return parsed.message;
+  } catch {}
+  return raw || 'Error inesperado';
 }
 
 async function api(url, options = {}) {
@@ -308,7 +317,7 @@ async function renderInventory() {
     <h3>Tags</h3>
     ${table(['MAC', 'Descripción', 'Delay buzzer→shaker (ms)', 'Activo', 'Acciones'], tags.map((t) => {
       const editing = inlineEdit.tags.id === t.id;
-      if (!editing) return [t.tag_uid, t.model || '', (t.physical_alarm_followup_delay_ms == null ? 45000 : t.physical_alarm_followup_delay_ms), t.active ? 'sí' : 'no', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button>` : '-'];
+      if (!editing) return [t.tag_uid, t.model || '', (t.physical_alarm_followup_delay_ms == null ? 45000 : t.physical_alarm_followup_delay_ms), t.active ? 'sí' : 'no', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button> <button class='danger' onclick="deleteTag('${t.id}')">Borrar</button>` : '-'];
       const d = inlineEdit.tags.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`,
@@ -321,7 +330,7 @@ async function renderInventory() {
     <h3 class="mt-12">Gateways</h3>
     ${table(['MAC', 'Descripción', 'Acciones'], gateways.map((g) => {
       const editing = inlineEdit.gateways.id === g.id;
-      if (!editing) return [g.gateway_mac, g.description || '', roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button>` : '-'];
+      if (!editing) return [g.gateway_mac, g.description || '', roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
       const d = inlineEdit.gateways.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`,
@@ -376,6 +385,26 @@ async function saveGatewayInlineEdit(id) {
   renderInventory();
 }
 
+async function deleteTag(id) {
+  if (!confirm('¿Borrar tag?')) return;
+  try {
+    await api(`/tags/${id}`, { method: 'DELETE' });
+    renderInventory();
+  } catch (error) {
+    alert(apiErrorMessage(error));
+  }
+}
+
+async function deleteGateway(id) {
+  if (!confirm('¿Borrar gateway?')) return;
+  try {
+    await api(`/gateways/${id}`, { method: 'DELETE' });
+    renderInventory();
+  } catch (error) {
+    alert(apiErrorMessage(error));
+  }
+}
+
 async function renderAssignments() {
   const [workers, tags, history] = await Promise.all([api('/workers'), api('/tags'), api('/workers/assignments/history')]);
   q('assignments').innerHTML = `
@@ -397,13 +426,14 @@ async function renderAssignments() {
     <button class="mt-12" onclick="assignTag()">Asignar tag</button>
 
     <h3 class="mt-12">Trabajadores registrados</h3>
-    ${table(['Nombre', 'DNI', 'Rol', 'Activo', 'Acciones'], workers.map((w) => {
+    ${table(['Nombre', 'DNI', 'Tag actual', 'Rol', 'Activo', 'Acciones'], workers.map((w) => {
       const editing = inlineEdit.workers.id === w.id;
-      if (!editing) return [w.full_name, w.dni, w.role || '-', w.active ? 'sí' : 'no', `<button onclick="beginWorkerInlineEdit('${w.id}')">Editar</button>`];
+      if (!editing) return [w.full_name, w.dni, w.current_tag_uid || '-', w.role || '-', w.active ? 'sí' : 'no', `<button onclick="beginWorkerInlineEdit('${w.id}')">Editar</button> ${w.current_tag_uid ? `<button onclick=\"unassignTag('${w.id}')\">Desasignar</button>` : ''} <button class='danger' onclick="deleteWorker('${w.id}')">Borrar</button>`];
       const d = inlineEdit.workers.draft;
       return [
         `<input value="${esc(d.fullName)}" oninput="updateInlineEdit('workers','fullName',this.value)"/>`,
         w.dni,
+        w.current_tag_uid || '-',
         `<input value="${esc(d.role)}" oninput="updateInlineEdit('workers','role',this.value)"/>`,
         `<select onchange="updateInlineEdit('workers','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>sí</option><option value="false" ${!d.active ? 'selected' : ''}>no</option></select>`,
         `<button onclick="saveWorkerInlineEdit('${w.id}')">Guardar</button> <button class="secondary" onclick="cancelWorkerInlineEdit()">Cancelar</button>`
@@ -446,6 +476,26 @@ async function saveWorkerInlineEdit(id) {
   await api(`/workers/${id}`, { method: 'PATCH', body: JSON.stringify({ fullName: d.fullName, role: d.role, active: d.active }) });
   cancelInlineEdit('workers');
   renderAssignments();
+}
+
+async function unassignTag(workerId) {
+  if (!confirm('¿Desasignar tag activo del trabajador?')) return;
+  try {
+    await api(`/workers/${workerId}/unassign-tag`, { method: 'POST' });
+    renderAssignments();
+  } catch (error) {
+    alert(apiErrorMessage(error));
+  }
+}
+
+async function deleteWorker(id) {
+  if (!confirm('¿Borrar trabajador?')) return;
+  try {
+    await api(`/workers/${id}`, { method: 'DELETE' });
+    renderAssignments();
+  } catch (error) {
+    alert(apiErrorMessage(error));
+  }
 }
 
 
@@ -580,7 +630,7 @@ async function createAlarmRule() {
 }
 
 async function toggleAlarm(id, active) { await api(`/alarm-rules/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) }); renderAlarms(); }
-async function deleteAlarm(id) { if (confirm('¿Eliminar alarma?')) { await api(`/alarm-rules/${id}`, { method: 'DELETE' }); renderAlarms(); } }
+async function deleteAlarm(id) { if (!confirm('¿Eliminar alarma?')) return; try { await api(`/alarm-rules/${id}`, { method: 'DELETE' }); renderAlarms(); } catch (error) { alert(apiErrorMessage(error)); } }
 
 async function renderReports() {
   q('reports').innerHTML = `

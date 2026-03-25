@@ -37,3 +37,36 @@ tagsRouter.patch('/:id', requireRoles(['superadministrador']), async (req, res, 
     res.json(result.rows[0]);
   } catch (e) { next(e); }
 });
+
+tagsRouter.delete('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
+  try {
+    const tag = await db.query<{ tag_uid: string }>('SELECT tag_uid FROM tags WHERE id = $1', [req.params.id]);
+    if (!tag.rowCount) return res.status(404).json({ error: 'not_found' });
+
+    const deps = await db.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM worker_tag_assignments WHERE tag_id = $1) AS assignments,
+         (SELECT COUNT(*)::int FROM cold_room_sessions WHERE tag_id = $1) AS sessions,
+         (SELECT COUNT(*)::int FROM alerts WHERE tag_id = $1) AS alerts,
+         (SELECT COUNT(*)::int FROM incidents WHERE tag_id = $1) AS incidents,
+         (SELECT COUNT(*)::int FROM tag_commands WHERE tag_id = $1) AS tag_commands,
+         (SELECT COUNT(*)::int FROM ble_alarm_sessions WHERE tag_id = $1) AS ble_sessions,
+         (SELECT COUNT(*)::int FROM presence_events WHERE tag_uid = $2) AS presence_events`,
+      [req.params.id, tag.rows[0].tag_uid]
+    );
+
+    const row = deps.rows[0] as Record<string, number>;
+    const blocked = Object.entries(row).filter(([, count]) => Number(count) > 0).map(([name, count]) => ({ relation: name, count }));
+    if (blocked.length) {
+      return res.status(409).json({
+        error: 'dependency_conflict',
+        entity: 'tag',
+        dependencies: blocked,
+        message: `No se puede borrar el tag porque está vinculado a: ${blocked.map((d) => `${d.relation} (${d.count})`).join(', ')}`
+      });
+    }
+
+    await db.query('DELETE FROM tags WHERE id = $1', [req.params.id]);
+    res.status(204).send();
+  } catch (e) { next(e); }
+});
