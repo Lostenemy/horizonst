@@ -181,20 +181,23 @@ export async function executeAlarmSequence(params: {
 
       for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
-        if (action === 'led') await sendLedAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
-        if (action === 'buzzer') await sendBuzzerAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
-        if (action === 'vibration') await sendVibrationAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
-        logger.info({ alertId: params.alertId, action, step: i + 1, total: actions.length, actions }, 'action ack');
+        if (action === 'led') {
+          await sendLedAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
+          logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions }, 'led ack');
+        }
+        if (action === 'buzzer') {
+          await sendBuzzerAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
+          logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions }, 'buzzer ack');
+        }
+        if (action === 'vibration') {
+          await sendVibrationAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
+          logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions }, 'shaker ack');
+        }
 
         if (i < actions.length - 1 && env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS > 0) {
           logger.info({ alertId: params.alertId, delayMs: env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS }, 'waiting before next action');
           await sleep(env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS);
         }
-      }
-
-      if (actions.length === 2) {
-        logger.info({ alertId: params.alertId, waitMs: env.TAG_ALARM_DUAL_ACTION_WAIT_MS }, 'waiting before disconnect after dual action');
-        await sleep(env.TAG_ALARM_DUAL_ACTION_WAIT_MS);
       }
     } finally {
       try {
