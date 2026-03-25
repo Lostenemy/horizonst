@@ -40,6 +40,8 @@ const schema = z.object({
   TAG_ALARM_CONNECT_TIMEOUT_MS: z.coerce.number().default(12000),
   TAG_ALARM_CONNECT_MAX_RETRIES: z.coerce.number().default(2),
   TAG_ALARM_ACTION_TIMEOUT_MS: z.coerce.number().default(8000),
+  TAG_ALARM_POST_CONNECT_DELAY_MS: z.coerce.number().default(1200),
+  TAG_ALARM_BETWEEN_ACTION_DELAY_MS: z.coerce.number().default(500),
   TAG_ALARM_DUAL_ACTION_WAIT_MS: z.coerce.number().default(60000),
   MAIL_ENABLED: z.coerce.boolean().default(true),
   MAIL_HOST: z.string().default('mail'),

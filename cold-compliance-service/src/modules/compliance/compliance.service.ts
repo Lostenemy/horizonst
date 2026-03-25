@@ -215,33 +215,60 @@ async function finalizeSession(
 
 async function closeStaleSessions(): Promise<void> {
   const timeoutMs = Math.max(1000, Number(env.PRESENCE_EXIT_TIMEOUT_MS));
-  const staleSessions = await db.query<SessionContext & { last_seen_at: string }>(
+  const activeSessions = await db.query<SessionContext & { last_seen_at: string; tag_uid: string; ble_active: boolean | null; ble_disconnected_at: string | null }>(
     `SELECT s.id,
             s.started_at,
             COALESCE(s.worker_id, wta.worker_id) AS worker_id,
             s.cold_room_id,
             s.tag_id,
-            COALESCE(cr.max_continuous_minutes, $2) AS max_continuous_minutes,
-            COALESCE(cr.pre_alert_minutes, $3) AS pre_alert_minutes,
-            COALESCE(cr.max_daily_minutes, $4) AS max_daily_minutes,
-            COALESCE(MAX(pe.event_ts), s.started_at) AS last_seen_at
+            t.tag_uid,
+            COALESCE(cr.max_continuous_minutes, $1) AS max_continuous_minutes,
+            COALESCE(cr.pre_alert_minutes, $2) AS pre_alert_minutes,
+            COALESCE(cr.max_daily_minutes, $3) AS max_daily_minutes,
+            COALESCE(MAX(pe.event_ts), s.started_at) AS last_seen_at,
+            bs.is_active AS ble_active,
+            bs.disconnected_at AS ble_disconnected_at
      FROM cold_room_sessions s
      JOIN tags t ON t.id = s.tag_id
      LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
      LEFT JOIN cold_rooms cr ON cr.id = s.cold_room_id
+     LEFT JOIN ble_alarm_sessions bs ON bs.tag_id = s.tag_id
      LEFT JOIN presence_events pe
        ON regexp_replace(lower(pe.tag_uid), '[-:]', '', 'g') = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')
       AND pe.event_ts >= s.started_at
       AND pe.event_type IN ('enter', 'heartbeat', 'movement')
      WHERE s.ended_at IS NULL
      GROUP BY s.id, s.started_at, COALESCE(s.worker_id, wta.worker_id), s.cold_room_id,
-              s.tag_id, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes
-     HAVING NOW() - COALESCE(MAX(pe.event_ts), s.started_at) > ($1::int * INTERVAL '1 millisecond')`,
-    [timeoutMs, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES]
+              s.tag_id, t.tag_uid, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes,
+              bs.is_active, bs.disconnected_at`,
+    [env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES]
   );
 
-  for (const session of staleSessions.rows) {
-    const closedAt = new Date(Date.parse(session.last_seen_at) + timeoutMs).toISOString();
+  const nowMs = Date.now();
+
+  for (const session of activeSessions.rows) {
+    if (session.ble_active) {
+      logger.info({ sessionId: session.id, tagId: session.tag_id }, 'presence timeout skipped due to active BLE session');
+      continue;
+    }
+
+    let referenceTs = Date.parse(session.last_seen_at);
+    if (session.ble_disconnected_at) {
+      const bleDisconnectedMs = Date.parse(session.ble_disconnected_at);
+      if (Number.isFinite(bleDisconnectedMs) && bleDisconnectedMs > referenceTs) {
+        referenceTs = bleDisconnectedMs;
+        logger.info({ sessionId: session.id, tagId: session.tag_id, bleDisconnectedAt: session.ble_disconnected_at }, 'presence timeout started from BLE disconnect timestamp');
+      }
+    }
+
+    if (!Number.isFinite(referenceTs)) {
+      referenceTs = Date.parse(session.started_at);
+    }
+
+    const elapsedMs = nowMs - referenceTs;
+    if (elapsedMs <= timeoutMs) continue;
+
+    const closedAt = new Date(referenceTs + timeoutMs).toISOString();
     const closed = await finalizeSession(session, closedAt, null, 'timeout');
     if (closed) {
       logger.info({ sessionId: session.id, tagId: session.tag_id, closedAt, timeoutMs }, 'closed stale session by presence timeout');

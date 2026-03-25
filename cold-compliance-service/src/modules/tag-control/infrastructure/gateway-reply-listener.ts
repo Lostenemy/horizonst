@@ -11,7 +11,7 @@ const resultMap: Record<number, string> = {
   4: 'no object error'
 };
 
-interface GatewayAck {
+export interface GatewayAck {
   topic: string;
   gatewayMac: string;
   msgId: number;
@@ -22,7 +22,6 @@ interface GatewayAck {
 
 type PendingWaiter = {
   resolve: (ack: GatewayAck) => void;
-  reject: (error: Error) => void;
   timer: NodeJS.Timeout;
 };
 
@@ -32,33 +31,69 @@ function waiterKey(gatewayMac: string, msgId: number): string {
   return `${gatewayMac.toLowerCase()}:${msgId}`;
 }
 
+function popWaitersForKey(key: string): PendingWaiter[] {
+  const waiters = pendingWaiters.get(key) ?? [];
+  pendingWaiters.delete(key);
+  return waiters;
+}
+
 function emitAckToWaiters(ack: GatewayAck): void {
   const key = waiterKey(ack.gatewayMac, ack.msgId);
-  const waiters = pendingWaiters.get(key);
-  if (!waiters?.length) return;
+  const waiters = popWaitersForKey(key);
+  if (!waiters.length) return;
 
-  pendingWaiters.delete(key);
   for (const waiter of waiters) {
     clearTimeout(waiter.timer);
     waiter.resolve(ack);
   }
 }
 
-export function waitForGatewayReply(params: { gatewayMac: string; msgId: number; timeoutMs: number }): Promise<GatewayAck> {
-  const key = waiterKey(params.gatewayMac, params.msgId);
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      const waiters = pendingWaiters.get(key) ?? [];
-      const remaining = waiters.filter((item) => item.resolve !== resolve);
-      if (remaining.length) pendingWaiters.set(key, remaining);
-      else pendingWaiters.delete(key);
-      reject(new Error(`timeout waiting gateway reply msg_id=${params.msgId}`));
-    }, params.timeoutMs);
-    timer.unref();
+function removeWaiter(key: string, resolveRef: (ack: GatewayAck) => void): void {
+  const list = pendingWaiters.get(key) ?? [];
+  const remaining = list.filter((item) => item.resolve !== resolveRef);
+  if (remaining.length) pendingWaiters.set(key, remaining);
+  else pendingWaiters.delete(key);
+}
 
-    const list = pendingWaiters.get(key) ?? [];
-    list.push({ resolve, reject, timer });
-    pendingWaiters.set(key, list);
+export function waitForGatewayReply(params: { gatewayMac: string; msgId: number; timeoutMs: number }): Promise<GatewayAck> {
+  return waitForGatewayReplyMulti({ gatewayMac: params.gatewayMac, msgIds: [params.msgId], timeoutMs: params.timeoutMs });
+}
+
+export function waitForGatewayReplyMulti(params: { gatewayMac: string; msgIds: number[]; timeoutMs: number }): Promise<GatewayAck> {
+  const msgIds = [...new Set(params.msgIds.filter((id) => Number.isFinite(id)))];
+  if (!msgIds.length) return Promise.reject(new Error('waitForGatewayReplyMulti requires msgIds'));
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timers: NodeJS.Timeout[] = [];
+
+    const wrappedResolve = (ack: GatewayAck) => {
+      if (settled) return;
+      settled = true;
+      for (const timer of timers) clearTimeout(timer);
+      for (const msgId of msgIds) removeWaiter(waiterKey(params.gatewayMac, msgId), wrappedResolve);
+      resolve(ack);
+    };
+
+    for (const msgId of msgIds) {
+      const key = waiterKey(params.gatewayMac, msgId);
+      const timer = setTimeout(() => {
+        removeWaiter(key, wrappedResolve);
+        if (settled) return;
+
+        const stillWaiting = msgIds.some((id) => (pendingWaiters.get(waiterKey(params.gatewayMac, id)) ?? []).some((w) => w.resolve === wrappedResolve));
+        if (!stillWaiting) {
+          settled = true;
+          reject(new Error(`timeout waiting gateway reply msg_ids=${msgIds.join(',')}`));
+        }
+      }, params.timeoutMs);
+      timer.unref();
+      timers.push(timer);
+
+      const list = pendingWaiters.get(key) ?? [];
+      list.push({ resolve: wrappedResolve, timer });
+      pendingWaiters.set(key, list);
+    }
   });
 }
 
