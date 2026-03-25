@@ -101,9 +101,17 @@ function stateBadge(state) {
 }
 
 function table(headers, rows) {
-  return `<table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${
-    rows.length ? rows.map((r) => `<tr>${r.map((c) => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('') : '<tr><td colspan="99">Sin datos</td></tr>'
-  }</tbody></table>`;
+  const body = rows.length
+    ? rows
+        .map(
+          (r) =>
+            `<tr>${r
+              .map((c, idx) => `<td data-label="${headers[idx] || ''}">${c ?? ''}</td>`)
+              .join('')}</tr>`
+        )
+        .join('')
+    : '<tr><td colspan="99">Sin datos</td></tr>';
+  return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 async function renderDashboard(snapshot) {
@@ -297,8 +305,10 @@ async function renderReports() {
   q('reports').innerHTML = `
     <h2>Informes de inspección</h2>
     <p>PDF y Excel contienen el mismo dataset operativo.</p>
-    <button onclick="downloadReport('/reports/inspection.pdf','inspection.pdf')">Descargar PDF</button>
-    <button class="secondary" onclick="downloadReport('/reports/inspection.xlsx','inspection.xlsx')">Descargar Excel</button>
+    <div class="actions">
+      <button onclick="downloadReport('/reports/inspection.pdf','inspection.pdf')">Descargar PDF</button>
+      <button class="secondary" onclick="downloadReport('/reports/inspection.xlsx','inspection.xlsx')">Descargar Excel</button>
+    </div>
   `;
 }
 
