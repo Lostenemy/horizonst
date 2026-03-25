@@ -173,7 +173,7 @@ async function renderUsers() {
       u.role,
       u.status,
       u.shift || '-',
-      `<button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? ` <button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}`
+      `<button onclick="editUser('${u.id}')">Editar</button> <button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? ` <button class='danger' onclick=\"deleteUser('${u.id}')\">Borrar</button>` : ''}`
     ]))}
   `;
 }
@@ -196,6 +196,24 @@ async function createUser() {
   renderUsers();
 }
 
+
+async function editUser(id) {
+  const users = await api('/users');
+  const user = users.find((u) => u.id === id);
+  if (!user) return;
+  const nombre = prompt('Nombre', user.first_name);
+  if (nombre === null) return;
+  const apellidos = prompt('Apellidos', user.last_name);
+  if (apellidos === null) return;
+  const telefono = prompt('Teléfono', user.phone || '');
+  const turno = prompt('Turno', user.shift || '');
+  await api(`/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ nombre, apellidos, telefono, turno })
+  });
+  renderUsers();
+}
+
 async function deactivateUser(id) { await api(`/users/${id}/deactivate`, { method: 'POST' }); renderUsers(); }
 async function deleteUser(id) { if (confirm('¿Borrar usuario?')) { await api(`/users/${id}`, { method: 'DELETE' }); renderUsers(); } }
 
@@ -209,6 +227,7 @@ async function renderInventory() {
         <h3>Alta tag</h3>
         <input id="tagMac" placeholder="MAC" />
         <input id="tagDesc" placeholder="Descripción" class="mt-12" />
+        <input id="tagDelay" type="number" min="0" placeholder="Delay buzzer→shaker (ms)" class="mt-12" value="45000" />
         <button class="mt-12" onclick="createTag()">Crear tag</button>
       </div>
       <div>
@@ -219,14 +238,40 @@ async function renderInventory() {
       </div>
     </div>` : '<p>Solo superadministrador puede asignar MAC de tags y gateways.</p>'}
     <h3>Tags</h3>
-    ${table(['MAC', 'Descripción', 'Activo'], tags.map((t) => [t.tag_uid, t.model || '', t.active ? 'sí' : 'no']))}
+    ${table(['MAC', 'Descripción', 'Delay buzzer→shaker (ms)', 'Activo', 'Acciones'], tags.map((t) => [t.tag_uid, t.model || '', t.physical_alarm_followup_delay_ms ?? 45000, t.active ? 'sí' : 'no', roleCan('superadministrador') ? `<button onclick=\"editTag('${t.id}')\">Editar</button>` : '-']))}
     <h3 class="mt-12">Gateways</h3>
-    ${table(['MAC', 'Descripción'], gateways.map((g) => [g.gateway_mac, g.description || '']))}
+    ${table(['MAC', 'Descripción', 'Acciones'], gateways.map((g) => [g.gateway_mac, g.description || '', roleCan('superadministrador') ? `<button onclick=\"editGateway('${g.id}')\">Editar</button>` : '-']))}
   `;
 }
 
-async function createTag() { await api('/tags', { method: 'POST', body: JSON.stringify({ mac: q('tagMac').value, descripcion: q('tagDesc').value }) }); renderInventory(); }
+async function createTag() { await api('/tags', { method: 'POST', body: JSON.stringify({ mac: q('tagMac').value, descripcion: q('tagDesc').value, physicalAlarmFollowupDelayMs: Number(q('tagDelay').value || 45000) }) }); renderInventory(); }
 async function createGateway() { await api('/gateways', { method: 'POST', body: JSON.stringify({ mac: q('gwMac').value, descripcion: q('gwDesc').value }) }); renderInventory(); }
+
+async function editTag(id) {
+  const tags = await api('/tags');
+  const tag = tags.find((t) => t.id === id);
+  if (!tag) return;
+  const mac = prompt('MAC del tag', tag.tag_uid);
+  if (mac === null) return;
+  const descripcion = prompt('Descripción', tag.model || '');
+  if (descripcion === null) return;
+  const delay = prompt('Delay buzzer→shaker (ms)', String(tag.physical_alarm_followup_delay_ms ?? 45000));
+  if (delay === null) return;
+  await api(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ mac, descripcion, physicalAlarmFollowupDelayMs: Number(delay) }) });
+  renderInventory();
+}
+
+async function editGateway(id) {
+  const gateways = await api('/gateways');
+  const gateway = gateways.find((g) => g.id === id);
+  if (!gateway) return;
+  const mac = prompt('MAC del gateway', gateway.gateway_mac);
+  if (mac === null) return;
+  const descripcion = prompt('Descripción', gateway.description || '');
+  if (descripcion === null) return;
+  await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac, descripcion }) });
+  renderInventory();
+}
 
 async function renderAssignments() {
   const [workers, tags, history] = await Promise.all([api('/workers'), api('/tags'), api('/workers/assignments/history')]);
@@ -249,7 +294,7 @@ async function renderAssignments() {
     <button class="mt-12" onclick="assignTag()">Asignar tag</button>
 
     <h3 class="mt-12">Trabajadores registrados</h3>
-    ${table(['Nombre', 'DNI', 'Activo'], workers.map((w) => [w.full_name, w.dni, w.active ? 'sí' : 'no']))}
+    ${table(['Nombre', 'DNI', 'Activo', 'Acciones'], workers.map((w) => [w.full_name, w.dni, w.active ? 'sí' : 'no', `<button onclick=\"editWorker('${w.id}')\">Editar</button>`]))}
 
     <h3 class="mt-12">Histórico de asignaciones</h3>
     ${table(['Trabajador', 'Tag', 'Inicio', 'Fin'], history.map((h) => [h.worker_name, h.tag_mac, new Date(h.assigned_at).toLocaleString(), h.unassigned_at ? new Date(h.unassigned_at).toLocaleString() : '-']))}
@@ -269,6 +314,18 @@ async function assignTag() {
     method: 'POST',
     body: JSON.stringify({ tagId: q('asTag').value })
   });
+  renderAssignments();
+}
+
+async function editWorker(id) {
+  const workers = await api('/workers');
+  const worker = workers.find((w) => w.id === id);
+  if (!worker) return;
+  const fullName = prompt('Nombre completo', worker.full_name);
+  if (fullName === null) return;
+  const role = prompt('Rol', worker.role || 'trabajador');
+  if (role === null) return;
+  await api(`/workers/${id}`, { method: 'PATCH', body: JSON.stringify({ fullName, role }) });
   renderAssignments();
 }
 
@@ -347,9 +404,25 @@ async function renderAlarms() {
       r.alarm_visibility_grace_minutes ?? 15,
       r.active ? 'encendida' : 'apagada',
       r.operational_status || (r.active ? 'encendida' : 'apagada'),
-      `<button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`
+      `<button onclick="editAlarmRule('${r.id}')">Editar</button> <button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`
     ]))}
   `;
+}
+
+async function editAlarmRule(id) {
+  const rules = await api('/alarm-rules');
+  const rule = rules.find((r) => r.id === id);
+  if (!rule) return;
+  const descripcion = prompt('Descripción', rule.description);
+  if (descripcion === null) return;
+  const minutosBuzzerShaker = prompt('Min buzzer/shaker', String(rule.buzzer_shaker_minutes));
+  if (minutosBuzzerShaker === null) return;
+  const minutosAlarma = prompt('Min alarma', String(rule.alarm_minutes));
+  if (minutosAlarma === null) return;
+  const minutosGraciaFuera = prompt('Min gracia fuera', String(rule.alarm_visibility_grace_minutes ?? 15));
+  if (minutosGraciaFuera === null) return;
+  await api(`/alarm-rules/${id}`, { method: 'PATCH', body: JSON.stringify({ descripcion, minutosBuzzerShaker: Number(minutosBuzzerShaker), minutosAlarma: Number(minutosAlarma), minutosGraciaFuera: Number(minutosGraciaFuera) }) });
+  renderAlarms();
 }
 
 async function createAlarmRule() {

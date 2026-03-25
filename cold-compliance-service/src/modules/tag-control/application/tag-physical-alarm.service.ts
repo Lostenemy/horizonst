@@ -5,6 +5,7 @@ import { waitForGatewayReplyMulti } from '../infrastructure/gateway-reply-listen
 import { logger } from '../../../utils/logger';
 import { sleep } from '../../../utils/sleep';
 import { markBleSessionActive, markBleSessionDisconnected } from '../infrastructure/ble-session.repository';
+import { db } from '../../../db/pool';
 
 export type PhysicalAlarmAction = 'led' | 'buzzer' | 'vibration';
 
@@ -17,6 +18,7 @@ const COMMANDS: Record<PhysicalAlarmAction | 'connect' | 'disconnect', { msgId: 
 };
 
 const tagAlarmLocks = new Map<string, Promise<void>>();
+const DEFAULT_FOLLOWUP_DELAY_MS = 45000;
 
 function toTopic(gatewayMac: string): string {
   return env.MQTT_COMMAND_TOPIC_TEMPLATE.replace('{gatewayMac}', gatewayMac.toLowerCase());
@@ -50,6 +52,16 @@ async function publishAndWaitAck(params: {
   }
 
   logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, command: params.command, ackMsgId: ack.msgId }, 'physical alarm command ack');
+}
+
+
+async function resolveFollowupDelayMs(tagId: string): Promise<number> {
+  const result = await db.query<{ physical_alarm_followup_delay_ms: number }>(
+    `SELECT physical_alarm_followup_delay_ms FROM tags WHERE id = $1`,
+    [tagId]
+  );
+  const raw = Number(result.rows[0]?.physical_alarm_followup_delay_ms ?? DEFAULT_FOLLOWUP_DELAY_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_FOLLOWUP_DELAY_MS;
 }
 
 async function withTagLock<T>(lockKey: string, fn: () => Promise<T>): Promise<T> {
@@ -166,7 +178,8 @@ export async function executeAlarmSequence(params: {
 
   const lockKey = `${target.gatewayMac.toLowerCase()}:${target.tagId}`;
   await withTagLock(lockKey, async () => {
-    logger.info({ alertId: params.alertId, gatewayMac: target.gatewayMac, tagUid: target.tagUid, actions }, 'starting physical alarm sequence');
+    const followupDelayMs = await resolveFollowupDelayMs(target.tagId);
+    logger.info({ alertId: params.alertId, gatewayMac: target.gatewayMac, tagUid: target.tagUid, actions, followupDelayMs }, 'starting physical alarm sequence');
 
     await connectTagSession({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
     await markBleSessionActive({ tagId: target.tagId, tagUid: target.tagUid, gatewayMac: target.gatewayMac });
@@ -194,9 +207,12 @@ export async function executeAlarmSequence(params: {
           logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions }, 'shaker ack');
         }
 
-        if (i < actions.length - 1 && env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS > 0) {
-          logger.info({ alertId: params.alertId, delayMs: env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS }, 'waiting before next action');
-          await sleep(env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS);
+        if (i < actions.length - 1) {
+          const delayMs = i === 0 ? followupDelayMs : env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS;
+          if (delayMs > 0) {
+            logger.info({ alertId: params.alertId, delayMs, between: `${actions[i]}->${actions[i + 1]}` }, 'waiting before next action');
+            await sleep(delayMs);
+          }
         }
       }
     } finally {
