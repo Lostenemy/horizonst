@@ -30,11 +30,11 @@ alarmRulesRouter.get('/', async (_req, res, next) => {
 
 alarmRulesRouter.post('/', requireRoles(['supervisor', 'administrador', 'superadministrador']), async (req, res, next) => {
   try {
-    const { descripcion, minutosBuzzerShaker, minutosAlarma, active } = req.body;
+    const { descripcion, minutosBuzzerShaker, minutosAlarma, minutosGraciaFuera, active } = req.body;
     const result = await db.query(
-      `INSERT INTO alarm_rules(description, buzzer_shaker_minutes, alarm_minutes, active)
-       VALUES($1,$2,$3,$4) RETURNING *`,
-      [descripcion, minutosBuzzerShaker, minutosAlarma, active ?? true]
+      `INSERT INTO alarm_rules(description, buzzer_shaker_minutes, alarm_minutes, alarm_visibility_grace_minutes, active)
+       VALUES($1,$2,$3,$4,$5) RETURNING *`,
+      [descripcion, minutosBuzzerShaker, minutosAlarma, minutosGraciaFuera ?? 15, active ?? true]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -44,16 +44,17 @@ alarmRulesRouter.post('/', requireRoles(['supervisor', 'administrador', 'superad
 
 alarmRulesRouter.patch('/:id', requireRoles(['supervisor', 'administrador', 'superadministrador']), async (req, res, next) => {
   try {
-    const { descripcion, minutosBuzzerShaker, minutosAlarma, active } = req.body;
+    const { descripcion, minutosBuzzerShaker, minutosAlarma, minutosGraciaFuera, active } = req.body;
     const result = await db.query(
       `UPDATE alarm_rules
        SET description = COALESCE($2, description),
            buzzer_shaker_minutes = COALESCE($3, buzzer_shaker_minutes),
            alarm_minutes = COALESCE($4, alarm_minutes),
-           active = COALESCE($5, active),
+           alarm_visibility_grace_minutes = COALESCE($5, alarm_visibility_grace_minutes),
+           active = COALESCE($6, active),
            updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      [req.params.id, descripcion ?? null, minutosBuzzerShaker ?? null, minutosAlarma ?? null, active ?? null]
+      [req.params.id, descripcion ?? null, minutosBuzzerShaker ?? null, minutosAlarma ?? null, minutosGraciaFuera ?? null, active ?? null]
     );
     res.json(result.rows[0]);
   } catch (error) {

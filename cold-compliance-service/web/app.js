@@ -337,12 +337,14 @@ async function renderAlarms() {
       <input id="aDesc" placeholder="Descripción" />
       <input id="aBuzz" type="number" min="1" placeholder="Minutos buzzer/shaker" />
       <input id="aAlarm" type="number" min="1" placeholder="Minutos alarma" />
+      <input id="aGrace" type="number" min="1" placeholder="Min gracia fuera cámara" value="15" />
     </div>
     <button class="mt-12" onclick="createAlarmRule()">Crear alarma</button>
-    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Configuración', 'Estado operativo', 'Acciones'], rules.map((r) => [
+    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Min gracia fuera', 'Configuración', 'Estado operativo', 'Acciones'], rules.map((r) => [
       r.description,
       r.buzzer_shaker_minutes,
       r.alarm_minutes,
+      r.alarm_visibility_grace_minutes ?? 15,
       r.active ? 'encendida' : 'apagada',
       r.operational_status || (r.active ? 'encendida' : 'apagada'),
       `<button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`
@@ -356,7 +358,8 @@ async function createAlarmRule() {
     body: JSON.stringify({
       descripcion: q('aDesc').value,
       minutosBuzzerShaker: Number(q('aBuzz').value),
-      minutosAlarma: Number(q('aAlarm').value)
+      minutosAlarma: Number(q('aAlarm').value),
+      minutosGraciaFuera: Number(q('aGrace').value || 15)
     })
   });
   renderAlarms();

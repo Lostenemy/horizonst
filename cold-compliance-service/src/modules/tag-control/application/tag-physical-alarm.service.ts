@@ -41,7 +41,7 @@ async function publishAndWaitAck(params: {
 
   const ack = await waitForGatewayReplyMulti({
     gatewayMac: params.gatewayMac,
-    msgIds: [commandDef.ackMsgId, commandDef.msgId],
+    msgIds: [commandDef.ackMsgId, commandDef.msgId, commandDef.msgId + 2000, commandDef.msgId + 2001],
     timeoutMs: params.timeoutMs
   });
 
@@ -138,8 +138,7 @@ export async function disconnectTagSession(params: { gatewayMac: string; tagUid:
 
 function resolveAlarmActions(alert: { severity: string; alertType: string }): PhysicalAlarmAction[] {
   if (alert.alertType === 'low_battery') return ['led'];
-  if (alert.severity === 'critical') return ['buzzer', 'vibration'];
-  if (alert.severity === 'warning') return ['vibration'];
+  if (alert.severity === 'critical' || alert.severity === 'warning') return ['buzzer', 'vibration'];
   return ['led'];
 }
 
@@ -185,7 +184,7 @@ export async function executeAlarmSequence(params: {
         if (action === 'led') await sendLedAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
         if (action === 'buzzer') await sendBuzzerAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
         if (action === 'vibration') await sendVibrationAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
-        logger.info({ alertId: params.alertId, action, step: i + 1, total: actions.length }, 'action ack');
+        logger.info({ alertId: params.alertId, action, step: i + 1, total: actions.length, actions }, 'action ack');
 
         if (i < actions.length - 1 && env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS > 0) {
           logger.info({ alertId: params.alertId, delayMs: env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS }, 'waiting before next action');

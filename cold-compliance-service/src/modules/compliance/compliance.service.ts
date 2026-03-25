@@ -266,6 +266,16 @@ async function closeStaleSessions(): Promise<void> {
     }
 
     const elapsedMs = nowMs - referenceTs;
+    logger.debug({
+      sessionId: session.id,
+      tagId: session.tag_id,
+      referenceTs: new Date(referenceTs).toISOString(),
+      elapsedMs,
+      timeoutMs,
+      lastSeenAt: session.last_seen_at,
+      bleDisconnectedAt: session.ble_disconnected_at
+    }, 'presence timeout evaluation');
+
     if (elapsedMs <= timeoutMs) continue;
 
     const closedAt = new Date(referenceTs + timeoutMs).toISOString();
@@ -393,7 +403,12 @@ export function startComplianceRuleLoop(): void {
 }
 
 export function startPresenceTimeoutLoop(): void {
+  const intervalMs = Math.max(1000, Math.min(env.PRESENCE_SWEEP_INTERVAL_MS, Math.floor(env.PRESENCE_EXIT_TIMEOUT_MS / 4), 10000));
+  if (intervalMs !== env.PRESENCE_SWEEP_INTERVAL_MS) {
+    logger.warn({ configured: env.PRESENCE_SWEEP_INTERVAL_MS, effective: intervalMs }, 'presence sweep interval adjusted to avoid delayed timeout closes');
+  }
+
   setInterval(() => {
     closeStaleSessions().catch((error) => logger.error({ error }, 'presence timeout loop failed'));
-  }, env.PRESENCE_SWEEP_INTERVAL_MS).unref();
+  }, intervalMs).unref();
 }
