@@ -3,7 +3,7 @@ let currentUser = null;
 let realtimeSource = null;
 
 const q = (id) => document.getElementById(id);
-const sections = ['dashboard', 'users', 'inventory', 'assignments', 'alarms', 'reports'];
+const sections = ['dashboard', 'users', 'inventory', 'assignments', 'alertsCenter', 'alarms', 'reports'];
 
 async function api(url, options = {}) {
   const res = await fetch(url, {
@@ -39,6 +39,7 @@ function showSection(section) {
   if (section === 'users') renderUsers();
   if (section === 'inventory') renderInventory();
   if (section === 'assignments') renderAssignments();
+  if (section === 'alertsCenter') renderAlertsCenter();
   if (section === 'alarms') renderAlarms();
   if (section === 'reports') renderReports();
 }
@@ -95,9 +96,15 @@ async function resetPassword() {
 }
 
 function stateBadge(state) {
-  if (state === 'alarma') return '<span class="badge alert">alarma</span>';
-  if (state === 'dentro') return '<span class="badge warn">dentro</span>';
-  return '<span class="badge ok">fuera</span>';
+  if (state === 'alarma') return '<span class=\"badge alert\">alarma</span>';
+  if (state === 'dentro') return '<span class=\"badge warn\">dentro</span>';
+  return '<span class=\"badge ok\">fuera</span>';
+}
+
+function severityBadge(severity) {
+  if (severity === 'critical') return '<span class=\"badge alert\">crítica</span>';
+  if (severity === 'warning') return '<span class=\"badge warn\">warning</span>';
+  return '<span class=\"badge ok\">info</span>';
 }
 
 function table(headers, rows) {
@@ -263,6 +270,63 @@ async function assignTag() {
     body: JSON.stringify({ tagId: q('asTag').value })
   });
   renderAssignments();
+}
+
+
+async function archiveAlert(id) {
+  if (!confirm('¿Archivar alarma seleccionada?')) return;
+  await api(`/alerts/${id}/archive`, { method: 'POST' });
+  renderAlertsCenter();
+}
+
+async function renderAlertsCenter() {
+  const state = q('acState')?.value || 'active';
+  const severity = q('acSeverity')?.value || '';
+  const search = q('acSearch')?.value?.trim() || '';
+  const query = new URLSearchParams();
+  if (state && state !== 'all') query.set('state', state);
+  if (severity) query.set('severity', severity);
+  if (search) query.set('search', search);
+
+  const alerts = await api(`/alerts?${query.toString()}`);
+
+  q('alertsCenter').innerHTML = `
+    <h2>Gestión de alarmas disparadas</h2>
+    <div class="grid three">
+      <select id="acState">
+        <option value="active" ${state === 'active' ? 'selected' : ''}>Activas</option>
+        <option value="archived" ${state === 'archived' ? 'selected' : ''}>Archivadas</option>
+        <option value="all" ${state === 'all' ? 'selected' : ''}>Todas</option>
+      </select>
+      <select id="acSeverity">
+        <option value="" ${severity === '' ? 'selected' : ''}>Todas las severidades</option>
+        <option value="critical" ${severity === 'critical' ? 'selected' : ''}>Crítica</option>
+        <option value="warning" ${severity === 'warning' ? 'selected' : ''}>Warning</option>
+        <option value="info" ${severity === 'info' ? 'selected' : ''}>Info</option>
+      </select>
+      <input id="acSearch" placeholder="Buscar trabajador / tag / cámara / mensaje" value="${search.replace(/"/g, '&quot;')}" />
+    </div>
+    <div class="actions mt-12">
+      <button onclick="renderAlertsCenter()">Aplicar filtros</button>
+      <button class="secondary" onclick="showSection('alertsCenter')">Refrescar</button>
+    </div>
+    ${table(
+      ['Fecha', 'Trabajador', 'DNI', 'Tag', 'Cámara', 'Tipo', 'Severidad', 'Mensaje', 'Estado', 'Archivado por', 'Acciones'],
+      alerts.map((a) => [
+        new Date(a.created_at).toLocaleString(),
+        a.worker_name,
+        a.worker_dni,
+        a.tag_uid,
+        a.cold_room_name,
+        a.alert_type,
+        severityBadge(a.severity),
+        a.message,
+        a.status === 'active' ? '<span class="badge warn">activa</span>' : '<span class="badge ok">archivada</span>',
+        a.acknowledged_by || '-',
+        a.status === 'active' ? `<button onclick="archiveAlert('${a.id}')">Archivar</button>` : '-'
+      ])
+    )}
+  `;
 }
 
 async function renderAlarms() {
