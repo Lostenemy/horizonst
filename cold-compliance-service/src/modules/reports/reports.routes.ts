@@ -207,9 +207,20 @@ reportsRouter.get('/inspection.pdf', async (_req: Request, res: Response, next) 
     const pageRange = doc.bufferedPageRange();
     for (let i = pageRange.start; i < pageRange.start + pageRange.count; i += 1) {
       doc.switchToPage(i);
-      const footerY = doc.page.height - margin;
-      doc.fillColor('#6B7280').fontSize(8).text('HorizonST · Cold Compliance', margin, footerY, { width: 260, align: 'left' });
-      doc.text(`Página ${i - pageRange.start + 1} / ${pageRange.count}`, margin, footerY, { width: doc.page.width - margin * 2, align: 'right' });
+      const footerY = doc.page.height - margin + 2;
+      doc.save();
+      doc.fillColor('#6B7280').fontSize(8);
+      doc.text('HorizonST · Cold Compliance', margin, footerY, {
+        width: 260,
+        align: 'left',
+        lineBreak: false
+      });
+      doc.text(`Página ${i - pageRange.start + 1} / ${pageRange.count}`, margin, footerY, {
+        width: doc.page.width - margin * 2,
+        align: 'right',
+        lineBreak: false
+      });
+      doc.restore();
     }
 
     doc.end();
