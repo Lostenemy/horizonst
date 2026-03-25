@@ -8,7 +8,10 @@ realtimeRouter.use(requireAuth);
 async function loadOperationalSnapshot() {
   const [presence, alerts] = await Promise.all([
     db.query(
-      `SELECT s.id,
+      `WITH cfg AS (
+         SELECT COALESCE((SELECT alarm_visibility_grace_minutes FROM alarm_rules ORDER BY updated_at DESC LIMIT 1), 15) AS grace_minutes
+       )
+       SELECT s.id,
               COALESCE(s.worker_id, wta.worker_id) AS worker_id,
               COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
               COALESCE(w.dni, '-') AS dni,
@@ -17,12 +20,28 @@ async function loadOperationalSnapshot() {
               EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
               CASE WHEN EXISTS(
                 SELECT 1 FROM alerts a
-                WHERE a.worker_id = COALESCE(s.worker_id, wta.worker_id) AND a.acknowledged_at IS NULL
+                WHERE a.worker_id = COALESCE(s.worker_id, wta.worker_id)
+                  AND a.acknowledged_at IS NULL
+                  AND (
+                    last_exit.last_exit_at IS NULL
+                    OR s.started_at - last_exit.last_exit_at <= (cfg.grace_minutes::int * INTERVAL '1 minute')
+                    OR a.created_at >= s.started_at
+                  )
               ) THEN 'alarma' ELSE 'dentro' END AS presence_status
        FROM cold_room_sessions s
        LEFT JOIN tags t ON t.id = s.tag_id
        LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
        LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
+       CROSS JOIN cfg
+       LEFT JOIN LATERAL (
+         SELECT prev.ended_at AS last_exit_at
+         FROM cold_room_sessions prev
+         WHERE prev.worker_id = COALESCE(s.worker_id, wta.worker_id)
+           AND prev.ended_at IS NOT NULL
+           AND prev.ended_at <= s.started_at
+         ORDER BY prev.ended_at DESC
+         LIMIT 1
+       ) last_exit ON true
        WHERE s.ended_at IS NULL
        ORDER BY s.started_at ASC`
     ),
