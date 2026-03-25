@@ -207,7 +207,7 @@ reportsRouter.get('/inspection.pdf', async (_req: Request, res: Response, next) 
     const pageRange = doc.bufferedPageRange();
     for (let i = pageRange.start; i < pageRange.start + pageRange.count; i += 1) {
       doc.switchToPage(i);
-      const footerY = doc.page.height - margin + 2;
+      const footerY = doc.page.height - margin - footerHeight;
       doc.save();
       doc.fillColor('#6B7280').fontSize(8);
       doc.text('HorizonST · Cold Compliance', margin, footerY, {
