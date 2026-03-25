@@ -5,6 +5,31 @@ let realtimeSource = null;
 const q = (id) => document.getElementById(id);
 const sections = ['dashboard', 'users', 'inventory', 'assignments', 'alertsCenter', 'alarms', 'reports'];
 
+const inlineEdit = {
+  users: { id: null, draft: null },
+  tags: { id: null, draft: null },
+  gateways: { id: null, draft: null },
+  workers: { id: null, draft: null },
+  alarmRules: { id: null, draft: null }
+};
+
+function startInlineEdit(scope, id, draft) {
+  inlineEdit[scope] = { id, draft: { ...draft } };
+}
+
+function cancelInlineEdit(scope) {
+  inlineEdit[scope] = { id: null, draft: null };
+}
+
+function updateInlineEdit(scope, field, value) {
+  if (!inlineEdit[scope].draft) return;
+  inlineEdit[scope].draft[field] = value;
+}
+
+function esc(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 async function api(url, options = {}) {
   const res = await fetch(url, {
     ...options,
@@ -167,14 +192,32 @@ async function renderUsers() {
       <input id="uTurno" placeholder="Turno" />
     </div>
     <button class="mt-12" onclick="createUser()">Crear usuario</button>
-    ${table(['Nombre', 'Email', 'Rol', 'Estado', 'Turno', 'Acciones'], users.map((u) => [
-      `${u.first_name} ${u.last_name}`,
-      u.email,
-      u.role,
-      u.status,
-      u.shift || '-',
-      `<button onclick="editUser('${u.id}')">Editar</button> <button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? ` <button class='danger' onclick=\"deleteUser('${u.id}')\">Borrar</button>` : ''}`
-    ]))}
+    ${table(['Nombre', 'Email', 'Rol', 'Estado', 'Teléfono', 'DNI', 'Turno', 'Acciones'], users.map((u) => {
+      const isEditing = inlineEdit.users.id === u.id;
+      if (!isEditing) {
+        return [
+          `${u.first_name} ${u.last_name}`,
+          u.email,
+          u.role,
+          u.status,
+          u.phone || '-',
+          u.dni,
+          u.shift || '-',
+          `<button onclick="beginUserInlineEdit('${u.id}')">Editar</button> <button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? ` <button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}`
+        ];
+      }
+      const d = inlineEdit.users.draft;
+      return [
+        `<input value="${esc(d.nombre)}" oninput="updateInlineEdit('users','nombre',this.value)"/> <input class="mt-12" value="${esc(d.apellidos)}" oninput="updateInlineEdit('users','apellidos',this.value)"/>`,
+        `<input value="${esc(d.email)}" oninput="updateInlineEdit('users','email',this.value)"/>`,
+        `<select onchange="updateInlineEdit('users','rol',this.value)"><option value="supervisor" ${d.rol === 'supervisor' ? 'selected' : ''}>supervisor</option><option value="administrador" ${d.rol === 'administrador' ? 'selected' : ''}>administrador</option></select>`,
+        `<select onchange="updateInlineEdit('users','estado',this.value)"><option value="active" ${d.estado === 'active' ? 'selected' : ''}>active</option><option value="inactive" ${d.estado === 'inactive' ? 'selected' : ''}>inactive</option></select>`,
+        `<input value="${esc(d.telefono)}" oninput="updateInlineEdit('users','telefono',this.value)"/>`,
+        `<input value="${esc(d.dni)}" oninput="updateInlineEdit('users','dni',this.value)"/>`,
+        `<input value="${esc(d.turno)}" oninput="updateInlineEdit('users','turno',this.value)"/>`,
+        `<input type="password" placeholder="Nueva contraseña (opcional)" oninput="updateInlineEdit('users','password',this.value)"/> <div class='mt-12'><button onclick="saveUserInlineEdit('${u.id}')">Guardar</button> <button class="secondary" onclick="cancelUserInlineEdit()">Cancelar</button></div>`
+      ];
+    }))}
   `;
 }
 
@@ -196,21 +239,46 @@ async function createUser() {
   renderUsers();
 }
 
-
-async function editUser(id) {
+async function beginUserInlineEdit(id) {
   const users = await api('/users');
   const user = users.find((u) => u.id === id);
   if (!user) return;
-  const nombre = prompt('Nombre', user.first_name);
-  if (nombre === null) return;
-  const apellidos = prompt('Apellidos', user.last_name);
-  if (apellidos === null) return;
-  const telefono = prompt('Teléfono', user.phone || '');
-  const turno = prompt('Turno', user.shift || '');
+  startInlineEdit('users', id, {
+    nombre: user.first_name,
+    apellidos: user.last_name,
+    email: user.email,
+    telefono: user.phone || '',
+    dni: user.dni,
+    rol: user.role === 'superadministrador' ? 'administrador' : user.role,
+    estado: user.status,
+    turno: user.shift || '',
+    password: ''
+  });
+  renderUsers();
+}
+
+function cancelUserInlineEdit() {
+  cancelInlineEdit('users');
+  renderUsers();
+}
+
+async function saveUserInlineEdit(id) {
+  const d = inlineEdit.users.draft;
   await api(`/users/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ nombre, apellidos, telefono, turno })
+    body: JSON.stringify({
+      nombre: d.nombre,
+      apellidos: d.apellidos,
+      email: d.email,
+      telefono: d.telefono || null,
+      dni: d.dni,
+      rol: d.rol,
+      estado: d.estado,
+      turno: d.turno || null,
+      password: d.password || null
+    })
   });
+  cancelInlineEdit('users');
   renderUsers();
 }
 
@@ -238,38 +306,73 @@ async function renderInventory() {
       </div>
     </div>` : '<p>Solo superadministrador puede asignar MAC de tags y gateways.</p>'}
     <h3>Tags</h3>
-    ${table(['MAC', 'Descripción', 'Delay buzzer→shaker (ms)', 'Activo', 'Acciones'], tags.map((t) => [t.tag_uid, t.model || '', t.physical_alarm_followup_delay_ms ?? 45000, t.active ? 'sí' : 'no', roleCan('superadministrador') ? `<button onclick=\"editTag('${t.id}')\">Editar</button>` : '-']))}
+    ${table(['MAC', 'Descripción', 'Delay buzzer→shaker (ms)', 'Activo', 'Acciones'], tags.map((t) => {
+      const editing = inlineEdit.tags.id === t.id;
+      if (!editing) return [t.tag_uid, t.model || '', t.physical_alarm_followup_delay_ms ?? 45000, t.active ? 'sí' : 'no', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button>` : '-'];
+      const d = inlineEdit.tags.draft;
+      return [
+        `<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`,
+        `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('tags','descripcion',this.value)"/>`,
+        `<input type="number" min="0" value="${esc(d.physicalAlarmFollowupDelayMs)}" oninput="updateInlineEdit('tags','physicalAlarmFollowupDelayMs',this.value)"/>`,
+        `<select onchange="updateInlineEdit('tags','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>sí</option><option value="false" ${!d.active ? 'selected' : ''}>no</option></select>`,
+        `<button onclick="saveTagInlineEdit('${t.id}')">Guardar</button> <button class="secondary" onclick="cancelTagInlineEdit()">Cancelar</button>`
+      ];
+    }))}
     <h3 class="mt-12">Gateways</h3>
-    ${table(['MAC', 'Descripción', 'Acciones'], gateways.map((g) => [g.gateway_mac, g.description || '', roleCan('superadministrador') ? `<button onclick=\"editGateway('${g.id}')\">Editar</button>` : '-']))}
+    ${table(['MAC', 'Descripción', 'Acciones'], gateways.map((g) => {
+      const editing = inlineEdit.gateways.id === g.id;
+      if (!editing) return [g.gateway_mac, g.description || '', roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button>` : '-'];
+      const d = inlineEdit.gateways.draft;
+      return [
+        `<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`,
+        `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('gateways','descripcion',this.value)"/>`,
+        `<button onclick="saveGatewayInlineEdit('${g.id}')">Guardar</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`
+      ];
+    }))}
   `;
 }
 
 async function createTag() { await api('/tags', { method: 'POST', body: JSON.stringify({ mac: q('tagMac').value, descripcion: q('tagDesc').value, physicalAlarmFollowupDelayMs: Number(q('tagDelay').value || 45000) }) }); renderInventory(); }
 async function createGateway() { await api('/gateways', { method: 'POST', body: JSON.stringify({ mac: q('gwMac').value, descripcion: q('gwDesc').value }) }); renderInventory(); }
 
-async function editTag(id) {
+async function beginTagInlineEdit(id) {
   const tags = await api('/tags');
   const tag = tags.find((t) => t.id === id);
   if (!tag) return;
-  const mac = prompt('MAC del tag', tag.tag_uid);
-  if (mac === null) return;
-  const descripcion = prompt('Descripción', tag.model || '');
-  if (descripcion === null) return;
-  const delay = prompt('Delay buzzer→shaker (ms)', String(tag.physical_alarm_followup_delay_ms ?? 45000));
-  if (delay === null) return;
-  await api(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ mac, descripcion, physicalAlarmFollowupDelayMs: Number(delay) }) });
+  startInlineEdit('tags', id, {
+    mac: tag.tag_uid,
+    descripcion: tag.model || '',
+    physicalAlarmFollowupDelayMs: tag.physical_alarm_followup_delay_ms ?? 45000,
+    active: !!tag.active
+  });
   renderInventory();
 }
 
-async function editGateway(id) {
+function cancelTagInlineEdit() { cancelInlineEdit('tags'); renderInventory(); }
+
+async function saveTagInlineEdit(id) {
+  const d = inlineEdit.tags.draft;
+  const delay = Number(d.physicalAlarmFollowupDelayMs);
+  if (!Number.isFinite(delay) || delay < 0) return alert('Delay inválido');
+  await api(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion, active: d.active, physicalAlarmFollowupDelayMs: delay }) });
+  cancelInlineEdit('tags');
+  renderInventory();
+}
+
+async function beginGatewayInlineEdit(id) {
   const gateways = await api('/gateways');
   const gateway = gateways.find((g) => g.id === id);
   if (!gateway) return;
-  const mac = prompt('MAC del gateway', gateway.gateway_mac);
-  if (mac === null) return;
-  const descripcion = prompt('Descripción', gateway.description || '');
-  if (descripcion === null) return;
-  await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac, descripcion }) });
+  startInlineEdit('gateways', id, { mac: gateway.gateway_mac, descripcion: gateway.description || '' });
+  renderInventory();
+}
+
+function cancelGatewayInlineEdit() { cancelInlineEdit('gateways'); renderInventory(); }
+
+async function saveGatewayInlineEdit(id) {
+  const d = inlineEdit.gateways.draft;
+  await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion }) });
+  cancelInlineEdit('gateways');
   renderInventory();
 }
 
@@ -294,7 +397,18 @@ async function renderAssignments() {
     <button class="mt-12" onclick="assignTag()">Asignar tag</button>
 
     <h3 class="mt-12">Trabajadores registrados</h3>
-    ${table(['Nombre', 'DNI', 'Activo', 'Acciones'], workers.map((w) => [w.full_name, w.dni, w.active ? 'sí' : 'no', `<button onclick=\"editWorker('${w.id}')\">Editar</button>`]))}
+    ${table(['Nombre', 'DNI', 'Rol', 'Activo', 'Acciones'], workers.map((w) => {
+      const editing = inlineEdit.workers.id === w.id;
+      if (!editing) return [w.full_name, w.dni, w.role || '-', w.active ? 'sí' : 'no', `<button onclick="beginWorkerInlineEdit('${w.id}')">Editar</button>`];
+      const d = inlineEdit.workers.draft;
+      return [
+        `<input value="${esc(d.fullName)}" oninput="updateInlineEdit('workers','fullName',this.value)"/>`,
+        w.dni,
+        `<input value="${esc(d.role)}" oninput="updateInlineEdit('workers','role',this.value)"/>`,
+        `<select onchange="updateInlineEdit('workers','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>sí</option><option value="false" ${!d.active ? 'selected' : ''}>no</option></select>`,
+        `<button onclick="saveWorkerInlineEdit('${w.id}')">Guardar</button> <button class="secondary" onclick="cancelWorkerInlineEdit()">Cancelar</button>`
+      ];
+    }))}
 
     <h3 class="mt-12">Histórico de asignaciones</h3>
     ${table(['Trabajador', 'Tag', 'Inicio', 'Fin'], history.map((h) => [h.worker_name, h.tag_mac, new Date(h.assigned_at).toLocaleString(), h.unassigned_at ? new Date(h.unassigned_at).toLocaleString() : '-']))}
@@ -317,15 +431,20 @@ async function assignTag() {
   renderAssignments();
 }
 
-async function editWorker(id) {
+async function beginWorkerInlineEdit(id) {
   const workers = await api('/workers');
   const worker = workers.find((w) => w.id === id);
   if (!worker) return;
-  const fullName = prompt('Nombre completo', worker.full_name);
-  if (fullName === null) return;
-  const role = prompt('Rol', worker.role || 'trabajador');
-  if (role === null) return;
-  await api(`/workers/${id}`, { method: 'PATCH', body: JSON.stringify({ fullName, role }) });
+  startInlineEdit('workers', id, { fullName: worker.full_name, role: worker.role || 'trabajador', active: !!worker.active });
+  renderAssignments();
+}
+
+function cancelWorkerInlineEdit() { cancelInlineEdit('workers'); renderAssignments(); }
+
+async function saveWorkerInlineEdit(id) {
+  const d = inlineEdit.workers.draft;
+  await api(`/workers/${id}`, { method: 'PATCH', body: JSON.stringify({ fullName: d.fullName, role: d.role, active: d.active }) });
+  cancelInlineEdit('workers');
   renderAssignments();
 }
 
@@ -397,35 +516,54 @@ async function renderAlarms() {
       <input id="aGrace" type="number" min="1" placeholder="Min gracia fuera cámara" value="15" />
     </div>
     <button class="mt-12" onclick="createAlarmRule()">Crear alarma</button>
-    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Min gracia fuera', 'Configuración', 'Estado operativo', 'Acciones'], rules.map((r) => [
-      r.description,
-      r.buzzer_shaker_minutes,
-      r.alarm_minutes,
-      r.alarm_visibility_grace_minutes ?? 15,
-      r.active ? 'encendida' : 'apagada',
-      r.operational_status || (r.active ? 'encendida' : 'apagada'),
-      `<button onclick="editAlarmRule('${r.id}')">Editar</button> <button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`
-    ]))}
+    ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Min gracia fuera', 'Configuración', 'Estado operativo', 'Acciones'], rules.map((r) => {
+      const editing = inlineEdit.alarmRules.id === r.id;
+      if (!editing) return [r.description, r.buzzer_shaker_minutes, r.alarm_minutes, r.alarm_visibility_grace_minutes ?? 15, r.active ? 'encendida' : 'apagada', r.operational_status || (r.active ? 'encendida' : 'apagada'), `<button onclick="beginAlarmRuleInlineEdit('${r.id}')">Editar</button> <button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`];
+      const d = inlineEdit.alarmRules.draft;
+      return [
+        `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('alarmRules','descripcion',this.value)"/>`,
+        `<input type="number" min="1" value="${esc(d.minutosBuzzerShaker)}" oninput="updateInlineEdit('alarmRules','minutosBuzzerShaker',this.value)"/>`,
+        `<input type="number" min="1" value="${esc(d.minutosAlarma)}" oninput="updateInlineEdit('alarmRules','minutosAlarma',this.value)"/>`,
+        `<input type="number" min="1" value="${esc(d.minutosGraciaFuera)}" oninput="updateInlineEdit('alarmRules','minutosGraciaFuera',this.value)"/>`,
+        `<select onchange="updateInlineEdit('alarmRules','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>encendida</option><option value="false" ${!d.active ? 'selected' : ''}>apagada</option></select>`,
+        r.operational_status || (r.active ? 'encendida' : 'apagada'),
+        `<button onclick="saveAlarmRuleInlineEdit('${r.id}')">Guardar</button> <button class="secondary" onclick="cancelAlarmRuleInlineEdit()">Cancelar</button>`
+      ];
+    }))}
   `;
 }
 
-async function editAlarmRule(id) {
+async function beginAlarmRuleInlineEdit(id) {
   const rules = await api('/alarm-rules');
   const rule = rules.find((r) => r.id === id);
   if (!rule) return;
-  const descripcion = prompt('Descripción', rule.description);
-  if (descripcion === null) return;
-  const minutosBuzzerShaker = prompt('Min buzzer/shaker', String(rule.buzzer_shaker_minutes));
-  if (minutosBuzzerShaker === null) return;
-  const minutosAlarma = prompt('Min alarma', String(rule.alarm_minutes));
-  if (minutosAlarma === null) return;
-  const minutosGraciaFuera = prompt('Min gracia fuera', String(rule.alarm_visibility_grace_minutes ?? 15));
-  if (minutosGraciaFuera === null) return;
-  await api(`/alarm-rules/${id}`, { method: 'PATCH', body: JSON.stringify({ descripcion, minutosBuzzerShaker: Number(minutosBuzzerShaker), minutosAlarma: Number(minutosAlarma), minutosGraciaFuera: Number(minutosGraciaFuera) }) });
+  startInlineEdit('alarmRules', id, {
+    descripcion: rule.description,
+    minutosBuzzerShaker: rule.buzzer_shaker_minutes,
+    minutosAlarma: rule.alarm_minutes,
+    minutosGraciaFuera: rule.alarm_visibility_grace_minutes ?? 15,
+    active: !!rule.active
+  });
+  renderAlarms();
+}
+
+function cancelAlarmRuleInlineEdit() { cancelInlineEdit('alarmRules'); renderAlarms(); }
+
+async function saveAlarmRuleInlineEdit(id) {
+  const d = inlineEdit.alarmRules.draft;
+  const minutosBuzzerShaker = Number(d.minutosBuzzerShaker);
+  const minutosAlarma = Number(d.minutosAlarma);
+  const minutosGraciaFuera = Number(d.minutosGraciaFuera);
+  if (![minutosBuzzerShaker, minutosAlarma, minutosGraciaFuera].every((v) => Number.isFinite(v) && v > 0)) {
+    return alert('Valores numéricos inválidos');
+  }
+  await api(`/alarm-rules/${id}`, { method: 'PATCH', body: JSON.stringify({ descripcion: d.descripcion, minutosBuzzerShaker, minutosAlarma, minutosGraciaFuera, active: d.active }) });
+  cancelInlineEdit('alarmRules');
   renderAlarms();
 }
 
 async function createAlarmRule() {
+
   await api('/alarm-rules', {
     method: 'POST',
     body: JSON.stringify({
