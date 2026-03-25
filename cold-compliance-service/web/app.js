@@ -27,7 +27,7 @@ function updateInlineEdit(scope, field, value) {
 }
 
 function esc(value) {
-  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 async function api(url, options = {}) {
@@ -138,7 +138,7 @@ function table(headers, rows) {
         .map(
           (r) =>
             `<tr>${r
-              .map((c, idx) => `<td data-label="${headers[idx] || ''}">${c ?? ''}</td>`)
+              .map((c, idx) => `<td data-label="${headers[idx] || ''}">${c == null ? '' : c}</td>`)
               .join('')}</tr>`
         )
         .join('')
@@ -308,7 +308,7 @@ async function renderInventory() {
     <h3>Tags</h3>
     ${table(['MAC', 'Descripción', 'Delay buzzer→shaker (ms)', 'Activo', 'Acciones'], tags.map((t) => {
       const editing = inlineEdit.tags.id === t.id;
-      if (!editing) return [t.tag_uid, t.model || '', t.physical_alarm_followup_delay_ms ?? 45000, t.active ? 'sí' : 'no', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button>` : '-'];
+      if (!editing) return [t.tag_uid, t.model || '', (t.physical_alarm_followup_delay_ms == null ? 45000 : t.physical_alarm_followup_delay_ms), t.active ? 'sí' : 'no', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button>` : '-'];
       const d = inlineEdit.tags.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`,
@@ -342,7 +342,7 @@ async function beginTagInlineEdit(id) {
   startInlineEdit('tags', id, {
     mac: tag.tag_uid,
     descripcion: tag.model || '',
-    physicalAlarmFollowupDelayMs: tag.physical_alarm_followup_delay_ms ?? 45000,
+    physicalAlarmFollowupDelayMs: (tag.physical_alarm_followup_delay_ms == null ? 45000 : tag.physical_alarm_followup_delay_ms),
     active: !!tag.active
   });
   renderInventory();
@@ -456,9 +456,12 @@ async function archiveAlert(id) {
 }
 
 async function renderAlertsCenter() {
-  const state = q('acState')?.value || 'active';
-  const severity = q('acSeverity')?.value || '';
-  const search = q('acSearch')?.value?.trim() || '';
+  const acStateEl = q('acState');
+  const state = (acStateEl && acStateEl.value) || 'active';
+  const acSeverityEl = q('acSeverity');
+  const severity = (acSeverityEl && acSeverityEl.value) || '';
+  const acSearchEl = q('acSearch');
+  const search = (acSearchEl && typeof acSearchEl.value === 'string' ? acSearchEl.value.trim() : '') || '';
   const query = new URLSearchParams();
   if (state && state !== 'all') query.set('state', state);
   if (severity) query.set('severity', severity);
@@ -518,7 +521,7 @@ async function renderAlarms() {
     <button class="mt-12" onclick="createAlarmRule()">Crear alarma</button>
     ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Min gracia fuera', 'Configuración', 'Estado operativo', 'Acciones'], rules.map((r) => {
       const editing = inlineEdit.alarmRules.id === r.id;
-      if (!editing) return [r.description, r.buzzer_shaker_minutes, r.alarm_minutes, r.alarm_visibility_grace_minutes ?? 15, r.active ? 'encendida' : 'apagada', r.operational_status || (r.active ? 'encendida' : 'apagada'), `<button onclick="beginAlarmRuleInlineEdit('${r.id}')">Editar</button> <button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`];
+      if (!editing) return [r.description, r.buzzer_shaker_minutes, r.alarm_minutes, (r.alarm_visibility_grace_minutes == null ? 15 : r.alarm_visibility_grace_minutes), r.active ? 'encendida' : 'apagada', r.operational_status || (r.active ? 'encendida' : 'apagada'), `<button onclick="beginAlarmRuleInlineEdit('${r.id}')">Editar</button> <button onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Encender'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`];
       const d = inlineEdit.alarmRules.draft;
       return [
         `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('alarmRules','descripcion',this.value)"/>`,
@@ -541,7 +544,7 @@ async function beginAlarmRuleInlineEdit(id) {
     descripcion: rule.description,
     minutosBuzzerShaker: rule.buzzer_shaker_minutes,
     minutosAlarma: rule.alarm_minutes,
-    minutosGraciaFuera: rule.alarm_visibility_grace_minutes ?? 15,
+    minutosGraciaFuera: (rule.alarm_visibility_grace_minutes == null ? 15 : rule.alarm_visibility_grace_minutes),
     active: !!rule.active
   });
   renderAlarms();
@@ -614,10 +617,12 @@ function startRealtime() {
 
 (function wireLoginForm() {
   const form = q('loginForm');
-  form?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    await login();
-  });
+  if (form) {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await login();
+    });
+  }
 })();
 
 (async function bootstrap() {
