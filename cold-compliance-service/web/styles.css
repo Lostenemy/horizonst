@@ -348,3 +348,199 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
   td::before { content: attr(data-label); font-weight: 600; color: var(--color-text-muted); flex: 0 0 46%; }
   td > * { text-align: right; }
 }
+
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 16px;
+  }
+
+  .header-right {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-logout {
+    margin-left: auto;
+    padding: 5px 12px;
+    font-size: 11px;
+    align-self: center;
+  }
+
+  .header-user-info {
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .user-table-actions,
+  tr td:last-child .table-actions,
+  [data-label="Acciones"] .btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  [data-label="Acciones"] button,
+  .user-table-actions button {
+    width: 100%;
+    text-align: center;
+    padding: 10px;
+  }
+
+  .nav-mobile-panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .nav-mobile-left-block,
+  .nav-mobile-label {
+    display: none;
+  }
+
+  .nav-mobile-links {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .nav-mobile-links button,
+  .nav-mobile-links a {
+    width: 100%;
+    text-align: left;
+    padding: 14px 20px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+  }
+
+  .nav-mobile-links button.active {
+    color: #E8472A;
+    border-left: 4px solid #E8472A;
+    padding-left: 16px;
+    background: transparent;
+  }
+
+  .nav-mobile-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f8f8f8;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px 16px;
+    width: 100%;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #1C1C1C;
+    cursor: pointer;
+  }
+
+  .kpi-grid,
+  .dashboard-kpi-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .kpi-card {
+    padding: 16px 12px;
+  }
+
+  .kpi-card .kpi-value {
+    font-size: 28px;
+  }
+
+  .kpi-card .kpi-label {
+    font-size: 10px;
+  }
+
+  .alarm-row-mensaje,
+  [data-label="Mensaje"] {
+    display: none;
+  }
+
+  .alarm-table tbody tr {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  [data-label="Tipo"] { flex: 1 1 100%; font-weight: 600; }
+  [data-label="Severidad"] { flex: 0 0 auto; }
+  [data-label="Fecha"] { flex: 0 0 auto; font-size: 11px; color: #5a5a5a; margin-left: auto; }
+
+  .alerts-bulk-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .btn-archivar-seleccionadas {
+    background-color: #fff3e0;
+    color: #e65100;
+    border: 1.5px solid #e65100;
+    font-weight: 700;
+    text-align: center;
+    padding: 10px;
+  }
+
+  .alerts-top-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .alerts-top-actions button {
+    flex: 1;
+    font-size: 11px;
+    padding: 9px 8px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .page-header .live-timestamp {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+  }
+
+  .page-header h2 {
+    font-size: 26px;
+    margin-top: 4px;
+  }
+
+  .password-toggle-btn,
+  .btn-mostrar {
+    background: transparent;
+    border: none;
+    color: #999;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    padding: 0 8px;
+    cursor: pointer;
+  }
+
+  .password-toggle-btn:hover { color: #E8472A; }
+
+  body, .container, .panel { overflow-x: hidden; }
+  input, select, textarea, button { min-height: 44px; }
+}

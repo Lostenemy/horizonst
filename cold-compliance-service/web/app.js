@@ -132,12 +132,12 @@ function renderNav() {
 
 function setSessionText(extra = '') {
   q('sessionBox').innerHTML = currentUser
-    ? `<div class="header-user-info"><b>${currentUser.email}</b><br><small>${roleLabel(currentUser.role)} ${extra}</small><br><button class="btn-logout mt-12" onclick="logout()">Salir</button></div>`
+    ? `<div class="header-right"><div class="header-user-info"><b>${currentUser.email}</b><br><small>${roleLabel(currentUser.role)} ${extra}</small></div><button class="btn-logout" onclick="logout()">Salir</button></div>`
     : '';
 }
 
 function setGlobalStatus(message) {
-  q('globalStatus').innerHTML = message;
+  q('globalStatus').innerHTML = `<span class="live-timestamp">${message}</span>`;
 }
 
 function stateBadge(state) {
@@ -152,9 +152,9 @@ function severityBadge(severity) {
   return '<span class="badge info">Info</span>';
 }
 
-function table(headers, rows) {
+function table(headers, rows, tableClass = "") {
   const body = rows.length ? rows.map((r) => `<tr>${r.map((c, idx) => `<td data-label="${headers[idx] || ''}">${c == null ? '' : c}</td>`).join('')}</tr>`).join('') : '<tr class="empty-state"><td colspan="99">Sin datos</td></tr>';
-  return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="table-wrap ${tableClass}"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function startInlineEdit(scope, id, draft) { inlineEdit[scope] = { id, draft: { ...draft } }; }
@@ -223,16 +223,16 @@ async function renderDashboard(snapshot) {
       <button onclick="refreshDashboardNow()">↻ Actualizar ahora</button>
       <span class="kpi-note">Auto-actualización activa cada evento en tiempo real + refresco manual.</span>
     </div>
-    <div class="metrics">
-      <div class="metric ${data.totals.workersInside ? 'warn' : 'success'}"><small>Trabajadores dentro</small><b>${data.totals.workersInside}</b></div>
-      <div class="metric ${alertKpiClass} clickable" onclick="openAlertsFiltered('')"><small>Alarmas disparadas</small><b>${data.totals.activeAlerts}</b></div>
-      <div class="metric ${data.systemOnline === false ? 'alert' : 'success'}"><small>Estado del sistema</small><b style="font-size:16px">${systemState}</b></div>
-      <div class="metric info"><small>Última actualización</small><b class="kpi-date">${formatDateTime(data.ts)}</b></div>
+    <div class="metrics kpi-grid dashboard-kpi-row">
+      <div class="metric kpi-card ${data.totals.workersInside ? 'warn' : 'success'}"><small class="kpi-label">Trabajadores dentro</small><b class="kpi-value">${data.totals.workersInside}</b></div>
+      <div class="metric kpi-card ${alertKpiClass} clickable" onclick="openAlertsFiltered('')"><small class="kpi-label">Alarmas disparadas</small><b class="kpi-value">${data.totals.activeAlerts}</b></div>
+      <div class="metric kpi-card ${data.systemOnline === false ? 'alert' : 'success'}"><small class="kpi-label">Estado del sistema</small><b style="font-size:16px">${systemState}</b></div>
+      <div class="metric kpi-card info"><small class="kpi-label">Última actualización</small><b class="kpi-date kpi-value">${formatDateTime(data.ts)}</b></div>
     </div>
     <h3>Trabajadores dentro (presencia real)</h3>
     ${workersRows.length ? table(['Trabajador', 'DNI', 'Tag', 'Min dentro', 'Estado'], workersRows) : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
     <h3 class="mt-12">Alarmas activas (últimas 5)</h3>
-    ${alertsRows.length ? table(['Tipo', 'Severidad', 'Mensaje', 'Fecha'], alertsRows) : '<div class="list-empty">Sin alarmas activas.</div>'}
+    ${alertsRows.length ? table(['Tipo', 'Severidad', 'Mensaje', 'Fecha'], alertsRows, 'alarm-table') : '<div class="list-empty">Sin alarmas activas.</div>'}
     <div class="actions mt-12"><button class="secondary" onclick="openAlertsFiltered('')">Ver todas</button></div>
   `;
   setGlobalStatus(`Último evento en vivo: ${formatDateTime(data.ts)}`);
@@ -311,7 +311,7 @@ async function renderUsers() {
         <div class="field"><label>DNI</label><input id="uDni" placeholder="DNI" oninput="validateUserFormLive()" /></div>
         <div class="field"><label>Rol</label><select id="uRol"><option value="supervisor">Supervisor</option><option value="administrador">Administrador</option></select></div>
         <div class="field"><label>Estado</label><select id="uEstado"><option value="active">Activo</option><option value="inactive">Inactivo</option></select></div>
-        <div class="field"><label>Contraseña</label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 8 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
+        <div class="field"><label>Contraseña</label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 8 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary password-toggle-btn btn-mostrar" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
         <div class="field"><label>Turno</label><select id="uTurno"><option value="mañana">Mañana</option><option value="tarde">Tarde</option><option value="noche">Noche</option></select></div>
       </div>
       <button class="mt-12" onclick="createUser()">Crear usuario</button>
@@ -328,7 +328,7 @@ async function renderUsers() {
           u.phone || '-',
           u.dni,
           u.shift || '-',
-          `<div class="table-actions"><button onclick="beginUserInlineEdit('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
+          `<div class="table-actions user-table-actions"><button onclick="beginUserInlineEdit('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
         ];
       }
       const d = inlineEdit.users.draft;
@@ -599,10 +599,12 @@ async function renderAlertsCenter() {
       <div class="field"><label>Severidad</label><select id="acSeverity"><option value="">Todas</option><option value="critical" ${severity === 'critical' ? 'selected' : ''}>Crítica</option><option value="warning" ${severity === 'warning' ? 'selected' : ''}>Advertencia</option><option value="info" ${severity === 'info' ? 'selected' : ''}>Info</option></select></div>
       <div class="field"><label>Búsqueda</label><input id="acSearch" placeholder="Trabajador / tag / cámara / mensaje" value="${esc(search)}" /></div>
     </div>
-    <div class="actions mt-12">
-      <button class="secondary" onclick="renderAlertsCenter()">Refrescar</button>
-      <button onclick="exportAlertsCsv()">Exportar CSV</button>
-      <button class="warning" onclick="archiveSelectedAlerts()">Archivar seleccionadas (${alertsUI.selected.size})</button>
+    <div class="actions mt-12 alerts-bulk-actions">
+      <div class="alerts-top-actions">
+        <button class="secondary" onclick="renderAlertsCenter()">Refrescar</button>
+        <button onclick="exportAlertsCsv()">Exportar CSV</button>
+      </div>
+      <button class="warning btn-archivar-seleccionadas" onclick="archiveSelectedAlerts()">Archivar seleccionadas (${alertsUI.selected.size})</button>
       <span class="help">Filtros reactivos: se aplican automáticamente.</span>
     </div>
     ${table(headers, paged.map((a) => {
