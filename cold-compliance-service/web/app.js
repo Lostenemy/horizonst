@@ -227,7 +227,7 @@ async function renderDashboard(snapshot) {
       <div class="metric ${data.totals.workersInside ? 'warn' : 'success'}"><small>Trabajadores dentro</small><b>${data.totals.workersInside}</b></div>
       <div class="metric ${alertKpiClass} clickable" onclick="openAlertsFiltered('')"><small>Alarmas disparadas</small><b>${data.totals.activeAlerts}</b></div>
       <div class="metric ${data.systemOnline === false ? 'alert' : 'success'}"><small>Estado del sistema</small><b style="font-size:16px">${systemState}</b></div>
-      <div class="metric"><small>Última actualización</small><b style="font-size:14px">${formatDateTime(data.ts)}</b></div>
+      <div class="metric info"><small>Última actualización</small><b class="kpi-date">${formatDateTime(data.ts)}</b></div>
     </div>
     <h3>Trabajadores dentro (presencia real)</h3>
     ${workersRows.length ? table(['Trabajador', 'DNI', 'Tag', 'Min dentro', 'Estado'], workersRows) : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
@@ -293,7 +293,7 @@ async function renderUsers() {
     return (!filters.name || full.includes(filters.name.toLowerCase())) && (!filters.dni || String(u.dni || '').toLowerCase().includes(filters.dni.toLowerCase())) && (!filters.role || u.role === filters.role) && (!filters.status || u.status === filters.status);
   });
   q('users').innerHTML = `
-    <div class="actions"><span class="badge info">Total usuarios: ${filtered.length} / ${users.length}</span></div>
+    <div class="actions"><span class="badge users-total-badge">Total usuarios: ${filtered.length} / ${users.length}</span></div>
     <div class="grid four mt-12">
       <div class="field"><label>Buscar por nombre</label><input id="ufName" placeholder="Ej: Juan" value="${esc(filters.name)}" oninput="renderUsers()" /></div>
       <div class="field"><label>Filtrar por DNI</label><input id="ufDni" placeholder="12345678A" value="${esc(filters.dni)}" oninput="renderUsers()" /></div>
@@ -328,7 +328,7 @@ async function renderUsers() {
           u.phone || '-',
           u.dni,
           u.shift || '-',
-          `<button onclick="beginUserInlineEdit('${u.id}')">Editar</button> <button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? ` <button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}`
+          `<div class="table-actions"><button onclick="beginUserInlineEdit('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
         ];
       }
       const d = inlineEdit.users.draft;
@@ -517,7 +517,7 @@ function showAssignmentWarning(workers) {
   const warningEl = q('assignmentWarning');
   if (!warningEl || !workerId) return;
   const assigned = currentWorkerHasTag(allWorkers, workerId);
-  warningEl.innerHTML = assigned ? `<span class="badge warn">Atención: este trabajador ya tiene tag (${esc(assigned)}). Se reasignará automáticamente.</span>` : '<span class="badge ok">Trabajador sin tag asignado actualmente.</span>';
+  warningEl.innerHTML = assigned ? `<span class="badge warn assignment-warning">Atención: este trabajador ya tiene tag (${esc(assigned)}). Se reasignará automáticamente.</span>` : '<span class="badge ok assignment-warning">Trabajador sin tag asignado actualmente.</span>';
 }
 
 async function createWorker() { await api('/workers', { method: 'POST', body: JSON.stringify({ dni: q('wDni').value, fullName: q('wName').value, role: 'trabajador' }) }); toast('Trabajador creado'); renderAssignments(); }
@@ -608,7 +608,7 @@ async function renderAlertsCenter() {
     ${table(headers, paged.map((a) => {
       const row = [`<input type="checkbox" ${alertsUI.selected.has(a.id) ? 'checked' : ''} onchange="toggleAlertSelection('${a.id}', this.checked)"/>`, formatDateTime(a.created_at), a.worker_name, a.worker_dni, a.tag_uid];
       if (showCamera) row.push(a.cold_room_name || '-');
-      row.push(alertTypeLabel(a.alert_type), severityBadge(a.severity), a.message, a.status === 'active' ? '<span class="badge warn">Activa</span>' : '<span class="badge archived">Archivada</span>', a.acknowledged_by || '-', a.status === 'active' ? `<button onclick="archiveAlert('${a.id}')">Archivar</button>` : '-');
+      row.push(alertTypeLabel(a.alert_type), severityBadge(a.severity), a.message, a.status === 'active' ? '<span class="badge warn">Activa</span>' : '<span class="badge archived">Archivada</span>', a.acknowledged_by || '-', a.status === 'active' ? `<button class="btn-archive" aria-label="Archivar" onclick="archiveAlert('${a.id}')">Archivar</button>` : '-');
       return row;
     }))}
     <div class="actions mt-12">
@@ -624,7 +624,7 @@ async function renderAlarms() {
   const rules = await api('/alarm-rules');
   q('alarms').innerHTML = `
     <p class="help">Si hay varias reglas activas, el sistema evalúa la que corresponda al contexto operativo vigente.</p>
-    <div class="grid four">
+    <div class="grid four alarms-form-row">
       <div class="field"><label>Descripción</label><input id="aDesc" placeholder="Descripción" /></div>
       <div class="field"><label>Minutos para buzzer/shaker</label><input id="aBuzz" type="number" min="1" placeholder="Ej: 15" /><small class="help">Tiempo hasta aviso inicial físico.</small></div>
       <div class="field"><label>Minutos para alarma</label><input id="aAlarm" type="number" min="1" placeholder="Ej: 45" /><small class="help">Tiempo hasta alarma crítica.</small></div>
@@ -703,10 +703,10 @@ async function renderReports() {
       <div class="field"><label>Filtrar por DNI (opcional)</label><input id="rWorker" placeholder="Ej: 12345678A" value="${esc(worker)}" /></div>
     </div>
     <p class="help mt-12">Periodo seleccionado: ${from || 'inicio'} → ${to || 'hoy'} ${worker ? `· DNI: ${esc(worker)}` : ''}</p>
-    <div class="actions">
-      <button onclick="downloadReport('/reports/inspection.pdf${queryText}','inspection.pdf', this)">Descargar PDF (auditoría)</button>
-      <button class="secondary" onclick="downloadReport('/reports/inspection.xlsx${queryText}','inspection.xlsx', this)">Descargar Excel (análisis)</button>
-      <button class="secondary" onclick="renderReports()">Actualizar filtros</button>
+    <div class="actions report-actions">
+      <button class="report-btn report-btn-pdf" onclick="downloadReport('/reports/inspection.pdf${queryText}','inspection.pdf', this)">Descargar PDF (auditoría)</button>
+      <button class="report-btn report-btn-excel" onclick="downloadReport('/reports/inspection.xlsx${queryText}','inspection.xlsx', this)">Descargar Excel (análisis)</button>
+      <button class="report-btn report-btn-refresh" onclick="renderReports()">Actualizar filtros</button>
     </div>
   `;
 }
