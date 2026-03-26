@@ -21,7 +21,9 @@
         <h2>Acceso al sistema</h2>
         <p class="muted">Introduce tus credenciales para continuar.</p>
         <div class="grid one">
+          <label for="username">Usuario o email</label>
           <input id="username" autocomplete="username" placeholder="Usuario o email" required />
+          <label for="password">Contraseña</label>
           <input id="password" autocomplete="current-password" type="password" placeholder="Contraseña" required />
         </div>
         <button type="submit" class="mt-12 full">Entrar</button>
@@ -29,9 +31,12 @@
         <details class="mt-12">
           <summary>Recuperar contraseña</summary>
           <div class="grid one mt-12">
+            <label for="fpEmail">Email de cuenta</label>
             <input id="fpEmail" placeholder="Email de cuenta" />
             <button type="button" onclick="forgotPassword()">Enviar enlace de recuperación</button>
+            <label for="rpToken">Token de recuperación</label>
             <input id="rpToken" placeholder="Token de recuperación" />
+            <label for="rpPass">Nueva contraseña</label>
             <input id="rpPass" type="password" placeholder="Nueva contraseña" />
             <button type="button" onclick="resetPassword()">Aplicar nueva contraseña</button>
           </div>
@@ -40,15 +45,18 @@
     </section>
 
     <section id="appView" hidden>
-      <nav class="tabs">
-        <button onclick="showSection('dashboard')">Inicio</button>
-        <button onclick="showSection('users')">Usuarios</button>
-        <button onclick="showSection('inventory')">Gateways y tags</button>
-        <button onclick="showSection('assignments')">Asignaciones</button>
-        <button onclick="showSection('alertsCenter')">Alertas disparadas</button>
-        <button onclick="showSection('alarms')">Reglas de alarma</button>
-        <button onclick="showSection('reports')">Informes</button>
-      </nav>
+      <div class="app-nav panel">
+        <button id="menuToggle" class="secondary nav-toggle" type="button">☰ Menú</button>
+        <nav id="mainTabs" class="tabs"></nav>
+      </div>
+
+      <section class="section-head panel">
+        <div>
+          <p id="sectionBreadcrumb" class="muted">Inicio</p>
+          <h2 id="sectionTitle">Dashboard operativo</h2>
+        </div>
+        <div id="globalStatus" class="muted"></div>
+      </section>
 
       <section id="dashboard" class="panel"></section>
       <section id="users" class="panel" hidden></section>
@@ -59,6 +67,8 @@
       <section id="reports" class="panel" hidden></section>
     </section>
   </main>
+
+  <div id="toastStack" class="toast-stack" aria-live="polite"></div>
 
   <script src="/web/app.js"></script>
 </body>
