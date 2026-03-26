@@ -110,7 +110,7 @@ function roleCan(required) {
 function setSectionHeader(section) {
   q('sectionTitle').textContent = sectionMeta[section].title;
   q('sectionBreadcrumb').textContent = sectionMeta[section].breadcrumb;
-  document.querySelectorAll('#mainTabs button').forEach((btn) => btn.classList.toggle('active-tab', btn.dataset.section === section));
+  document.querySelectorAll('#mainTabs button').forEach((btn) => btn.classList.toggle('active', btn.dataset.section === section));
 }
 
 function showSection(section) {
@@ -132,7 +132,7 @@ function renderNav() {
 
 function setSessionText(extra = '') {
   q('sessionBox').innerHTML = currentUser
-    ? `<b>${currentUser.email}</b><br><small>${roleLabel(currentUser.role)} ${extra}</small><br><button class="secondary mt-12" onclick="logout()">Salir</button>`
+    ? `<div class="header-user-info"><b>${currentUser.email}</b><br><small>${roleLabel(currentUser.role)} ${extra}</small><br><button class="btn-logout mt-12" onclick="logout()">Salir</button></div>`
     : '';
 }
 
@@ -153,7 +153,7 @@ function severityBadge(severity) {
 }
 
 function table(headers, rows) {
-  const body = rows.length ? rows.map((r) => `<tr>${r.map((c, idx) => `<td data-label="${headers[idx] || ''}">${c == null ? '' : c}</td>`).join('')}</tr>`).join('') : '<tr><td colspan="99">Sin datos</td></tr>';
+  const body = rows.length ? rows.map((r) => `<tr>${r.map((c, idx) => `<td data-label="${headers[idx] || ''}">${c == null ? '' : c}</td>`).join('')}</tr>`).join('') : '<tr class="empty-state"><td colspan="99">Sin datos</td></tr>';
   return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
@@ -738,7 +738,7 @@ function startRealtime() {
   realtimeSource.addEventListener('snapshot', (event) => {
     const payload = JSON.parse(event.data);
     lastSnapshot = payload;
-    setSessionText(`· dentro: ${payload.totals.workersInside} · alertas: <a href="#" onclick="showSection('alertsCenter');return false;" style="color:#fff">${payload.totals.activeAlerts}</a>`);
+    setSessionText(`· dentro: ${payload.totals.workersInside} · alertas: <a class="header-alert-badge" href="#" onclick="showSection('alertsCenter');return false;">${payload.totals.activeAlerts}</a>`);
     if (!q('dashboard').hidden) renderDashboard(payload);
   });
   realtimeSource.onerror = () => {
