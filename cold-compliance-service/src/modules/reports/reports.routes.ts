@@ -17,7 +17,25 @@ interface InspectionRow {
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth, requireRoles(['administrador', 'superadministrador']));
 
-async function loadInspectionRows(): Promise<InspectionRow[]> {
+async function loadInspectionRows(filters?: { from?: string; to?: string; workerDni?: string }): Promise<InspectionRow[]> {
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+
+  if (filters?.from) {
+    values.push(`${filters.from}T00:00:00`);
+    conditions.push(`s.started_at >= $${values.length}`);
+  }
+  if (filters?.to) {
+    values.push(`${filters.to}T23:59:59`);
+    conditions.push(`s.started_at <= $${values.length}`);
+  }
+  if (filters?.workerDni) {
+    values.push(`%${filters.workerDni}%`);
+    conditions.push(`w.dni ILIKE $${values.length}`);
+  }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
   return (
     await db.query<InspectionRow>(
       `SELECT w.full_name as worker_name,
@@ -29,8 +47,10 @@ async function loadInspectionRows(): Promise<InspectionRow[]> {
        FROM cold_room_sessions s
        JOIN workers w ON w.id = s.worker_id
        LEFT JOIN tags t ON t.id = s.tag_id
+       ${whereClause}
        ORDER BY s.started_at DESC
-       LIMIT 2000`
+       LIMIT 2000`,
+      values
     )
   ).rows;
 }
@@ -47,9 +67,13 @@ function formatDurationMmSs(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-reportsRouter.get('/inspection.xlsx', async (_req: Request, res: Response, next) => {
+reportsRouter.get('/inspection.xlsx', async (req: Request, res: Response, next) => {
   try {
-    const rows = await loadInspectionRows();
+    const rows = await loadInspectionRows({
+      from: typeof req.query.from === 'string' ? req.query.from : undefined,
+      to: typeof req.query.to === 'string' ? req.query.to : undefined,
+      workerDni: typeof req.query.workerDni === 'string' ? req.query.workerDni : undefined
+    });
     const wb = new ExcelJS.Workbook();
     wb.creator = 'HorizonST';
     wb.created = new Date();
@@ -126,9 +150,13 @@ reportsRouter.get('/inspection.xlsx', async (_req: Request, res: Response, next)
   }
 });
 
-reportsRouter.get('/inspection.pdf', async (_req: Request, res: Response, next) => {
+reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) => {
   try {
-    const rows = await loadInspectionRows();
+    const rows = await loadInspectionRows({
+      from: typeof req.query.from === 'string' ? req.query.from : undefined,
+      to: typeof req.query.to === 'string' ? req.query.to : undefined,
+      workerDni: typeof req.query.workerDni === 'string' ? req.query.workerDni : undefined
+    });
     const generatedAt = new Date();
     const totalRows = rows.length;
     const criticalRows = rows.filter((row) => row.duration_seconds >= 45 * 60).length;
