@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Elecnor · Lecturas</title>
+    <title>EMUASA · Lecturas</title>
     <base href="__BASE_PATH__/" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="__BASE_PATH__/style.css" />
@@ -16,10 +16,10 @@
   <body class="elecnor-shell">
     <header class="topbar">
       <div class="brand">
-        <div class="brand__mark" aria-hidden="true">elecnor</div>
+        <div class="brand__mark" aria-hidden="true">emuasa</div>
         <div class="brand__text">
           <strong>Portal de accesos</strong>
-          <span>Lecturas</span>
+          <span>Simulador RFID</span>
         </div>
       </div>
       <div class="topbar__cluster">
@@ -81,10 +81,16 @@
     <main id="main-view" class="page" data-view="lecturas">
       <section class="hero hero--compact">
         <div>
-          <p class="breadcrumb"><a href="__BASE_PATH__/elecnor-tarjetas.html">Inicio</a> · Elecnor · Lecturas</p>
-          <h1>Simular lecturas RFID</h1>
-          <p class="lead">
-            Envía una lectura manual para comprobar el flujo (directorio MAC ↔ DNI, validación externa y publicación MQTT).
+          <nav class="breadcrumb" aria-label="Ruta de navegación">
+            <a href="__BASE_PATH__/elecnor-tarjetas.html" data-router>Portal de accesos</a>
+            <span aria-hidden="true">›</span>
+            <a href="__BASE_PATH__/elecnor-lecturas.html" data-router>Simulador RFID</a>
+            <span aria-hidden="true">›</span>
+            <span aria-current="page">Lecturas</span>
+          </nav>
+          <h1 class="page-title">Simular lecturas RFID</h1>
+          <p class="lead lead--subhead">
+            Reproduce el flujo completo (directorio MAC ↔ DNI, validación externa y publicación MQTT) con datos reales antes de desplegar en campo.
           </p>
           <div class="pill-row">
             <span class="pill pill--info">MQTT + API externa</span>
@@ -94,39 +100,106 @@
         </div>
       </section>
 
-      <section class="panel-grid">
-        <article class="panel">
-          <header class="panel__header">
+      <section class="panel-grid panel-grid--single">
+        <article class="panel panel--simulator">
+          <header class="panel__header panel__header--stacked">
             <div>
               <p class="eyebrow">Lecturas</p>
               <h2>Simular lectura</h2>
-              <p class="muted">Tarjeta y MAC son obligatorios; el resto de datos es opcional.</p>
+              <p class="muted">Tarjeta y MAC son obligatorios; puedes complementar con fecha/hora y JSON opcional.</p>
             </div>
           </header>
-          <form id="simulate-form" class="form-grid">
-            <label class="form-field">
-              <span>ID de tarjeta*</span>
-              <input type="text" id="simulate-card-id" required autocomplete="off" />
+          <form id="simulate-form" class="form-stack" novalidate>
+            <div class="form-stack__row">
+              <label class="form-field form-field--stack" for="simulate-card-id">
+                <span class="form-label">ID de tarjeta<span class="required" aria-hidden="true">*</span></span>
+                <input
+                  type="text"
+                  id="simulate-card-id"
+                  required
+                  autocomplete="off"
+                  aria-required="true"
+                  aria-describedby="card-id-hint card-id-error"
+                  spellcheck="false"
+                />
+                <small class="field-hint" id="card-id-hint">Identificador exacto de la tarjeta o tag RFID.</small>
+                <p class="field-error" id="card-id-error" role="alert" hidden></p>
+              </label>
+              <label class="form-field form-field--stack" for="simulate-mac">
+                <span class="form-label">MAC del lector<span class="required" aria-hidden="true">*</span></span>
+                <input
+                  type="text"
+                  id="simulate-mac"
+                  required
+                  autocomplete="off"
+                  aria-required="true"
+                  aria-describedby="mac-hint mac-error"
+                  spellcheck="false"
+                  inputmode="text"
+                  placeholder="AA:BB:CC:DD:EE:FF"
+                />
+                <small class="field-hint" id="mac-hint">Formato esperado: AA:BB:CC:DD:EE:FF</small>
+                <p class="field-error" id="mac-error" role="alert" hidden></p>
+              </label>
+            </div>
+
+            <label class="form-field form-field--stack" for="simulate-timestamp">
+              <span class="form-label">Fecha y hora (opcional)</span>
+              <div class="datetime-group">
+                <input
+                  type="datetime-local"
+                  id="simulate-timestamp"
+                  aria-describedby="timestamp-hint timestamp-error"
+                />
+                <button type="button" class="cta cta--ghost cta--inline" id="use-current-timestamp">Usar ahora</button>
+              </div>
+              <small class="field-hint" id="timestamp-hint">Si se deja vacío, se usará la fecha/hora actual.</small>
+              <p class="field-error" id="timestamp-error" role="alert" hidden></p>
             </label>
-            <label class="form-field">
-              <span>MAC del lector*</span>
-              <input type="text" id="simulate-mac" required autocomplete="off" />
+
+            <label class="form-field form-field--stack form-field--wide" for="simulate-additional">
+              <span class="form-label">Datos adicionales (JSON)</span>
+              <textarea
+                id="simulate-additional"
+                class="textarea textarea--mono"
+                aria-describedby="additional-hint additional-error"
+                placeholder="Pegue aquí un objeto JSON válido"
+              ></textarea>
+              <small class="field-hint" id="additional-hint">Opcional. Ejemplo: {"departamento":"I+D"}</small>
+              <p class="field-error" id="additional-error" role="alert" hidden></p>
             </label>
-            <label class="form-field">
-              <span>Fecha y hora (opcional)</span>
-              <input type="datetime-local" id="simulate-timestamp" />
-            </label>
-            <label class="form-field form-field--wide">
-              <span>Datos adicionales (JSON)</span>
-              <textarea id="simulate-additional" placeholder='{"departamento":"I+D"}'></textarea>
-            </label>
-            <div class="form-actions">
-              <button type="submit" class="cta cta--primary">Enviar lectura</button>
-              <p class="muted">El resultado incluye la decisión y las publicaciones MQTT realizadas.</p>
+
+            <div class="form-actions form-actions--stack">
+              <div class="form-actions__primary">
+                <button type="submit" class="cta cta--primary" id="simulate-submit">Enviar lectura</button>
+                <p id="simulate-error" class="form-global-error" role="alert" hidden></p>
+              </div>
+              <div class="form-actions__notes">
+                <p class="muted">El resultado incluye la decisión y las publicaciones MQTT realizadas.</p>
+                <p class="muted small">Revisa formato antes de enviar para evitar reintentos.</p>
+              </div>
             </div>
           </form>
-          <p id="simulate-error" class="error" hidden></p>
-          <div id="simulate-result" class="result hidden"></div>
+
+          <section
+            id="simulate-result"
+            class="result-panel"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label="Resultado de la simulación"
+          >
+            <div class="result-panel__header">
+              <div>
+                <p class="eyebrow">Resultado de la simulación</p>
+                <h3 id="simulate-result-title">Aún no hay resultado</h3>
+                <p class="muted" id="simulate-result-subtitle">Envía una lectura para ver la respuesta.</p>
+              </div>
+              <span class="status-chip status-chip--idle" id="simulate-result-state">Pendiente</span>
+            </div>
+            <div class="result-panel__body" id="simulate-result-body">
+              <p class="muted">Incluiremos aquí la decisión y las publicaciones MQTT realizadas.</p>
+            </div>
+          </section>
         </article>
       </section>
     </main>
