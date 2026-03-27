@@ -468,12 +468,31 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
     font-size: 10px;
   }
 
+  .kpi-card.kpi-timestamp .kpi-value {
+    font-size: 11px !important;
+    font-weight: 700;
+    line-height: 1.5;
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: break-word;
+    overflow: hidden;
+    max-width: 100%;
+  }
+
   .alarm-row-mensaje,
   .alarm-table [data-label="Mensaje"],
   .alarm-table [data-label="Cámara"],
   .alarm-table [data-label="DNI"],
-  .alarm-table [data-label="Tag"] {
-    display: none;
+  .alarm-table [data-label="Tag"],
+  .alerts-mobile-compact [data-label="Sel"],
+  .alerts-mobile-compact [data-label="Trabajador"],
+  .alerts-mobile-compact [data-label="DNI"],
+  .alerts-mobile-compact [data-label="Tag"],
+  .alerts-mobile-compact [data-label="Cámara"],
+  .alerts-mobile-compact [data-label="Mensaje"],
+  .alerts-mobile-compact [data-label="Estado"],
+  .alerts-mobile-compact [data-label="Archivado por"] {
+    display: none !important;
   }
 
   .alarm-table tbody tr {
@@ -486,9 +505,12 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
     border-bottom: 1px solid #f0f0f0;
   }
 
-  [data-label="Tipo"] { flex: 1 1 100%; font-weight: 600; }
-  [data-label="Severidad"] { flex: 0 0 auto; }
-  [data-label="Fecha"] { flex: 0 0 auto; font-size: 11px; color: #5a5a5a; margin-left: auto; }
+  .alarm-table [data-label="Tipo"],
+  .alerts-mobile-compact [data-label="Tipo"] { flex: 1 1 100%; font-weight: 600; }
+  .alarm-table [data-label="Severidad"],
+  .alerts-mobile-compact [data-label="Severidad"] { flex: 0 0 auto; }
+  .alarm-table [data-label="Fecha"],
+  .alerts-mobile-compact [data-label="Fecha"] { flex: 0 0 auto; font-size: 11px; color: #5a5a5a; margin-left: auto; }
 
   .alerts-bulk-actions {
     display: flex;
@@ -524,6 +546,35 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
     align-items: center;
     justify-content: center;
   }
+  .assignment-step-card p,
+  .create-worker-card p {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    max-width: 100%;
+  }
+
+  .create-worker-card input,
+  .create-worker-card button,
+  .assignment-step-card input,
+  .assignment-step-card button,
+  .assignment-step-card select {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-step-card,
+  .create-worker-card {
+    overflow: hidden;
+    padding: 16px;
+  }
+
+  .assignment-step-card .grid.two,
+  .create-worker-card .grid.two {
+    grid-template-columns: 1fr;
+  }
+
 
   .page-header {
     flex-direction: column;

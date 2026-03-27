@@ -228,7 +228,7 @@ async function renderDashboard(snapshot) {
       <div class="metric kpi-card ${data.totals.workersInside ? 'warn' : 'success'}"><small class="kpi-label">Trabajadores dentro</small><b class="kpi-value">${data.totals.workersInside}</b></div>
       <div class="metric kpi-card ${alertKpiClass} clickable" onclick="openAlertsFiltered('')"><small class="kpi-label">Alarmas disparadas</small><b class="kpi-value">${data.totals.activeAlerts}</b></div>
       <div class="metric kpi-card ${data.systemOnline === false ? 'alert' : 'success'}"><small class="kpi-label">Estado del sistema</small><b style="font-size:16px">${systemState}</b></div>
-      <div class="metric kpi-card info"><small class="kpi-label">Última actualización</small><b class="kpi-date kpi-value">${formatDateTime(data.ts)}</b></div>
+      <div class="metric kpi-card info kpi-timestamp"><small class="kpi-label">Última actualización</small><b class="kpi-date kpi-value">${formatDateTime(data.ts)}</b></div>
     </div>
     <h3>Trabajadores dentro (presencia real)</h3>
     ${workersRows.length ? table(['Trabajador', 'DNI', 'Tag', 'Min dentro', 'Estado'], workersRows) : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
@@ -471,8 +471,8 @@ function currentWorkerHasTag(workers, workerId) { const w = workers.find((item) 
 async function renderAssignments() {
   const [workers, tags, history] = await Promise.all([api('/workers'), api('/tags'), api('/workers/assignments/history')]);
   q('assignments').innerHTML = `
-    <div class="grid two">
-      <div class="card-block">
+    <div class="grid two assignment-steps">
+      <div class="card-block assignment-step-card create-worker-card">
         <h3>1) Crear trabajador</h3>
         <p class="help">Primero crea el trabajador para poder asignarle un tag.</p>
         <div class="grid two">
@@ -481,7 +481,7 @@ async function renderAssignments() {
         </div>
         <button class="mt-12 full" onclick="createWorker()">Crear trabajador</button>
       </div>
-      <div class="card-block">
+      <div class="card-block assignment-step-card">
         <h3>2) Asignar tag</h3>
         <p class="help">Si el trabajador ya tenía tag, la asignación anterior se cierra automáticamente.</p>
         <div class="grid two">
@@ -613,7 +613,7 @@ async function renderAlertsCenter() {
       if (showCamera) row.push(a.cold_room_name || '-');
       row.push(alertTypeLabel(a.alert_type), severityBadge(a.severity), a.message, a.status === 'active' ? '<span class="badge warn">Activa</span>' : '<span class="badge archived">Archivada</span>', a.acknowledged_by || '-', a.status === 'active' ? `<button class="btn-archive" aria-label="Archivar" onclick="archiveAlert('${a.id}')">Archivar</button>` : '-');
       return row;
-    }))}
+    }), 'alerts-mobile-compact')}
     <div class="actions mt-12">
       <button class="secondary" ${alertsUI.page <= 1 ? 'disabled' : ''} onclick="alertsUI.page=Math.max(1,alertsUI.page-1);renderAlertsCenter();">← Anterior</button>
       <span class="badge info">Página ${alertsUI.page} de ${totalPages} · ${alerts.length} alertas</span>
