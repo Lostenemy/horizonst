@@ -238,11 +238,11 @@ input.valid { border-color: var(--color-success); background: var(--color-succes
 .metric { background: var(--color-bg-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 14px; min-width: 0; min-height: 122px; display:flex; flex-direction:column; justify-content:space-between; }
 .metric small { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #5a5a5a; margin-bottom: 4px; }
 .metric b { font-size: 32px; font-weight: 700; font-family: var(--font-heading); display: block; overflow-wrap: anywhere; line-height: 1.1; }
-.metric .kpi-date { font-size: 18px; font-family: var(--font-body); font-weight: 600; line-height: 1.2; }
+.metric .kpi-date { white-space: nowrap; font-size: 14px; line-height: 1.2; font-family: var(--font-body); font-weight: 600; }
 .metric.success { border-left: 4px solid var(--color-success); }
 .metric.warn { border-left: 4px solid var(--color-warning); }
 .metric.alert { border-left: 4px solid var(--color-danger); }
-.metric.info { border-left: 4px solid #1565c0; }
+.metric.info { border-left: 4px solid #1565c0; display: flex; flex-direction: column; justify-content: center; }
 .metric.clickable { cursor: pointer; }
 .kpi-note { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 
@@ -292,6 +292,8 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
   box-sizing: border-box;
   white-space: normal;
   word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 .alarms-form-row { align-items: flex-start; }
 .alarms-form-row input { line-height: 1.4; }
@@ -406,8 +408,12 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
 
   .nav-mobile-links {
     width: 100%;
-    display: flex;
+    display: none;
     flex-direction: column;
+  }
+
+  .nav-mobile-links.open {
+    display: flex;
   }
 
   .nav-mobile-links button,
@@ -463,7 +469,10 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
   }
 
   .alarm-row-mensaje,
-  [data-label="Mensaje"] {
+  .alarm-table [data-label="Mensaje"],
+  .alarm-table [data-label="Cámara"],
+  .alarm-table [data-label="DNI"],
+  .alarm-table [data-label="Tag"] {
     display: none;
   }
 
@@ -507,6 +516,13 @@ tbody tr.empty-state td { text-align: center; color: var(--color-text-muted); fo
     flex: 1;
     font-size: 11px;
     padding: 9px 8px;
+  }
+
+  .report-actions button {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .page-header {

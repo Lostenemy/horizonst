@@ -116,7 +116,7 @@ function setSectionHeader(section) {
 function showSection(section) {
   sections.forEach((s) => (q(s).hidden = s !== section));
   setSectionHeader(section);
-  if (window.innerWidth <= 760) q('mainTabs').classList.remove('open');
+  if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
   if (section === 'dashboard') renderDashboard();
   if (section === 'users') renderUsers();
   if (section === 'inventory') renderInventory();
@@ -128,6 +128,7 @@ function showSection(section) {
 
 function renderNav() {
   q('mainTabs').innerHTML = tabs.map((tab) => `<button data-section="${tab.id}" onclick="showSection('${tab.id}')">${tab.label}</button>`).join('');
+  if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
 }
 
 function setSessionText(extra = '') {
@@ -758,6 +759,7 @@ function startRealtime() {
     });
   }
   const menuToggle = q('menuToggle');
+  if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
   if (menuToggle) menuToggle.addEventListener('click', () => q('mainTabs').classList.toggle('open'));
 })();
 
