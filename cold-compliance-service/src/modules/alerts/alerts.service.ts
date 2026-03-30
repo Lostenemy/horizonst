@@ -19,6 +19,14 @@ export async function createAlert(params: {
   message: string;
   metadata?: Record<string, unknown>;
 }): Promise<CreatedAlert> {
+  logger.info({
+    workerId: params.workerId ?? null,
+    tagId: params.tagId ?? null,
+    coldRoomId: params.coldRoomId ?? null,
+    severity: params.severity,
+    alertType: params.alertType
+  }, 'creating alert in DB');
+
   const inserted = await db.query<CreatedAlert>(
     `INSERT INTO alerts(worker_id, tag_id, cold_room_id, severity, alert_type, message, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -35,6 +43,18 @@ export async function createAlert(params: {
   );
 
   const alert = inserted.rows[0];
+  if (!alert?.id) {
+    logger.error({ params }, 'failed to persist alert: no row returned');
+    throw new Error('alert_not_persisted');
+  }
+
+  const persistedCheck = await db.query<{ id: string }>('SELECT id FROM alerts WHERE id = $1', [alert.id]);
+  if (!persistedCheck.rowCount) {
+    logger.error({ alertId: alert.id, params }, 'failed to persist alert: row not found after insert');
+    throw new Error('alert_not_persisted_verification_failed');
+  }
+  logger.info({ alertId: alert.id, severity: alert.severity, alertType: alert.alert_type }, 'alert persisted');
+
   setImmediate(() => {
     executeAlarmSequence({
       alertId: alert.id,

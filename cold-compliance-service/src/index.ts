@@ -4,7 +4,7 @@ import { buildApp } from './app';
 import { startMqttConsumer } from './modules/mqtt/mqtt.service';
 import { startSyncLoop } from './modules/sync/sync.service';
 import { startGatewayReplyListener } from './modules/tag-control/infrastructure/gateway-reply-listener';
-import { startComplianceRuleLoop, startPresenceTimeoutLoop } from './modules/compliance/compliance.service';
+import { startComplianceRuleLoop, startGraceReentryReminderLoop, startPresenceTimeoutLoop } from './modules/compliance/compliance.service';
 import { logger } from './utils/logger';
 
 async function bootstrap() {
@@ -14,6 +14,7 @@ async function bootstrap() {
   startSyncLoop();
   startComplianceRuleLoop();
   startPresenceTimeoutLoop();
+  startGraceReentryReminderLoop();
 
   const app = buildApp();
   app.listen(env.PORT, () => {
