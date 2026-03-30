@@ -1,7 +1,6 @@
 import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { createAlert } from '../alerts/alerts.service';
-import { resolveOperationalAlarmTable } from '../alerts/alarm-table-resolver';
 import { openIncident } from '../incidents/incidents.service';
 import { ParsedPresenceEvent } from '../presence/types';
 import {
@@ -51,7 +50,6 @@ async function evaluateOperationalAlarmRules(tag: {
   worker_id: string | null;
   cold_room_id: string | null;
 }): Promise<void> {
-  const alarmTable = await resolveOperationalAlarmTable();
   const sessionRes = await db.query<ActiveSession>(
     `SELECT id, started_at, worker_id, cold_room_id
      FROM cold_room_sessions
@@ -78,7 +76,7 @@ async function evaluateOperationalAlarmRules(tag: {
 
     if (elapsedMinutes >= Number(rule.buzzer_shaker_minutes)) {
       const existsWarning = await db.query(
-        `SELECT 1 FROM ${alarmTable}
+        `SELECT 1 FROM alerts
          WHERE alert_type = 'alarm_rule_warning'
            AND acknowledged_at IS NULL
            AND metadata @> $1::jsonb
@@ -100,7 +98,7 @@ async function evaluateOperationalAlarmRules(tag: {
 
     if (elapsedMinutes >= Number(rule.alarm_minutes)) {
       const existsAlarm = await db.query(
-        `SELECT 1 FROM ${alarmTable}
+        `SELECT 1 FROM alerts
          WHERE alert_type = 'alarm_rule_alarm'
            AND acknowledged_at IS NULL
            AND metadata @> $1::jsonb
@@ -123,7 +121,6 @@ async function evaluateOperationalAlarmRules(tag: {
 }
 
 async function resolvePreviousCriticalContext(tagId: string, eventTs: string): Promise<PreviousCriticalContext | null> {
-  const alarmTable = await resolveOperationalAlarmTable();
   const lastClosedSession = await db.query<LastClosedSession>(
     `SELECT id, started_at, ended_at
      FROM cold_room_sessions
@@ -138,7 +135,7 @@ async function resolvePreviousCriticalContext(tagId: string, eventTs: string): P
   const criticalAlert = await db.query<{ rule_id: string | null; grace_minutes_override: string | null }>(
     `SELECT (
         SELECT a.metadata->>'ruleId'
-        FROM ${alarmTable} a
+        FROM alerts a
         WHERE a.tag_id = $1
           AND a.severity = 'critical'
           AND a.metadata ? 'ruleId'
@@ -151,7 +148,7 @@ async function resolvePreviousCriticalContext(tagId: string, eventTs: string): P
       ) AS rule_id,
       (
         SELECT a.metadata->>'reentryGraceMinutes'
-        FROM ${alarmTable} a
+        FROM alerts a
         WHERE a.tag_id = $1
           AND a.severity = 'critical'
           AND a.metadata ? 'reentryGraceMinutes'
@@ -167,7 +164,7 @@ async function resolvePreviousCriticalContext(tagId: string, eventTs: string): P
 
   const hasCriticalAlarm = await db.query(
     `SELECT 1
-     FROM ${alarmTable} a
+     FROM alerts a
      WHERE a.tag_id = $1
        AND a.severity = 'critical'
        AND (
@@ -451,7 +448,6 @@ async function triggerGraceReentryAlarm(params: {
 }
 
 async function processGraceReentryReminders(): Promise<void> {
-  const alarmTable = await resolveOperationalAlarmTable();
   const sessions = await db.query<{
     session_id: string;
     worker_id: string | null;
@@ -470,11 +466,11 @@ async function processGraceReentryReminders(): Promise<void> {
             MAX(a.created_at) AS last_reentry_alert_at
      FROM cold_room_sessions s
      LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
-     JOIN ${alarmTable} alert_seed
+     JOIN alerts alert_seed
        ON alert_seed.tag_id = s.tag_id
       AND alert_seed.metadata->>'sessionId' = s.id::text
       AND alert_seed.metadata->>'reenteredDuringGrace' = 'true'
-     LEFT JOIN ${alarmTable} a
+     LEFT JOIN alerts a
        ON a.tag_id = s.tag_id
       AND a.metadata->>'sessionId' = s.id::text
       AND a.metadata->>'reenteredDuringGrace' = 'true'

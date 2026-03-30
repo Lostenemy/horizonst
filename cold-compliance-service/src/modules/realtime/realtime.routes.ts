@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth } from '../../middleware/auth';
 import { loadPresenceStateSnapshot, PresenceWorkerSummary } from '../presence/presence-state.service';
-import { resolveOperationalAlarmTable } from '../alerts/alarm-table-resolver';
 
 export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
@@ -17,12 +16,11 @@ function withPresenceStatus(workers: PresenceWorkerSummary[]): Array<PresenceWor
 }
 
 async function loadOperationalSnapshot() {
-  const alarmTable = await resolveOperationalAlarmTable();
   const [presence, alerts] = await Promise.all([
     loadPresenceStateSnapshot(),
     db.query(
       `SELECT id, worker_id, tag_id, severity, alert_type, message, created_at
-       FROM ${alarmTable}
+       FROM alerts
        WHERE acknowledged_at IS NULL
        ORDER BY created_at DESC
        LIMIT 200`

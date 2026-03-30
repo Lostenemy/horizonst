@@ -1,5 +1,4 @@
 import { db } from '../../db/pool';
-import { resolveOperationalAlarmTable } from '../alerts/alarm-table-resolver';
 
 interface InsideSessionRow {
   id: string;
@@ -45,7 +44,6 @@ export interface PresenceStateSnapshot {
 }
 
 export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot> {
-  const alarmTable = await resolveOperationalAlarmTable();
   const [insideSessions, graceSessions] = await Promise.all([
     db.query<InsideSessionRow>(
       `SELECT s.id,
@@ -57,7 +55,7 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
               EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
               EXISTS(
                 SELECT 1
-                FROM ${alarmTable} a
+                FROM alerts a
                 WHERE a.tag_id = s.tag_id
                   AND a.acknowledged_at IS NULL
                   AND a.severity = 'critical'
@@ -89,7 +87,7 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
               COALESCE(t.tag_uid, '') AS tag_uid,
               (
                   SELECT a.metadata->>'ruleId'
-                  FROM ${alarmTable} a
+                  FROM alerts a
                   WHERE a.tag_id = s.tag_id
                     AND a.severity = 'critical'
                     AND a.metadata ? 'ruleId'
@@ -100,7 +98,7 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
                 ) AS alarm_rule_id,
                 (
                   SELECT a.metadata->>'reentryGraceMinutes'
-                  FROM ${alarmTable} a
+                  FROM alerts a
                   WHERE a.tag_id = s.tag_id
                     AND a.severity = 'critical'
                     AND a.created_at >= s.started_at
@@ -116,7 +114,7 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
          WHERE s.ended_at IS NOT NULL
            AND EXISTS(
              SELECT 1
-             FROM ${alarmTable} a
+             FROM alerts a
              WHERE a.tag_id = s.tag_id
                AND a.severity = 'critical'
                AND a.created_at >= s.started_at
