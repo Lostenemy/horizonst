@@ -34,6 +34,17 @@ interface LastClosedSession {
   ended_at: string;
 }
 
+interface PreviousCriticalContext {
+  previousSessionId: string;
+  hasCriticalAlarm: boolean;
+  withinGrace: boolean;
+  graceMinutes: number;
+  minutesOutside: number;
+}
+
+const REENTRY_GRACE_ALERT_TYPE = 'grace_reentry_alarm';
+const REENTRY_GRACE_REMINDER_ALERT_TYPE = 'grace_reentry_alarm_reminder';
+
 async function evaluateOperationalAlarmRules(tag: {
   id: string;
   worker_id: string | null;
@@ -109,19 +120,100 @@ async function evaluateOperationalAlarmRules(tag: {
   }
 }
 
-async function upsertOpenSession(tag: any, event: ParsedPresenceEvent): Promise<void> {
-  const active = await db.query(
+async function resolvePreviousCriticalContext(tagId: string, eventTs: string): Promise<PreviousCriticalContext | null> {
+  const lastClosedSession = await db.query<LastClosedSession>(
+    `SELECT id, started_at, ended_at
+     FROM cold_room_sessions
+     WHERE tag_id = $1 AND ended_at IS NOT NULL
+     ORDER BY ended_at DESC LIMIT 1`,
+    [tagId]
+  );
+
+  if (!lastClosedSession.rowCount) return null;
+  const previousSession = lastClosedSession.rows[0];
+
+  const criticalAlert = await db.query<{ rule_id: string | null; grace_minutes_override: string | null }>(
+    `SELECT a.metadata->>'ruleId' AS rule_id,
+            a.metadata->>'reentryGraceMinutes' AS grace_minutes_override
+     FROM alerts a
+     WHERE a.tag_id = $1
+       AND a.severity = 'critical'
+       AND (
+         (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = $2)
+         OR (a.created_at >= $3::timestamptz AND a.created_at <= $4::timestamptz)
+       )
+     ORDER BY a.created_at DESC
+     LIMIT 1`,
+    [tagId, previousSession.id, previousSession.started_at, previousSession.ended_at]
+  );
+
+  if (!criticalAlert.rowCount) {
+    return {
+      previousSessionId: previousSession.id,
+      hasCriticalAlarm: false,
+      withinGrace: false,
+      graceMinutes: 0,
+      minutesOutside: (Date.parse(eventTs) - Date.parse(previousSession.ended_at)) / 60000
+    };
+  }
+
+  const ruleId = criticalAlert.rows[0].rule_id;
+  const graceOverride = Number(criticalAlert.rows[0].grace_minutes_override ?? NaN);
+  const graceByRuleRes = await db.query<{ alarm_visibility_grace_minutes: number }>(
+    `SELECT alarm_visibility_grace_minutes
+     FROM alarm_rules
+     WHERE id::text = $1
+     LIMIT 1`,
+    [ruleId ?? '']
+  );
+  const defaultGraceRes = await db.query<{ grace_minutes: number }>(
+    `SELECT COALESCE((
+       SELECT alarm_visibility_grace_minutes
+       FROM alarm_rules
+       ORDER BY updated_at DESC
+       LIMIT 1
+     ), 15) AS grace_minutes`
+  );
+
+  const graceMinutes = Number.isFinite(graceOverride) && graceOverride > 0
+    ? graceOverride
+    : (graceByRuleRes.rows[0]?.alarm_visibility_grace_minutes ?? defaultGraceRes.rows[0]?.grace_minutes ?? 15);
+  const minutesOutside = (Date.parse(eventTs) - Date.parse(previousSession.ended_at)) / 60000;
+
+  return {
+    previousSessionId: previousSession.id,
+    hasCriticalAlarm: true,
+    withinGrace: minutesOutside < graceMinutes,
+    graceMinutes,
+    minutesOutside
+  };
+}
+
+async function upsertOpenSession(tag: any, event: ParsedPresenceEvent): Promise<string> {
+  const active = await db.query<{ id: string }>(
     `SELECT id FROM cold_room_sessions WHERE tag_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
     [tag.id]
   );
-  if (active.rowCount) return;
+  if (active.rowCount) return active.rows[0].id;
 
-  await db.query(
+  const inserted = await db.query<{ id: string }>(
     `INSERT INTO cold_room_sessions(worker_id, tag_id, cold_room_id, started_at, source_event_id)
      VALUES($1, $2, $3, $4, $5)
-     ON CONFLICT (source_event_id) DO NOTHING`,
+     ON CONFLICT (source_event_id) DO NOTHING
+     RETURNING id`,
     [tag.worker_id, tag.id, tag.cold_room_id, event.timestamp, event.eventId]
   );
+
+  if (inserted.rowCount) {
+    return inserted.rows[0].id;
+  }
+
+  const fallback = await db.query<{ id: string }>(
+    `SELECT id FROM cold_room_sessions WHERE tag_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+    [tag.id]
+  );
+  if (!fallback.rowCount) throw new Error('failed to resolve open session after upsert');
+  return fallback.rows[0].id;
 }
 
 async function finalizeSession(
@@ -293,6 +385,92 @@ async function closeStaleSessions(): Promise<void> {
   }
 }
 
+async function triggerGraceReentryAlarm(params: {
+  sessionId: string;
+  previousSessionId: string;
+  workerId: string | null;
+  tagId: string;
+  coldRoomId: string | null;
+  graceMinutes: number;
+  minutesOutside: number;
+  reminder: boolean;
+}): Promise<void> {
+  const alertType = params.reminder ? REENTRY_GRACE_REMINDER_ALERT_TYPE : REENTRY_GRACE_ALERT_TYPE;
+  await createAlert({
+    workerId: params.workerId ?? undefined,
+    tagId: params.tagId,
+    coldRoomId: params.coldRoomId ?? undefined,
+    severity: 'critical',
+    alertType,
+    message: params.reminder
+      ? 'Recordatorio: reentrada en cámara durante estado de gracia'
+      : 'Reentrada en cámara durante estado de gracia',
+    metadata: {
+      sessionId: params.sessionId,
+      previousSessionId: params.previousSessionId,
+      reenteredDuringGrace: true,
+      reentryReminder: params.reminder,
+      reminderEveryMinutes: 3,
+      graceMinutes: params.graceMinutes,
+      minutesOutside: params.minutesOutside,
+      reentryAlertAt: new Date().toISOString(),
+      reentryGraceMinutes: params.graceMinutes
+    }
+  });
+}
+
+async function processGraceReentryReminders(): Promise<void> {
+  const sessions = await db.query<{
+    session_id: string;
+    worker_id: string | null;
+    tag_id: string;
+    cold_room_id: string | null;
+    previous_session_id: string | null;
+    grace_minutes: number | null;
+    last_reentry_alert_at: string | null;
+  }>(
+    `SELECT s.id AS session_id,
+            COALESCE(s.worker_id, wta.worker_id) AS worker_id,
+            s.tag_id,
+            s.cold_room_id AS cold_room_id,
+            COALESCE(alert_seed.metadata->>'previousSessionId', '') AS previous_session_id,
+            NULLIF(alert_seed.metadata->>'graceMinutes', '')::int AS grace_minutes,
+            MAX(a.created_at) AS last_reentry_alert_at
+     FROM cold_room_sessions s
+     LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
+     JOIN alerts alert_seed
+       ON alert_seed.tag_id = s.tag_id
+      AND alert_seed.metadata->>'sessionId' = s.id::text
+      AND alert_seed.metadata->>'reenteredDuringGrace' = 'true'
+     LEFT JOIN alerts a
+       ON a.tag_id = s.tag_id
+      AND a.metadata->>'sessionId' = s.id::text
+      AND a.metadata->>'reenteredDuringGrace' = 'true'
+     WHERE s.ended_at IS NULL
+     GROUP BY s.id, COALESCE(s.worker_id, wta.worker_id), s.tag_id, s.cold_room_id,
+              COALESCE(alert_seed.metadata->>'previousSessionId', ''), NULLIF(alert_seed.metadata->>'graceMinutes', '')::int`
+  );
+
+  const reminderMs = 3 * 60 * 1000;
+  const nowMs = Date.now();
+
+  for (const session of sessions.rows) {
+    const lastAlertMs = session.last_reentry_alert_at ? Date.parse(session.last_reentry_alert_at) : 0;
+    if (Number.isFinite(lastAlertMs) && nowMs - lastAlertMs < reminderMs) continue;
+
+    await triggerGraceReentryAlarm({
+      sessionId: session.session_id,
+      previousSessionId: session.previous_session_id || session.session_id,
+      workerId: session.worker_id,
+      tagId: session.tag_id,
+      coldRoomId: session.cold_room_id,
+      graceMinutes: session.grace_minutes ?? 15,
+      minutesOutside: 0,
+      reminder: true
+    });
+  }
+}
+
 export async function processComplianceRules(event: ParsedPresenceEvent): Promise<void> {
   const tagRes = await db.query(
     `SELECT t.id, t.tag_uid,
@@ -317,67 +495,56 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
   const tag = tagRes.rows[0];
 
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
+    let previousCriticalContext: PreviousCriticalContext | null = null;
     if (event.eventType === 'enter') {
-      const lastClosedSession = await db.query<LastClosedSession>(
-        `SELECT id, started_at, ended_at
-         FROM cold_room_sessions
-         WHERE tag_id = $1 AND ended_at IS NOT NULL
-         ORDER BY ended_at DESC LIMIT 1`,
-        [tag.id]
-      );
-
-      if (lastClosedSession.rowCount) {
-        const previousSession = lastClosedSession.rows[0];
-        const criticalAlarmDuringSession = await db.query(
-          `SELECT 1
-           FROM alerts
-           WHERE tag_id = $1
-             AND severity = 'critical'
-             AND (
-               (metadata ? 'sessionId' AND metadata->>'sessionId' = $2)
-               OR (created_at >= $3::timestamptz AND created_at <= $4::timestamptz)
-             )
-           LIMIT 1`,
-          [tag.id, previousSession.id, previousSession.started_at, previousSession.ended_at]
-        );
-
-        if (criticalAlarmDuringSession.rowCount) {
-          const minutesOutside = (Date.parse(event.timestamp) - Date.parse(previousSession.ended_at)) / 60000;
-          if (minutesOutside < Number(tag.required_break_minutes)) {
-            await createAlert({
-              workerId: tag.worker_id,
-              tagId: tag.id,
-              coldRoomId: tag.cold_room_id,
-              severity: 'warning',
-              alertType: 'break_not_compliant',
-              message: `Reentrada sin descanso mínimo tras alarma crítica (${Math.floor(minutesOutside)} min)`,
-              metadata: {
-                requiredBreakMinutes: Number(tag.required_break_minutes),
-                minutesOutside,
-                previousSessionId: previousSession.id
-              }
-            });
-            await openIncident({
-              workerId: tag.worker_id,
-              tagId: tag.id,
-              coldRoomId: tag.cold_room_id,
-              incidentType: 'non_compliant_reentry',
-              reason: 'Intento de reentrada sin descanso tras alarma crítica',
-              metadata: {
-                minutesOutside,
-                requiredBreakMinutes: Number(tag.required_break_minutes),
-                previousSessionId: previousSession.id
-              }
-            });
-            await sendEarlyReentryBlockedAlert({ workerId: tag.worker_id ?? undefined, tagId: tag.id, reason: 'Reentrada no permitida tras alarma crítica y descanso incompleto' }).catch((error) => {
-              logger.warn({ error }, 'failed to send early reentry blocked tag alert');
-            });
-          }
+      previousCriticalContext = await resolvePreviousCriticalContext(tag.id, event.timestamp);
+      if (previousCriticalContext?.hasCriticalAlarm && !previousCriticalContext.withinGrace) {
+        if (previousCriticalContext.minutesOutside < Number(tag.required_break_minutes)) {
+          await createAlert({
+            workerId: tag.worker_id,
+            tagId: tag.id,
+            coldRoomId: tag.cold_room_id,
+            severity: 'warning',
+            alertType: 'break_not_compliant',
+            message: `Reentrada sin descanso mínimo tras alarma crítica (${Math.floor(previousCriticalContext.minutesOutside)} min)`,
+            metadata: {
+              requiredBreakMinutes: Number(tag.required_break_minutes),
+              minutesOutside: previousCriticalContext.minutesOutside,
+              previousSessionId: previousCriticalContext.previousSessionId
+            }
+          });
+          await openIncident({
+            workerId: tag.worker_id,
+            tagId: tag.id,
+            coldRoomId: tag.cold_room_id,
+            incidentType: 'non_compliant_reentry',
+            reason: 'Intento de reentrada sin descanso tras alarma crítica',
+            metadata: {
+              minutesOutside: previousCriticalContext.minutesOutside,
+              requiredBreakMinutes: Number(tag.required_break_minutes),
+              previousSessionId: previousCriticalContext.previousSessionId
+            }
+          });
+          await sendEarlyReentryBlockedAlert({ workerId: tag.worker_id ?? undefined, tagId: tag.id, reason: 'Reentrada no permitida tras alarma crítica y descanso incompleto' }).catch((error) => {
+            logger.warn({ error }, 'failed to send early reentry blocked tag alert');
+          });
         }
       }
     }
 
-    await upsertOpenSession(tag, event);
+    const openSessionId = await upsertOpenSession(tag, event);
+    if (event.eventType === 'enter' && previousCriticalContext?.withinGrace) {
+      await triggerGraceReentryAlarm({
+        sessionId: openSessionId,
+        previousSessionId: previousCriticalContext.previousSessionId,
+        workerId: tag.worker_id,
+        tagId: tag.id,
+        coldRoomId: tag.cold_room_id,
+        graceMinutes: previousCriticalContext.graceMinutes,
+        minutesOutside: previousCriticalContext.minutesOutside,
+        reminder: false
+      });
+    }
     await evaluateOperationalAlarmRules(tag);
   }
 
@@ -442,5 +609,12 @@ export function startPresenceTimeoutLoop(): void {
 
   setInterval(() => {
     closeStaleSessions().catch((error) => logger.error({ error }, 'presence timeout loop failed'));
+  }, intervalMs).unref();
+}
+
+export function startGraceReentryReminderLoop(): void {
+  const intervalMs = 30000;
+  setInterval(() => {
+    processGraceReentryReminders().catch((error) => logger.error({ error }, 'grace reentry reminder loop failed'));
   }, intervalMs).unref();
 }

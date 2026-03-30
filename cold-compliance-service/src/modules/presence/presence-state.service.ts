@@ -83,9 +83,9 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
                 s.ended_at,
                 COALESCE(s.worker_id, wta.worker_id) AS worker_id,
                 COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
-                COALESCE(w.dni, '-') AS dni,
-                COALESCE(t.tag_uid, '') AS tag_uid,
-                (
+              COALESCE(w.dni, '-') AS dni,
+              COALESCE(t.tag_uid, '') AS tag_uid,
+              (
                   SELECT a.metadata->>'ruleId'
                   FROM alerts a
                   WHERE a.tag_id = s.tag_id
@@ -94,7 +94,18 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
                     AND a.created_at <= s.ended_at
                   ORDER BY a.created_at DESC
                   LIMIT 1
-                ) AS alarm_rule_id
+                ) AS alarm_rule_id,
+                (
+                  SELECT a.metadata->>'reentryGraceMinutes'
+                  FROM alerts a
+                  WHERE a.tag_id = s.tag_id
+                    AND a.severity = 'critical'
+                    AND a.created_at >= s.started_at
+                    AND a.created_at <= s.ended_at
+                    AND a.metadata ? 'reentryGraceMinutes'
+                  ORDER BY a.created_at DESC
+                  LIMIT 1
+                ) AS reentry_grace_minutes
          FROM cold_room_sessions s
          LEFT JOIN tags t ON t.id = s.tag_id
          LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
@@ -121,13 +132,13 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
               alarmed.dni,
               alarmed.tag_uid,
               alarmed.ended_at,
-              COALESCE(rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) AS grace_minutes,
+              COALESCE(NULLIF(alarmed.reentry_grace_minutes, '')::int, rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) AS grace_minutes,
               EXTRACT(EPOCH FROM (NOW() - alarmed.ended_at))::INT AS since_exit_seconds,
-              GREATEST(0, EXTRACT(EPOCH FROM ((alarmed.ended_at + (COALESCE(rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) * INTERVAL '1 minute')) - NOW())))::INT AS grace_remaining_seconds
+              GREATEST(0, EXTRACT(EPOCH FROM ((alarmed.ended_at + (COALESCE(NULLIF(alarmed.reentry_grace_minutes, '')::int, rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) * INTERVAL '1 minute')) - NOW())))::INT AS grace_remaining_seconds
        FROM alarmed_sessions alarmed
        CROSS JOIN cfg
        LEFT JOIN alarm_rules rule ON rule.id::text = alarmed.alarm_rule_id
-       WHERE NOW() < (alarmed.ended_at + (COALESCE(rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) * INTERVAL '1 minute'))
+       WHERE NOW() < (alarmed.ended_at + (COALESCE(NULLIF(alarmed.reentry_grace_minutes, '')::int, rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) * INTERVAL '1 minute'))
        ORDER BY alarmed.ended_at DESC`
     )
   ]);
