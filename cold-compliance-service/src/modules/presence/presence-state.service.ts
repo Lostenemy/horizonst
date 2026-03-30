@@ -59,7 +59,10 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
                 WHERE a.tag_id = s.tag_id
                   AND a.acknowledged_at IS NULL
                   AND a.severity = 'critical'
-                  AND a.created_at >= s.started_at
+                  AND (
+                    (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = s.id::text)
+                    OR a.created_at >= s.started_at
+                  )
               ) AS has_active_critical_alert
        FROM cold_room_sessions s
        LEFT JOIN tags t ON t.id = s.tag_id
@@ -91,8 +94,10 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
                   WHERE a.tag_id = s.tag_id
                     AND a.severity = 'critical'
                     AND a.metadata ? 'ruleId'
-                    AND a.created_at >= s.started_at
-                    AND a.created_at <= s.ended_at
+                    AND (
+                      (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = s.id::text)
+                      OR (a.created_at >= s.started_at AND a.created_at <= s.ended_at)
+                    )
                   ORDER BY a.created_at DESC
                   LIMIT 1
                 ) AS alarm_rule_id,
@@ -101,9 +106,11 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
                   FROM alerts a
                   WHERE a.tag_id = s.tag_id
                     AND a.severity = 'critical'
-                    AND a.created_at >= s.started_at
-                    AND a.created_at <= s.ended_at
                     AND a.metadata ? 'reentryGraceMinutes'
+                    AND (
+                      (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = s.id::text)
+                      OR (a.created_at >= s.started_at AND a.created_at <= s.ended_at)
+                    )
                   ORDER BY a.created_at DESC
                   LIMIT 1
                 ) AS reentry_grace_minutes
@@ -117,8 +124,10 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
              FROM alerts a
              WHERE a.tag_id = s.tag_id
                AND a.severity = 'critical'
-               AND a.created_at >= s.started_at
-               AND a.created_at <= s.ended_at
+               AND (
+                 (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = s.id::text)
+                 OR (a.created_at >= s.started_at AND a.created_at <= s.ended_at)
+               )
            )
            AND NOT EXISTS(
              SELECT 1

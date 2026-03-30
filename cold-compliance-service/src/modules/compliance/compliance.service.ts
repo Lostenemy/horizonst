@@ -5,7 +5,6 @@ import { openIncident } from '../incidents/incidents.service';
 import { ParsedPresenceEvent } from '../presence/types';
 import {
   sendCriticalExposureAlert,
-  sendEarlyReentryBlockedAlert,
   sendPreLimitAlert
 } from '../tag-control/application/tag-control.service';
 import { logger } from '../../utils/logger';
@@ -526,38 +525,6 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
     let previousCriticalContext: PreviousCriticalContext | null = null;
     if (event.eventType === 'enter') {
       previousCriticalContext = await resolvePreviousCriticalContext(tag.id, event.timestamp);
-      if (previousCriticalContext?.hasCriticalAlarm && !previousCriticalContext.withinGrace) {
-        if (previousCriticalContext.minutesOutside < Number(tag.required_break_minutes)) {
-          await createAlert({
-            workerId: tag.worker_id,
-            tagId: tag.id,
-            coldRoomId: tag.cold_room_id,
-            severity: 'warning',
-            alertType: 'break_not_compliant',
-            message: `Reentrada sin descanso mínimo tras alarma crítica (${Math.floor(previousCriticalContext.minutesOutside)} min)`,
-            metadata: {
-              requiredBreakMinutes: Number(tag.required_break_minutes),
-              minutesOutside: previousCriticalContext.minutesOutside,
-              previousSessionId: previousCriticalContext.previousSessionId
-            }
-          });
-          await openIncident({
-            workerId: tag.worker_id,
-            tagId: tag.id,
-            coldRoomId: tag.cold_room_id,
-            incidentType: 'non_compliant_reentry',
-            reason: 'Intento de reentrada sin descanso tras alarma crítica',
-            metadata: {
-              minutesOutside: previousCriticalContext.minutesOutside,
-              requiredBreakMinutes: Number(tag.required_break_minutes),
-              previousSessionId: previousCriticalContext.previousSessionId
-            }
-          });
-          await sendEarlyReentryBlockedAlert({ workerId: tag.worker_id ?? undefined, tagId: tag.id, reason: 'Reentrada no permitida tras alarma crítica y descanso incompleto' }).catch((error) => {
-            logger.warn({ error }, 'failed to send early reentry blocked tag alert');
-          });
-        }
-      }
     }
 
     const openSessionId = await upsertOpenSession(tag, event);
