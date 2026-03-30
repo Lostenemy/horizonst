@@ -1,6 +1,7 @@
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
 import { executeAlarmSequence } from '../tag-control/application/tag-physical-alarm.service';
+import { resolveOperationalAlarmTable } from './alarm-table-resolver';
 
 interface CreatedAlert {
   id: string;
@@ -19,8 +20,9 @@ export async function createAlert(params: {
   message: string;
   metadata?: Record<string, unknown>;
 }): Promise<CreatedAlert> {
+  const alarmTable = await resolveOperationalAlarmTable();
   const inserted = await db.query<CreatedAlert>(
-    `INSERT INTO alerts(worker_id, tag_id, cold_room_id, severity, alert_type, message, metadata)
+    `INSERT INTO ${alarmTable}(worker_id, tag_id, cold_room_id, severity, alert_type, message, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, worker_id, tag_id, severity, alert_type`,
     [
