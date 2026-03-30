@@ -1,50 +1,23 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth } from '../../middleware/auth';
+import { loadPresenceStateSnapshot, PresenceWorkerSummary } from '../presence/presence-state.service';
 
 export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
 
+function withPresenceStatus(workers: PresenceWorkerSummary[], workerIdsWithAlerts: Set<string>): Array<PresenceWorkerSummary & { presence_status: 'dentro' | 'alarma' | 'gracia' }> {
+  return workers.map((worker) => {
+    if (worker.worker_id && workerIdsWithAlerts.has(worker.worker_id)) {
+      return { ...worker, presence_status: 'alarma' as const };
+    }
+    return { ...worker, presence_status: 'dentro' as const };
+  });
+}
+
 async function loadOperationalSnapshot() {
   const [presence, alerts] = await Promise.all([
-    db.query(
-      `WITH cfg AS (
-         SELECT COALESCE((SELECT alarm_visibility_grace_minutes FROM alarm_rules ORDER BY updated_at DESC LIMIT 1), 15) AS grace_minutes
-       )
-       SELECT s.id,
-              COALESCE(s.worker_id, wta.worker_id) AS worker_id,
-              COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
-              COALESCE(w.dni, '-') AS dni,
-              COALESCE(t.tag_uid, '') AS tag_uid,
-              s.started_at,
-              EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
-              CASE WHEN EXISTS(
-                SELECT 1 FROM alerts a
-                WHERE a.worker_id = COALESCE(s.worker_id, wta.worker_id)
-                  AND a.acknowledged_at IS NULL
-                  AND (
-                    last_exit.last_exit_at IS NULL
-                    OR s.started_at - last_exit.last_exit_at <= (cfg.grace_minutes::int * INTERVAL '1 minute')
-                    OR a.created_at >= s.started_at
-                  )
-              ) THEN 'alarma' ELSE 'dentro' END AS presence_status
-       FROM cold_room_sessions s
-       LEFT JOIN tags t ON t.id = s.tag_id
-       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
-       LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
-       CROSS JOIN cfg
-       LEFT JOIN LATERAL (
-         SELECT prev.ended_at AS last_exit_at
-         FROM cold_room_sessions prev
-         WHERE prev.worker_id = COALESCE(s.worker_id, wta.worker_id)
-           AND prev.ended_at IS NOT NULL
-           AND prev.ended_at <= s.started_at
-         ORDER BY prev.ended_at DESC
-         LIMIT 1
-       ) last_exit ON true
-       WHERE s.ended_at IS NULL
-       ORDER BY s.started_at ASC`
-    ),
+    loadPresenceStateSnapshot(),
     db.query(
       `SELECT id, worker_id, tag_id, severity, alert_type, message, created_at
        FROM alerts
@@ -54,11 +27,22 @@ async function loadOperationalSnapshot() {
     )
   ]);
 
+  const workerIdsWithAlerts = new Set(
+    alerts.rows
+      .map((alert) => alert.worker_id)
+      .filter((workerId): workerId is string => typeof workerId === 'string' && workerId.length > 0)
+  );
+
+  const workersInside = withPresenceStatus(presence.inside, workerIdsWithAlerts);
+  const workersGrace = presence.grace.map((worker) => ({ ...worker, presence_status: 'gracia' as const }));
+
   return {
-    workersInside: presence.rows,
+    workersInside,
+    workersGrace,
     activeAlerts: alerts.rows,
     totals: {
-      workersInside: presence.rowCount,
+      workersInside: workersInside.length,
+      workersGrace: workersGrace.length,
       activeAlerts: alerts.rowCount
     },
     ts: new Date().toISOString()
