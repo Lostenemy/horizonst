@@ -423,6 +423,13 @@ async function triggerGraceReentryAlarm(params: {
   reminder: boolean;
 }): Promise<void> {
   const alertType = params.reminder ? REENTRY_GRACE_REMINDER_ALERT_TYPE : REENTRY_GRACE_ALERT_TYPE;
+  logger.info({
+    sessionId: params.sessionId,
+    previousSessionId: params.previousSessionId,
+    tagId: params.tagId,
+    workerId: params.workerId,
+    alertType
+  }, 'creating grace reentry alert');
   await createAlert({
     workerId: params.workerId ?? undefined,
     tagId: params.tagId,
