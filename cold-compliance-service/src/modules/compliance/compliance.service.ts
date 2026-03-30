@@ -28,6 +28,12 @@ interface SessionContext {
   max_daily_minutes: number;
 }
 
+interface LastClosedSession {
+  id: string;
+  started_at: string;
+  ended_at: string;
+}
+
 async function evaluateOperationalAlarmRules(tag: {
   id: string;
   worker_id: string | null;
@@ -160,7 +166,8 @@ async function finalizeSession(
       metadata: {
         durationMinutes,
         limitMinutes: session.max_continuous_minutes,
-        closeReason: reason
+        closeReason: reason,
+        sessionId: session.id
       }
     });
 
@@ -311,36 +318,61 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
 
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
     if (event.eventType === 'enter') {
-      const lastClosedSession = await db.query(
-        `SELECT ended_at FROM cold_room_sessions
+      const lastClosedSession = await db.query<LastClosedSession>(
+        `SELECT id, started_at, ended_at
+         FROM cold_room_sessions
          WHERE tag_id = $1 AND ended_at IS NOT NULL
          ORDER BY ended_at DESC LIMIT 1`,
         [tag.id]
       );
 
       if (lastClosedSession.rowCount) {
-        const minutesOutside = (Date.parse(event.timestamp) - Date.parse(lastClosedSession.rows[0].ended_at)) / 60000;
-        if (minutesOutside < Number(tag.required_break_minutes)) {
-          await createAlert({
-            workerId: tag.worker_id,
-            tagId: tag.id,
-            coldRoomId: tag.cold_room_id,
-            severity: 'warning',
-            alertType: 'break_not_compliant',
-            message: `Reentrada sin descanso mínimo (${Math.floor(minutesOutside)} min)`,
-            metadata: { requiredBreakMinutes: Number(tag.required_break_minutes), minutesOutside }
-          });
-          await openIncident({
-            workerId: tag.worker_id,
-            tagId: tag.id,
-            coldRoomId: tag.cold_room_id,
-            incidentType: 'non_compliant_reentry',
-            reason: 'Intento de reentrada sin descanso reglamentario',
-            metadata: { minutesOutside, requiredBreakMinutes: Number(tag.required_break_minutes) }
-          });
-          await sendEarlyReentryBlockedAlert({ workerId: tag.worker_id ?? undefined, tagId: tag.id, reason: 'Reentrada no permitida por descanso incompleto' }).catch((error) => {
-            logger.warn({ error }, 'failed to send early reentry blocked tag alert');
-          });
+        const previousSession = lastClosedSession.rows[0];
+        const criticalAlarmDuringSession = await db.query(
+          `SELECT 1
+           FROM alerts
+           WHERE tag_id = $1
+             AND severity = 'critical'
+             AND (
+               (metadata ? 'sessionId' AND metadata->>'sessionId' = $2)
+               OR (created_at >= $3::timestamptz AND created_at <= $4::timestamptz)
+             )
+           LIMIT 1`,
+          [tag.id, previousSession.id, previousSession.started_at, previousSession.ended_at]
+        );
+
+        if (criticalAlarmDuringSession.rowCount) {
+          const minutesOutside = (Date.parse(event.timestamp) - Date.parse(previousSession.ended_at)) / 60000;
+          if (minutesOutside < Number(tag.required_break_minutes)) {
+            await createAlert({
+              workerId: tag.worker_id,
+              tagId: tag.id,
+              coldRoomId: tag.cold_room_id,
+              severity: 'warning',
+              alertType: 'break_not_compliant',
+              message: `Reentrada sin descanso mínimo tras alarma crítica (${Math.floor(minutesOutside)} min)`,
+              metadata: {
+                requiredBreakMinutes: Number(tag.required_break_minutes),
+                minutesOutside,
+                previousSessionId: previousSession.id
+              }
+            });
+            await openIncident({
+              workerId: tag.worker_id,
+              tagId: tag.id,
+              coldRoomId: tag.cold_room_id,
+              incidentType: 'non_compliant_reentry',
+              reason: 'Intento de reentrada sin descanso tras alarma crítica',
+              metadata: {
+                minutesOutside,
+                requiredBreakMinutes: Number(tag.required_break_minutes),
+                previousSessionId: previousSession.id
+              }
+            });
+            await sendEarlyReentryBlockedAlert({ workerId: tag.worker_id ?? undefined, tagId: tag.id, reason: 'Reentrada no permitida tras alarma crítica y descanso incompleto' }).catch((error) => {
+              logger.warn({ error }, 'failed to send early reentry blocked tag alert');
+            });
+          }
         }
       }
     }
