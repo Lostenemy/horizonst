@@ -213,8 +213,12 @@ async function renderDashboard(snapshot) {
     a.message,
     formatDateTime(a.created_at)
   ]);
-  const workersRows = (data.workersInside || []).map((w) => [w.full_name, w.dni, w.tag_uid, Math.floor(w.elapsed_seconds / 60), stateBadge(w.presence_status)]);
-  const graceRows = (data.workersGrace || []).map((w) => [w.full_name, w.tag_uid || '-', `${Math.floor((w.since_last_detection_seconds || 0) / 60)}m ${(w.since_last_detection_seconds || 0) % 60}s`, stateBadge('gracia')]);
+  const workersRows = (data.workersInside || []).map((w) => [w.full_name, w.dni, Math.floor((w.elapsed_seconds || 0) / 60), stateBadge(w.presence_status)]);
+  const graceRows = (data.workersGrace || []).map((w) => [
+    w.full_name,
+    `${Math.floor((w.grace_remaining_seconds || 0) / 60)}m ${(w.grace_remaining_seconds || 0) % 60}s`,
+    stateBadge('gracia')
+  ]);
   const systemState = data.systemOnline === false
     ? '<span class="badge alert">Sistema offline</span>'
     : data.totals.workersInside === 0
@@ -236,11 +240,11 @@ async function renderDashboard(snapshot) {
     <div class="presence-columns grid two">
       <div class="presence-column">
         <h3>Trabajadores dentro</h3>
-        ${workersRows.length ? table(['Trabajador', 'DNI', 'Tag', 'Min dentro', 'Estado'], workersRows) : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
+        ${workersRows.length ? table(['Trabajador', 'DNI', 'Min dentro', 'Estado'], workersRows) : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
       </div>
       <div class="presence-column">
         <h3>En estado de gracia</h3>
-        ${graceRows.length ? table(['Trabajador', 'Tag', 'Desde última detección', 'Estado'], graceRows) : '<div class="list-empty">Sin trabajadores en gracia.</div>'}
+        ${graceRows.length ? table(['Trabajador', 'Tiempo restante', 'Estado'], graceRows) : '<div class="list-empty">Sin trabajadores en gracia.</div>'}
       </div>
     </div>
     <h3 class="mt-12">Alarmas activas (últimas 5)</h3>

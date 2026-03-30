@@ -6,9 +6,9 @@ import { loadPresenceStateSnapshot, PresenceWorkerSummary } from '../presence/pr
 export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
 
-function withPresenceStatus(workers: PresenceWorkerSummary[], workerIdsWithAlerts: Set<string>): Array<PresenceWorkerSummary & { presence_status: 'dentro' | 'alarma' | 'gracia' }> {
+function withPresenceStatus(workers: PresenceWorkerSummary[]): Array<PresenceWorkerSummary & { presence_status: 'dentro' | 'alarma' | 'gracia' }> {
   return workers.map((worker) => {
-    if (worker.worker_id && workerIdsWithAlerts.has(worker.worker_id)) {
+    if (worker.has_active_critical_alert) {
       return { ...worker, presence_status: 'alarma' as const };
     }
     return { ...worker, presence_status: 'dentro' as const };
@@ -27,13 +27,7 @@ async function loadOperationalSnapshot() {
     )
   ]);
 
-  const workerIdsWithAlerts = new Set(
-    alerts.rows
-      .map((alert) => alert.worker_id)
-      .filter((workerId): workerId is string => typeof workerId === 'string' && workerId.length > 0)
-  );
-
-  const workersInside = withPresenceStatus(presence.inside, workerIdsWithAlerts);
+  const workersInside = withPresenceStatus(presence.inside);
   const workersGrace = presence.grace.map((worker) => ({ ...worker, presence_status: 'gracia' as const }));
 
   return {

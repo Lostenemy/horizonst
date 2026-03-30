@@ -1,7 +1,6 @@
-import { env } from '../../config/env';
 import { db } from '../../db/pool';
 
-interface PresenceSessionRow {
+interface InsideSessionRow {
   id: string;
   worker_id: string | null;
   full_name: string;
@@ -9,9 +8,19 @@ interface PresenceSessionRow {
   tag_uid: string;
   started_at: string;
   elapsed_seconds: number;
-  last_seen_at: string;
-  ble_active: boolean | null;
-  ble_disconnected_at: string | null;
+  has_active_critical_alert: boolean;
+}
+
+interface GraceSessionRow {
+  id: string;
+  worker_id: string | null;
+  full_name: string;
+  dni: string;
+  tag_uid: string;
+  ended_at: string;
+  grace_minutes: number;
+  since_exit_seconds: number;
+  grace_remaining_seconds: number;
 }
 
 export interface PresenceWorkerSummary {
@@ -20,10 +29,13 @@ export interface PresenceWorkerSummary {
   full_name: string;
   dni: string;
   tag_uid: string;
-  started_at: string;
-  elapsed_seconds: number;
-  since_last_detection_seconds: number;
-  grace_remaining_seconds: number;
+  started_at?: string;
+  ended_at?: string;
+  elapsed_seconds?: number;
+  since_exit_seconds?: number;
+  grace_minutes?: number;
+  grace_remaining_seconds?: number;
+  has_active_critical_alert?: boolean;
 }
 
 export interface PresenceStateSnapshot {
@@ -32,60 +44,96 @@ export interface PresenceStateSnapshot {
 }
 
 export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot> {
-  const timeoutMs = Math.max(1000, Number(env.PRESENCE_EXIT_TIMEOUT_MS));
-  const activeWindowMs = Math.max(1000, Number(env.PRESENCE_ACTIVE_WINDOW_MS));
+  const [insideSessions, graceSessions] = await Promise.all([
+    db.query<InsideSessionRow>(
+      `SELECT s.id,
+              COALESCE(s.worker_id, wta.worker_id) AS worker_id,
+              COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
+              COALESCE(w.dni, '-') AS dni,
+              COALESCE(t.tag_uid, '') AS tag_uid,
+              s.started_at,
+              EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
+              EXISTS(
+                SELECT 1
+                FROM alerts a
+                WHERE a.tag_id = s.tag_id
+                  AND a.acknowledged_at IS NULL
+                  AND a.severity = 'critical'
+                  AND a.created_at >= s.started_at
+              ) AS has_active_critical_alert
+       FROM cold_room_sessions s
+       LEFT JOIN tags t ON t.id = s.tag_id
+       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
+       LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
+       WHERE s.ended_at IS NULL
+       ORDER BY s.started_at ASC`
+    ),
+    db.query<GraceSessionRow>(
+      `WITH cfg AS (
+         SELECT COALESCE((
+           SELECT alarm_visibility_grace_minutes
+           FROM alarm_rules
+           ORDER BY updated_at DESC
+           LIMIT 1
+         ), 15) AS default_grace_minutes
+       ), alarmed_sessions AS (
+         SELECT s.id,
+                s.tag_id,
+                s.started_at,
+                s.ended_at,
+                COALESCE(s.worker_id, wta.worker_id) AS worker_id,
+                COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
+                COALESCE(w.dni, '-') AS dni,
+                COALESCE(t.tag_uid, '') AS tag_uid,
+                (
+                  SELECT a.metadata->>'ruleId'
+                  FROM alerts a
+                  WHERE a.tag_id = s.tag_id
+                    AND a.severity = 'critical'
+                    AND a.created_at >= s.started_at
+                    AND a.created_at <= s.ended_at
+                  ORDER BY a.created_at DESC
+                  LIMIT 1
+                ) AS alarm_rule_id
+         FROM cold_room_sessions s
+         LEFT JOIN tags t ON t.id = s.tag_id
+         LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
+         LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
+         WHERE s.ended_at IS NOT NULL
+           AND EXISTS(
+             SELECT 1
+             FROM alerts a
+             WHERE a.tag_id = s.tag_id
+               AND a.severity = 'critical'
+               AND a.created_at >= s.started_at
+               AND a.created_at <= s.ended_at
+           )
+           AND NOT EXISTS(
+             SELECT 1
+             FROM cold_room_sessions open_session
+             WHERE open_session.tag_id = s.tag_id
+               AND open_session.ended_at IS NULL
+           )
+       )
+       SELECT alarmed.id,
+              alarmed.worker_id,
+              alarmed.full_name,
+              alarmed.dni,
+              alarmed.tag_uid,
+              alarmed.ended_at,
+              COALESCE(rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) AS grace_minutes,
+              EXTRACT(EPOCH FROM (NOW() - alarmed.ended_at))::INT AS since_exit_seconds,
+              GREATEST(0, EXTRACT(EPOCH FROM ((alarmed.ended_at + (COALESCE(rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) * INTERVAL '1 minute')) - NOW())))::INT AS grace_remaining_seconds
+       FROM alarmed_sessions alarmed
+       CROSS JOIN cfg
+       LEFT JOIN alarm_rules rule ON rule.id::text = alarmed.alarm_rule_id
+       WHERE NOW() < (alarmed.ended_at + (COALESCE(rule.alarm_visibility_grace_minutes, cfg.default_grace_minutes) * INTERVAL '1 minute'))
+       ORDER BY alarmed.ended_at DESC`
+    )
+  ]);
 
-  const sessions = await db.query<PresenceSessionRow>(
-    `SELECT s.id,
-            COALESCE(s.worker_id, wta.worker_id) AS worker_id,
-            COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
-            COALESCE(w.dni, '-') AS dni,
-            COALESCE(t.tag_uid, '') AS tag_uid,
-            s.started_at,
-            EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
-            COALESCE(MAX(pe.event_ts), s.started_at) AS last_seen_at,
-            bs.is_active AS ble_active,
-            bs.disconnected_at AS ble_disconnected_at
-     FROM cold_room_sessions s
-     LEFT JOIN tags t ON t.id = s.tag_id
-     LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
-     LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
-     LEFT JOIN ble_alarm_sessions bs ON bs.tag_id = s.tag_id
-     LEFT JOIN presence_events pe
-       ON regexp_replace(lower(pe.tag_uid), '[-:]', '', 'g') = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')
-      AND pe.event_ts >= s.started_at
-      AND pe.event_type IN ('enter', 'heartbeat', 'movement')
-     WHERE s.ended_at IS NULL
-     GROUP BY s.id, COALESCE(s.worker_id, wta.worker_id), COALESCE(w.full_name, '(sin trabajador asignado)'),
-              COALESCE(w.dni, '-'), COALESCE(t.tag_uid, ''), s.started_at, bs.is_active, bs.disconnected_at
-     ORDER BY s.started_at ASC`
-  );
-
-  const nowMs = Date.now();
-  const inside: PresenceWorkerSummary[] = [];
-  const grace: PresenceWorkerSummary[] = [];
-
-  for (const row of sessions.rows) {
-    let referenceTs = Date.parse(row.last_seen_at);
-    if (!Number.isFinite(referenceTs)) {
-      referenceTs = Date.parse(row.started_at);
-    }
-
-    if (row.ble_disconnected_at) {
-      const bleDisconnectedMs = Date.parse(row.ble_disconnected_at);
-      if (Number.isFinite(bleDisconnectedMs) && bleDisconnectedMs > referenceTs) {
-        referenceTs = bleDisconnectedMs;
-      }
-    }
-
-    const elapsedSinceLastSeenMs = Math.max(0, nowMs - referenceTs);
-    const graceRemainingMs = Math.max(0, timeoutMs - elapsedSinceLastSeenMs);
-
-    if (graceRemainingMs <= 0) {
-      continue;
-    }
-
-    const workerSummary: PresenceWorkerSummary = {
+  return {
+    inside: insideSessions.rows.map((row) => ({
       id: row.id,
       worker_id: row.worker_id,
       full_name: row.full_name,
@@ -93,17 +141,22 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
       tag_uid: row.tag_uid,
       started_at: row.started_at,
       elapsed_seconds: Number(row.elapsed_seconds) || 0,
-      since_last_detection_seconds: Math.floor(elapsedSinceLastSeenMs / 1000),
-      grace_remaining_seconds: Math.floor(graceRemainingMs / 1000)
-    };
-
-    if (row.ble_active || elapsedSinceLastSeenMs <= activeWindowMs) {
-      inside.push(workerSummary);
-      continue;
-    }
-
-    grace.push(workerSummary);
-  }
-
-  return { inside, grace };
+      grace_remaining_seconds: 0,
+      since_exit_seconds: 0,
+      grace_minutes: 0,
+      has_active_critical_alert: row.has_active_critical_alert
+    })),
+    grace: graceSessions.rows.map((row) => ({
+      id: row.id,
+      worker_id: row.worker_id,
+      full_name: row.full_name,
+      dni: row.dni,
+      tag_uid: row.tag_uid,
+      ended_at: row.ended_at,
+      since_exit_seconds: Number(row.since_exit_seconds) || 0,
+      grace_minutes: Number(row.grace_minutes) || 0,
+      grace_remaining_seconds: Number(row.grace_remaining_seconds) || 0,
+      has_active_critical_alert: false
+    }))
+  };
 }

@@ -20,7 +20,6 @@ const schema = z.object({
   MQTT_COMMAND_TOPIC_TEMPLATE: z.string().default('gw/{gatewayMac}/subscribe'),
   PRESENCE_EXIT_TIMEOUT_MS: z.coerce.number().default(45000),
   PRESENCE_SWEEP_INTERVAL_MS: z.coerce.number().default(5000),
-  PRESENCE_ACTIVE_WINDOW_MS: z.coerce.number().default(15000),
   MAX_CONTINUOUS_MINUTES: z.coerce.number().default(45),
   PRE_ALERT_MINUTES: z.coerce.number().default(40),
   REQUIRED_BREAK_MINUTES: z.coerce.number().default(15),
