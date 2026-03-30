@@ -240,11 +240,11 @@ async function renderDashboard(snapshot) {
     <div class="presence-columns grid two">
       <div class="presence-column">
         <h3>Trabajadores dentro</h3>
-        ${workersRows.length ? table(['Trabajador', 'DNI', 'Min dentro', 'Estado'], workersRows) : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
+        ${workersRows.length ? table(['Trabajador', 'DNI', 'Min dentro', 'Estado'], workersRows, 'presence-table') : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
       </div>
       <div class="presence-column">
         <h3>En estado de gracia</h3>
-        ${graceRows.length ? table(['Trabajador', 'Tiempo restante', 'Estado'], graceRows) : '<div class="list-empty">Sin trabajadores en gracia.</div>'}
+        ${graceRows.length ? table(['Trabajador', 'Tiempo restante', 'Estado'], graceRows, 'presence-table') : '<div class="list-empty">Sin trabajadores en gracia.</div>'}
       </div>
     </div>
     <h3 class="mt-12">Alarmas activas (últimas 5)</h3>

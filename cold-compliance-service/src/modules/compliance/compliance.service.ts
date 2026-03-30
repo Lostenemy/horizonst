@@ -133,8 +133,37 @@ async function resolvePreviousCriticalContext(tagId: string, eventTs: string): P
   const previousSession = lastClosedSession.rows[0];
 
   const criticalAlert = await db.query<{ rule_id: string | null; grace_minutes_override: string | null }>(
-    `SELECT a.metadata->>'ruleId' AS rule_id,
-            a.metadata->>'reentryGraceMinutes' AS grace_minutes_override
+    `SELECT (
+        SELECT a.metadata->>'ruleId'
+        FROM alerts a
+        WHERE a.tag_id = $1
+          AND a.severity = 'critical'
+          AND a.metadata ? 'ruleId'
+          AND (
+            (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = $2)
+            OR (a.created_at >= $3::timestamptz AND a.created_at <= $4::timestamptz)
+          )
+        ORDER BY a.created_at DESC
+        LIMIT 1
+      ) AS rule_id,
+      (
+        SELECT a.metadata->>'reentryGraceMinutes'
+        FROM alerts a
+        WHERE a.tag_id = $1
+          AND a.severity = 'critical'
+          AND a.metadata ? 'reentryGraceMinutes'
+          AND (
+            (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = $2)
+            OR (a.created_at >= $3::timestamptz AND a.created_at <= $4::timestamptz)
+          )
+        ORDER BY a.created_at DESC
+        LIMIT 1
+      ) AS grace_minutes_override`,
+    [tagId, previousSession.id, previousSession.started_at, previousSession.ended_at]
+  );
+
+  const hasCriticalAlarm = await db.query(
+    `SELECT 1
      FROM alerts a
      WHERE a.tag_id = $1
        AND a.severity = 'critical'
@@ -142,12 +171,11 @@ async function resolvePreviousCriticalContext(tagId: string, eventTs: string): P
          (a.metadata ? 'sessionId' AND a.metadata->>'sessionId' = $2)
          OR (a.created_at >= $3::timestamptz AND a.created_at <= $4::timestamptz)
        )
-     ORDER BY a.created_at DESC
      LIMIT 1`,
     [tagId, previousSession.id, previousSession.started_at, previousSession.ended_at]
   );
 
-  if (!criticalAlert.rowCount) {
+  if (!hasCriticalAlarm.rowCount) {
     return {
       previousSessionId: previousSession.id,
       hasCriticalAlarm: false,

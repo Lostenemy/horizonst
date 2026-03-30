@@ -90,6 +90,7 @@ export async function loadPresenceStateSnapshot(): Promise<PresenceStateSnapshot
                   FROM alerts a
                   WHERE a.tag_id = s.tag_id
                     AND a.severity = 'critical'
+                    AND a.metadata ? 'ruleId'
                     AND a.created_at >= s.started_at
                     AND a.created_at <= s.ended_at
                   ORDER BY a.created_at DESC
