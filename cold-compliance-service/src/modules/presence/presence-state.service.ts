@@ -175,8 +175,15 @@ export async function sendGraceReentryReminders(): Promise<void> {
        AND pos.in_alarm = TRUE
        AND pos.last_alarm_at IS NOT NULL
        AND (
-         pos.reminder_sent_at IS NULL
-         OR EXTRACT(EPOCH FROM (NOW() - pos.reminder_sent_at)) * 1000 >= $1
+         (
+           pos.reminder_sent_at IS NULL
+           AND EXTRACT(EPOCH FROM (NOW() - pos.last_alarm_at)) * 1000 >= $1
+         )
+         OR
+         (
+           pos.reminder_sent_at IS NOT NULL
+           AND EXTRACT(EPOCH FROM (NOW() - pos.reminder_sent_at)) * 1000 >= $1
+         )
        )`,
     [cadenceMs]
   );
