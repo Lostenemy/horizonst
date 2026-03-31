@@ -317,8 +317,21 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
   const tag = tagRes.rows[0];
 
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
+    if (event.eventType === 'enter' || event.eventType === 'heartbeat') {
+      const activeSession = await db.query(
+        `SELECT 1
+         FROM cold_room_sessions
+         WHERE tag_id = $1
+           AND ended_at IS NULL
+         LIMIT 1`,
+        [tag.id]
+      );
+      if (!activeSession.rowCount) {
+        await markPresenceEnter(tag, event.timestamp);
+      }
+    }
+
     if (event.eventType === 'enter') {
-      await markPresenceEnter(tag, event.timestamp);
       const lastClosedSession = await db.query(
         `SELECT ended_at FROM cold_room_sessions
          WHERE tag_id = $1 AND ended_at IS NOT NULL
