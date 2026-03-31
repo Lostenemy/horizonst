@@ -9,12 +9,14 @@ import {
   sendPreLimitAlert
 } from '../tag-control/application/tag-control.service';
 import { logger } from '../../utils/logger';
+import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
 
 interface ActiveSession {
   id: string;
   started_at: string;
   worker_id: string | null;
   cold_room_id: string | null;
+  tag_id: string;
 }
 
 interface SessionContext {
@@ -34,7 +36,7 @@ async function evaluateOperationalAlarmRules(tag: {
   cold_room_id: string | null;
 }): Promise<void> {
   const sessionRes = await db.query<ActiveSession>(
-    `SELECT id, started_at, worker_id, cold_room_id
+    `SELECT id, started_at, worker_id, cold_room_id, tag_id
      FROM cold_room_sessions
      WHERE tag_id = $1 AND ended_at IS NULL
      ORDER BY started_at DESC LIMIT 1`,
@@ -80,6 +82,7 @@ async function evaluateOperationalAlarmRules(tag: {
     }
 
     if (elapsedMinutes >= Number(rule.alarm_minutes)) {
+      await markPresenceAlarm(session.tag_id, new Date().toISOString());
       const existsAlarm = await db.query(
         `SELECT 1 FROM alerts
          WHERE alert_type = 'alarm_rule_alarm'
@@ -137,6 +140,7 @@ async function finalizeSession(
   if (!updateResult.rowCount) return false;
 
   const closed = updateResult.rows[0];
+  await markPresenceExit(closed.tag_id, endedAt);
   const durationMinutes = (Date.parse(endedAt) - Date.parse(closed.started_at)) / 60000;
 
   await db.query(
@@ -311,6 +315,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
 
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
     if (event.eventType === 'enter') {
+      await markPresenceEnter(tag, event.timestamp);
       const lastClosedSession = await db.query(
         `SELECT ended_at FROM cold_room_sessions
          WHERE tag_id = $1 AND ended_at IS NOT NULL

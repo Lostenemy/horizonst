@@ -66,6 +66,13 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+function formatRemaining(seconds) {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const mm = Math.floor(safe / 60);
+  const ss = safe % 60;
+  return `${mm}m ${String(ss).padStart(2, '0')}s`;
+}
+
 function roleLabel(role) {
   return ({ supervisor: 'Supervisor', administrador: 'Administrador', superadministrador: 'Superadministrador', trabajador: 'Trabajador' }[role] || role || '-');
 }
@@ -212,7 +219,8 @@ async function renderDashboard(snapshot) {
     a.message,
     formatDateTime(a.created_at)
   ]);
-  const workersRows = (data.workersInside || []).map((w) => [w.full_name, w.dni, w.tag_uid, Math.floor(w.elapsed_seconds / 60), stateBadge(w.presence_status)]);
+  const workersRows = (data.workersInside || []).map((w) => [w.full_name, w.dni, Math.floor(w.elapsed_seconds / 60), stateBadge(w.presence_status)]);
+  const graceRows = (data.workersInGrace || []).map((w) => [w.full_name, formatRemaining(w.remaining_seconds), '<span class="badge info">Gracia</span>']);
   const systemState = data.systemOnline === false
     ? '<span class="badge alert">Sistema offline</span>'
     : data.totals.workersInside === 0
@@ -226,12 +234,21 @@ async function renderDashboard(snapshot) {
     </div>
     <div class="metrics kpi-grid dashboard-kpi-row">
       <div class="metric kpi-card ${data.totals.workersInside ? 'warn' : 'success'}"><small class="kpi-label">Trabajadores dentro</small><b class="kpi-value">${data.totals.workersInside}</b></div>
+      <div class="metric kpi-card info"><small class="kpi-label">En estado de gracia</small><b class="kpi-value">${data.totals.workersInGrace || 0}</b></div>
       <div class="metric kpi-card ${alertKpiClass} clickable" onclick="openAlertsFiltered('')"><small class="kpi-label">Alarmas disparadas</small><b class="kpi-value">${data.totals.activeAlerts}</b></div>
       <div class="metric kpi-card ${data.systemOnline === false ? 'alert' : 'success'}"><small class="kpi-label">Estado del sistema</small><b style="font-size:16px">${systemState}</b></div>
       <div class="metric kpi-card info kpi-timestamp"><small class="kpi-label">Última actualización</small><b class="kpi-date kpi-value">${formatDateTime(data.ts)}</b></div>
     </div>
-    <h3>Trabajadores dentro (presencia real)</h3>
-    ${workersRows.length ? table(['Trabajador', 'DNI', 'Tag', 'Min dentro', 'Estado'], workersRows) : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
+    <div class="dashboard-presence-grid">
+      <div class="dashboard-presence-column">
+        <h3>Trabajadores dentro (presencia real)</h3>
+        ${workersRows.length ? table(['Trabajador', 'DNI', 'Min dentro', 'Estado'], workersRows, 'dashboard-table') : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
+      </div>
+      <div class="dashboard-presence-column">
+        <h3>En estado de gracia</h3>
+        ${graceRows.length ? table(['Trabajador', 'Tiempo restante', 'Estado'], graceRows, 'dashboard-table') : '<div class="list-empty">No hay trabajadores en gracia.</div>'}
+      </div>
+    </div>
     <h3 class="mt-12">Alarmas activas (últimas 5)</h3>
     ${alertsRows.length ? table(['Tipo', 'Severidad', 'Mensaje', 'Fecha'], alertsRows, 'alarm-table') : '<div class="list-empty">Sin alarmas activas.</div>'}
     <div class="actions mt-12"><button class="secondary" onclick="openAlertsFiltered('')">Ver todas</button></div>
