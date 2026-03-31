@@ -21,9 +21,27 @@ interface PresenceOperationalState {
   reminder_sent_at: string | null;
 }
 
-function graceIntervalSql(): string {
-  const minutes = Math.max(1, Number(env.OPERATIONAL_GRACE_MINUTES));
-  return `${minutes} minutes`;
+interface PresenceAlarmContext {
+  workerId?: string | null;
+  coldRoomId?: string | null;
+}
+
+async function resolveOperationalGraceMinutes(): Promise<number> {
+  const configured = await db.query<{ grace_minutes: number }>(
+    `SELECT COALESCE(
+        (
+          SELECT alarm_visibility_grace_minutes
+          FROM alarm_rules
+          WHERE active = TRUE
+          ORDER BY updated_at DESC
+          LIMIT 1
+        ),
+        $1
+      )::int AS grace_minutes`,
+    [Math.max(1, Number(env.OPERATIONAL_GRACE_MINUTES))]
+  );
+  const rawMinutes = Number(configured.rows[0]?.grace_minutes ?? env.OPERATIONAL_GRACE_MINUTES);
+  return Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : Math.max(1, Number(env.OPERATIONAL_GRACE_MINUTES));
 }
 
 export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string): Promise<{ isGraceReentry: boolean }> {
@@ -49,8 +67,8 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
       )
       VALUES($1, $2, $3, TRUE, TRUE, FALSE, NULL, NULL, $4, NULL, NOW())
       ON CONFLICT (tag_id)
-      DO UPDATE SET worker_id = EXCLUDED.worker_id,
-                    cold_room_id = EXCLUDED.cold_room_id,
+      DO UPDATE SET worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
+                    cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                     inside = TRUE,
                     in_alarm = TRUE,
                     in_grace = FALSE,
@@ -79,8 +97,8 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
     )
     VALUES($1, $2, $3, TRUE, FALSE, FALSE, NULL, NULL, NULL, NOW())
     ON CONFLICT (tag_id)
-    DO UPDATE SET worker_id = EXCLUDED.worker_id,
-                  cold_room_id = EXCLUDED.cold_room_id,
+    DO UPDATE SET worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
+                  cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                   inside = TRUE,
                   in_grace = FALSE,
                   grace_until = NULL,
@@ -93,25 +111,29 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
   return { isGraceReentry: false };
 }
 
-export async function markPresenceAlarm(tagId: string, eventTs: string): Promise<void> {
+export async function markPresenceAlarm(tagId: string, eventTs: string, context: PresenceAlarmContext = {}): Promise<void> {
   await db.query(
     `INSERT INTO presence_operational_state(
-      tag_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
-    ) VALUES($1, TRUE, TRUE, FALSE, NULL, NULL, $2, NULL, NOW())
+      tag_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
+    ) VALUES($1, $2, $3, TRUE, TRUE, FALSE, NULL, NULL, $4, NULL, NOW())
     ON CONFLICT (tag_id)
-    DO UPDATE SET inside = TRUE,
+    DO UPDATE SET worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
+                  cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
+                  inside = TRUE,
                   in_alarm = TRUE,
                   in_grace = FALSE,
                   grace_until = NULL,
                   grace_started_at = NULL,
-                  last_alarm_at = $2,
+                  last_alarm_at = $4,
                   reminder_sent_at = NULL,
                   updated_at = NOW()`,
-    [tagId, eventTs]
+    [tagId, context.workerId ?? null, context.coldRoomId ?? null, eventTs]
   );
 }
 
 export async function markPresenceExit(tagId: string, exitTs: string): Promise<void> {
+  const graceMinutes = await resolveOperationalGraceMinutes();
+  const intervalExpr = `${graceMinutes} minutes`;
   await db.query(
     `UPDATE presence_operational_state
      SET inside = FALSE,
@@ -122,7 +144,7 @@ export async function markPresenceExit(tagId: string, exitTs: string): Promise<v
          reminder_sent_at = NULL,
          updated_at = NOW()
      WHERE tag_id = $1`,
-    [tagId, exitTs, graceIntervalSql()]
+    [tagId, exitTs, intervalExpr]
   );
 }
 

@@ -82,7 +82,10 @@ async function evaluateOperationalAlarmRules(tag: {
     }
 
     if (elapsedMinutes >= Number(rule.alarm_minutes)) {
-      await markPresenceAlarm(session.tag_id, new Date().toISOString());
+      await markPresenceAlarm(session.tag_id, new Date().toISOString(), {
+        workerId: session.worker_id,
+        coldRoomId: session.cold_room_id
+      });
       const existsAlarm = await db.query(
         `SELECT 1 FROM alerts
          WHERE alert_type = 'alarm_rule_alarm'

@@ -31,11 +31,13 @@ dashboardRouter.get('/grace', async (_req, res, next) => {
   try {
     const result = await db.query(
       `SELECT pos.tag_id,
-              COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
+              COALESCE(w.full_name, wa.full_name, '(sin trabajador asignado)') AS full_name,
               GREATEST(0, EXTRACT(EPOCH FROM (pos.grace_until - NOW()))::INT) AS remaining_seconds,
               'gracia' AS presence_status
        FROM presence_operational_state pos
        LEFT JOIN workers w ON w.id = pos.worker_id
+       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = pos.tag_id AND wta.active = TRUE
+       LEFT JOIN workers wa ON wa.id = wta.worker_id
        WHERE pos.inside = FALSE
          AND pos.in_grace = TRUE
          AND pos.grace_until > NOW()
