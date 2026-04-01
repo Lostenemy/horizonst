@@ -55,6 +55,15 @@ async function evaluateOperationalAlarmRules(tag: {
 
   const elapsedMinutes = (Date.now() - Date.parse(session.started_at)) / 60000;
 
+  const operationalState = await db.query<{ in_alarm: boolean }>(
+    `SELECT in_alarm
+     FROM presence_operational_state
+     WHERE tag_id = $1
+     LIMIT 1`,
+    [tag.id]
+  );
+  let alreadyInOperationalAlarm = operationalState.rows[0]?.in_alarm === true;
+
   for (const rule of rules) {
     const warningKey = { sessionId: session.id, ruleId: rule.id, stage: 'warning' };
     const alarmKey = { sessionId: session.id, ruleId: rule.id, stage: 'alarm' };
@@ -82,10 +91,13 @@ async function evaluateOperationalAlarmRules(tag: {
     }
 
     if (elapsedMinutes >= Number(rule.alarm_minutes)) {
-      await markPresenceAlarm(session.tag_id, new Date().toISOString(), {
-        workerId: session.worker_id,
-        coldRoomId: session.cold_room_id
-      });
+      if (!alreadyInOperationalAlarm) {
+        await markPresenceAlarm(session.tag_id, new Date().toISOString(), {
+          workerId: session.worker_id,
+          coldRoomId: session.cold_room_id
+        });
+        alreadyInOperationalAlarm = true;
+      }
       const existsAlarm = await db.query(
         `SELECT 1 FROM alerts
          WHERE alert_type = 'alarm_rule_alarm'
