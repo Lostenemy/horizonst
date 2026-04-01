@@ -6,44 +6,36 @@ export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
 
 async function loadOperationalSnapshot() {
-  const [presence, alerts] = await Promise.all([
+  const [presence, grace, alerts] = await Promise.all([
     db.query(
-      `WITH cfg AS (
-         SELECT COALESCE((SELECT alarm_visibility_grace_minutes FROM alarm_rules ORDER BY updated_at DESC LIMIT 1), 15) AS grace_minutes
-       )
-       SELECT s.id,
+      `SELECT s.id,
               COALESCE(s.worker_id, wta.worker_id) AS worker_id,
               COALESCE(w.full_name, '(sin trabajador asignado)') AS full_name,
               COALESCE(w.dni, '-') AS dni,
-              COALESCE(t.tag_uid, '') AS tag_uid,
               s.started_at,
               EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
-              CASE WHEN EXISTS(
-                SELECT 1 FROM alerts a
-                WHERE a.worker_id = COALESCE(s.worker_id, wta.worker_id)
-                  AND a.acknowledged_at IS NULL
-                  AND (
-                    last_exit.last_exit_at IS NULL
-                    OR s.started_at - last_exit.last_exit_at <= (cfg.grace_minutes::int * INTERVAL '1 minute')
-                    OR a.created_at >= s.started_at
-                  )
-              ) THEN 'alarma' ELSE 'dentro' END AS presence_status
+              CASE WHEN COALESCE(pos.in_alarm, FALSE) THEN 'alarma' ELSE 'dentro' END AS presence_status
        FROM cold_room_sessions s
-       LEFT JOIN tags t ON t.id = s.tag_id
+       LEFT JOIN presence_operational_state pos ON pos.tag_id = s.tag_id
        LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
        LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
-       CROSS JOIN cfg
-       LEFT JOIN LATERAL (
-         SELECT prev.ended_at AS last_exit_at
-         FROM cold_room_sessions prev
-         WHERE prev.worker_id = COALESCE(s.worker_id, wta.worker_id)
-           AND prev.ended_at IS NOT NULL
-           AND prev.ended_at <= s.started_at
-         ORDER BY prev.ended_at DESC
-         LIMIT 1
-       ) last_exit ON true
        WHERE s.ended_at IS NULL
        ORDER BY s.started_at ASC`
+    ),
+    db.query(
+      `SELECT pos.tag_id,
+              COALESCE(w.full_name, wa.full_name, '(sin trabajador asignado)') AS full_name,
+              GREATEST(0, EXTRACT(EPOCH FROM (pos.grace_until - NOW()))::INT) AS remaining_seconds,
+              'gracia' AS presence_status
+       FROM presence_operational_state pos
+       LEFT JOIN workers w ON w.id = pos.worker_id
+       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = pos.tag_id AND wta.active = TRUE
+       LEFT JOIN workers wa ON wa.id = wta.worker_id
+       WHERE pos.inside = FALSE
+         AND pos.in_grace = TRUE
+         AND pos.grace_until IS NOT NULL
+         AND pos.grace_until > NOW()
+       ORDER BY pos.grace_until ASC`
     ),
     db.query(
       `SELECT id, worker_id, tag_id, severity, alert_type, message, created_at
@@ -56,9 +48,11 @@ async function loadOperationalSnapshot() {
 
   return {
     workersInside: presence.rows,
+    workersInGrace: grace.rows,
     activeAlerts: alerts.rows,
     totals: {
       workersInside: presence.rowCount,
+      workersInGrace: grace.rowCount,
       activeAlerts: alerts.rowCount
     },
     ts: new Date().toISOString()

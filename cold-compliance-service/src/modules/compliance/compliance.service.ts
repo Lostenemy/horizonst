@@ -9,12 +9,14 @@ import {
   sendPreLimitAlert
 } from '../tag-control/application/tag-control.service';
 import { logger } from '../../utils/logger';
+import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
 
 interface ActiveSession {
   id: string;
   started_at: string;
   worker_id: string | null;
   cold_room_id: string | null;
+  tag_id: string;
 }
 
 interface SessionContext {
@@ -34,7 +36,7 @@ async function evaluateOperationalAlarmRules(tag: {
   cold_room_id: string | null;
 }): Promise<void> {
   const sessionRes = await db.query<ActiveSession>(
-    `SELECT id, started_at, worker_id, cold_room_id
+    `SELECT id, started_at, worker_id, cold_room_id, tag_id
      FROM cold_room_sessions
      WHERE tag_id = $1 AND ended_at IS NULL
      ORDER BY started_at DESC LIMIT 1`,
@@ -52,6 +54,15 @@ async function evaluateOperationalAlarmRules(tag: {
   if (!rules.length) return;
 
   const elapsedMinutes = (Date.now() - Date.parse(session.started_at)) / 60000;
+
+  const operationalState = await db.query<{ in_alarm: boolean }>(
+    `SELECT in_alarm
+     FROM presence_operational_state
+     WHERE tag_id = $1
+     LIMIT 1`,
+    [tag.id]
+  );
+  let alreadyInOperationalAlarm = operationalState.rows[0]?.in_alarm === true;
 
   for (const rule of rules) {
     const warningKey = { sessionId: session.id, ruleId: rule.id, stage: 'warning' };
@@ -80,6 +91,13 @@ async function evaluateOperationalAlarmRules(tag: {
     }
 
     if (elapsedMinutes >= Number(rule.alarm_minutes)) {
+      if (!alreadyInOperationalAlarm) {
+        await markPresenceAlarm(session.tag_id, new Date().toISOString(), {
+          workerId: session.worker_id,
+          coldRoomId: session.cold_room_id
+        });
+        alreadyInOperationalAlarm = true;
+      }
       const existsAlarm = await db.query(
         `SELECT 1 FROM alerts
          WHERE alert_type = 'alarm_rule_alarm'
@@ -137,6 +155,7 @@ async function finalizeSession(
   if (!updateResult.rowCount) return false;
 
   const closed = updateResult.rows[0];
+  await markPresenceExit(closed.tag_id, endedAt);
   const durationMinutes = (Date.parse(endedAt) - Date.parse(closed.started_at)) / 60000;
 
   await db.query(
@@ -310,6 +329,20 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
   const tag = tagRes.rows[0];
 
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
+    if (event.eventType === 'enter' || event.eventType === 'heartbeat') {
+      const activeSession = await db.query(
+        `SELECT 1
+         FROM cold_room_sessions
+         WHERE tag_id = $1
+           AND ended_at IS NULL
+         LIMIT 1`,
+        [tag.id]
+      );
+      if (!activeSession.rowCount) {
+        await markPresenceEnter(tag, event.timestamp);
+      }
+    }
+
     if (event.eventType === 'enter') {
       const lastClosedSession = await db.query(
         `SELECT ended_at FROM cold_room_sessions
