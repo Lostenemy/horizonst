@@ -159,7 +159,7 @@ export async function clearExpiredGrace(): Promise<void> {
 }
 
 export async function sendGraceReentryReminders(): Promise<void> {
-  const cadenceMs = Math.max(60000, Number(env.REENTRY_REMINDER_INTERVAL_MS));
+  const cadenceMs = Math.max(60000, Number(env.REENTRY_REMINDER_INTERVAL_MS ?? 180000));
   const due = await db.query<PresenceOperationalState>(
     `SELECT pos.tag_id,
             pos.worker_id,
