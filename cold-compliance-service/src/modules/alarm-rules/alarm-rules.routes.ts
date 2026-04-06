@@ -5,7 +5,7 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 export const alarmRulesRouter = Router();
 alarmRulesRouter.use(requireAuth);
 
-alarmRulesRouter.get('/', async (_req, res, next) => {
+alarmRulesRouter.get('/', requireRoles(['superadministrador']), async (_req, res, next) => {
   try {
     const result = await db.query(
       `SELECT r.*,
@@ -28,7 +28,7 @@ alarmRulesRouter.get('/', async (_req, res, next) => {
   }
 });
 
-alarmRulesRouter.post('/', requireRoles(['supervisor', 'administrador', 'superadministrador']), async (req, res, next) => {
+alarmRulesRouter.post('/', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
     const { descripcion, minutosBuzzerShaker, minutosAlarma, minutosGraciaFuera, active } = req.body;
     const result = await db.query(
@@ -42,7 +42,7 @@ alarmRulesRouter.post('/', requireRoles(['supervisor', 'administrador', 'superad
   }
 });
 
-alarmRulesRouter.patch('/:id', requireRoles(['supervisor', 'administrador', 'superadministrador']), async (req, res, next) => {
+alarmRulesRouter.patch('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
     const { descripcion, minutosBuzzerShaker, minutosAlarma, minutosGraciaFuera, active } = req.body;
     const result = await db.query(
@@ -62,7 +62,7 @@ alarmRulesRouter.patch('/:id', requireRoles(['supervisor', 'administrador', 'sup
   }
 });
 
-alarmRulesRouter.delete('/:id', requireRoles(['supervisor', 'administrador', 'superadministrador']), async (req, res, next) => {
+alarmRulesRouter.delete('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
     const deps = await db.query(
       `SELECT

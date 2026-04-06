@@ -15,7 +15,7 @@ interface InspectionRow {
 }
 
 export const reportsRouter = Router();
-reportsRouter.use(requireAuth, requireRoles(['administrador', 'superadministrador']));
+reportsRouter.use(requireAuth, requireRoles(['supervisor', 'administrador', 'superadministrador']));
 
 async function loadInspectionRows(filters?: { from?: string; to?: string; workerDni?: string }): Promise<InspectionRow[]> {
   const conditions: string[] = [];

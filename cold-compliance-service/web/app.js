@@ -3,7 +3,7 @@ let currentUser = null;
 let realtimeSource = null;
 let lastSnapshot = null;
 let alertsCache = [];
-const alertsUI = { page: 1, pageSize: 20, selected: new Set() };
+const alertsUI = { page: 1, pageSize: 20, selected: new Set(), visibleIds: [] };
 const sectionMeta = {
   dashboard: { title: 'Dashboard operativo', breadcrumb: 'Inicio / Dashboard' },
   users: { title: 'Gestión de usuarios', breadcrumb: 'Inicio / Usuarios' },
@@ -22,6 +22,15 @@ const tabs = [
   { id: 'alarms', label: 'Reglas de alarma' },
   { id: 'reports', label: 'Informes' }
 ];
+const sectionPermissions = {
+  dashboard: ['supervisor', 'administrador', 'superadministrador'],
+  users: ['administrador', 'superadministrador'],
+  inventory: ['superadministrador'],
+  assignments: ['supervisor', 'administrador', 'superadministrador'],
+  alertsCenter: ['supervisor', 'administrador', 'superadministrador'],
+  alarms: ['superadministrador'],
+  reports: ['supervisor', 'administrador', 'superadministrador']
+};
 
 const q = (id) => document.getElementById(id);
 const sections = tabs.map((t) => t.id);
@@ -114,6 +123,16 @@ function roleCan(required) {
   return currentUser && rank[currentUser.role] >= rank[required];
 }
 
+function canAccessSection(section) {
+  if (!currentUser) return false;
+  const allowedRoles = sectionPermissions[section] || [];
+  return allowedRoles.includes(currentUser.role);
+}
+
+function firstAllowedSection() {
+  return tabs.find((tab) => canAccessSection(tab.id))?.id || 'dashboard';
+}
+
 function setSectionHeader(section) {
   q('sectionTitle').textContent = sectionMeta[section].title;
   q('sectionBreadcrumb').textContent = sectionMeta[section].breadcrumb;
@@ -121,6 +140,10 @@ function setSectionHeader(section) {
 }
 
 function showSection(section) {
+  if (!canAccessSection(section)) {
+    toast('Sin permisos para acceder a esta sección.', 'warning');
+    section = firstAllowedSection();
+  }
   sections.forEach((s) => (q(s).hidden = s !== section));
   setSectionHeader(section);
   if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
@@ -134,7 +157,10 @@ function showSection(section) {
 }
 
 function renderNav() {
-  q('mainTabs').innerHTML = tabs.map((tab) => `<button data-section="${tab.id}" onclick="showSection('${tab.id}')">${tab.label}</button>`).join('');
+  q('mainTabs').innerHTML = tabs
+    .filter((tab) => !currentUser || canAccessSection(tab.id))
+    .map((tab) => `<button data-section="${tab.id}" onclick="showSection('${tab.id}')">${tab.label}</button>`)
+    .join('');
   if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
 }
 
@@ -179,8 +205,9 @@ async function login() {
   q('appView').hidden = false;
   q('appView').style.display = 'block';
   setSessionText();
+  renderNav();
   startRealtime();
-  showSection('dashboard');
+  showSection(firstAllowedSection());
   toast('Sesión iniciada correctamente');
 }
 
@@ -283,6 +310,64 @@ function validateUserFormLive() {
   dniEl.className = dniEl.value ? (dniOk ? 'valid' : 'invalid') : '';
 }
 
+function ensureFieldErrorNode(fieldId) {
+  const field = q(fieldId);
+  if (!field) return null;
+  const errorId = `${fieldId}Error`;
+  let errorEl = q(errorId);
+  if (!errorEl) {
+    errorEl = document.createElement('div');
+    errorEl.id = errorId;
+    errorEl.className = 'field-error';
+    field.insertAdjacentElement('afterend', errorEl);
+  }
+  return errorEl;
+}
+
+function clearFieldError(fieldId) {
+  const field = q(fieldId);
+  if (!field) return;
+  field.classList.remove('invalid');
+  const errorEl = q(`${fieldId}Error`);
+  if (errorEl) errorEl.textContent = '';
+}
+
+function setFieldError(fieldId, message) {
+  const field = q(fieldId);
+  if (!field) return;
+  field.classList.remove('valid');
+  field.classList.add('invalid');
+  const errorEl = ensureFieldErrorNode(fieldId);
+  if (errorEl) errorEl.textContent = message;
+}
+
+function clearCreateUserFormErrors() {
+  ['uNombre', 'uApellidos', 'uEmail', 'uDni', 'uRol', 'uPass'].forEach(clearFieldError);
+}
+
+function validateCreateUserForm() {
+  clearCreateUserFormErrors();
+  const payload = {
+    nombre: q('uNombre').value.trim(),
+    apellidos: q('uApellidos').value.trim(),
+    email: q('uEmail').value.trim(),
+    telefono: q('uTelefono').value.trim(),
+    dni: q('uDni').value.trim(),
+    rol: q('uRol').value.trim(),
+    estado: q('uEstado').value,
+    password: q('uPass').value,
+    turno: q('uTurno').value
+  };
+  let hasError = false;
+  if (!payload.nombre) { setFieldError('uNombre', 'El nombre es obligatorio'); hasError = true; }
+  if (!payload.apellidos) { setFieldError('uApellidos', 'Los apellidos son obligatorios'); hasError = true; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) { setFieldError('uEmail', 'Introduce un email válido'); hasError = true; }
+  if (!payload.dni) { setFieldError('uDni', 'El DNI es obligatorio'); hasError = true; }
+  if (!payload.rol) { setFieldError('uRol', 'Selecciona un rol'); hasError = true; }
+  if (!payload.password || payload.password.length < 8) { setFieldError('uPass', 'La contraseña debe tener al menos 8 caracteres'); hasError = true; }
+  return hasError ? null : payload;
+}
+
 function filterUsersRows(users) {
   const term = (q('ufName')?.value || '').toLowerCase();
   const dni = (q('ufDni')?.value || '').toLowerCase();
@@ -295,7 +380,7 @@ function filterUsersRows(users) {
 }
 
 async function renderUsers() {
-  if (!roleCan('administrador')) {
+  if (!canAccessSection('users')) {
     q('users').innerHTML = '<p>Sin permisos para gestionar usuarios.</p>';
     return;
   }
@@ -321,15 +406,16 @@ async function renderUsers() {
 
     <details class="mt-12" ${inlineEdit.users.id ? '' : 'open'}>
       <summary><b>Nuevo usuario</b></summary>
+      <p class="help">Los campos marcados con <span class="required-asterisk">*</span> son obligatorios.</p>
       <div class="grid three mt-12">
-        <div class="field"><label>Nombre</label><input id="uNombre" placeholder="Nombre" /></div>
-        <div class="field"><label>Apellidos</label><input id="uApellidos" placeholder="Apellidos" /></div>
-        <div class="field"><label>Email</label><input id="uEmail" placeholder="Email" oninput="validateUserFormLive()" /></div>
+        <div class="field"><label>Nombre <span class="required-asterisk">*</span></label><input id="uNombre" placeholder="Nombre" /></div>
+        <div class="field"><label>Apellidos <span class="required-asterisk">*</span></label><input id="uApellidos" placeholder="Apellidos" /></div>
+        <div class="field"><label>Email <span class="required-asterisk">*</span></label><input id="uEmail" placeholder="Email" oninput="validateUserFormLive()" /></div>
         <div class="field"><label>Teléfono</label><input id="uTelefono" placeholder="Teléfono" /></div>
-        <div class="field"><label>DNI</label><input id="uDni" placeholder="DNI" oninput="validateUserFormLive()" /></div>
-        <div class="field"><label>Rol</label><select id="uRol"><option value="supervisor">Supervisor</option><option value="administrador">Administrador</option></select></div>
+        <div class="field"><label>DNI <span class="required-asterisk">*</span></label><input id="uDni" placeholder="DNI" oninput="validateUserFormLive()" /></div>
+        <div class="field"><label>Rol <span class="required-asterisk">*</span></label><select id="uRol"><option value="supervisor">Supervisor</option><option value="administrador">Administrador</option></select></div>
         <div class="field"><label>Estado</label><select id="uEstado"><option value="active">Activo</option><option value="inactive">Inactivo</option></select></div>
-        <div class="field"><label>Contraseña</label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 8 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary password-toggle-btn btn-mostrar" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
+        <div class="field"><label>Contraseña <span class="required-asterisk">*</span></label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 8 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary password-toggle-btn btn-mostrar" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
         <div class="field"><label>Turno</label><select id="uTurno"><option value="mañana">Mañana</option><option value="tarde">Tarde</option><option value="noche">Noche</option></select></div>
       </div>
       <button class="mt-12" onclick="createUser()">Crear usuario</button>
@@ -356,7 +442,7 @@ async function renderUsers() {
         `<select onchange="updateInlineEdit('users','rol',this.value)"><option value="supervisor" ${d.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${d.rol === 'administrador' ? 'selected' : ''}>Administrador</option></select>`,
         `<select onchange="updateInlineEdit('users','estado',this.value)"><option value="active" ${d.estado === 'active' ? 'selected' : ''}>Activo</option><option value="inactive" ${d.estado === 'inactive' ? 'selected' : ''}>Inactivo</option></select>`,
         `<input value="${esc(d.telefono)}" oninput="updateInlineEdit('users','telefono',this.value)"/>`,
-        `<input value="${esc(d.dni)}" oninput="updateInlineEdit('users','dni',this.value)"/>`,
+        `<input id="ueDni-${u.id}" value="${esc(d.dni)}" oninput="updateInlineEdit('users','dni',this.value);clearInlineUserFieldError('${u.id}','dni')"/><div id="ueDniErr-${u.id}" class="field-error"></div>`,
         `<select onchange="updateInlineEdit('users','turno',this.value)"><option value="mañana" ${d.turno === 'mañana' ? 'selected' : ''}>Mañana</option><option value="tarde" ${d.turno === 'tarde' ? 'selected' : ''}>Tarde</option><option value="noche" ${d.turno === 'noche' ? 'selected' : ''}>Noche</option></select>`,
         `<input type="password" placeholder="Nueva contraseña (opcional)" oninput="updateInlineEdit('users','password',this.value)"/> <div class='mt-12'><button onclick="saveUserInlineEdit('${u.id}')">Guardar</button> <button class="secondary" onclick="cancelUserInlineEdit()">Cancelar</button></div>`
       ];
@@ -372,22 +458,25 @@ function togglePassword(id, btn) {
 }
 
 async function createUser() {
-  await api('/users', {
-    method: 'POST',
-    body: JSON.stringify({
-      nombre: q('uNombre').value,
-      apellidos: q('uApellidos').value,
-      email: q('uEmail').value,
-      telefono: q('uTelefono').value,
-      dni: q('uDni').value,
-      rol: q('uRol').value,
-      estado: q('uEstado').value,
-      password: q('uPass').value,
-      turno: q('uTurno').value
-    })
-  });
-  toast('Usuario creado correctamente');
-  renderUsers();
+  const payload = validateCreateUserForm();
+  if (!payload) return toast('Revisa los campos marcados en rojo', 'warning');
+  try {
+    await api('/users', { method: 'POST', body: JSON.stringify(payload) });
+    toast('Usuario creado correctamente');
+    renderUsers();
+  } catch (error) {
+    const message = apiErrorMessage(error);
+    if (message.includes('dni no puede estar vacío')) setFieldError('uDni', 'El DNI es obligatorio');
+    if (message.includes('Campos obligatorios')) {
+      if (!payload.nombre) setFieldError('uNombre', 'El nombre es obligatorio');
+      if (!payload.apellidos) setFieldError('uApellidos', 'Los apellidos son obligatorios');
+      if (!payload.email) setFieldError('uEmail', 'El email es obligatorio');
+      if (!payload.dni) setFieldError('uDni', 'El DNI es obligatorio');
+      if (!payload.rol) setFieldError('uRol', 'Selecciona un rol');
+      if (!payload.password) setFieldError('uPass', 'La contraseña es obligatoria');
+    }
+    toast(message, 'error');
+  }
 }
 
 async function beginUserInlineEdit(id) {
@@ -408,17 +497,47 @@ async function beginUserInlineEdit(id) {
   renderUsers();
 }
 function cancelUserInlineEdit() { cancelInlineEdit('users'); renderUsers(); }
+function clearInlineUserFieldError(id, field) {
+  if (field !== 'dni') return;
+  const input = q(`ueDni-${id}`);
+  const errorEl = q(`ueDniErr-${id}`);
+  if (input) input.classList.remove('invalid');
+  if (errorEl) errorEl.textContent = '';
+}
 async function saveUserInlineEdit(id) {
   const d = inlineEdit.users.draft;
-  await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
-  cancelInlineEdit('users');
-  toast('Usuario actualizado');
-  renderUsers();
+  clearInlineUserFieldError(id, 'dni');
+  if (!String(d.dni || '').trim()) {
+    const input = q(`ueDni-${id}`);
+    const errorEl = q(`ueDniErr-${id}`);
+    if (input) input.classList.add('invalid');
+    if (errorEl) errorEl.textContent = 'El DNI no puede estar vacío';
+    return toast('Revisa los campos marcados en rojo', 'warning');
+  }
+  try {
+    await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
+    cancelInlineEdit('users');
+    toast('Usuario actualizado');
+    renderUsers();
+  } catch (error) {
+    const message = apiErrorMessage(error);
+    if (message.includes('dni no puede estar vacío')) {
+      const input = q(`ueDni-${id}`);
+      const errorEl = q(`ueDniErr-${id}`);
+      if (input) input.classList.add('invalid');
+      if (errorEl) errorEl.textContent = 'El DNI no puede estar vacío';
+    }
+    toast(message, 'error');
+  }
 }
 async function deactivateUser(id) { await api(`/users/${id}/deactivate`, { method: 'POST' }); toast('Usuario desactivado'); renderUsers(); }
 async function deleteUser(id) { if (!confirm('¿Seguro que deseas borrar este usuario?')) return; await api(`/users/${id}`, { method: 'DELETE' }); toast('Usuario borrado'); renderUsers(); }
 
 async function renderInventory() {
+  if (!canAccessSection('inventory')) {
+    q('inventory').innerHTML = '<p>Sin permisos para ver inventario.</p>';
+    return;
+  }
   const [tags, gateways] = await Promise.all([api('/tags'), api('/gateways')]);
   q('inventory').innerHTML = `
     <div class="grid two">
@@ -569,6 +688,34 @@ function exportAlertsCsv() {
 function toggleAlertSelection(id, checked) {
   if (checked) alertsUI.selected.add(id);
   else alertsUI.selected.delete(id);
+  updateSelectedAlertsCount();
+  syncSelectAllCheckbox(alertsUI.visibleIds);
+}
+
+function updateSelectedAlertsCount() {
+  const button = q('archiveSelectedBtn');
+  if (!button) return;
+  button.textContent = `Archivar seleccionadas (${alertsUI.selected.size})`;
+}
+
+function toggleVisibleAlerts(ids, checked) {
+  ids.forEach((id) => {
+    if (checked) alertsUI.selected.add(id);
+    else alertsUI.selected.delete(id);
+  });
+  renderAlertsCenter();
+}
+
+function toggleVisibleAlertsFromHeader(checked) {
+  toggleVisibleAlerts(alertsUI.visibleIds, checked);
+}
+
+function syncSelectAllCheckbox(ids) {
+  const checkbox = q('acSelectAll');
+  if (!checkbox) return;
+  const selectedCount = ids.reduce((acc, id) => acc + (alertsUI.selected.has(id) ? 1 : 0), 0);
+  checkbox.checked = ids.length > 0 && selectedCount === ids.length;
+  checkbox.indeterminate = selectedCount > 0 && selectedCount < ids.length;
 }
 
 async function archiveSelectedAlerts() {
@@ -593,6 +740,10 @@ function bindAlertsReactiveFilters() {
 }
 
 async function renderAlertsCenter() {
+  if (!canAccessSection('alertsCenter')) {
+    q('alertsCenter').innerHTML = '<p>Sin permisos para ver alertas.</p>';
+    return;
+  }
   const state = (q('acState') && q('acState').value) || 'active';
   const severity = (q('acSeverity') && q('acSeverity').value) || '';
   const search = (q('acSearch') && q('acSearch').value.trim()) || '';
@@ -605,9 +756,10 @@ async function renderAlertsCenter() {
   const showCamera = alerts.some((a) => a.cold_room_name && a.cold_room_name !== '-');
   const start = (alertsUI.page - 1) * alertsUI.pageSize;
   const paged = alerts.slice(start, start + alertsUI.pageSize);
+  alertsUI.visibleIds = paged.map((a) => a.id);
   const totalPages = Math.max(1, Math.ceil(alerts.length / alertsUI.pageSize));
 
-  const headers = ['Sel', 'Fecha', 'Trabajador', 'DNI', 'Tag'];
+  const headers = ['<input id="acSelectAll" type="checkbox" onchange="toggleVisibleAlertsFromHeader(this.checked)" aria-label="Seleccionar todas las alertas visibles" />', 'Fecha', 'Trabajador', 'DNI', 'Tag'];
   if (showCamera) headers.push('Cámara');
   headers.push('Tipo', 'Severidad', 'Mensaje', 'Estado', 'Archivado por', 'Acciones');
 
@@ -622,7 +774,7 @@ async function renderAlertsCenter() {
         <button class="secondary" onclick="renderAlertsCenter()">Refrescar</button>
         <button onclick="exportAlertsCsv()">Exportar CSV</button>
       </div>
-      <button class="warning btn-archivar-seleccionadas" onclick="archiveSelectedAlerts()">Archivar seleccionadas (${alertsUI.selected.size})</button>
+      <button id="archiveSelectedBtn" class="warning btn-archivar-seleccionadas" onclick="archiveSelectedAlerts()">Archivar seleccionadas (${alertsUI.selected.size})</button>
       <span class="help">Filtros reactivos: se aplican automáticamente.</span>
     </div>
     ${table(headers, paged.map((a) => {
@@ -638,9 +790,15 @@ async function renderAlertsCenter() {
     </div>
   `;
   bindAlertsReactiveFilters();
+  updateSelectedAlertsCount();
+  syncSelectAllCheckbox(alertsUI.visibleIds);
 }
 
 async function renderAlarms() {
+  if (!canAccessSection('alarms')) {
+    q('alarms').innerHTML = '<p>Sin permisos para gestionar reglas de alarma.</p>';
+    return;
+  }
   const rules = await api('/alarm-rules');
   q('alarms').innerHTML = `
     <p class="help">Si hay varias reglas activas, el sistema evalúa la que corresponda al contexto operativo vigente.</p>
@@ -706,6 +864,10 @@ async function toggleAlarm(id, active) { await api(`/alarm-rules/${id}`, { metho
 async function deleteAlarm(id) { if (!confirm('¿Eliminar regla de alarma?')) return; try { await api(`/alarm-rules/${id}`, { method: 'DELETE' }); toast('Regla eliminada'); renderAlarms(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 
 async function renderReports() {
+  if (!canAccessSection('reports')) {
+    q('reports').innerHTML = '<p>Sin permisos para ver informes.</p>';
+    return;
+  }
   const from = q('rFrom')?.value || '';
   const to = q('rTo')?.value || '';
   const worker = q('rWorker')?.value || '';
@@ -791,8 +953,9 @@ function startRealtime() {
     q('appView').hidden = false;
     q('appView').style.display = 'block';
     setSessionText();
+    renderNav();
     startRealtime();
-    showSection('dashboard');
+    showSection(firstAllowedSection());
   } catch {
     localStorage.removeItem('cc_token');
     token = '';

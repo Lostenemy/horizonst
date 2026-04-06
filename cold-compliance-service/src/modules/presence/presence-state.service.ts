@@ -27,6 +27,13 @@ interface PresenceAlarmContext {
   coldRoomId?: string | null;
 }
 
+function sleepUnref(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(resolve, ms);
+    timeout.unref();
+  });
+}
+
 async function resolveOperationalGraceMinutes(): Promise<number> {
   const configured = await db.query<{ grace_minutes: number }>(
     `SELECT COALESCE(
@@ -162,30 +169,36 @@ export async function clearExpiredGrace(): Promise<void> {
 export async function sendGraceReentryReminders(): Promise<void> {
   const cadenceMs = Math.max(60000, Number(env.REENTRY_REMINDER_INTERVAL_MS ?? 180000));
   const due = await db.query<PresenceOperationalState>(
-    `SELECT pos.tag_id,
-            pos.worker_id,
-            pos.cold_room_id,
-            pos.inside,
-            pos.in_alarm,
-            pos.in_grace,
-            pos.grace_until,
-            pos.last_alarm_at,
-            pos.reminder_sent_at
-     FROM presence_operational_state pos
-     WHERE pos.inside = TRUE
-       AND pos.in_alarm = TRUE
-       AND pos.last_alarm_at IS NOT NULL
-       AND (
-         (
-           pos.reminder_sent_at IS NULL
-           AND EXTRACT(EPOCH FROM (NOW() - pos.last_alarm_at)) * 1000 >= $1
-         )
-         OR
-         (
-           pos.reminder_sent_at IS NOT NULL
-           AND EXTRACT(EPOCH FROM (NOW() - pos.reminder_sent_at)) * 1000 >= $1
-         )
-       )`,
+    `WITH claim AS (
+      UPDATE presence_operational_state pos
+      SET reminder_sent_at = NOW(),
+          updated_at = NOW()
+      WHERE pos.inside = TRUE
+        AND pos.in_alarm = TRUE
+        AND pos.last_alarm_at IS NOT NULL
+        AND (
+          (
+            pos.reminder_sent_at IS NULL
+            AND EXTRACT(EPOCH FROM (NOW() - pos.last_alarm_at)) * 1000 >= $1
+          )
+          OR
+          (
+            pos.reminder_sent_at IS NOT NULL
+            AND EXTRACT(EPOCH FROM (NOW() - pos.reminder_sent_at)) * 1000 >= $1
+          )
+        )
+      RETURNING pos.tag_id,
+                pos.worker_id,
+                pos.cold_room_id,
+                pos.inside,
+                pos.in_alarm,
+                pos.in_grace,
+                pos.grace_until,
+                pos.last_alarm_at,
+                pos.reminder_sent_at
+    )
+    SELECT *
+    FROM claim`,
     [cadenceMs]
   );
 
@@ -199,7 +212,7 @@ export async function sendGraceReentryReminders(): Promise<void> {
     });
 
     await triggerPhysicalAlarmSequence({
-      alertId: `reentry-reminder:${row.tag_id}:${Date.now()}`,
+      alertId: `reentry-reminder:${row.tag_id}:${Math.floor(Date.now() / cadenceMs)}`,
       workerId: row.worker_id ?? undefined,
       tagId: row.tag_id,
       severity: 'critical',
@@ -208,17 +221,29 @@ export async function sendGraceReentryReminders(): Promise<void> {
       logger.warn({ error, tagId: row.tag_id }, 'failed to run physical reminder alarm sequence');
     });
 
-    await db.query(
-      `UPDATE presence_operational_state SET reminder_sent_at = NOW(), updated_at = NOW() WHERE tag_id = $1`,
-      [row.tag_id]
-    );
   }
 }
 
 export function startPresenceGraceLoop(): void {
   const cleanupIntervalMs = Math.max(10000, Math.floor(Number(env.PRESENCE_SWEEP_INTERVAL_MS)));
-  setInterval(() => {
-    clearExpiredGrace().catch((error) => logger.error({ error }, 'failed to clear expired grace states'));
-    sendGraceReentryReminders().catch((error) => logger.error({ error }, 'failed to send grace reentry reminders'));
-  }, cleanupIntervalMs).unref();
+
+  const loop = async (): Promise<void> => {
+    while (true) {
+      try {
+        await clearExpiredGrace();
+      } catch (error) {
+        logger.error({ error }, 'failed to clear expired grace states');
+      }
+
+      try {
+        await sendGraceReentryReminders();
+      } catch (error) {
+        logger.error({ error }, 'failed to send grace reentry reminders');
+      }
+
+      await sleepUnref(cleanupIntervalMs);
+    }
+  };
+
+  void loop();
 }
