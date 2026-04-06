@@ -1,5 +1,16 @@
 import { db } from '../../../db/pool';
 
+export async function isBleSessionActive(params: { tagId: string }): Promise<boolean> {
+  const result = await db.query<{ is_active: boolean }>(
+    `SELECT is_active
+     FROM ble_alarm_sessions
+     WHERE tag_id = $1`,
+    [params.tagId]
+  );
+
+  return Boolean(result.rows[0]?.is_active);
+}
+
 export async function markBleSessionActive(params: { tagId: string; tagUid: string; gatewayMac: string }): Promise<void> {
   await db.query(
     `INSERT INTO ble_alarm_sessions(tag_id, tag_uid, gateway_mac, is_active, connected_at, disconnected_at, updated_at)

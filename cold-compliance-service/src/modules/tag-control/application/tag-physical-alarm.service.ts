@@ -4,7 +4,7 @@ import { resolveTagTarget } from '../infrastructure/tag-control.repository';
 import { waitForGatewayReplyMulti } from '../infrastructure/gateway-reply-listener';
 import { logger } from '../../../utils/logger';
 import { sleep } from '../../../utils/sleep';
-import { markBleSessionActive, markBleSessionDisconnected } from '../infrastructure/ble-session.repository';
+import { isBleSessionActive, markBleSessionActive, markBleSessionDisconnected } from '../infrastructure/ble-session.repository';
 import { db } from '../../../db/pool';
 
 export type PhysicalAlarmAction = 'led' | 'buzzer' | 'vibration';
@@ -17,7 +17,7 @@ const COMMANDS: Record<PhysicalAlarmAction | 'connect' | 'disconnect', { msgId: 
   disconnect: { msgId: 1200, ackMsgId: 3201 }
 };
 
-const tagAlarmLocks = new Map<string, Promise<void>>();
+const activeTagAlarms = new Set<string>();
 const DEFAULT_FOLLOWUP_DELAY_MS = 45000;
 
 function toTopic(gatewayMac: string): string {
@@ -62,25 +62,6 @@ async function resolveFollowupDelayMs(tagId: string): Promise<number> {
   );
   const raw = Number(result.rows[0]?.physical_alarm_followup_delay_ms ?? DEFAULT_FOLLOWUP_DELAY_MS);
   return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_FOLLOWUP_DELAY_MS;
-}
-
-async function withTagLock<T>(lockKey: string, fn: () => Promise<T>): Promise<T> {
-  const previous = tagAlarmLocks.get(lockKey) ?? Promise.resolve();
-  let release: () => void = () => {};
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  tagAlarmLocks.set(lockKey, previous.then(() => current));
-
-  await previous;
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (tagAlarmLocks.get(lockKey) === current) {
-      tagAlarmLocks.delete(lockKey);
-    }
-  }
 }
 
 export async function connectTagSession(params: { gatewayMac: string; tagUid: string }): Promise<void> {
@@ -176,8 +157,19 @@ export async function executeAlarmSequence(params: {
     strategy: env.TAG_CONTROL_GATEWAY_STRATEGY
   });
 
-  const lockKey = `${target.gatewayMac.toLowerCase()}:${target.tagId}`;
-  await withTagLock(lockKey, async () => {
+  if (activeTagAlarms.has(target.tagId)) {
+    logger.info({ alertId: params.alertId, tagId: target.tagId }, 'skipped duplicate physical alarm (tag already running)');
+    return;
+  }
+
+  const bleActive = await isBleSessionActive({ tagId: target.tagId });
+  if (bleActive) {
+    logger.info({ alertId: params.alertId, tagId: target.tagId }, 'skipped duplicate physical alarm (BLE session already active)');
+    return;
+  }
+
+  activeTagAlarms.add(target.tagId);
+  try {
     const followupDelayMs = await resolveFollowupDelayMs(target.tagId);
     logger.info({ alertId: params.alertId, gatewayMac: target.gatewayMac, tagUid: target.tagUid, actions, followupDelayMs }, 'starting physical alarm sequence');
 
@@ -230,5 +222,7 @@ export async function executeAlarmSequence(params: {
 
       logger.info({ alertId: params.alertId, disconnectAck }, 'physical alarm sequence finished');
     }
-  });
+  } finally {
+    activeTagAlarms.delete(target.tagId);
+  }
 }
