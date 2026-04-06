@@ -6,11 +6,25 @@ export const usersRouter = Router();
 
 usersRouter.use(requireAuth);
 
+function toTrimmedText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function toOptionalTrimmedText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = toTrimmedText(value);
+  return trimmed === '' ? null : trimmed;
+}
+
+function badRequest(message: string): Error & { statusCode: number } {
+  const error = new Error(message) as Error & { statusCode: number };
+  error.statusCode = 400;
+  return error;
+}
+
 function assertRoleAllowedForManagement(role: unknown): void {
   if (role === 'superadministrador') {
-    const error = new Error('role_not_allowed');
-    (error as Error & { statusCode?: number }).statusCode = 400;
-    throw error;
+    throw badRequest('role_not_allowed');
   }
 }
 
@@ -29,12 +43,25 @@ usersRouter.get('/', requireRoles(['administrador', 'superadministrador']), asyn
 usersRouter.post('/', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
     const { nombre, apellidos, email, telefono, dni, rol, estado, password, turno } = req.body;
-    assertRoleAllowedForManagement(rol);
+    const normalizedNombre = toTrimmedText(nombre);
+    const normalizedApellidos = toTrimmedText(apellidos);
+    const normalizedEmail = toTrimmedText(email);
+    const normalizedDni = toTrimmedText(dni);
+    const normalizedRol = toTrimmedText(rol);
+    const normalizedPassword = toTrimmedText(password);
+    const normalizedTelefono = toOptionalTrimmedText(telefono);
+    const normalizedTurno = toOptionalTrimmedText(turno);
+
+    if (!normalizedNombre || !normalizedApellidos || !normalizedEmail || !normalizedDni || !normalizedRol || !normalizedPassword) {
+      throw badRequest('Campos obligatorios: nombre, apellidos, email, dni, rol y password');
+    }
+
+    assertRoleAllowedForManagement(normalizedRol);
     const result = await db.query(
       `INSERT INTO app_users(first_name,last_name,email,phone,dni,role,status,password_hash,shift)
        VALUES($1,$2,$3,$4,$5,$6,$7,crypt($8, gen_salt('bf')),$9)
        RETURNING id, first_name, last_name, email, phone, dni, role, status, shift, created_at, updated_at`,
-      [nombre, apellidos, email, telefono ?? null, dni, rol, estado ?? 'active', password, turno ?? null]
+      [normalizedNombre, normalizedApellidos, normalizedEmail, normalizedTelefono, normalizedDni, normalizedRol, estado ?? 'active', normalizedPassword, normalizedTurno]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -45,8 +72,21 @@ usersRouter.post('/', requireRoles(['administrador', 'superadministrador']), asy
 usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
     const { nombre, apellidos, email, telefono, dni, rol, estado, password, turno } = req.body;
-    if (rol !== undefined && rol !== null) {
-      assertRoleAllowedForManagement(rol);
+    const normalizedNombre = toOptionalTrimmedText(nombre);
+    const normalizedApellidos = toOptionalTrimmedText(apellidos);
+    const normalizedEmail = toOptionalTrimmedText(email);
+    const normalizedTelefono = toOptionalTrimmedText(telefono);
+    const normalizedRol = toOptionalTrimmedText(rol);
+    const normalizedTurno = toOptionalTrimmedText(turno);
+    const normalizedPassword = toOptionalTrimmedText(password);
+    const normalizedDni = toOptionalTrimmedText(dni);
+
+    if (dni !== undefined && normalizedDni === null) {
+      throw badRequest('dni no puede estar vacío');
+    }
+
+    if (normalizedRol !== null) {
+      assertRoleAllowedForManagement(normalizedRol);
     }
     const result = await db.query(
       `UPDATE app_users
@@ -58,11 +98,11 @@ usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']),
            role = COALESCE($7, role),
            status = COALESCE($8, status),
            shift = COALESCE($9, shift),
-           password_hash = CASE WHEN $10 IS NULL THEN password_hash ELSE crypt($10, gen_salt('bf')) END,
+           password_hash = CASE WHEN $10::text IS NULL THEN password_hash ELSE crypt($10::text, gen_salt('bf')) END,
            updated_at = NOW()
        WHERE id = $1
        RETURNING id, first_name, last_name, email, phone, dni, role, status, shift, created_at, updated_at`,
-      [req.params.id, nombre ?? null, apellidos ?? null, email ?? null, telefono ?? null, dni ?? null, rol ?? null, estado ?? null, turno ?? null, password ?? null]
+      [req.params.id, normalizedNombre, normalizedApellidos, normalizedEmail, normalizedTelefono, normalizedDni, normalizedRol, estado ?? null, normalizedTurno, normalizedPassword]
     );
     res.json(result.rows[0]);
   } catch (error) {
