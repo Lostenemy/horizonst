@@ -220,6 +220,18 @@ label, .field-label {
 }
 input.invalid { border-color: var(--color-danger); background: var(--color-danger-bg); }
 input.valid { border-color: var(--color-success); background: var(--color-success-bg); }
+select.invalid { border-color: var(--color-danger); background: var(--color-danger-bg); }
+select.valid { border-color: var(--color-success); background: var(--color-success-bg); }
+.field-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+  min-height: 14px;
+  line-height: 1.2;
+}
+.required-asterisk {
+  color: var(--color-danger);
+  font-weight: 700;
+}
 
 .grid { display: grid; gap: 14px; }
 .grid.one { grid-template-columns: 1fr; }

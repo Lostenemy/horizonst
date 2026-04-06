@@ -310,6 +310,64 @@ function validateUserFormLive() {
   dniEl.className = dniEl.value ? (dniOk ? 'valid' : 'invalid') : '';
 }
 
+function ensureFieldErrorNode(fieldId) {
+  const field = q(fieldId);
+  if (!field) return null;
+  const errorId = `${fieldId}Error`;
+  let errorEl = q(errorId);
+  if (!errorEl) {
+    errorEl = document.createElement('div');
+    errorEl.id = errorId;
+    errorEl.className = 'field-error';
+    field.insertAdjacentElement('afterend', errorEl);
+  }
+  return errorEl;
+}
+
+function clearFieldError(fieldId) {
+  const field = q(fieldId);
+  if (!field) return;
+  field.classList.remove('invalid');
+  const errorEl = q(`${fieldId}Error`);
+  if (errorEl) errorEl.textContent = '';
+}
+
+function setFieldError(fieldId, message) {
+  const field = q(fieldId);
+  if (!field) return;
+  field.classList.remove('valid');
+  field.classList.add('invalid');
+  const errorEl = ensureFieldErrorNode(fieldId);
+  if (errorEl) errorEl.textContent = message;
+}
+
+function clearCreateUserFormErrors() {
+  ['uNombre', 'uApellidos', 'uEmail', 'uDni', 'uRol', 'uPass'].forEach(clearFieldError);
+}
+
+function validateCreateUserForm() {
+  clearCreateUserFormErrors();
+  const payload = {
+    nombre: q('uNombre').value.trim(),
+    apellidos: q('uApellidos').value.trim(),
+    email: q('uEmail').value.trim(),
+    telefono: q('uTelefono').value.trim(),
+    dni: q('uDni').value.trim(),
+    rol: q('uRol').value.trim(),
+    estado: q('uEstado').value,
+    password: q('uPass').value,
+    turno: q('uTurno').value
+  };
+  let hasError = false;
+  if (!payload.nombre) { setFieldError('uNombre', 'El nombre es obligatorio'); hasError = true; }
+  if (!payload.apellidos) { setFieldError('uApellidos', 'Los apellidos son obligatorios'); hasError = true; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) { setFieldError('uEmail', 'Introduce un email válido'); hasError = true; }
+  if (!payload.dni) { setFieldError('uDni', 'El DNI es obligatorio'); hasError = true; }
+  if (!payload.rol) { setFieldError('uRol', 'Selecciona un rol'); hasError = true; }
+  if (!payload.password || payload.password.length < 8) { setFieldError('uPass', 'La contraseña debe tener al menos 8 caracteres'); hasError = true; }
+  return hasError ? null : payload;
+}
+
 function filterUsersRows(users) {
   const term = (q('ufName')?.value || '').toLowerCase();
   const dni = (q('ufDni')?.value || '').toLowerCase();
@@ -348,15 +406,16 @@ async function renderUsers() {
 
     <details class="mt-12" ${inlineEdit.users.id ? '' : 'open'}>
       <summary><b>Nuevo usuario</b></summary>
+      <p class="help">Los campos marcados con <span class="required-asterisk">*</span> son obligatorios.</p>
       <div class="grid three mt-12">
-        <div class="field"><label>Nombre</label><input id="uNombre" placeholder="Nombre" /></div>
-        <div class="field"><label>Apellidos</label><input id="uApellidos" placeholder="Apellidos" /></div>
-        <div class="field"><label>Email</label><input id="uEmail" placeholder="Email" oninput="validateUserFormLive()" /></div>
+        <div class="field"><label>Nombre <span class="required-asterisk">*</span></label><input id="uNombre" placeholder="Nombre" /></div>
+        <div class="field"><label>Apellidos <span class="required-asterisk">*</span></label><input id="uApellidos" placeholder="Apellidos" /></div>
+        <div class="field"><label>Email <span class="required-asterisk">*</span></label><input id="uEmail" placeholder="Email" oninput="validateUserFormLive()" /></div>
         <div class="field"><label>Teléfono</label><input id="uTelefono" placeholder="Teléfono" /></div>
-        <div class="field"><label>DNI</label><input id="uDni" placeholder="DNI" oninput="validateUserFormLive()" /></div>
-        <div class="field"><label>Rol</label><select id="uRol"><option value="supervisor">Supervisor</option><option value="administrador">Administrador</option></select></div>
+        <div class="field"><label>DNI <span class="required-asterisk">*</span></label><input id="uDni" placeholder="DNI" oninput="validateUserFormLive()" /></div>
+        <div class="field"><label>Rol <span class="required-asterisk">*</span></label><select id="uRol"><option value="supervisor">Supervisor</option><option value="administrador">Administrador</option></select></div>
         <div class="field"><label>Estado</label><select id="uEstado"><option value="active">Activo</option><option value="inactive">Inactivo</option></select></div>
-        <div class="field"><label>Contraseña</label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 8 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary password-toggle-btn btn-mostrar" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
+        <div class="field"><label>Contraseña <span class="required-asterisk">*</span></label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 8 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary password-toggle-btn btn-mostrar" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
         <div class="field"><label>Turno</label><select id="uTurno"><option value="mañana">Mañana</option><option value="tarde">Tarde</option><option value="noche">Noche</option></select></div>
       </div>
       <button class="mt-12" onclick="createUser()">Crear usuario</button>
@@ -383,7 +442,7 @@ async function renderUsers() {
         `<select onchange="updateInlineEdit('users','rol',this.value)"><option value="supervisor" ${d.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${d.rol === 'administrador' ? 'selected' : ''}>Administrador</option></select>`,
         `<select onchange="updateInlineEdit('users','estado',this.value)"><option value="active" ${d.estado === 'active' ? 'selected' : ''}>Activo</option><option value="inactive" ${d.estado === 'inactive' ? 'selected' : ''}>Inactivo</option></select>`,
         `<input value="${esc(d.telefono)}" oninput="updateInlineEdit('users','telefono',this.value)"/>`,
-        `<input value="${esc(d.dni)}" oninput="updateInlineEdit('users','dni',this.value)"/>`,
+        `<input id="ueDni-${u.id}" value="${esc(d.dni)}" oninput="updateInlineEdit('users','dni',this.value);clearInlineUserFieldError('${u.id}','dni')"/><div id="ueDniErr-${u.id}" class="field-error"></div>`,
         `<select onchange="updateInlineEdit('users','turno',this.value)"><option value="mañana" ${d.turno === 'mañana' ? 'selected' : ''}>Mañana</option><option value="tarde" ${d.turno === 'tarde' ? 'selected' : ''}>Tarde</option><option value="noche" ${d.turno === 'noche' ? 'selected' : ''}>Noche</option></select>`,
         `<input type="password" placeholder="Nueva contraseña (opcional)" oninput="updateInlineEdit('users','password',this.value)"/> <div class='mt-12'><button onclick="saveUserInlineEdit('${u.id}')">Guardar</button> <button class="secondary" onclick="cancelUserInlineEdit()">Cancelar</button></div>`
       ];
@@ -399,22 +458,25 @@ function togglePassword(id, btn) {
 }
 
 async function createUser() {
-  await api('/users', {
-    method: 'POST',
-    body: JSON.stringify({
-      nombre: q('uNombre').value,
-      apellidos: q('uApellidos').value,
-      email: q('uEmail').value,
-      telefono: q('uTelefono').value,
-      dni: q('uDni').value,
-      rol: q('uRol').value,
-      estado: q('uEstado').value,
-      password: q('uPass').value,
-      turno: q('uTurno').value
-    })
-  });
-  toast('Usuario creado correctamente');
-  renderUsers();
+  const payload = validateCreateUserForm();
+  if (!payload) return toast('Revisa los campos marcados en rojo', 'warning');
+  try {
+    await api('/users', { method: 'POST', body: JSON.stringify(payload) });
+    toast('Usuario creado correctamente');
+    renderUsers();
+  } catch (error) {
+    const message = apiErrorMessage(error);
+    if (message.includes('dni no puede estar vacío')) setFieldError('uDni', 'El DNI es obligatorio');
+    if (message.includes('Campos obligatorios')) {
+      if (!payload.nombre) setFieldError('uNombre', 'El nombre es obligatorio');
+      if (!payload.apellidos) setFieldError('uApellidos', 'Los apellidos son obligatorios');
+      if (!payload.email) setFieldError('uEmail', 'El email es obligatorio');
+      if (!payload.dni) setFieldError('uDni', 'El DNI es obligatorio');
+      if (!payload.rol) setFieldError('uRol', 'Selecciona un rol');
+      if (!payload.password) setFieldError('uPass', 'La contraseña es obligatoria');
+    }
+    toast(message, 'error');
+  }
 }
 
 async function beginUserInlineEdit(id) {
@@ -435,12 +497,38 @@ async function beginUserInlineEdit(id) {
   renderUsers();
 }
 function cancelUserInlineEdit() { cancelInlineEdit('users'); renderUsers(); }
+function clearInlineUserFieldError(id, field) {
+  if (field !== 'dni') return;
+  const input = q(`ueDni-${id}`);
+  const errorEl = q(`ueDniErr-${id}`);
+  if (input) input.classList.remove('invalid');
+  if (errorEl) errorEl.textContent = '';
+}
 async function saveUserInlineEdit(id) {
   const d = inlineEdit.users.draft;
-  await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
-  cancelInlineEdit('users');
-  toast('Usuario actualizado');
-  renderUsers();
+  clearInlineUserFieldError(id, 'dni');
+  if (!String(d.dni || '').trim()) {
+    const input = q(`ueDni-${id}`);
+    const errorEl = q(`ueDniErr-${id}`);
+    if (input) input.classList.add('invalid');
+    if (errorEl) errorEl.textContent = 'El DNI no puede estar vacío';
+    return toast('Revisa los campos marcados en rojo', 'warning');
+  }
+  try {
+    await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
+    cancelInlineEdit('users');
+    toast('Usuario actualizado');
+    renderUsers();
+  } catch (error) {
+    const message = apiErrorMessage(error);
+    if (message.includes('dni no puede estar vacío')) {
+      const input = q(`ueDni-${id}`);
+      const errorEl = q(`ueDniErr-${id}`);
+      if (input) input.classList.add('invalid');
+      if (errorEl) errorEl.textContent = 'El DNI no puede estar vacío';
+    }
+    toast(message, 'error');
+  }
 }
 async function deactivateUser(id) { await api(`/users/${id}/deactivate`, { method: 'POST' }); toast('Usuario desactivado'); renderUsers(); }
 async function deleteUser(id) { if (!confirm('¿Seguro que deseas borrar este usuario?')) return; await api(`/users/${id}`, { method: 'DELETE' }); toast('Usuario borrado'); renderUsers(); }
