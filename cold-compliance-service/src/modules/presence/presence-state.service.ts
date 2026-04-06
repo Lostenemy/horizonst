@@ -2,6 +2,7 @@ import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
 import { sendCriticalExposureAlert } from '../tag-control/application/tag-control.service';
+import { triggerPhysicalAlarmSequence } from '../alerts/alerts.service';
 
 interface PresenceStateTag {
   id: string;
@@ -195,6 +196,16 @@ export async function sendGraceReentryReminders(): Promise<void> {
       reason: 'Recordatorio de reentrada en alarma'
     }).catch((error) => {
       logger.warn({ error, tagId: row.tag_id }, 'failed to send reminder for alarm reentry');
+    });
+
+    await triggerPhysicalAlarmSequence({
+      alertId: `reentry-reminder:${row.tag_id}:${Date.now()}`,
+      workerId: row.worker_id ?? undefined,
+      tagId: row.tag_id,
+      severity: 'critical',
+      alertType: 'alarm_rule_alarm'
+    }).catch((error) => {
+      logger.warn({ error, tagId: row.tag_id }, 'failed to run physical reminder alarm sequence');
     });
 
     await db.query(

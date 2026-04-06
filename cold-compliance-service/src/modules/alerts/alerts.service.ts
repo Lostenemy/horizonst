@@ -49,3 +49,19 @@ export async function createAlert(params: {
 
   return alert;
 }
+
+export async function triggerPhysicalAlarmSequence(params: {
+  workerId?: string;
+  tagId?: string;
+  severity: 'info' | 'warning' | 'critical';
+  alertType: string;
+  alertId: string;
+}): Promise<void> {
+  await executeAlarmSequence({
+    alertId: params.alertId,
+    workerId: params.workerId,
+    tagId: params.tagId,
+    severity: params.severity,
+    alertType: params.alertType
+  });
+}
