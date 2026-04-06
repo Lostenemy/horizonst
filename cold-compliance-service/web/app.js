@@ -3,7 +3,7 @@ let currentUser = null;
 let realtimeSource = null;
 let lastSnapshot = null;
 let alertsCache = [];
-const alertsUI = { page: 1, pageSize: 20, selected: new Set() };
+const alertsUI = { page: 1, pageSize: 20, selected: new Set(), visibleIds: [] };
 const sectionMeta = {
   dashboard: { title: 'Dashboard operativo', breadcrumb: 'Inicio / Dashboard' },
   users: { title: 'Gestión de usuarios', breadcrumb: 'Inicio / Usuarios' },
@@ -22,6 +22,15 @@ const tabs = [
   { id: 'alarms', label: 'Reglas de alarma' },
   { id: 'reports', label: 'Informes' }
 ];
+const sectionPermissions = {
+  dashboard: ['supervisor', 'administrador', 'superadministrador'],
+  users: ['administrador', 'superadministrador'],
+  inventory: ['superadministrador'],
+  assignments: ['supervisor', 'administrador', 'superadministrador'],
+  alertsCenter: ['supervisor', 'administrador', 'superadministrador'],
+  alarms: ['superadministrador'],
+  reports: ['supervisor', 'administrador', 'superadministrador']
+};
 
 const q = (id) => document.getElementById(id);
 const sections = tabs.map((t) => t.id);
@@ -114,6 +123,16 @@ function roleCan(required) {
   return currentUser && rank[currentUser.role] >= rank[required];
 }
 
+function canAccessSection(section) {
+  if (!currentUser) return false;
+  const allowedRoles = sectionPermissions[section] || [];
+  return allowedRoles.includes(currentUser.role);
+}
+
+function firstAllowedSection() {
+  return tabs.find((tab) => canAccessSection(tab.id))?.id || 'dashboard';
+}
+
 function setSectionHeader(section) {
   q('sectionTitle').textContent = sectionMeta[section].title;
   q('sectionBreadcrumb').textContent = sectionMeta[section].breadcrumb;
@@ -121,6 +140,10 @@ function setSectionHeader(section) {
 }
 
 function showSection(section) {
+  if (!canAccessSection(section)) {
+    toast('Sin permisos para acceder a esta sección.', 'warning');
+    section = firstAllowedSection();
+  }
   sections.forEach((s) => (q(s).hidden = s !== section));
   setSectionHeader(section);
   if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
@@ -134,7 +157,10 @@ function showSection(section) {
 }
 
 function renderNav() {
-  q('mainTabs').innerHTML = tabs.map((tab) => `<button data-section="${tab.id}" onclick="showSection('${tab.id}')">${tab.label}</button>`).join('');
+  q('mainTabs').innerHTML = tabs
+    .filter((tab) => !currentUser || canAccessSection(tab.id))
+    .map((tab) => `<button data-section="${tab.id}" onclick="showSection('${tab.id}')">${tab.label}</button>`)
+    .join('');
   if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
 }
 
@@ -179,8 +205,9 @@ async function login() {
   q('appView').hidden = false;
   q('appView').style.display = 'block';
   setSessionText();
+  renderNav();
   startRealtime();
-  showSection('dashboard');
+  showSection(firstAllowedSection());
   toast('Sesión iniciada correctamente');
 }
 
@@ -295,7 +322,7 @@ function filterUsersRows(users) {
 }
 
 async function renderUsers() {
-  if (!roleCan('administrador')) {
+  if (!canAccessSection('users')) {
     q('users').innerHTML = '<p>Sin permisos para gestionar usuarios.</p>';
     return;
   }
@@ -419,6 +446,10 @@ async function deactivateUser(id) { await api(`/users/${id}/deactivate`, { metho
 async function deleteUser(id) { if (!confirm('¿Seguro que deseas borrar este usuario?')) return; await api(`/users/${id}`, { method: 'DELETE' }); toast('Usuario borrado'); renderUsers(); }
 
 async function renderInventory() {
+  if (!canAccessSection('inventory')) {
+    q('inventory').innerHTML = '<p>Sin permisos para ver inventario.</p>';
+    return;
+  }
   const [tags, gateways] = await Promise.all([api('/tags'), api('/gateways')]);
   q('inventory').innerHTML = `
     <div class="grid two">
@@ -569,6 +600,34 @@ function exportAlertsCsv() {
 function toggleAlertSelection(id, checked) {
   if (checked) alertsUI.selected.add(id);
   else alertsUI.selected.delete(id);
+  updateSelectedAlertsCount();
+  syncSelectAllCheckbox(alertsUI.visibleIds);
+}
+
+function updateSelectedAlertsCount() {
+  const button = q('archiveSelectedBtn');
+  if (!button) return;
+  button.textContent = `Archivar seleccionadas (${alertsUI.selected.size})`;
+}
+
+function toggleVisibleAlerts(ids, checked) {
+  ids.forEach((id) => {
+    if (checked) alertsUI.selected.add(id);
+    else alertsUI.selected.delete(id);
+  });
+  renderAlertsCenter();
+}
+
+function toggleVisibleAlertsFromHeader(checked) {
+  toggleVisibleAlerts(alertsUI.visibleIds, checked);
+}
+
+function syncSelectAllCheckbox(ids) {
+  const checkbox = q('acSelectAll');
+  if (!checkbox) return;
+  const selectedCount = ids.reduce((acc, id) => acc + (alertsUI.selected.has(id) ? 1 : 0), 0);
+  checkbox.checked = ids.length > 0 && selectedCount === ids.length;
+  checkbox.indeterminate = selectedCount > 0 && selectedCount < ids.length;
 }
 
 async function archiveSelectedAlerts() {
@@ -593,6 +652,10 @@ function bindAlertsReactiveFilters() {
 }
 
 async function renderAlertsCenter() {
+  if (!canAccessSection('alertsCenter')) {
+    q('alertsCenter').innerHTML = '<p>Sin permisos para ver alertas.</p>';
+    return;
+  }
   const state = (q('acState') && q('acState').value) || 'active';
   const severity = (q('acSeverity') && q('acSeverity').value) || '';
   const search = (q('acSearch') && q('acSearch').value.trim()) || '';
@@ -605,9 +668,10 @@ async function renderAlertsCenter() {
   const showCamera = alerts.some((a) => a.cold_room_name && a.cold_room_name !== '-');
   const start = (alertsUI.page - 1) * alertsUI.pageSize;
   const paged = alerts.slice(start, start + alertsUI.pageSize);
+  alertsUI.visibleIds = paged.map((a) => a.id);
   const totalPages = Math.max(1, Math.ceil(alerts.length / alertsUI.pageSize));
 
-  const headers = ['Sel', 'Fecha', 'Trabajador', 'DNI', 'Tag'];
+  const headers = ['<input id="acSelectAll" type="checkbox" onchange="toggleVisibleAlertsFromHeader(this.checked)" aria-label="Seleccionar todas las alertas visibles" />', 'Fecha', 'Trabajador', 'DNI', 'Tag'];
   if (showCamera) headers.push('Cámara');
   headers.push('Tipo', 'Severidad', 'Mensaje', 'Estado', 'Archivado por', 'Acciones');
 
@@ -622,7 +686,7 @@ async function renderAlertsCenter() {
         <button class="secondary" onclick="renderAlertsCenter()">Refrescar</button>
         <button onclick="exportAlertsCsv()">Exportar CSV</button>
       </div>
-      <button class="warning btn-archivar-seleccionadas" onclick="archiveSelectedAlerts()">Archivar seleccionadas (${alertsUI.selected.size})</button>
+      <button id="archiveSelectedBtn" class="warning btn-archivar-seleccionadas" onclick="archiveSelectedAlerts()">Archivar seleccionadas (${alertsUI.selected.size})</button>
       <span class="help">Filtros reactivos: se aplican automáticamente.</span>
     </div>
     ${table(headers, paged.map((a) => {
@@ -638,9 +702,15 @@ async function renderAlertsCenter() {
     </div>
   `;
   bindAlertsReactiveFilters();
+  updateSelectedAlertsCount();
+  syncSelectAllCheckbox(alertsUI.visibleIds);
 }
 
 async function renderAlarms() {
+  if (!canAccessSection('alarms')) {
+    q('alarms').innerHTML = '<p>Sin permisos para gestionar reglas de alarma.</p>';
+    return;
+  }
   const rules = await api('/alarm-rules');
   q('alarms').innerHTML = `
     <p class="help">Si hay varias reglas activas, el sistema evalúa la que corresponda al contexto operativo vigente.</p>
@@ -706,6 +776,10 @@ async function toggleAlarm(id, active) { await api(`/alarm-rules/${id}`, { metho
 async function deleteAlarm(id) { if (!confirm('¿Eliminar regla de alarma?')) return; try { await api(`/alarm-rules/${id}`, { method: 'DELETE' }); toast('Regla eliminada'); renderAlarms(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 
 async function renderReports() {
+  if (!canAccessSection('reports')) {
+    q('reports').innerHTML = '<p>Sin permisos para ver informes.</p>';
+    return;
+  }
   const from = q('rFrom')?.value || '';
   const to = q('rTo')?.value || '';
   const worker = q('rWorker')?.value || '';
@@ -791,8 +865,9 @@ function startRealtime() {
     q('appView').hidden = false;
     q('appView').style.display = 'block';
     setSessionText();
+    renderNav();
     startRealtime();
-    showSection('dashboard');
+    showSection(firstAllowedSection());
   } catch {
     localStorage.removeItem('cc_token');
     token = '';
