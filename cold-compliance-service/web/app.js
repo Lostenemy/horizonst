@@ -60,6 +60,17 @@ function apiErrorMessage(error) {
   return raw || 'Error inesperado';
 }
 
+function isForbiddenError(error) {
+  const raw = String(error && error.message ? error.message : error || '');
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.error === 'forbidden' || parsed?.message === 'forbidden';
+  } catch {
+    return raw.toLowerCase().includes('forbidden') || raw.includes('403');
+  }
+}
+
 function toast(message, type = 'success') {
   const stack = q('toastStack');
   if (!stack) return;
@@ -391,16 +402,18 @@ async function renderUsers() {
     status: q('ufStatus')?.value || ''
   };
   const users = await api('/users');
-  const filtered = users.filter((u) => {
+  const manageableUsers = currentUser?.role === 'administrador' ? users.filter((u) => u.role !== 'superadministrador') : users;
+  const filtered = manageableUsers.filter((u) => {
     const full = `${u.first_name} ${u.last_name}`.toLowerCase();
     return (!filters.name || full.includes(filters.name.toLowerCase())) && (!filters.dni || String(u.dni || '').toLowerCase().includes(filters.dni.toLowerCase())) && (!filters.role || u.role === filters.role) && (!filters.status || u.status === filters.status);
   });
+  const canManageSuperadmin = currentUser?.role === 'superadministrador';
   q('users').innerHTML = `
-    <div class="actions"><span class="badge users-total-badge">Total usuarios: ${filtered.length} / ${users.length}</span></div>
+    <div class="actions"><span class="badge users-total-badge">Total usuarios: ${filtered.length} / ${manageableUsers.length}</span></div>
     <div class="grid four mt-12">
       <div class="field"><label>Buscar por nombre</label><input id="ufName" placeholder="Ej: Juan" value="${esc(filters.name)}" oninput="renderUsers()" /></div>
       <div class="field"><label>Filtrar por DNI</label><input id="ufDni" placeholder="12345678A" value="${esc(filters.dni)}" oninput="renderUsers()" /></div>
-      <div class="field"><label>Filtrar por rol</label><select id="ufRole" onchange="renderUsers()"><option value="">Todos</option><option value="supervisor" ${filters.role === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${filters.role === 'administrador' ? 'selected' : ''}>Administrador</option><option value="superadministrador" ${filters.role === 'superadministrador' ? 'selected' : ''}>Superadministrador</option></select></div>
+      <div class="field"><label>Filtrar por rol</label><select id="ufRole" onchange="renderUsers()"><option value="">Todos</option><option value="supervisor" ${filters.role === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${filters.role === 'administrador' ? 'selected' : ''}>Administrador</option>${canManageSuperadmin ? `<option value="superadministrador" ${filters.role === 'superadministrador' ? 'selected' : ''}>Superadministrador</option>` : ''}</select></div>
       <div class="field"><label>Filtrar por estado</label><select id="ufStatus" onchange="renderUsers()"><option value="">Todos</option><option value="active" ${filters.status === 'active' ? 'selected' : ''}>Activo</option><option value="inactive" ${filters.status === 'inactive' ? 'selected' : ''}>Inactivo</option></select></div>
     </div>
 
@@ -432,7 +445,7 @@ async function renderUsers() {
           u.phone || '-',
           u.dni,
           u.shift || '-',
-          `<div class="table-actions user-table-actions"><button onclick="beginUserInlineEdit('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
+          `<div class="table-actions user-table-actions">${(u.role === 'superadministrador' && !canManageSuperadmin) ? '<span class="muted">Sin acciones</span>' : `<button onclick="beginUserInlineEdit('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>`}${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
         ];
       }
       const d = inlineEdit.users.draft;
@@ -483,6 +496,10 @@ async function beginUserInlineEdit(id) {
   const users = await api('/users');
   const user = users.find((u) => u.id === id);
   if (!user) return;
+  if (currentUser?.role !== 'superadministrador' && user.role === 'superadministrador') {
+    toast('No tienes permisos para modificar este usuario.', 'warning');
+    return;
+  }
   startInlineEdit('users', id, {
     nombre: user.first_name,
     apellidos: user.last_name,
@@ -520,6 +537,10 @@ async function saveUserInlineEdit(id) {
     toast('Usuario actualizado');
     renderUsers();
   } catch (error) {
+    if (isForbiddenError(error)) {
+      toast('No tienes permisos para modificar este usuario.', 'warning');
+      return;
+    }
     const message = apiErrorMessage(error);
     if (message.includes('dni no puede estar vacío')) {
       const input = q(`ueDni-${id}`);
@@ -530,7 +551,19 @@ async function saveUserInlineEdit(id) {
     toast(message, 'error');
   }
 }
-async function deactivateUser(id) { await api(`/users/${id}/deactivate`, { method: 'POST' }); toast('Usuario desactivado'); renderUsers(); }
+async function deactivateUser(id) {
+  try {
+    await api(`/users/${id}/deactivate`, { method: 'POST' });
+    toast('Usuario desactivado');
+    renderUsers();
+  } catch (error) {
+    if (isForbiddenError(error)) {
+      toast('No tienes permisos para modificar este usuario.', 'warning');
+      return;
+    }
+    toast(apiErrorMessage(error), 'error');
+  }
+}
 async function deleteUser(id) { if (!confirm('¿Seguro que deseas borrar este usuario?')) return; await api(`/users/${id}`, { method: 'DELETE' }); toast('Usuario borrado'); renderUsers(); }
 
 async function renderInventory() {
