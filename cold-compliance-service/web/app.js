@@ -42,6 +42,7 @@ const inlineEdit = {
   workers: { id: null, draft: null },
   alarmRules: { id: null, draft: null }
 };
+const userEditModal = { open: false, data: null };
 
 function esc(value) {
   return String(value == null ? '' : value)
@@ -58,6 +59,17 @@ function apiErrorMessage(error) {
     if (parsed && parsed.message) return parsed.message;
   } catch {}
   return raw || 'Error inesperado';
+}
+
+function isForbiddenError(error) {
+  const raw = String(error && error.message ? error.message : error || '');
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.error === 'forbidden' || parsed?.message === 'forbidden';
+  } catch {
+    return raw.toLowerCase().includes('forbidden') || raw.includes('403');
+  }
 }
 
 function toast(message, type = 'success') {
@@ -391,20 +403,22 @@ async function renderUsers() {
     status: q('ufStatus')?.value || ''
   };
   const users = await api('/users');
-  const filtered = users.filter((u) => {
+  const manageableUsers = currentUser?.role === 'administrador' ? users.filter((u) => u.role !== 'superadministrador') : users;
+  const filtered = manageableUsers.filter((u) => {
     const full = `${u.first_name} ${u.last_name}`.toLowerCase();
     return (!filters.name || full.includes(filters.name.toLowerCase())) && (!filters.dni || String(u.dni || '').toLowerCase().includes(filters.dni.toLowerCase())) && (!filters.role || u.role === filters.role) && (!filters.status || u.status === filters.status);
   });
+  const canManageSuperadmin = currentUser?.role === 'superadministrador';
   q('users').innerHTML = `
-    <div class="actions"><span class="badge users-total-badge">Total usuarios: ${filtered.length} / ${users.length}</span></div>
+    <div class="actions"><span class="badge users-total-badge">Total usuarios: ${filtered.length} / ${manageableUsers.length}</span></div>
     <div class="grid four mt-12">
       <div class="field"><label>Buscar por nombre</label><input id="ufName" placeholder="Ej: Juan" value="${esc(filters.name)}" oninput="renderUsers()" /></div>
       <div class="field"><label>Filtrar por DNI</label><input id="ufDni" placeholder="12345678A" value="${esc(filters.dni)}" oninput="renderUsers()" /></div>
-      <div class="field"><label>Filtrar por rol</label><select id="ufRole" onchange="renderUsers()"><option value="">Todos</option><option value="supervisor" ${filters.role === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${filters.role === 'administrador' ? 'selected' : ''}>Administrador</option><option value="superadministrador" ${filters.role === 'superadministrador' ? 'selected' : ''}>Superadministrador</option></select></div>
+      <div class="field"><label>Filtrar por rol</label><select id="ufRole" onchange="renderUsers()"><option value="">Todos</option><option value="supervisor" ${filters.role === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${filters.role === 'administrador' ? 'selected' : ''}>Administrador</option>${canManageSuperadmin ? `<option value="superadministrador" ${filters.role === 'superadministrador' ? 'selected' : ''}>Superadministrador</option>` : ''}</select></div>
       <div class="field"><label>Filtrar por estado</label><select id="ufStatus" onchange="renderUsers()"><option value="">Todos</option><option value="active" ${filters.status === 'active' ? 'selected' : ''}>Activo</option><option value="inactive" ${filters.status === 'inactive' ? 'selected' : ''}>Inactivo</option></select></div>
     </div>
 
-    <details class="mt-12" ${inlineEdit.users.id ? '' : 'open'}>
+    <details class="mt-12" open>
       <summary><b>Nuevo usuario</b></summary>
       <p class="help">Los campos marcados con <span class="required-asterisk">*</span> son obligatorios.</p>
       <div class="grid three mt-12">
@@ -421,32 +435,17 @@ async function renderUsers() {
       <button class="mt-12" onclick="createUser()">Crear usuario</button>
     </details>
 
-    ${table(['Nombre', 'Email', 'Rol', 'Estado', 'Teléfono', 'DNI', 'Turno', 'Acciones'], filtered.map((u) => {
-      const isEditing = inlineEdit.users.id === u.id;
-      if (!isEditing) {
-        return [
-          `${u.first_name} ${u.last_name}`,
-          u.email,
-          roleLabel(u.role),
-          statusLabel(u.status),
-          u.phone || '-',
-          u.dni,
-          u.shift || '-',
-          `<div class="table-actions user-table-actions"><button onclick="beginUserInlineEdit('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
-        ];
-      }
-      const d = inlineEdit.users.draft;
-      return [
-        `<input value="${esc(d.nombre)}" oninput="updateInlineEdit('users','nombre',this.value)"/> <input class="mt-12" value="${esc(d.apellidos)}" oninput="updateInlineEdit('users','apellidos',this.value)"/>`,
-        `<input value="${esc(d.email)}" oninput="updateInlineEdit('users','email',this.value)"/>`,
-        `<select onchange="updateInlineEdit('users','rol',this.value)"><option value="supervisor" ${d.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${d.rol === 'administrador' ? 'selected' : ''}>Administrador</option></select>`,
-        `<select onchange="updateInlineEdit('users','estado',this.value)"><option value="active" ${d.estado === 'active' ? 'selected' : ''}>Activo</option><option value="inactive" ${d.estado === 'inactive' ? 'selected' : ''}>Inactivo</option></select>`,
-        `<input value="${esc(d.telefono)}" oninput="updateInlineEdit('users','telefono',this.value)"/>`,
-        `<input id="ueDni-${u.id}" value="${esc(d.dni)}" oninput="updateInlineEdit('users','dni',this.value);clearInlineUserFieldError('${u.id}','dni')"/><div id="ueDniErr-${u.id}" class="field-error"></div>`,
-        `<select onchange="updateInlineEdit('users','turno',this.value)"><option value="mañana" ${d.turno === 'mañana' ? 'selected' : ''}>Mañana</option><option value="tarde" ${d.turno === 'tarde' ? 'selected' : ''}>Tarde</option><option value="noche" ${d.turno === 'noche' ? 'selected' : ''}>Noche</option></select>`,
-        `<input type="password" placeholder="Nueva contraseña (opcional)" oninput="updateInlineEdit('users','password',this.value)"/> <div class='mt-12'><button onclick="saveUserInlineEdit('${u.id}')">Guardar</button> <button class="secondary" onclick="cancelUserInlineEdit()">Cancelar</button></div>`
-      ];
-    }))}
+    ${table(['Nombre', 'Email', 'Rol', 'Estado', 'Teléfono', 'DNI', 'Turno', 'Acciones'], filtered.map((u) => ([
+      `${u.first_name} ${u.last_name}`,
+      u.email,
+      roleLabel(u.role),
+      statusLabel(u.status),
+      u.phone || '-',
+      u.dni,
+      u.shift || '-',
+      `<div class="table-actions user-table-actions">${(u.role === 'superadministrador' && !canManageSuperadmin) ? '<span class="muted">Sin acciones</span>' : `<button onclick="openUserEditModal('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>`}${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
+    ])))}
+    ${renderUserEditModal()}
   `;
 }
 
@@ -479,58 +478,141 @@ async function createUser() {
   }
 }
 
-async function beginUserInlineEdit(id) {
+async function openUserEditModal(id) {
   const users = await api('/users');
   const user = users.find((u) => u.id === id);
   if (!user) return;
-  startInlineEdit('users', id, {
+  if (currentUser?.role !== 'superadministrador' && user.role === 'superadministrador') {
+    toast('No tienes permisos para modificar este usuario.', 'warning');
+    return;
+  }
+  userEditModal.open = true;
+  userEditModal.data = {
+    id: user.id,
     nombre: user.first_name,
     apellidos: user.last_name,
     email: user.email,
     telefono: user.phone || '',
     dni: user.dni,
-    rol: user.role === 'superadministrador' ? 'administrador' : user.role,
+    rol: user.role,
     estado: user.status,
     turno: user.shift || 'mañana',
-    password: ''
-  });
+    password: '',
+    originalRole: user.role
+  };
   renderUsers();
 }
-function cancelUserInlineEdit() { cancelInlineEdit('users'); renderUsers(); }
-function clearInlineUserFieldError(id, field) {
-  if (field !== 'dni') return;
-  const input = q(`ueDni-${id}`);
-  const errorEl = q(`ueDniErr-${id}`);
+function closeUserEditModal() {
+  userEditModal.open = false;
+  userEditModal.data = null;
+  renderUsers();
+}
+function setModalFieldError(fieldId, message) {
+  const input = q(fieldId);
+  const errorEl = q(`${fieldId}Error`);
+  if (input) input.classList.add('invalid');
+  if (errorEl) errorEl.textContent = message;
+}
+function clearModalFieldError(fieldId) {
+  const input = q(fieldId);
+  const errorEl = q(`${fieldId}Error`);
   if (input) input.classList.remove('invalid');
   if (errorEl) errorEl.textContent = '';
 }
-async function saveUserInlineEdit(id) {
-  const d = inlineEdit.users.draft;
-  clearInlineUserFieldError(id, 'dni');
-  if (!String(d.dni || '').trim()) {
-    const input = q(`ueDni-${id}`);
-    const errorEl = q(`ueDniErr-${id}`);
-    if (input) input.classList.add('invalid');
-    if (errorEl) errorEl.textContent = 'El DNI no puede estar vacío';
-    return toast('Revisa los campos marcados en rojo', 'warning');
+function updateUserEditModalField(field, value) {
+  if (!userEditModal.data) return;
+  userEditModal.data[field] = value;
+  const fieldMap = {
+    nombre: 'umNombre',
+    apellidos: 'umApellidos',
+    email: 'umEmail',
+    telefono: 'umTelefono',
+    dni: 'umDni',
+    rol: 'umRol',
+    estado: 'umEstado',
+    turno: 'umTurno',
+    password: 'umPass'
+  };
+  const fieldId = fieldMap[field];
+  if (fieldId) clearModalFieldError(fieldId);
+}
+function validateUserEditModal() {
+  if (!userEditModal.data) return false;
+  ['umNombre', 'umApellidos', 'umEmail', 'umDni', 'umRol', 'umPass'].forEach(clearModalFieldError);
+  const d = userEditModal.data;
+  let hasError = false;
+  if (!String(d.nombre || '').trim()) { setModalFieldError('umNombre', 'El nombre es obligatorio'); hasError = true; }
+  if (!String(d.apellidos || '').trim()) { setModalFieldError('umApellidos', 'Los apellidos son obligatorios'); hasError = true; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.email || '').trim())) { setModalFieldError('umEmail', 'Introduce un email válido'); hasError = true; }
+  if (!String(d.dni || '').trim()) { setModalFieldError('umDni', 'El DNI no puede estar vacío'); hasError = true; }
+  if (d.originalRole !== 'superadministrador' && !String(d.rol || '').trim()) { setModalFieldError('umRol', 'Selecciona un rol'); hasError = true; }
+  if (String(d.password || '').trim() && String(d.password).trim().length < 8) { setModalFieldError('umPass', 'La contraseña debe tener al menos 8 caracteres'); hasError = true; }
+  return !hasError;
+}
+async function saveUserModalEdit() {
+  if (!userEditModal.data || !validateUserEditModal()) {
+    toast('Revisa los campos marcados en rojo', 'warning');
+    return;
   }
+  const d = userEditModal.data;
   try {
-    await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
-    cancelInlineEdit('users');
+    await api(`/users/${d.id}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.originalRole === 'superadministrador' ? null : d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
+    userEditModal.open = false;
+    userEditModal.data = null;
     toast('Usuario actualizado');
     renderUsers();
   } catch (error) {
+    if (isForbiddenError(error)) {
+      toast('No tienes permisos para modificar este usuario.', 'warning');
+      return;
+    }
     const message = apiErrorMessage(error);
     if (message.includes('dni no puede estar vacío')) {
-      const input = q(`ueDni-${id}`);
-      const errorEl = q(`ueDniErr-${id}`);
-      if (input) input.classList.add('invalid');
-      if (errorEl) errorEl.textContent = 'El DNI no puede estar vacío';
+      setModalFieldError('umDni', 'El DNI no puede estar vacío');
     }
     toast(message, 'error');
   }
 }
-async function deactivateUser(id) { await api(`/users/${id}/deactivate`, { method: 'POST' }); toast('Usuario desactivado'); renderUsers(); }
+function renderUserEditModal() {
+  if (!userEditModal.open || !userEditModal.data) return '';
+  const d = userEditModal.data;
+  return `
+    <div class="modal-overlay" onclick="closeUserEditModal()">
+      <div class="modal-card user-edit-modal" onclick="event.stopPropagation()">
+        <button class="modal-close-btn" type="button" onclick="closeUserEditModal()">✕</button>
+        <h3>Editar usuario</h3>
+        <div class="grid two mt-12">
+          <div class="field"><label>Nombre <span class="required-asterisk">*</span></label><input id="umNombre" value="${esc(d.nombre)}" oninput="updateUserEditModalField('nombre', this.value)" /><div id="umNombreError" class="field-error"></div></div>
+          <div class="field"><label>Apellidos <span class="required-asterisk">*</span></label><input id="umApellidos" value="${esc(d.apellidos)}" oninput="updateUserEditModalField('apellidos', this.value)" /><div id="umApellidosError" class="field-error"></div></div>
+          <div class="field"><label>Email <span class="required-asterisk">*</span></label><input id="umEmail" value="${esc(d.email)}" oninput="updateUserEditModalField('email', this.value)" /><div id="umEmailError" class="field-error"></div></div>
+          <div class="field"><label>Teléfono</label><input id="umTelefono" value="${esc(d.telefono)}" oninput="updateUserEditModalField('telefono', this.value)" /><div id="umTelefonoError" class="field-error"></div></div>
+          <div class="field"><label>DNI <span class="required-asterisk">*</span></label><input id="umDni" value="${esc(d.dni)}" oninput="updateUserEditModalField('dni', this.value)" /><div id="umDniError" class="field-error"></div></div>
+          <div class="field"><label>Rol <span class="required-asterisk">*</span></label>${d.originalRole === 'superadministrador' ? `<input value="Superadministrador" disabled /><small class="help">No editable desde esta pantalla.</small>` : `<select id="umRol" onchange="updateUserEditModalField('rol', this.value)"><option value="supervisor" ${d.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${d.rol === 'administrador' ? 'selected' : ''}>Administrador</option></select>`}<div id="umRolError" class="field-error"></div></div>
+          <div class="field"><label>Estado</label><select id="umEstado" onchange="updateUserEditModalField('estado', this.value)"><option value="active" ${d.estado === 'active' ? 'selected' : ''}>Activo</option><option value="inactive" ${d.estado === 'inactive' ? 'selected' : ''}>Inactivo</option></select><div id="umEstadoError" class="field-error"></div></div>
+          <div class="field"><label>Turno</label><select id="umTurno" onchange="updateUserEditModalField('turno', this.value)"><option value="mañana" ${d.turno === 'mañana' ? 'selected' : ''}>Mañana</option><option value="tarde" ${d.turno === 'tarde' ? 'selected' : ''}>Tarde</option><option value="noche" ${d.turno === 'noche' ? 'selected' : ''}>Noche</option></select><div id="umTurnoError" class="field-error"></div></div>
+          <div class="field"><label>Nueva contraseña (opcional)</label><input id="umPass" type="password" placeholder="Mínimo 8 caracteres" oninput="updateUserEditModalField('password', this.value)" /><div id="umPassError" class="field-error"></div></div>
+        </div>
+        <div class="modal-actions mt-12">
+          <button class="secondary" type="button" onclick="closeUserEditModal()">Cancelar</button>
+          <button type="button" onclick="saveUserModalEdit()">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+async function deactivateUser(id) {
+  try {
+    await api(`/users/${id}/deactivate`, { method: 'POST' });
+    toast('Usuario desactivado');
+    renderUsers();
+  } catch (error) {
+    if (isForbiddenError(error)) {
+      toast('No tienes permisos para modificar este usuario.', 'warning');
+      return;
+    }
+    toast(apiErrorMessage(error), 'error');
+  }
+}
 async function deleteUser(id) { if (!confirm('¿Seguro que deseas borrar este usuario?')) return; await api(`/users/${id}`, { method: 'DELETE' }); toast('Usuario borrado'); renderUsers(); }
 
 async function renderInventory() {

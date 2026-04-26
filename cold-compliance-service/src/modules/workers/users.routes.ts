@@ -28,11 +28,19 @@ function assertRoleAllowedForManagement(role: unknown): void {
   }
 }
 
-usersRouter.get('/', requireRoles(['administrador', 'superadministrador']), async (_req, res, next) => {
+async function getUserById(id: string) {
+  const result = await db.query('SELECT id, role FROM app_users WHERE id = $1', [id]);
+  return result.rows[0] as { id: string; role: string } | undefined;
+}
+
+usersRouter.get('/', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
-    const result = await db.query(
+    const baseQuery =
       `SELECT id, first_name, last_name, email, phone, dni, role, status, shift, created_at, updated_at
-       FROM app_users ORDER BY created_at DESC`
+       FROM app_users`;
+    const whereClause = req.authUser?.role === 'administrador' ? ` WHERE role <> 'superadministrador'` : '';
+    const result = await db.query(
+      `${baseQuery}${whereClause} ORDER BY created_at DESC`
     );
     res.json(result.rows);
   } catch (error) {
@@ -71,6 +79,11 @@ usersRouter.post('/', requireRoles(['administrador', 'superadministrador']), asy
 
 usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
+    const targetUser = await getUserById(req.params.id);
+    if (targetUser && req.authUser?.role === 'administrador' && targetUser.role === 'superadministrador') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
     const { nombre, apellidos, email, telefono, dni, rol, estado, password, turno } = req.body;
     const normalizedNombre = toOptionalTrimmedText(nombre);
     const normalizedApellidos = toOptionalTrimmedText(apellidos);
@@ -112,6 +125,11 @@ usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']),
 
 usersRouter.post('/:id/deactivate', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
   try {
+    const targetUser = await getUserById(req.params.id);
+    if (targetUser && req.authUser?.role === 'administrador' && targetUser.role === 'superadministrador') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
     const result = await db.query(
       `UPDATE app_users SET status = 'inactive', updated_at = NOW() WHERE id = $1
        RETURNING id, first_name, last_name, email, phone, dni, role, status, shift, created_at, updated_at`,
@@ -125,6 +143,9 @@ usersRouter.post('/:id/deactivate', requireRoles(['administrador', 'superadminis
 
 usersRouter.delete('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
+    if (req.authUser?.id === req.params.id) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     await db.query('DELETE FROM app_users WHERE id = $1', [req.params.id]);
     res.status(204).send();
   } catch (error) {
