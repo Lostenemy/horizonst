@@ -82,9 +82,20 @@ function toast(message, type = 'success') {
   setTimeout(() => el.remove(), 3600);
 }
 
-function formatDateTime(value) {
+function formatDateTimeMadrid(value) {
   if (!value) return '-';
-  return new Date(value).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '-';
+  return parsed.toLocaleString('es-ES', {
+    timeZone: 'Europe/Madrid',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
 }
 
 function formatRemaining(seconds) {
@@ -256,7 +267,7 @@ async function renderDashboard(snapshot) {
     `<a href="#" onclick="openAlertsFiltered('${a.severity}');return false;">${alertTypeLabel(a.alert_type)}</a>`,
     severityBadge(a.severity),
     a.message,
-    formatDateTime(a.created_at)
+    formatDateTimeMadrid(a.created_at)
   ]);
   const workersRows = (data.workersInside || []).map((w) => [w.full_name, w.dni, Math.floor(w.elapsed_seconds / 60), stateBadge(w.presence_status)]);
   const graceRows = (data.workersInGrace || []).map((w) => [w.full_name, formatRemaining(w.remaining_seconds), '<span class="badge info">Gracia</span>']);
@@ -276,7 +287,7 @@ async function renderDashboard(snapshot) {
       <div class="metric kpi-card info"><small class="kpi-label">En estado de gracia</small><b class="kpi-value">${data.totals.workersInGrace || 0}</b></div>
       <div class="metric kpi-card ${alertKpiClass} clickable" onclick="openAlertsFiltered('')"><small class="kpi-label">Alarmas disparadas</small><b class="kpi-value">${data.totals.activeAlerts}</b></div>
       <div class="metric kpi-card ${data.systemOnline === false ? 'alert' : 'success'}"><small class="kpi-label">Estado del sistema</small><b style="font-size:16px">${systemState}</b></div>
-      <div class="metric kpi-card info kpi-timestamp"><small class="kpi-label">Última actualización</small><b class="kpi-date kpi-value">${formatDateTime(data.ts)}</b></div>
+      <div class="metric kpi-card info kpi-timestamp"><small class="kpi-label">Última actualización</small><b class="kpi-date kpi-value">${formatDateTimeMadrid(data.ts)}</b></div>
     </div>
     <div class="dashboard-presence-grid">
       <div class="dashboard-presence-column">
@@ -292,7 +303,7 @@ async function renderDashboard(snapshot) {
     ${alertsRows.length ? table(['Tipo', 'Severidad', 'Mensaje', 'Fecha'], alertsRows, 'alarm-table') : '<div class="list-empty">Sin alarmas activas.</div>'}
     <div class="actions mt-12"><button class="secondary" onclick="openAlertsFiltered('')">Ver todas</button></div>
   `;
-  setGlobalStatus(`Último evento en vivo: ${formatDateTime(data.ts)}`);
+  setGlobalStatus(`Último evento en vivo: ${formatDateTimeMadrid(data.ts)}`);
 }
 
 async function refreshDashboardNow() {
@@ -645,7 +656,7 @@ async function renderInventory() {
     ${table(['MAC', 'Descripción', 'Delay (ms / s)', 'Activo', 'Último evento', 'Acciones'], tags.map((t) => {
       const editing = inlineEdit.tags.id === t.id;
       const delay = t.physical_alarm_followup_delay_ms == null ? 45000 : t.physical_alarm_followup_delay_ms;
-      if (!editing) return [t.tag_uid, t.model || '', `${delay} / ${(delay / 1000).toFixed(1)} s`, t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>', t.updated_at ? formatDateTime(t.updated_at) : '-', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button> <button class='danger' onclick="deleteTag('${t.id}')">Borrar</button>` : '-'];
+      if (!editing) return [t.tag_uid, t.model || '', `${delay} / ${(delay / 1000).toFixed(1)} s`, t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>', t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button> <button class='danger' onclick="deleteTag('${t.id}')">Borrar</button>` : '-'];
       const d = inlineEdit.tags.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`,
@@ -725,7 +736,7 @@ async function renderAssignments() {
       ];
     }))}
     <h3 class="mt-12">Histórico de asignaciones</h3>
-    ${table(['Trabajador', 'Tag', 'Inicio', 'Fin'], history.map((h) => [h.worker_name, h.tag_mac, formatDateTime(h.assigned_at), h.unassigned_at ? formatDateTime(h.unassigned_at) : '-']))}
+    ${table(['Trabajador', 'Tag', 'Inicio', 'Fin'], history.map((h) => [h.worker_name, h.tag_mac, formatDateTimeMadrid(h.assigned_at), h.unassigned_at ? formatDateTimeMadrid(h.unassigned_at) : '-']))}
   `;
   showAssignmentWarning(workers);
 }
@@ -756,7 +767,7 @@ async function archiveAlert(id) {
 
 function exportAlertsCsv() {
   if (!alertsCache.length) return toast('No hay alertas para exportar', 'warning');
-  const rows = alertsCache.map((a) => [formatDateTime(a.created_at), a.worker_name, a.worker_dni, a.tag_uid, a.cold_room_name, alertTypeLabel(a.alert_type), severityLabel(a.severity), a.message, a.status]);
+  const rows = alertsCache.map((a) => [formatDateTimeMadrid(a.created_at), a.worker_name, a.worker_dni, a.tag_uid, a.cold_room_name, alertTypeLabel(a.alert_type), severityLabel(a.severity), a.message, a.status]);
   const csv = ['Fecha,Trabajador,DNI,Tag,Cámara,Tipo,Severidad,Mensaje,Estado', ...rows.map((r) => r.map((v) => `"${String(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -860,7 +871,7 @@ async function renderAlertsCenter() {
       <span class="help">Filtros reactivos: se aplican automáticamente.</span>
     </div>
     ${table(headers, paged.map((a) => {
-      const row = [`<input type="checkbox" ${alertsUI.selected.has(a.id) ? 'checked' : ''} onchange="toggleAlertSelection('${a.id}', this.checked)"/>`, formatDateTime(a.created_at), a.worker_name, a.worker_dni, a.tag_uid];
+      const row = [`<input type="checkbox" ${alertsUI.selected.has(a.id) ? 'checked' : ''} onchange="toggleAlertSelection('${a.id}', this.checked)"/>`, formatDateTimeMadrid(a.created_at), a.worker_name, a.worker_dni, a.tag_uid];
       if (showCamera) row.push(a.cold_room_name || '-');
       row.push(alertTypeLabel(a.alert_type), severityBadge(a.severity), a.message, a.status === 'active' ? '<span class="badge warn">Activa</span>' : '<span class="badge archived">Archivada</span>', a.acknowledged_by || '-', a.status === 'active' ? `<button class="btn-archive" aria-label="Archivar" onclick="archiveAlert('${a.id}')">Archivar</button>` : '-');
       return row;

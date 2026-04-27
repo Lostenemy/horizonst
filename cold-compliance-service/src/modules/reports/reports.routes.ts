@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
+import { formatDateTimeMadrid } from '../../utils/datetime';
 
 interface InspectionRow {
   worker_name: string;
@@ -55,11 +56,6 @@ async function loadInspectionRows(filters?: { from?: string; to?: string; worker
   ).rows;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  return new Date(value).toLocaleString('es-ES');
-}
-
 function formatDurationMmSs(totalSeconds: number): string {
   const safeSeconds = Number.isFinite(totalSeconds) && totalSeconds > 0 ? Math.floor(totalSeconds) : 0;
   const minutes = Math.floor(safeSeconds / 60);
@@ -88,7 +84,7 @@ reportsRouter.get('/inspection.xlsx', async (req: Request, res: Response, next) 
     ws.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left' };
 
     ws.mergeCells('A2:F2');
-    ws.getCell('A2').value = `Generado: ${new Date().toLocaleString('es-ES')}`;
+    ws.getCell('A2').value = `Generado: ${formatDateTimeMadrid(new Date())}`;
     ws.getCell('A2').font = { size: 10, color: { argb: 'FF4B5563' } };
 
     const headers = ['Trabajador', 'DNI', 'Tag', 'Entrada', 'Salida', 'Minutos'];
@@ -102,12 +98,10 @@ reportsRouter.get('/inspection.xlsx', async (req: Request, res: Response, next) 
         row.worker_name,
         row.worker_dni,
         row.tag_mac,
-        new Date(row.started_at),
-        row.ended_at ? new Date(row.ended_at) : null,
+        formatDateTimeMadrid(row.started_at),
+        formatDateTimeMadrid(row.ended_at),
         row.duration_seconds / 60
       ]);
-      r.getCell(4).numFmt = 'dd/mm/yyyy hh:mm:ss';
-      r.getCell(5).numFmt = 'dd/mm/yyyy hh:mm:ss';
       r.getCell(6).numFmt = '0.00';
       if (row.duration_seconds >= 45 * 60) {
         r.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE5E5' } };
@@ -185,7 +179,7 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
       }
 
       doc.fillColor('#0F3D5E').fontSize(18).text('Informe de inspección', 140, 36);
-      doc.fillColor('#4B5563').fontSize(10).text(`Generado: ${generatedAt.toLocaleString('es-ES')}`, 140, 58);
+      doc.fillColor('#4B5563').fontSize(10).text(`Generado: ${formatDateTimeMadrid(generatedAt)}`, 140, 58);
     };
 
     drawPageHeader();
@@ -226,8 +220,8 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
       doc.text(row.worker_name, colX[0], y, { width: 145, ellipsis: true });
       doc.text(row.worker_dni, colX[1], y, { width: 60 });
       doc.text(row.tag_mac, colX[2], y, { width: 66, ellipsis: true });
-      doc.text(formatDate(row.started_at), colX[3], y, { width: 86 });
-      doc.text(formatDate(row.ended_at), colX[4], y, { width: 106 });
+      doc.text(formatDateTimeMadrid(row.started_at), colX[3], y, { width: 86 });
+      doc.text(formatDateTimeMadrid(row.ended_at), colX[4], y, { width: 106 });
       doc.fillColor(row.duration_seconds >= 45 * 60 ? '#C62828' : '#111827').text(formatDurationMmSs(row.duration_seconds), colX[5], y, { width: 34, align: 'right' });
       y += 18;
     });
