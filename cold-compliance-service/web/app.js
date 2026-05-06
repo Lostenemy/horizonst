@@ -43,6 +43,10 @@ const inlineEdit = {
   alarmRules: { id: null, draft: null }
 };
 const userEditModal = { open: false, data: null };
+const TAG_DEFAULT_FOLLOWUP_DELAY_MS = 45000;
+const TAG_DEFAULT_ACTION_DURATION_MS = 3000;
+const TAG_MIN_ACTION_DURATION_MS = 100;
+const TAG_MAX_ACTION_DURATION_MS = 60000;
 
 function esc(value) {
   return String(value == null ? '' : value)
@@ -50,6 +54,37 @@ function esc(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+
+function formatMsWithSeconds(value) {
+  const ms = Number(value);
+  if (!Number.isFinite(ms)) return '-';
+  return `${ms} ms / ${(ms / 1000).toFixed(1)} s`;
+}
+
+function tagDurationHelp(value) {
+  return `Equivale a ${(Number(value || 0) / 1000).toFixed(1)} segundos.`;
+}
+
+function readIntegerField(id, label, min, max) {
+  const raw = q(id)?.value;
+  const value = Number(raw);
+  if (raw === '' || !Number.isInteger(value) || value < min || (max != null && value > max)) {
+    const range = max == null ? `mayor o igual que ${min}` : `entre ${min} y ${max}`;
+    toast(`${label} debe ser un entero ${range}.`, 'error');
+    return null;
+  }
+  return value;
+}
+
+function validateTagDuration(value, label) {
+  const duration = Number(value);
+  if (!Number.isInteger(duration) || duration < TAG_MIN_ACTION_DURATION_MS || duration > TAG_MAX_ACTION_DURATION_MS) {
+    toast(`${label} debe ser un entero entre ${TAG_MIN_ACTION_DURATION_MS} y ${TAG_MAX_ACTION_DURATION_MS} ms.`, 'error');
+    return null;
+  }
+  return duration;
 }
 
 function apiErrorMessage(error) {
@@ -639,7 +674,9 @@ async function renderInventory() {
         ${roleCan('superadministrador') ? `
           <div class="field"><label>MAC del tag</label><input id="tagMac" placeholder="AA:BB:CC:DD:EE:FF" /></div>
           <div class="field mt-12"><label>Descripción del tag</label><input id="tagDesc" placeholder="Ej: B5 Terreros" /></div>
-          <div class="field mt-12"><label>Delay buzzer → shaker (ms)</label><input id="tagDelay" type="number" min="0" value="45000" /><small class="help">Se mide en milisegundos. Ejemplo: 45000 ms = 45 segundos.</small></div>
+          <div class="field mt-12"><label>Delay buzzer → shaker (ms)</label><input id="tagDelay" type="number" min="0" step="1" value="45000" oninput="q('tagDelaySeconds').textContent = tagDurationHelp(this.value)" /><small id="tagDelaySeconds" class="help">Equivale a 45.0 segundos.</small></div>
+          <div class="field mt-12"><label>Duración pitido (ms)</label><input id="tagBuzzerDuration" type="number" min="100" max="60000" step="1" value="3000" oninput="q('tagBuzzerDurationSeconds').textContent = tagDurationHelp(this.value)" required /><small id="tagBuzzerDurationSeconds" class="help">Equivale a 3.0 segundos.</small></div>
+          <div class="field mt-12"><label>Duración vibración (ms)</label><input id="tagVibrationDuration" type="number" min="100" max="60000" step="1" value="3000" oninput="q('tagVibrationDurationSeconds').textContent = tagDurationHelp(this.value)" required /><small id="tagVibrationDurationSeconds" class="help">Equivale a 3.0 segundos.</small></div>
           <button class="mt-12" onclick="createTag()">Crear tag</button>
         ` : '<p>Solo superadministrador puede crear tags.</p>'}
       </div>
@@ -653,15 +690,19 @@ async function renderInventory() {
       </div>
     </div>
     <h3 class="mt-12">Listado de tags</h3>
-    ${table(['MAC', 'Descripción', 'Delay (ms / s)', 'Activo', 'Último evento', 'Acciones'], tags.map((t) => {
+    ${table(['MAC', 'Descripción', 'Delay (ms / s)', 'Pitido (ms / s)', 'Vibración (ms / s)', 'Activo', 'Último evento', 'Acciones'], tags.map((t) => {
       const editing = inlineEdit.tags.id === t.id;
-      const delay = t.physical_alarm_followup_delay_ms == null ? 45000 : t.physical_alarm_followup_delay_ms;
-      if (!editing) return [t.tag_uid, t.model || '', `${delay} / ${(delay / 1000).toFixed(1)} s`, t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>', t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button> <button class='danger' onclick="deleteTag('${t.id}')">Borrar</button>` : '-'];
+      const delay = t.physical_alarm_followup_delay_ms == null ? TAG_DEFAULT_FOLLOWUP_DELAY_MS : t.physical_alarm_followup_delay_ms;
+      const buzzerDuration = t.physical_alarm_buzzer_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_buzzer_duration_ms;
+      const vibrationDuration = t.physical_alarm_vibration_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_vibration_duration_ms;
+      if (!editing) return [t.tag_uid, t.model || '', formatMsWithSeconds(delay), formatMsWithSeconds(buzzerDuration), formatMsWithSeconds(vibrationDuration), t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>', t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button> <button class='danger' onclick="deleteTag('${t.id}')">Borrar</button>` : '-'];
       const d = inlineEdit.tags.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`,
         `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('tags','descripcion',this.value)"/>`,
-        `<input type="number" min="0" value="${esc(d.physicalAlarmFollowupDelayMs)}" oninput="updateInlineEdit('tags','physicalAlarmFollowupDelayMs',this.value)"/>`,
+        `<input type="number" min="0" step="1" value="${esc(d.physicalAlarmFollowupDelayMs)}" oninput="updateInlineEdit('tags','physicalAlarmFollowupDelayMs',this.value)"/><small class="help">${formatMsWithSeconds(d.physicalAlarmFollowupDelayMs)}</small>`,
+        `<input type="number" min="100" max="60000" step="1" value="${esc(d.physicalAlarmBuzzerDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmBuzzerDurationMs',this.value)"/><small class="help">${formatMsWithSeconds(d.physicalAlarmBuzzerDurationMs)}</small>`,
+        `<input type="number" min="100" max="60000" step="1" value="${esc(d.physicalAlarmVibrationDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmVibrationDurationMs',this.value)"/><small class="help">${formatMsWithSeconds(d.physicalAlarmVibrationDurationMs)}</small>`,
         `<select onchange="updateInlineEdit('tags','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Activo</option><option value="false" ${!d.active ? 'selected' : ''}>Inactivo</option></select>`,
         '-',
         `<button onclick="saveTagInlineEdit('${t.id}')">Guardar</button> <button class="secondary" onclick="cancelTagInlineEdit()">Cancelar</button>`
@@ -681,11 +722,43 @@ async function renderInventory() {
   `;
 }
 
-async function createTag() { await api('/tags', { method: 'POST', body: JSON.stringify({ mac: q('tagMac').value, descripcion: q('tagDesc').value, physicalAlarmFollowupDelayMs: Number(q('tagDelay').value || 45000) }) }); toast('Tag creado'); renderInventory(); }
+async function createTag() {
+  const physicalAlarmFollowupDelayMs = readIntegerField('tagDelay', 'Delay buzzer → shaker', 0);
+  const physicalAlarmBuzzerDurationMs = readIntegerField('tagBuzzerDuration', 'Duración pitido', TAG_MIN_ACTION_DURATION_MS, TAG_MAX_ACTION_DURATION_MS);
+  const physicalAlarmVibrationDurationMs = readIntegerField('tagVibrationDuration', 'Duración vibración', TAG_MIN_ACTION_DURATION_MS, TAG_MAX_ACTION_DURATION_MS);
+  if ([physicalAlarmFollowupDelayMs, physicalAlarmBuzzerDurationMs, physicalAlarmVibrationDurationMs].some((v) => v == null)) return;
+  await api('/tags', { method: 'POST', body: JSON.stringify({ mac: q('tagMac').value, descripcion: q('tagDesc').value, physicalAlarmFollowupDelayMs, physicalAlarmBuzzerDurationMs, physicalAlarmVibrationDurationMs }) });
+  toast('Tag creado');
+  renderInventory();
+}
 async function createGateway() { await api('/gateways', { method: 'POST', body: JSON.stringify({ mac: q('gwMac').value, descripcion: q('gwDesc').value }) }); toast('Gateway creado'); renderInventory(); }
-async function beginTagInlineEdit(id) { const tags = await api('/tags'); const tag = tags.find((t) => t.id === id); if (!tag) return; startInlineEdit('tags', id, { mac: tag.tag_uid, descripcion: tag.model || '', physicalAlarmFollowupDelayMs: (tag.physical_alarm_followup_delay_ms == null ? 45000 : tag.physical_alarm_followup_delay_ms), active: !!tag.active }); renderInventory(); }
+async function beginTagInlineEdit(id) {
+  const tags = await api('/tags');
+  const tag = tags.find((t) => t.id === id);
+  if (!tag) return;
+  startInlineEdit('tags', id, {
+    mac: tag.tag_uid,
+    descripcion: tag.model || '',
+    physicalAlarmFollowupDelayMs: (tag.physical_alarm_followup_delay_ms == null ? TAG_DEFAULT_FOLLOWUP_DELAY_MS : tag.physical_alarm_followup_delay_ms),
+    physicalAlarmBuzzerDurationMs: (tag.physical_alarm_buzzer_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : tag.physical_alarm_buzzer_duration_ms),
+    physicalAlarmVibrationDurationMs: (tag.physical_alarm_vibration_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : tag.physical_alarm_vibration_duration_ms),
+    active: !!tag.active
+  });
+  renderInventory();
+}
 function cancelTagInlineEdit() { cancelInlineEdit('tags'); renderInventory(); }
-async function saveTagInlineEdit(id) { const d = inlineEdit.tags.draft; const delay = Number(d.physicalAlarmFollowupDelayMs); if (!Number.isFinite(delay) || delay < 0) return toast('Delay inválido', 'error'); await api(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion, active: d.active, physicalAlarmFollowupDelayMs: delay }) }); cancelInlineEdit('tags'); toast('Tag actualizado'); renderInventory(); }
+async function saveTagInlineEdit(id) {
+  const d = inlineEdit.tags.draft;
+  const delay = Number(d.physicalAlarmFollowupDelayMs);
+  const buzzerDuration = validateTagDuration(d.physicalAlarmBuzzerDurationMs, 'Duración pitido');
+  const vibrationDuration = validateTagDuration(d.physicalAlarmVibrationDurationMs, 'Duración vibración');
+  if (!Number.isInteger(delay) || delay < 0) return toast('Delay inválido', 'error');
+  if (buzzerDuration == null || vibrationDuration == null) return;
+  await api(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion, active: d.active, physicalAlarmFollowupDelayMs: delay, physicalAlarmBuzzerDurationMs: buzzerDuration, physicalAlarmVibrationDurationMs: vibrationDuration }) });
+  cancelInlineEdit('tags');
+  toast('Tag actualizado');
+  renderInventory();
+}
 async function beginGatewayInlineEdit(id) { const gateways = await api('/gateways'); const gateway = gateways.find((g) => g.id === id); if (!gateway) return; startInlineEdit('gateways', id, { mac: gateway.gateway_mac, descripcion: gateway.description || '' }); renderInventory(); }
 function cancelGatewayInlineEdit() { cancelInlineEdit('gateways'); renderInventory(); }
 async function saveGatewayInlineEdit(id) { const d = inlineEdit.gateways.draft; await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion }) }); cancelInlineEdit('gateways'); toast('Gateway actualizado'); renderInventory(); }

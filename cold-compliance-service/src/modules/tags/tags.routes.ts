@@ -4,14 +4,35 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 
 export const tagsRouter = Router();
 
+const DEFAULT_FOLLOWUP_DELAY_MS = 45000;
+const DEFAULT_ACTION_DURATION_MS = 3000;
+const MIN_ACTION_DURATION_MS = 100;
+const MAX_ACTION_DURATION_MS = 60000;
+
 tagsRouter.use(requireAuth);
+
+function parseOptionalInteger(value: unknown, field: string, min: number, max?: number): number | undefined {
+  if (value == null || value === '') return undefined;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(parsed) || parsed < min || (max != null && parsed > max)) {
+    const range = max == null ? `>= ${min}` : `entre ${min} y ${max}`;
+    const error = new Error(`${field} debe ser un entero ${range}`) as Error & { statusCode?: number };
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
+}
 
 tagsRouter.post('/', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
-    const { mac, descripcion, physicalAlarmFollowupDelayMs } = req.body;
+    const { mac, descripcion } = req.body;
+    const physicalAlarmFollowupDelayMs = parseOptionalInteger(req.body.physicalAlarmFollowupDelayMs, 'physicalAlarmFollowupDelayMs', 0) ?? DEFAULT_FOLLOWUP_DELAY_MS;
+    const physicalAlarmBuzzerDurationMs = parseOptionalInteger(req.body.physicalAlarmBuzzerDurationMs, 'physicalAlarmBuzzerDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS) ?? DEFAULT_ACTION_DURATION_MS;
+    const physicalAlarmVibrationDurationMs = parseOptionalInteger(req.body.physicalAlarmVibrationDurationMs, 'physicalAlarmVibrationDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS) ?? DEFAULT_ACTION_DURATION_MS;
     const result = await db.query(
-      `INSERT INTO tags(tag_uid, model, physical_alarm_followup_delay_ms) VALUES($1,$2,$3) RETURNING *`,
-      [String(mac).toLowerCase(), descripcion ?? null, physicalAlarmFollowupDelayMs ?? 45000]
+      `INSERT INTO tags(tag_uid, model, physical_alarm_followup_delay_ms, physical_alarm_buzzer_duration_ms, physical_alarm_vibration_duration_ms)
+       VALUES($1,$2,$3,$4,$5) RETURNING *`,
+      [String(mac).toLowerCase(), descripcion ?? null, physicalAlarmFollowupDelayMs, physicalAlarmBuzzerDurationMs, physicalAlarmVibrationDurationMs]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) { next(e); }
@@ -29,10 +50,28 @@ tagsRouter.get('/', async (_req, res, next) => {
 
 tagsRouter.patch('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
+    const physicalAlarmFollowupDelayMs = parseOptionalInteger(req.body.physicalAlarmFollowupDelayMs, 'physicalAlarmFollowupDelayMs', 0);
+    const physicalAlarmBuzzerDurationMs = parseOptionalInteger(req.body.physicalAlarmBuzzerDurationMs, 'physicalAlarmBuzzerDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS);
+    const physicalAlarmVibrationDurationMs = parseOptionalInteger(req.body.physicalAlarmVibrationDurationMs, 'physicalAlarmVibrationDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS);
     const result = await db.query(
-      `UPDATE tags SET tag_uid = COALESCE($2, tag_uid), model = COALESCE($3, model), active = COALESCE($4, active), physical_alarm_followup_delay_ms = COALESCE($5, physical_alarm_followup_delay_ms), updated_at = NOW()
+      `UPDATE tags
+       SET tag_uid = COALESCE($2, tag_uid),
+           model = COALESCE($3, model),
+           active = COALESCE($4, active),
+           physical_alarm_followup_delay_ms = COALESCE($5, physical_alarm_followup_delay_ms),
+           physical_alarm_buzzer_duration_ms = COALESCE($6, physical_alarm_buzzer_duration_ms),
+           physical_alarm_vibration_duration_ms = COALESCE($7, physical_alarm_vibration_duration_ms),
+           updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      [req.params.id, req.body.mac ? String(req.body.mac).toLowerCase() : null, req.body.descripcion ?? null, req.body.active ?? null, req.body.physicalAlarmFollowupDelayMs ?? null]
+      [
+        req.params.id,
+        req.body.mac ? String(req.body.mac).toLowerCase() : null,
+        req.body.descripcion ?? null,
+        req.body.active ?? null,
+        physicalAlarmFollowupDelayMs ?? null,
+        physicalAlarmBuzzerDurationMs ?? null,
+        physicalAlarmVibrationDurationMs ?? null
+      ]
     );
     res.json(result.rows[0]);
   } catch (e) { next(e); }
