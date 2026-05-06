@@ -19,6 +19,9 @@ const COMMANDS: Record<PhysicalAlarmAction | 'connect' | 'disconnect', { msgId: 
 
 const activeTagAlarms = new Set<string>();
 const DEFAULT_FOLLOWUP_DELAY_MS = 45000;
+const DEFAULT_ACTION_DURATION_MS = 3000;
+const MIN_ACTION_DURATION_MS = 100;
+const MAX_ACTION_DURATION_MS = 60000;
 
 function toTopic(gatewayMac: string): string {
   return env.MQTT_COMMAND_TOPIC_TEMPLATE.replace('{gatewayMac}', gatewayMac.toLowerCase());
@@ -38,7 +41,7 @@ async function publishAndWaitAck(params: {
     data: { mac: params.tagUid.toUpperCase(), ...params.data }
   };
 
-  logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, command: params.command, msgId: commandDef.msgId }, 'physical alarm command requested');
+  logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, command: params.command, msgId: commandDef.msgId, data: params.data }, 'physical alarm command requested');
   await mqttPublish(toTopic(params.gatewayMac), payload);
 
   const ack = await waitForGatewayReplyMulti({
@@ -55,13 +58,33 @@ async function publishAndWaitAck(params: {
 }
 
 
-async function resolveFollowupDelayMs(tagId: string): Promise<number> {
-  const result = await db.query<{ physical_alarm_followup_delay_ms: number }>(
-    `SELECT physical_alarm_followup_delay_ms FROM tags WHERE id = $1`,
+interface PhysicalAlarmSettings {
+  followupDelayMs: number;
+  buzzerDurationMs: number;
+  vibrationDurationMs: number;
+}
+
+function normalizeActionDurationMs(value: unknown): number {
+  const raw = Number(value ?? DEFAULT_ACTION_DURATION_MS);
+  return Number.isInteger(raw) && raw >= MIN_ACTION_DURATION_MS && raw <= MAX_ACTION_DURATION_MS ? raw : DEFAULT_ACTION_DURATION_MS;
+}
+
+async function resolvePhysicalAlarmSettings(tagId: string): Promise<PhysicalAlarmSettings> {
+  const result = await db.query<{
+    physical_alarm_followup_delay_ms: number;
+    physical_alarm_buzzer_duration_ms: number;
+    physical_alarm_vibration_duration_ms: number;
+  }>(
+    `SELECT physical_alarm_followup_delay_ms, physical_alarm_buzzer_duration_ms, physical_alarm_vibration_duration_ms FROM tags WHERE id = $1`,
     [tagId]
   );
-  const raw = Number(result.rows[0]?.physical_alarm_followup_delay_ms ?? DEFAULT_FOLLOWUP_DELAY_MS);
-  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_FOLLOWUP_DELAY_MS;
+  const row = result.rows[0];
+  const rawFollowupDelayMs = Number(row?.physical_alarm_followup_delay_ms ?? DEFAULT_FOLLOWUP_DELAY_MS);
+  return {
+    followupDelayMs: Number.isFinite(rawFollowupDelayMs) && rawFollowupDelayMs >= 0 ? rawFollowupDelayMs : DEFAULT_FOLLOWUP_DELAY_MS,
+    buzzerDurationMs: normalizeActionDurationMs(row?.physical_alarm_buzzer_duration_ms),
+    vibrationDurationMs: normalizeActionDurationMs(row?.physical_alarm_vibration_duration_ms)
+  };
 }
 
 export async function connectTagSession(params: { gatewayMac: string; tagUid: string }): Promise<void> {
@@ -97,22 +120,22 @@ export async function sendLedAlert(params: { gatewayMac: string; tagUid: string 
   });
 }
 
-export async function sendBuzzerAlert(params: { gatewayMac: string; tagUid: string }): Promise<void> {
+export async function sendBuzzerAlert(params: { gatewayMac: string; tagUid: string; durationMs: number }): Promise<void> {
   await publishAndWaitAck({
     gatewayMac: params.gatewayMac,
     tagUid: params.tagUid,
     command: 'buzzer',
-    data: { ring_time: 100, ring_interval: 10 },
+    data: { ring_time: params.durationMs, ring_interval: 10 },
     timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
   });
 }
 
-export async function sendVibrationAlert(params: { gatewayMac: string; tagUid: string }): Promise<void> {
+export async function sendVibrationAlert(params: { gatewayMac: string; tagUid: string; durationMs: number }): Promise<void> {
   await publishAndWaitAck({
     gatewayMac: params.gatewayMac,
     tagUid: params.tagUid,
     command: 'vibration',
-    data: { shake_time: 100, shake_interval: 10 },
+    data: { shake_time: params.durationMs, shake_interval: 10 },
     timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
   });
 }
@@ -170,8 +193,8 @@ export async function executeAlarmSequence(params: {
 
   activeTagAlarms.add(target.tagId);
   try {
-    const followupDelayMs = await resolveFollowupDelayMs(target.tagId);
-    logger.info({ alertId: params.alertId, gatewayMac: target.gatewayMac, tagUid: target.tagUid, actions, followupDelayMs }, 'starting physical alarm sequence');
+    const alarmSettings = await resolvePhysicalAlarmSettings(target.tagId);
+    logger.info({ alertId: params.alertId, gatewayMac: target.gatewayMac, tagUid: target.tagUid, actions, ...alarmSettings }, 'starting physical alarm sequence');
 
     await connectTagSession({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
     await markBleSessionActive({ tagId: target.tagId, tagUid: target.tagUid, gatewayMac: target.gatewayMac });
@@ -191,16 +214,16 @@ export async function executeAlarmSequence(params: {
           logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions }, 'led ack');
         }
         if (action === 'buzzer') {
-          await sendBuzzerAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
-          logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions }, 'buzzer ack');
+          await sendBuzzerAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid, durationMs: alarmSettings.buzzerDurationMs });
+          logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions, durationMs: alarmSettings.buzzerDurationMs }, 'buzzer ack');
         }
         if (action === 'vibration') {
-          await sendVibrationAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid });
-          logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions }, 'shaker ack');
+          await sendVibrationAlert({ gatewayMac: target.gatewayMac, tagUid: target.tagUid, durationMs: alarmSettings.vibrationDurationMs });
+          logger.info({ alertId: params.alertId, step: i + 1, total: actions.length, actions, durationMs: alarmSettings.vibrationDurationMs }, 'shaker ack');
         }
 
         if (i < actions.length - 1) {
-          const delayMs = i === 0 ? followupDelayMs : env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS;
+          const delayMs = i === 0 ? alarmSettings.followupDelayMs : env.TAG_ALARM_BETWEEN_ACTION_DELAY_MS;
           if (delayMs > 0) {
             logger.info({ alertId: params.alertId, delayMs, between: `${actions[i]}->${actions[i + 1]}` }, 'waiting before next action');
             await sleep(delayMs);
