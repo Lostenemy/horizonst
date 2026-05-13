@@ -1,0 +1,18 @@
+# Plantilla de correo para horizonst.es - NO contiene secretos.
+# Crear cuentas desde cero y asignar contraseñas por canal seguro fuera de Git.
+
+# Buzones
+notificaciones@horizonst.es:<PASSWORD_HASH_OR_SECRET_OUTSIDE_GIT>
+admin@horizonst.es:<PASSWORD_HASH_OR_SECRET_OUTSIDE_GIT>
+no_reply@horizonst.es:<PASSWORD_HASH_OR_SECRET_OUTSIDE_GIT>
+
+# Alias
+contacto@horizonst.es -> notificaciones@horizonst.es
+soporte@horizonst.es -> notificaciones@horizonst.es
+postmaster@horizonst.es -> notificaciones@horizonst.es
+abuse@horizonst.es -> notificaciones@horizonst.es
+
+# Notas operativas
+# - No migrar maildirs ni correos antiguos.
+# - Rotar contraseñas durante el corte.
+# - Generar DKIM nuevo para horizonst.es y no versionar claves privadas.
