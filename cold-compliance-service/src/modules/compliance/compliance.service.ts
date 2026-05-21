@@ -10,6 +10,11 @@ import {
 } from '../tag-control/application/tag-control.service';
 import { logger } from '../../utils/logger';
 import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
+const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
+export function isValidSessionStart(startedAt: string): boolean {
+  const startedAtMs = Date.parse(startedAt);
+  return Number.isFinite(startedAtMs) && startedAtMs >= MIN_SESSION_START_MS;
+}
 
 interface ActiveSession {
   id: string;
@@ -122,6 +127,10 @@ async function evaluateOperationalAlarmRules(tag: {
 }
 
 async function upsertOpenSession(tag: any, event: ParsedPresenceEvent): Promise<void> {
+  if (!isValidSessionStart(event.timestamp)) {
+    logger.error({ tagId: tag.id, eventId: event.eventId, startedAt: event.timestamp }, 'rejected session creation due to invalid started_at');
+    return;
+  }
   const active = await db.query(
     `SELECT id FROM cold_room_sessions WHERE tag_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
     [tag.id]

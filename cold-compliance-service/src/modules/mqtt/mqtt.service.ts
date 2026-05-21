@@ -8,6 +8,23 @@ type MessageHandler = (topic: string, payload: Buffer) => Promise<void> | void;
 
 let client: MqttClient | null = null;
 const handlers = new Set<MessageHandler>();
+const MIN_ACCEPTED_TS_MS = Date.parse('2025-01-01T00:00:00.000Z');
+
+function parsePayloadTimestampMs(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value > 1e12 ? value : value > 1e9 ? value * 1000 : value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^\d+$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric > 1e9 ? numeric * 1000 : numeric;
+    }
+    const parsed = Date.parse(trimmed);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
+}
 
 export function addMqttMessageHandler(handler: MessageHandler): void {
   handlers.add(handler);
@@ -58,11 +75,23 @@ export function startMqttConsumer(): void {
         let asJson: unknown = null;
         try { asJson = JSON.parse(payload.toString('utf8')); } catch { asJson = null; }
         if (!isGatewayCommandReply(asJson)) {
-          const events = parseGatewayPayload(topic, payload);
+          const receivedAt = new Date();
+          const events = parseGatewayPayload(topic, payload, receivedAt);
           if (!events.length) {
             logger.debug({ topic }, 'mqtt payload without detectable tag identifiers, skipping');
           }
           for (const event of events) {
+            if (event.payloadTimestamp !== null && event.payloadTimestamp !== undefined) {
+              const payloadTsMs = parsePayloadTimestampMs(event.payloadTimestamp);
+              const suspicious = payloadTsMs === null || payloadTsMs < MIN_ACCEPTED_TS_MS || payloadTsMs > (receivedAt.getTime() + 5 * 60 * 1000);
+              logger[suspicious ? 'warn' : 'debug']({
+                topic,
+                gatewayMac: event.gatewayMac,
+                tagId: event.tagId,
+                payloadTimestamp: event.payloadTimestamp,
+                receivedAt: event.timestamp
+              }, 'payload timestamp ignored: server receivedAt is authoritative');
+            }
             await ingestPresenceEvent(event);
           }
         }

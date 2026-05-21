@@ -7,6 +7,7 @@ export interface ParsedPresenceEvent {
   cameraCode?: string;
   eventType: PresenceEventType;
   timestamp: string;
+  payloadTimestamp?: unknown;
   rssi?: number;
   battery?: number;
   rawPayload: Record<string, unknown>;
