@@ -4,6 +4,8 @@ import { requireAuth } from '../../middleware/auth';
 
 export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
+const MIN_VALID_STARTED_AT = '2025-01-01T00:00:00.000Z';
+const MAX_VALID_ELAPSED_SECONDS = 60 * 60 * 24 * 3;
 
 async function loadOperationalSnapshot() {
   const [presence, grace, alerts] = await Promise.all([
@@ -20,7 +22,11 @@ async function loadOperationalSnapshot() {
        LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
        LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
        WHERE s.ended_at IS NULL
+         AND s.started_at >= $1::timestamptz
+         AND EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT BETWEEN 0 AND $2
        ORDER BY s.started_at ASC`
+      ,
+      [MIN_VALID_STARTED_AT, MAX_VALID_ELAPSED_SECONDS]
     ),
     db.query(
       `SELECT pos.tag_id,

@@ -18,36 +18,6 @@ function inferEventType(payload: any): ParsedPresenceEvent['eventType'] {
 }
 
 
-function normalizeTimestamp(value: unknown): string {
-  if (value === null || value === undefined) return new Date().toISOString();
-
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const abs = Math.abs(value);
-    if (abs > 1e12) return new Date(value).toISOString();
-    if (abs > 1e9) return new Date(value * 1000).toISOString();
-    return new Date(value).toISOString();
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return new Date().toISOString();
-
-    if (/^\d+$/.test(trimmed)) {
-      const numeric = Number(trimmed);
-      if (Number.isFinite(numeric)) {
-        const abs = Math.abs(numeric);
-        if (abs > 1e12) return new Date(numeric).toISOString();
-        if (abs > 1e9) return new Date(numeric * 1000).toISOString();
-      }
-    }
-
-    const parsed = Date.parse(trimmed);
-    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
-  }
-
-  return new Date().toISOString();
-}
-
 function normalizeMac(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const v = String(value).trim();
@@ -136,7 +106,7 @@ function pickTagIdentifier(item: any, gatewayMac: string): string | null {
   return null;
 }
 
-export function parseGatewayPayload(topic: string, payloadRaw: Buffer): ParsedPresenceEvent[] {
+export function parseGatewayPayload(topic: string, payloadRaw: Buffer, receivedAt: Date = new Date()): ParsedPresenceEvent[] {
   const [, gatewayMacRaw] = topic.split('/');
   const gatewayMac = normalizeMac(gatewayMacRaw) ?? String(gatewayMacRaw ?? '').toLowerCase();
 
@@ -147,7 +117,8 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer): ParsedPr
   list.forEach((item: any, idx: number) => {
     if (isGatewaySelfDescription(item)) return;
 
-    const timestamp = normalizeTimestamp(item.timestamp ?? item.ts ?? item.created_at);
+    const timestamp = receivedAt.toISOString();
+    const payloadTimestamp = item.timestamp ?? item.ts ?? item.created_at;
     const tagId = pickTagIdentifier(item, gatewayMac);
     if (!tagId) return;
 
@@ -160,6 +131,7 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer): ParsedPr
       cameraCode: item.cameraCode ?? item.zoneId ?? item.zone_id,
       eventType: inferEventType(item),
       timestamp,
+      payloadTimestamp,
       rssi: typeof item.rssi === 'number' ? item.rssi : typeof item?.data?.rssi === 'number' ? item.data.rssi : undefined,
       battery: typeof item.battery === 'number' ? item.battery : typeof item?.data?.battery === 'number' ? item.data.battery : undefined,
       rawPayload: item
