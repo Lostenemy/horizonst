@@ -31,8 +31,10 @@ services:
       - PORT=${APP_PORT:-3000}
       - MQTT_PERSISTENCE_MODE=app
     depends_on:
-      - postgres
-      - vernemq
+      postgres:
+        condition: service_healthy
+      vernemq:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -74,8 +76,10 @@ services:
       - RFID_DB_ADMIN_DB=${RFID_DB_ADMIN_DB:-postgres}
       - RFID_DB_SSL=${RFID_DB_SSL:-0}
     depends_on:
-      - vernemq
-      - postgres
+      postgres:
+        condition: service_healthy
+      vernemq:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -98,8 +102,10 @@ services:
     env_file:
       - ./rfid-demo-dashboard/.env
     depends_on:
-      - postgres
-      - vernemq
+      postgres:
+        condition: service_healthy
+      vernemq:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -152,8 +158,10 @@ services:
       - MAIL_TLS_REJECT_UNAUTHORIZED=${COLD_MAIL_TLS_REJECT_UNAUTHORIZED:-true}
       - APP_BASE_URL=${COLD_APP_BASE_URL:-https://horneo.horizonst.com.es}
     depends_on:
-      - postgres
-      - vernemq
+      postgres:
+        condition: service_healthy
+      vernemq:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -210,8 +218,10 @@ services:
       - GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS=${GATT_INQUIRE_STATUS_EXPECTED_MSG_IDS:-1102,3102}
       - GATT_SSE_TICKET_TTL_MS=${GATT_SSE_TICKET_TTL_MS:-60000}
     depends_on:
-      - vernemq
-      - vernemq_observer
+      vernemq:
+        condition: service_healthy
+      vernemq_observer:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -232,7 +242,8 @@ services:
     build:
       context: ./mqtt-ui
     depends_on:
-      - mqtt_ui_api
+      mqtt_ui_api:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -250,7 +261,8 @@ services:
     environment:
       - OBSERVER_PORT=4040
     depends_on:
-      - vernemq
+      vernemq:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -301,7 +313,8 @@ services:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
