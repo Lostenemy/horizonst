@@ -176,6 +176,7 @@ export const config = {
     port: parsePort(process.env.MQTT_PORT, 1883),
     username: process.env.MQTT_USER,
     password: process.env.MQTT_PASS,
+    clientId: process.env.MQTT_CLIENT_ID,
     clientIdPrefix: process.env.MQTT_CLIENT_PREFIX || 'rfid_access_',
     keepalive: parsePort(process.env.MQTT_KEEPALIVE, 60),
     reconnectPeriod: parsePort(process.env.MQTT_RECONNECT_PERIOD, 1000),
