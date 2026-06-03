@@ -436,7 +436,7 @@ services:
           - mail.horizonst.com.es
 
   webmail:
-    image: roundcube/roundcubemail:1.6.16-apache
+    image: roundcube/roundcubemail:1.7.1-apache
     profiles:
       - mail
     depends_on:
