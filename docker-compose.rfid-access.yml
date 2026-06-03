@@ -9,6 +9,7 @@ services:
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USER=${MQTT_USER:-Horizon@user2024}
       - MQTT_PASS=${MQTT_PASS:-Chanel_horizon@2024}
+      - MQTT_CLIENT_ID=${RFID_MQTT_CLIENT_ID:-rfid-access-service}
       - HTTP_PORT=${HTTP_PORT:-3001}
       - BASE_PATH=${BASE_PATH:-/elecnor}
       - RFID_WEB_ENABLED=${RFID_WEB_ENABLED:-1}

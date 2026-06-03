@@ -504,7 +504,8 @@ const processMessage = async (client: MqttClient, topic: string, payloadBuffer: 
 
 const start = async (): Promise<void> => {
   await dniDirectory.initialize();
-  const clientId = `${config.mqtt.clientIdPrefix}${Math.random().toString(16).slice(2, 10)}`;
+  const clientId =
+    config.mqtt.clientId ?? `${config.mqtt.clientIdPrefix}${Math.random().toString(16).slice(2, 10)}`;
   const url = `mqtt://${config.mqtt.host}:${config.mqtt.port}`;
   const options: IClientOptions = {
     username: config.mqtt.username,
