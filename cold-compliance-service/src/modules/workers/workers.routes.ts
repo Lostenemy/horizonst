@@ -50,7 +50,7 @@ workersRouter.delete('/:id', requireRoles(['administrador', 'superadministrador'
   try {
     const deps = await db.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM worker_tag_assignments WHERE worker_id = $1) AS assignments,
+         (SELECT COUNT(*)::int FROM worker_tag_assignments WHERE worker_id = $1 AND active = true AND unassigned_at IS NULL) AS assignments,
          (SELECT COUNT(*)::int FROM cold_room_sessions WHERE worker_id = $1) AS sessions,
          (SELECT COUNT(*)::int FROM alerts WHERE worker_id = $1) AS alerts,
          (SELECT COUNT(*)::int FROM incidents WHERE worker_id = $1) AS incidents,

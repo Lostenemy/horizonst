@@ -49,6 +49,9 @@ const TAG_MIN_ACTION_DURATION_MS = 100;
 const TAG_MAX_ACTION_DURATION_MS = 60000;
 const TAG_MIN_ACTION_DURATION_SECONDS = TAG_MIN_ACTION_DURATION_MS / 1000;
 const TAG_MAX_ACTION_DURATION_SECONDS = TAG_MAX_ACTION_DURATION_MS / 1000;
+const GATEWAY_DEFAULT_RSSI_THRESHOLD = -127;
+const GATEWAY_MIN_RSSI_THRESHOLD = -127;
+const GATEWAY_MAX_RSSI_THRESHOLD = 0;
 
 function esc(value) {
   return String(value == null ? '' : value)
@@ -98,6 +101,20 @@ function readSecondsFieldAsMs(id, label, minMs, maxMs) {
 
 function validateTagDurationSecondsAsMs(value, label) {
   return validateSecondsAsMs(value, label, TAG_MIN_ACTION_DURATION_MS, TAG_MAX_ACTION_DURATION_MS);
+}
+
+
+function validateGatewayRssiThreshold(value) {
+  const rssi = Number(value);
+  if (value === '' || !Number.isInteger(rssi) || rssi < GATEWAY_MIN_RSSI_THRESHOLD || rssi > GATEWAY_MAX_RSSI_THRESHOLD) {
+    toast(`RSSI mínimo debe ser un entero entre ${GATEWAY_MIN_RSSI_THRESHOLD} y ${GATEWAY_MAX_RSSI_THRESHOLD}.`, 'error');
+    return null;
+  }
+  return rssi;
+}
+
+function readGatewayRssiThresholdField(id) {
+  return validateGatewayRssiThreshold(q(id)?.value);
 }
 
 function apiErrorMessage(error) {
@@ -698,6 +715,7 @@ async function renderInventory() {
         ${roleCan('superadministrador') ? `
           <div class="field"><label>MAC del gateway</label><input id="gwMac" placeholder="AA:BB:CC:DD:EE:FF" /></div>
           <div class="field mt-12"><label>Descripción del gateway</label><input id="gwDesc" placeholder="Ej: Gateway cámara 2" /></div>
+          <div class="field mt-12"><label>RSSI mínimo (-127 a 0)</label><input id="gwRssiThreshold" type="number" min="-127" max="0" step="1" value="-127" /></div>
           <button class="mt-12" onclick="createGateway()">Crear gateway</button>
         ` : '<p>Solo superadministrador puede crear gateways.</p>'}
       </div>
@@ -722,14 +740,16 @@ async function renderInventory() {
       ];
     }))}
     <h3 class="mt-12">Listado de gateways</h3>
-    ${table(['MAC', 'Descripción', 'Acciones'], gateways.map((g) => {
+    ${table(['MAC', 'Descripción', 'RSSI mínimo', 'Acciones'], gateways.map((g) => {
       const editing = inlineEdit.gateways.id === g.id;
-      if (!editing) return [g.gateway_mac, g.description || '', roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
+      const rssiThreshold = g.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD;
+      if (!editing) return [g.gateway_mac, g.description || '', rssiThreshold, roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
       const d = inlineEdit.gateways.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`,
         `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('gateways','descripcion',this.value)"/>`,
-        `<button onclick="saveGatewayInlineEdit('${g.id}')">Guardar</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`
+        `<input type="number" min="-127" max="0" step="1" value="${esc(d.rssiThreshold)}" oninput="updateInlineEdit('gateways','rssiThreshold',this.value)"/>`,
+        `<button onclick="saveGatewayInlineEdit('${g.id}')">Guardar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`
       ];
     }))}
   `;
@@ -744,7 +764,13 @@ async function createTag() {
   toast('Tag creado');
   renderInventory();
 }
-async function createGateway() { await api('/gateways', { method: 'POST', body: JSON.stringify({ mac: q('gwMac').value, descripcion: q('gwDesc').value }) }); toast('Gateway creado'); renderInventory(); }
+async function createGateway() {
+  const rssiThreshold = readGatewayRssiThresholdField('gwRssiThreshold');
+  if (rssiThreshold == null) return;
+  await api('/gateways', { method: 'POST', body: JSON.stringify({ mac: q('gwMac').value, descripcion: q('gwDesc').value, rssiThreshold }) });
+  toast('Gateway creado');
+  renderInventory();
+}
 async function beginTagInlineEdit(id) {
   const tags = await api('/tags');
   const tag = tags.find((t) => t.id === id);
@@ -771,9 +797,37 @@ async function saveTagInlineEdit(id) {
   toast('Tag actualizado');
   renderInventory();
 }
-async function beginGatewayInlineEdit(id) { const gateways = await api('/gateways'); const gateway = gateways.find((g) => g.id === id); if (!gateway) return; startInlineEdit('gateways', id, { mac: gateway.gateway_mac, descripcion: gateway.description || '' }); renderInventory(); }
+async function beginGatewayInlineEdit(id) {
+  const gateways = await api('/gateways');
+  const gateway = gateways.find((g) => g.id === id);
+  if (!gateway) return;
+  startInlineEdit('gateways', id, {
+    mac: gateway.gateway_mac,
+    descripcion: gateway.description || '',
+    rssiThreshold: gateway.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD
+  });
+  renderInventory();
+}
 function cancelGatewayInlineEdit() { cancelInlineEdit('gateways'); renderInventory(); }
-async function saveGatewayInlineEdit(id) { const d = inlineEdit.gateways.draft; await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion }) }); cancelInlineEdit('gateways'); toast('Gateway actualizado'); renderInventory(); }
+async function saveGatewayInlineEdit(id) {
+  const d = inlineEdit.gateways.draft;
+  const rssiThreshold = validateGatewayRssiThreshold(d.rssiThreshold);
+  if (rssiThreshold == null) return;
+  await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion, rssiThreshold }) });
+  cancelInlineEdit('gateways');
+  toast('Gateway actualizado');
+  renderInventory();
+}
+async function applyGatewayRssi(id) {
+  const gateways = await api('/gateways');
+  const gateway = gateways.find((g) => g.id === id);
+  if (!gateway) return;
+  const draft = inlineEdit.gateways.id === id ? inlineEdit.gateways.draft : null;
+  const rssi = validateGatewayRssiThreshold(draft ? draft.rssiThreshold : (gateway.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD));
+  if (rssi == null) return;
+  await api(`/gateways/${id}/apply-rssi`, { method: 'POST', body: JSON.stringify({ rssi }) });
+  toast('Sensibilidad RSSI enviada al gateway');
+}
 async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se puede deshacer.')) return; try { await api(`/tags/${id}`, { method: 'DELETE' }); toast('Tag borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 
