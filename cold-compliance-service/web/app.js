@@ -826,7 +826,7 @@ async function applyGatewayRssi(id) {
   const rssi = validateGatewayRssiThreshold(draft ? draft.rssiThreshold : (gateway.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD));
   if (rssi == null) return;
   await api(`/gateways/${id}/apply-rssi`, { method: 'POST', body: JSON.stringify({ rssi }) });
-  toast('Sensibilidad RSSI enviada al gateway');
+  toast('Comando RSSI enviado. Pendiente de confirmación por el gateway.');
 }
 async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se puede deshacer.')) return; try { await api(`/tags/${id}`, { method: 'DELETE' }); toast('Tag borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }

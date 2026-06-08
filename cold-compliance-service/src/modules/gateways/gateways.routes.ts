@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
+import { logger } from '../../utils/logger';
 import { mqttPublish } from '../mqtt/mqtt.service';
 
 export const gatewaysRouter = Router();
@@ -87,7 +88,14 @@ gatewaysRouter.post('/:id/apply-rssi', requireRoles(['superadministrador']), asy
     const topic = gatewayTopic(gatewayMac);
 
     await mqttPublish(topic, payload);
-    res.status(202).json({ ok: true, topic, payload });
+    logger.info({ gatewayId: req.params.id, gatewayMac, topic, rssi }, 'rssi command published to gateway topic');
+    res.status(202).json({
+      ok: true,
+      status: 'published',
+      message: 'RSSI command published to gateway topic. Gateway acknowledgement is not verified.',
+      topic,
+      payload
+    });
   } catch (error) {
     next(error);
   }
