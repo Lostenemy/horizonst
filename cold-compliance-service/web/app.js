@@ -49,6 +49,9 @@ const TAG_MIN_ACTION_DURATION_MS = 100;
 const TAG_MAX_ACTION_DURATION_MS = 60000;
 const TAG_MIN_ACTION_DURATION_SECONDS = TAG_MIN_ACTION_DURATION_MS / 1000;
 const TAG_MAX_ACTION_DURATION_SECONDS = TAG_MAX_ACTION_DURATION_MS / 1000;
+const GATEWAY_DEFAULT_RSSI_THRESHOLD = -127;
+const GATEWAY_MIN_RSSI_THRESHOLD = -127;
+const GATEWAY_MAX_RSSI_THRESHOLD = 0;
 
 function esc(value) {
   return String(value == null ? '' : value)
@@ -100,12 +103,33 @@ function validateTagDurationSecondsAsMs(value, label) {
   return validateSecondsAsMs(value, label, TAG_MIN_ACTION_DURATION_MS, TAG_MAX_ACTION_DURATION_MS);
 }
 
-function apiErrorMessage(error) {
+
+function validateGatewayRssiThreshold(value) {
+  const rssi = Number(value);
+  if (value === '' || !Number.isInteger(rssi) || rssi < GATEWAY_MIN_RSSI_THRESHOLD || rssi > GATEWAY_MAX_RSSI_THRESHOLD) {
+    toast(`RSSI mínimo debe ser un entero entre ${GATEWAY_MIN_RSSI_THRESHOLD} y ${GATEWAY_MAX_RSSI_THRESHOLD}.`, 'error');
+    return null;
+  }
+  return rssi;
+}
+
+function readGatewayRssiThresholdField(id) {
+  return validateGatewayRssiThreshold(q(id)?.value);
+}
+
+function parseApiErrorPayload(error) {
   const raw = String(error && error.message ? error.message : error || '');
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.message) return parsed.message;
-  } catch {}
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function apiErrorMessage(error) {
+  const raw = String(error && error.message ? error.message : error || '');
+  const parsed = parseApiErrorPayload(error);
+  if (parsed && parsed.message) return parsed.message;
   return raw || 'Error inesperado';
 }
 
@@ -698,6 +722,7 @@ async function renderInventory() {
         ${roleCan('superadministrador') ? `
           <div class="field"><label>MAC del gateway</label><input id="gwMac" placeholder="AA:BB:CC:DD:EE:FF" /></div>
           <div class="field mt-12"><label>Descripción del gateway</label><input id="gwDesc" placeholder="Ej: Gateway cámara 2" /></div>
+          <div class="field mt-12"><label>RSSI mínimo (-127 a 0)</label><input id="gwRssiThreshold" type="number" min="-127" max="0" step="1" value="-127" /></div>
           <button class="mt-12" onclick="createGateway()">Crear gateway</button>
         ` : '<p>Solo superadministrador puede crear gateways.</p>'}
       </div>
@@ -722,14 +747,16 @@ async function renderInventory() {
       ];
     }))}
     <h3 class="mt-12">Listado de gateways</h3>
-    ${table(['MAC', 'Descripción', 'Acciones'], gateways.map((g) => {
+    ${table(['MAC', 'Descripción', 'RSSI mínimo', 'Acciones'], gateways.map((g) => {
       const editing = inlineEdit.gateways.id === g.id;
-      if (!editing) return [g.gateway_mac, g.description || '', roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
+      const rssiThreshold = g.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD;
+      if (!editing) return [g.gateway_mac, g.description || '', rssiThreshold, roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
       const d = inlineEdit.gateways.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`,
         `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('gateways','descripcion',this.value)"/>`,
-        `<button onclick="saveGatewayInlineEdit('${g.id}')">Guardar</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`
+        `<input type="number" min="-127" max="0" step="1" value="${esc(d.rssiThreshold)}" oninput="updateInlineEdit('gateways','rssiThreshold',this.value)"/>`,
+        `<button onclick="saveGatewayInlineEdit('${g.id}')">Guardar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`
       ];
     }))}
   `;
@@ -744,7 +771,13 @@ async function createTag() {
   toast('Tag creado');
   renderInventory();
 }
-async function createGateway() { await api('/gateways', { method: 'POST', body: JSON.stringify({ mac: q('gwMac').value, descripcion: q('gwDesc').value }) }); toast('Gateway creado'); renderInventory(); }
+async function createGateway() {
+  const rssiThreshold = readGatewayRssiThresholdField('gwRssiThreshold');
+  if (rssiThreshold == null) return;
+  await api('/gateways', { method: 'POST', body: JSON.stringify({ mac: q('gwMac').value, descripcion: q('gwDesc').value, rssiThreshold }) });
+  toast('Gateway creado');
+  renderInventory();
+}
 async function beginTagInlineEdit(id) {
   const tags = await api('/tags');
   const tag = tags.find((t) => t.id === id);
@@ -771,9 +804,37 @@ async function saveTagInlineEdit(id) {
   toast('Tag actualizado');
   renderInventory();
 }
-async function beginGatewayInlineEdit(id) { const gateways = await api('/gateways'); const gateway = gateways.find((g) => g.id === id); if (!gateway) return; startInlineEdit('gateways', id, { mac: gateway.gateway_mac, descripcion: gateway.description || '' }); renderInventory(); }
+async function beginGatewayInlineEdit(id) {
+  const gateways = await api('/gateways');
+  const gateway = gateways.find((g) => g.id === id);
+  if (!gateway) return;
+  startInlineEdit('gateways', id, {
+    mac: gateway.gateway_mac,
+    descripcion: gateway.description || '',
+    rssiThreshold: gateway.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD
+  });
+  renderInventory();
+}
 function cancelGatewayInlineEdit() { cancelInlineEdit('gateways'); renderInventory(); }
-async function saveGatewayInlineEdit(id) { const d = inlineEdit.gateways.draft; await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion }) }); cancelInlineEdit('gateways'); toast('Gateway actualizado'); renderInventory(); }
+async function saveGatewayInlineEdit(id) {
+  const d = inlineEdit.gateways.draft;
+  const rssiThreshold = validateGatewayRssiThreshold(d.rssiThreshold);
+  if (rssiThreshold == null) return;
+  await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion, rssiThreshold }) });
+  cancelInlineEdit('gateways');
+  toast('Gateway actualizado');
+  renderInventory();
+}
+async function applyGatewayRssi(id) {
+  const gateways = await api('/gateways');
+  const gateway = gateways.find((g) => g.id === id);
+  if (!gateway) return;
+  const draft = inlineEdit.gateways.id === id ? inlineEdit.gateways.draft : null;
+  const rssi = validateGatewayRssiThreshold(draft ? draft.rssiThreshold : (gateway.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD));
+  if (rssi == null) return;
+  await api(`/gateways/${id}/apply-rssi`, { method: 'POST', body: JSON.stringify({ rssi }) });
+  toast('Comando RSSI enviado. Pendiente de confirmación por el gateway.');
+}
 async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se puede deshacer.')) return; try { await api(`/tags/${id}`, { method: 'DELETE' }); toast('Tag borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 
@@ -781,9 +842,42 @@ function renderTagOptions(tags) {
   return tags.filter((t) => t.active).map((t) => `<option value="${t.id}">${esc((t.model || 'Tag sin descripción'))} (${esc(t.tag_uid)})</option>`).join('');
 }
 function currentWorkerHasTag(workers, workerId) { const w = workers.find((item) => item.id === workerId); return w && w.current_tag_uid; }
+function workerDependencyCounts(worker) {
+  return {
+    sessions: Number(worker.dependency_sessions || 0),
+    alerts: Number(worker.dependency_alerts || 0),
+    incidents: Number(worker.dependency_incidents || 0),
+    accumulators: Number(worker.dependency_accumulators || 0),
+    tagCommands: Number(worker.dependency_tag_commands || 0)
+  };
+}
+function workerHasOperationalHistory(worker) { return Object.values(workerDependencyCounts(worker)).some((count) => count > 0); }
+function workerDependencySummary(worker) {
+  const labels = { sessions: 'sesiones', alerts: 'alertas', incidents: 'incidencias', accumulators: 'acumuladores', tagCommands: 'comandos tag' };
+  return Object.entries(workerDependencyCounts(worker)).filter(([, count]) => count > 0).map(([name, count]) => `${labels[name]} (${count})`).join(', ');
+}
+function renderWorkerActions(worker) {
+  const actions = [`<button onclick="beginWorkerInlineEdit('${worker.id}')">Editar</button>`];
+  if (worker.current_tag_uid) {
+    actions.push(`<button onclick="unassignTag('${worker.id}')">Desasignar</button>`);
+    actions.push('<span class="help">Desasigna el tag antes de borrar o desactivar.</span>');
+    return actions.join(' ');
+  }
+
+  if (workerHasOperationalHistory(worker)) {
+    if (worker.active) actions.push(`<button class="warning" onclick="deactivateWorker('${worker.id}')">Desactivar</button>`);
+    else actions.push('<span class="badge warn">Desactivado</span>');
+    actions.push(`<span class="help" title="${esc(workerDependencySummary(worker))}">Tiene histórico operativo; no se borra físicamente.</span>`);
+    return actions.join(' ');
+  }
+
+  actions.push(`<button class='danger' onclick="deleteWorker('${worker.id}')">Borrar físico</button>`);
+  return actions.join(' ');
+}
 
 async function renderAssignments() {
   const [workers, tags, history] = await Promise.all([api('/workers'), api('/tags'), api('/workers/assignments/history')]);
+  const assignableWorkers = workers.filter((w) => w.active);
   q('assignments').innerHTML = `
     <div class="grid two assignment-steps">
       <div class="card-block assignment-step-card create-worker-card">
@@ -799,17 +893,18 @@ async function renderAssignments() {
         <h3>2) Asignar tag</h3>
         <p class="help">Si el trabajador ya tenía tag, la asignación anterior se cierra automáticamente.</p>
         <div class="grid two">
-          <div class="field"><label>Trabajador</label><select id="asWorker" onchange="showAssignmentWarning()">${workers.map((w) => `<option value="${w.id}">${esc(w.full_name)} (${esc(w.dni)})</option>`).join('')}</select></div>
+          <div class="field"><label>Trabajador</label><select id="asWorker" onchange="showAssignmentWarning()" ${assignableWorkers.length ? '' : 'disabled'}>${assignableWorkers.map((w) => `<option value="${w.id}">${esc(w.full_name)} (${esc(w.dni)})</option>`).join('')}</select></div>
           <div class="field"><label>Tag</label><select id="asTag">${renderTagOptions(tags)}</select></div>
         </div>
         <div id="assignmentWarning" class="help mt-12"></div>
-        <button class="mt-12" onclick="assignTag()">Asignar tag</button>
+        <button class="mt-12" onclick="assignTag()" ${assignableWorkers.length ? '' : 'disabled'}>Asignar tag</button>
       </div>
     </div>
     <h3 class="mt-12">Trabajadores registrados</h3>
+    <p class="help">Los trabajadores con histórico operativo no pueden borrarse físicamente. Puedes desactivarlos para que no sigan en uso sin perder trazabilidad.</p>
     ${table(['Nombre', 'DNI', 'Tag actual', 'Rol', 'Activo', 'Acciones'], workers.map((w) => {
       const editing = inlineEdit.workers.id === w.id;
-      if (!editing) return [w.full_name, w.dni, w.current_tag_uid || '-', roleLabel(w.role), w.active ? 'Sí' : 'No', `<button onclick="beginWorkerInlineEdit('${w.id}')">Editar</button> ${w.current_tag_uid ? `<button onclick="unassignTag('${w.id}')">Desasignar</button>` : ''} <button class='danger' onclick="deleteWorker('${w.id}')">Borrar</button>`];
+      if (!editing) return [w.full_name, w.dni, w.current_tag_uid || '-', roleLabel(w.role), w.active ? 'Sí' : 'No', renderWorkerActions(w)];
       const d = inlineEdit.workers.draft;
       return [
         `<input value="${esc(d.fullName)}" oninput="updateInlineEdit('workers','fullName',this.value)"/>`,
@@ -823,25 +918,58 @@ async function renderAssignments() {
     <h3 class="mt-12">Histórico de asignaciones</h3>
     ${table(['Trabajador', 'Tag', 'Inicio', 'Fin'], history.map((h) => [h.worker_name, h.tag_mac, formatDateTimeMadrid(h.assigned_at), h.unassigned_at ? formatDateTimeMadrid(h.unassigned_at) : '-']))}
   `;
-  showAssignmentWarning(workers);
+  showAssignmentWarning(assignableWorkers);
 }
 
 function showAssignmentWarning(workers) {
   const allWorkers = workers || [];
   const workerId = q('asWorker')?.value;
   const warningEl = q('assignmentWarning');
-  if (!warningEl || !workerId) return;
+  if (!warningEl) return;
+  if (!workerId) {
+    warningEl.innerHTML = '<span class="badge warn assignment-warning">No hay trabajadores activos disponibles para asignación.</span>';
+    return;
+  }
   const assigned = currentWorkerHasTag(allWorkers, workerId);
-  warningEl.innerHTML = assigned ? `<span class="badge warn assignment-warning">Atención: este trabajador ya tiene tag (${esc(assigned)}). Se reasignará automáticamente.</span>` : '<span class="badge ok assignment-warning">Trabajador sin tag asignado actualmente.</span>';
+  warningEl.innerHTML = assigned ? `<span class="badge warn assignment-warning">Atención: este trabajador ya tiene tag (${esc(assigned)}). Se reasignará automáticamente.</span>` : '<span class="badge ok assignment-warning">Trabajador activo sin tag asignado actualmente.</span>';
 }
 
 async function createWorker() { await api('/workers', { method: 'POST', body: JSON.stringify({ dni: q('wDni').value, fullName: q('wName').value, role: 'trabajador' }) }); toast('Trabajador creado'); renderAssignments(); }
-async function assignTag() { await api(`/workers/${q('asWorker').value}/assign-tag`, { method: 'POST', body: JSON.stringify({ tagId: q('asTag').value }) }); toast('Tag asignado'); renderAssignments(); }
+async function assignTag() {
+  const workerId = q('asWorker')?.value;
+  if (!workerId) return toast('No hay trabajadores activos disponibles para asignación.', 'error');
+  await api(`/workers/${workerId}/assign-tag`, { method: 'POST', body: JSON.stringify({ tagId: q('asTag').value }) });
+  toast('Tag asignado');
+  renderAssignments();
+}
 async function beginWorkerInlineEdit(id) { const workers = await api('/workers'); const worker = workers.find((w) => w.id === id); if (!worker) return; startInlineEdit('workers', id, { fullName: worker.full_name, role: worker.role || 'trabajador', active: !!worker.active }); renderAssignments(); }
 function cancelWorkerInlineEdit() { cancelInlineEdit('workers'); renderAssignments(); }
 async function saveWorkerInlineEdit(id) { const d = inlineEdit.workers.draft; await api(`/workers/${id}`, { method: 'PATCH', body: JSON.stringify({ fullName: d.fullName, role: d.role, active: d.active }) }); cancelInlineEdit('workers'); toast('Trabajador actualizado'); renderAssignments(); }
 async function unassignTag(workerId) { if (!confirm('¿Desasignar tag activo del trabajador?')) return; try { await api(`/workers/${workerId}/unassign-tag`, { method: 'POST' }); toast('Tag desasignado'); renderAssignments(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
-async function deleteWorker(id) { if (!confirm('¿Borrar trabajador?')) return; try { await api(`/workers/${id}`, { method: 'DELETE' }); toast('Trabajador borrado'); renderAssignments(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
+async function deactivateWorker(id, skipConfirm = false) {
+  if (!skipConfirm && !confirm('Este trabajador tiene histórico operativo y no puede borrarse físicamente. Puedes desactivarlo para que no siga en uso. ¿Desactivar trabajador?')) return;
+  try {
+    await api(`/workers/${id}/deactivate`, { method: 'POST' });
+    toast('Trabajador desactivado. El histórico operativo se conserva.');
+    renderAssignments();
+  } catch (error) { toast(apiErrorMessage(error), 'error'); }
+}
+async function deleteWorker(id) {
+  if (!confirm('¿Borrar físicamente trabajador? Esta acción solo es posible si no tiene histórico ni dependencias.')) return;
+  try {
+    await api(`/workers/${id}`, { method: 'DELETE' });
+    toast('Trabajador borrado');
+    renderAssignments();
+  } catch (error) {
+    const parsed = parseApiErrorPayload(error);
+    const activeAssignment = parsed?.dependencies?.some((d) => d.relation === 'assignments' && Number(d.count) > 0);
+    if (parsed?.error === 'dependency_conflict' && !activeAssignment && confirm('Este trabajador tiene histórico operativo y no puede borrarse físicamente. Puedes desactivarlo para que no siga en uso. ¿Desactivar trabajador ahora?')) {
+      await deactivateWorker(id, true);
+      return;
+    }
+    toast(apiErrorMessage(error), 'error');
+  }
+}
 
 async function archiveAlert(id) {
   if (!confirm('¿Archivar alarma seleccionada?')) return;

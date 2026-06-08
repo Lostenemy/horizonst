@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS gateways (
   cold_room_id UUID REFERENCES cold_rooms(id),
   plant_id UUID REFERENCES plants(id),
   description TEXT,
+  rssi_threshold INT NOT NULL DEFAULT -127 CHECK (rssi_threshold BETWEEN -127 AND 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
