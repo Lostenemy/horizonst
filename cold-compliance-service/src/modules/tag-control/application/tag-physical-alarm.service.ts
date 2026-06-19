@@ -64,6 +64,10 @@ interface PhysicalAlarmSettings {
   vibrationDurationMs: number;
 }
 
+export function durationMsToGatewaySeconds(durationMs: number): number {
+  return Math.max(1, Math.ceil(durationMs / 1000));
+}
+
 function normalizeActionDurationMs(value: unknown): number {
   const raw = Number(value ?? DEFAULT_ACTION_DURATION_MS);
   return Number.isInteger(raw) && raw >= MIN_ACTION_DURATION_MS && raw <= MAX_ACTION_DURATION_MS ? raw : DEFAULT_ACTION_DURATION_MS;
@@ -125,7 +129,7 @@ export async function sendBuzzerAlert(params: { gatewayMac: string; tagUid: stri
     gatewayMac: params.gatewayMac,
     tagUid: params.tagUid,
     command: 'buzzer',
-    data: { ring_time: params.durationMs, ring_interval: 10 },
+    data: { ring_time: durationMsToGatewaySeconds(params.durationMs), ring_interval: 10 },
     timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
   });
 }
@@ -135,7 +139,7 @@ export async function sendVibrationAlert(params: { gatewayMac: string; tagUid: s
     gatewayMac: params.gatewayMac,
     tagUid: params.tagUid,
     command: 'vibration',
-    data: { shake_time: params.durationMs, shake_interval: 10 },
+    data: { shake_time: durationMsToGatewaySeconds(params.durationMs), shake_interval: 10 },
     timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
   });
 }
