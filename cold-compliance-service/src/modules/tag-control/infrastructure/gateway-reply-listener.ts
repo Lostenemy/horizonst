@@ -17,7 +17,28 @@ export interface GatewayAck {
   msgId: number;
   resultCode: number;
   resultMsg?: string;
+  tagMac?: string;
   payload: Record<string, unknown>;
+}
+
+type NormalizedGatewayAck = Omit<GatewayAck, 'topic' | 'gatewayMac'>;
+
+export function normalizeGatewayAckPayload(payload: any): NormalizedGatewayAck | null {
+  const msgId = payload?.msg_id;
+  const resultCode = payload?.result_code ?? payload?.data?.result_code;
+
+  if (typeof msgId !== 'number' || typeof resultCode !== 'number') return null;
+
+  const resultMsg = payload?.result_msg ?? payload?.data?.result_msg ?? resultMap[resultCode];
+  const tagMac = typeof payload?.data?.mac === 'string' ? payload.data.mac : undefined;
+
+  return {
+    msgId,
+    resultCode,
+    resultMsg,
+    tagMac,
+    payload
+  };
 }
 
 type PendingWaiter = {
@@ -108,37 +129,53 @@ export function startGatewayReplyListener(): void {
       return;
     }
 
-    if (typeof payload?.msg_id !== 'number' || typeof payload?.result_code !== 'number') return;
+    const normalized = normalizeGatewayAckPayload(payload);
+    if (!normalized) {
+      logger.debug({
+        topic,
+        payload,
+        reason: typeof payload?.msg_id !== 'number' ? 'missing_or_invalid_msg_id' : 'missing_or_invalid_result_code'
+      }, 'discarded gateway publish payload without ACK fields');
+      return;
+    }
 
     const gatewayMacFromTopic = topic.split('/')[1]?.toLowerCase();
     const gatewayMac = String(payload?.device_info?.mac ?? gatewayMacFromTopic ?? '').toLowerCase();
-    if (!gatewayMac) return;
+    if (!gatewayMac) {
+      logger.debug({ topic, payload, reason: 'missing_gateway_mac' }, 'discarded gateway publish payload without gateway mac');
+      return;
+    }
 
     const ack: GatewayAck = {
       topic,
       gatewayMac,
-      msgId: payload.msg_id,
-      resultCode: payload.result_code,
-      resultMsg: payload.result_msg ?? resultMap[payload.result_code],
-      payload
+      ...normalized
     };
+
+    logger.info({
+      gatewayMac,
+      msgId: ack.msgId,
+      resultCode: ack.resultCode,
+      resultMsg: ack.resultMsg,
+      tagMac: ack.tagMac
+    }, 'gateway ACK received');
 
     emitAckToWaiters(ack);
 
-    const cmd = await findOpenCommandByGatewayAndMsgId(gatewayMac, payload.msg_id);
+    const cmd = await findOpenCommandByGatewayAndMsgId(gatewayMac, ack.msgId);
     if (!cmd) return;
 
     await appendResponse({
       tagCommandId: cmd.id,
       gatewayMac,
-      msgId: payload.msg_id,
-      resultCode: payload.result_code,
-      resultMsg: payload.result_msg ?? resultMap[payload.result_code],
-      payload
+      msgId: ack.msgId,
+      resultCode: ack.resultCode,
+      resultMsg: ack.resultMsg,
+      payload: ack.payload
     });
 
-    const ok = payload.result_code === 0;
-    await updateCommandStatus(cmd.id, ok ? 'ack_ok' : 'ack_error', { completed: true, lastError: ok ? undefined : (payload.result_msg ?? resultMap[payload.result_code]) });
+    const ok = ack.resultCode === 0;
+    await updateCommandStatus(cmd.id, ok ? 'ack_ok' : 'ack_error', { completed: true, lastError: ok ? undefined : ack.resultMsg });
     await appendAuditLog({
       actorType: 'system',
       action: ok ? 'tag_command_ack_ok' : 'tag_command_ack_error',
@@ -146,9 +183,10 @@ export function startGatewayReplyListener(): void {
       entityId: cmd.id,
       payload: {
         gatewayMac,
-        msgId: payload.msg_id,
-        resultCode: payload.result_code,
-        resultMsg: payload.result_msg ?? resultMap[payload.result_code]
+        msgId: ack.msgId,
+        resultCode: ack.resultCode,
+        resultMsg: ack.resultMsg,
+        tagMac: ack.tagMac
       }
     });
   });
