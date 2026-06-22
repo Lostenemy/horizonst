@@ -161,3 +161,27 @@ curl -X POST http://127.0.0.1:4020/api/auth/login -H 'Content-Type: application/
 ACCESS_TOKEN=...; curl http://127.0.0.1:4020/api/auth/me -H "Authorization: Bearer $ACCESS_TOKEN"
 REFRESH_TOKEN=...; curl -X POST http://127.0.0.1:4020/api/auth/logout -H 'Content-Type: application/json' -d "{\"refreshToken\":\"$REFRESH_TOKEN\"}"
 ```
+
+## Portal de distribuidores
+
+La fase 3 añade `POST /api/auth/register-distributor` para solicitar alta como distribuidor, además de APIs protegidas para distribuidores y administración. Las rutas de distribuidor requieren JWT con `role = distributor`; las rutas administrativas requieren `role = admin`.
+
+### Área privada de distribuidor
+
+- `GET /api/distributor/profile`: devuelve usuario, perfil de distribuidor, estado de validación y fechas relevantes.
+- `PATCH /api/distributor/profile`: actualiza únicamente datos fiscales y de contacto permitidos (`company_name`, `tax_id`, `billing_address`, `city`, `province`, `postal_code`, `country`, `website`, `contact_person`). No acepta cambios directos de `validation_status`, `approved_at` ni `approved_by`.
+- `POST /api/distributor/documents`: recibe `multipart/form-data` con `documentType` y `file`. Solo admite PDFs, valida tamaño con `store.settings.document_max_size_bytes`, genera nombres seguros, reemplaza documentos anteriores del mismo tipo y devuelve el perfil a `pending` limpiando aprobaciones previas.
+- `GET /api/distributor/documents`: lista documentos del distribuidor con `id`, `document_type`, `status` y `created_at`.
+
+Tipos documentales permitidos: `certificado_censal`, `modelo_036`, `modelo_037`, `cif_empresa`, `certificado_autonomo`, `escrituras` y `otro`.
+
+### API administrativa mínima
+
+- `GET /api/admin/distributors`: lista distribuidores con filtros opcionales `validation_status`, `email` y `company_name`.
+- `GET /api/admin/distributors/:id`: devuelve usuario, perfil y documentos asociados.
+- `PATCH /api/admin/distributors/:id/status`: cambia el estado a `pending`, `needs_more_info`, `approved`, `rejected`, `suspended` o `closed`; al aprobar completa `approved_at` y `approved_by`.
+- `GET /api/admin/distributor-documents/:id`: consulta el detalle administrativo de un documento.
+- `PATCH /api/admin/distributor-documents/:id/status`: revisa documentos con estados `pending`, `approved`, `rejected` o `replaced`; `rejected` requiere `review_notes`.
+- `GET /api/admin/distributor-documents/:id/download`: descarga segura de PDFs para administradores sin revelar rutas físicas.
+
+Las acciones principales del portal (`distributor_profile_updated`, `distributor_document_uploaded`, `distributor_validation_status_changed` y `distributor_document_approved`, `distributor_document_rejected`, `distributor_document_replaced`, `admin_distributor_document_downloaded`) quedan registradas en `store.audit_log`.

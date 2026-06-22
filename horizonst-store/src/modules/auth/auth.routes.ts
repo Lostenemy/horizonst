@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth } from './middleware.js';
+import { writeAuditLog } from '../shared/audit.js';
 import { createOpaqueToken, emailVerificationSeconds, expiresAtSql, hashToken, passwordResetSeconds, refreshTokenSeconds, signAccessToken } from './token.js';
 
 const scrypt = promisify(scryptCallback);
@@ -54,6 +55,39 @@ authRouter.post('/register', async (req, res, next) => {
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 
+
+const registerDistributorSchema = registerSchema.extend({
+  company_name: z.string().min(1).max(200),
+  tax_id: z.string().min(1).max(80),
+  billing_address: z.string().max(500).optional(),
+  city: z.string().max(120).optional(),
+  province: z.string().max(120).optional(),
+  postal_code: z.string().max(30).optional(),
+  country: z.string().max(2).optional(),
+  website: z.string().url().max(300).optional(),
+  contact_person: z.string().max(200).optional()
+});
+
+authRouter.post('/register-distributor', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const input = registerDistributorSchema.parse(req.body);
+    const passwordHash = await hashPassword(input.password);
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `INSERT INTO store.users (email, password_hash, full_name, phone, role, status) VALUES ($1, $2, $3, $4, 'distributor', 'pending_email_verification') RETURNING ${safeUserFields}`,
+      [input.email.toLowerCase(), passwordHash, input.fullName, input.phone ?? null]
+    );
+    const profile = await client.query(`INSERT INTO store.distributor_profiles (user_id, company_name, tax_id, billing_address, city, province, postal_code, country, website, contact_person, validation_status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'ES'),$9,$10,'pending') RETURNING id`,
+      [rows[0].id, input.company_name, input.tax_id, input.billing_address ?? null, input.city ?? null, input.province ?? null, input.postal_code ?? null, input.country ?? null, input.website ?? null, input.contact_person ?? null]);
+    await writeAuditLog({ actorUserId: rows[0].id, action: 'distributor_application_created', entityType: 'distributor_profile', entityId: profile.rows[0].id }, client);
+    const verificationToken = createOpaqueToken();
+    await client.query('INSERT INTO store.email_verification_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [rows[0].id, hashToken(verificationToken), expiresAtSql(emailVerificationSeconds()), req.header('user-agent') ?? null, req.ip]);
+    await client.query('COMMIT');
+    res.status(201).json({ user: rows[0], message: 'Distributor account created pending email verification and validation.', verificationToken: process.env.NODE_ENV === 'production' ? undefined : verificationToken });
+  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
+});
 
 
 authRouter.post('/verify-email', async (req, res, next) => {
