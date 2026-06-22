@@ -1,9 +1,4 @@
-import { cp, mkdir } from 'node:fs/promises';
-import path from 'node:path';
+import { spawn } from 'node:child_process';
 
-const outDir = path.resolve('web/dist');
-await mkdir(outDir, { recursive: true });
-await cp('web/index.html', path.join(outDir, 'index.html'));
-await cp('web/src/styles.css', path.join(outDir, 'styles.css'));
-await cp('web/src/app.js', path.join(outDir, 'app.js'));
-console.log('Built web assets into web/dist');
+const child = spawn('npm', ['--prefix', 'web', 'run', 'build'], { stdio: 'inherit', shell: process.platform === 'win32' });
+child.on('exit', (code) => process.exit(code ?? 1));
