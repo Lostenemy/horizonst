@@ -11,6 +11,8 @@ import { healthRouter } from './modules/health/health.routes.js';
 import { customerRouter } from './modules/customer/customer.routes.js';
 import { distributorRouter } from './modules/distributor/distributor.routes.js';
 import { adminDistributorsRouter } from './modules/admin/distributors.routes.js';
+import { adminQuotesRouter } from './modules/admin/quotes.routes.js';
+import { cartRouter } from './modules/cart/cart.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
@@ -26,7 +28,9 @@ app.use('/api/catalog', catalogRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/customer', customerRouter);
 app.use('/api/distributor', distributorRouter);
+app.use('/api/cart', cartRouter);
 app.use('/api/admin', adminDistributorsRouter);
+app.use('/api/admin', adminQuotesRouter);
 app.use(express.static(webDist));
 app.get('*', (_req, res) => res.sendFile(path.join(webDist, 'index.html')));
 
