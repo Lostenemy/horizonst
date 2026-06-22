@@ -271,6 +271,11 @@ services:
       - DB_NAME=${DB_NAME:-horizonst}
       - STORE_DOCUMENTS_PATH=/opt/horizonst/store-data/documents
       - STORE_CORS_ORIGIN=${STORE_CORS_ORIGIN:-http://127.0.0.1:4020}
+      - STORE_JWT_SECRET=${STORE_JWT_SECRET}
+      - STORE_ACCESS_TOKEN_TTL=${STORE_ACCESS_TOKEN_TTL:-15m}
+      - STORE_REFRESH_TOKEN_TTL=${STORE_REFRESH_TOKEN_TTL:-30d}
+      - STORE_PASSWORD_RESET_TTL=${STORE_PASSWORD_RESET_TTL:-1h}
+      - STORE_EMAIL_VERIFICATION_TTL=${STORE_EMAIL_VERIFICATION_TTL:-24h}
     volumes:
       - /opt/horizonst/store-data/documents:/opt/horizonst/store-data/documents
     depends_on:
