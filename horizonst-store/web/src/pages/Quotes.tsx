@@ -1,1 +1,11 @@
-export default function Quotes(){return <section className="panel"><h1>Mis presupuestos</h1><p>El listado de presupuestos de cliente/distribuidor estará disponible en la Fase 5B. Esta pantalla no usa endpoints de administración.</p></section>}
+export default function Quotes() {
+  return (
+    <section className="panel">
+      <h1>Mis presupuestos</h1>
+      <p>
+        El listado de presupuestos de cliente/distribuidor estará disponible en la Fase 5B.
+        Esta pantalla no usa endpoints de administración.
+      </p>
+    </section>
+  );
+}

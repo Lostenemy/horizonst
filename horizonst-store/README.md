@@ -287,8 +287,8 @@ Admin:
 ### Decisiones técnicas
 
 - Tokens encapsulados en `web/src/lib/auth.ts` para poder migrar a cookies `httpOnly` sin repartir acceso directo a `localStorage` por la aplicación.
-- Cliente API centralizado en `web/src/lib/api.ts` con cabecera `Authorization: Bearer` automática.
-- Guards `ProtectedRoute` y `RoleRoute` para separar rutas autenticadas y rutas por rol (`customer`, `distributor`, `admin`).
+- Cliente API centralizado en `web/src/lib/api.ts` con cabecera `Authorization: Bearer` automática, refresh token en `401`, reintento único de la petición original y limpieza de sesión si el refresh falla.
+- `AuthProvider` realiza bootstrap con `GET /api/auth/me` al arrancar si hay access token, expone `loading`, `authenticated` y `user`, y permite que `ProtectedRoute` y `RoleRoute` esperen antes de decidir redirecciones.
 - CSS propio en `web/src/styles.css`, sin Tailwind ni frameworks de UI pesados.
 
 ### Limitaciones conocidas y Fase 5B

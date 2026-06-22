@@ -1,2 +1,53 @@
-import { useEffect,useState } from 'react';import { api,patchJson } from '../lib/api';import { money } from '../lib/money';
-export default function Cart(){const[cart,setCart]=useState<any>({items:[],quote:{}});const[msg,setMsg]=useState('');const load=()=>api<any>('/api/cart').then(setCart);useEffect(()=>{load()},[]);async function qty(id:string,quantity:number){setCart(await patchJson(`/api/cart/items/${id}`,{quantity}))}async function del(id:string){setCart(await api(`/api/cart/items/${id}`,{method:'DELETE'}))}async function submit(){setCart(await api('/api/cart/submit',{method:'POST'}));setMsg('Solicitud de presupuesto enviada')}return <section className="panel"><h1>Carrito</h1>{cart.items?.map((i:any)=><div className="line" key={i.id}><span>{i.description}</span><input type="number" min="1" value={i.quantity} onChange={e=>qty(i.id,Number(e.target.value))}/><b>{money(i.line_total_cents)}</b><button onClick={()=>del(i.id)}>Eliminar</button></div>)}<h2>Total: {money(cart.quote?.total_cents)}</h2><button disabled={!cart.items?.length} onClick={submit}>Enviar solicitud de presupuesto</button>{msg&&<p className="success">{msg}</p>}</section>}
+import { ChangeEvent, useEffect, useState } from 'react';
+import { api, patchJson } from '../lib/api';
+import { money } from '../lib/money';
+import type { Cart as CartModel } from '../lib/types';
+
+export default function Cart() {
+  const [cart, setCart] = useState<CartModel | null>(null);
+  const [message, setMessage] = useState('');
+
+  const load = () => api<CartModel>('/api/cart').then(setCart);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function updateQuantity(id: string, event: ChangeEvent<HTMLInputElement>) {
+    const quantity = Number(event.target.value);
+    if (quantity > 0) setCart(await patchJson<CartModel>(`/api/cart/items/${id}`, { quantity }));
+  }
+
+  async function removeItem(id: string) {
+    setCart(await api<CartModel>(`/api/cart/items/${id}`, { method: 'DELETE' }));
+  }
+
+  async function submitQuote() {
+    setCart(await api<CartModel>('/api/cart/submit', { method: 'POST' }));
+    setMessage('Solicitud de presupuesto enviada');
+  }
+
+  return (
+    <section className="panel">
+      <h1>Carrito</h1>
+      {cart?.items.map((item) => (
+        <div className="line" key={item.id}>
+          <span>{item.description}</span>
+          <input
+            type="number"
+            min="1"
+            value={item.quantity}
+            onChange={(event) => updateQuantity(item.id, event)}
+          />
+          <b>{money(item.line_total_cents)}</b>
+          <button type="button" onClick={() => removeItem(item.id)}>Eliminar</button>
+        </div>
+      ))}
+      <h2>Total: {money(cart?.quote.total_cents)}</h2>
+      <button type="button" disabled={!cart?.items.length} onClick={submitQuote}>
+        Enviar solicitud de presupuesto
+      </button>
+      {message && <p className="success">{message}</p>}
+    </section>
+  );
+}

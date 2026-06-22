@@ -1,3 +1,13 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { Role, auth } from '../lib/auth';
-export default function RoleRoute({ roles }: { roles: Role[] }) { const role = auth.user?.role; return role && roles.includes(role) ? <Outlet /> : <Navigate to="/dashboard" replace />; }
+import type { Role } from '../lib/types';
+import { useAuth } from './AuthProvider';
+import Loading from './Loading';
+
+export default function RoleRoute({ roles }: { roles: Role[] }) {
+  const { loading, user } = useAuth();
+
+  if (loading) return <Loading />;
+  if (!user || !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
+
+  return <Outlet />;
+}
