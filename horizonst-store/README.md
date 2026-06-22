@@ -42,10 +42,11 @@ docker compose up -d horizonst_store
 
 ## Migraciones
 
-Las migraciones viven en `migrations/` y se aplican con:
+Las migraciones viven en `migrations/`. El script de migración usa el JavaScript compilado en `dist/db/migrate.js`, por lo que primero debe ejecutarse el build:
 
 ```bash
 cd horizonst-store
+npm run build
 npm run migrate
 ```
 

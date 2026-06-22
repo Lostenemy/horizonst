@@ -9,7 +9,7 @@
     "build": "npm run build:web && tsc -p tsconfig.build.json",
     "build:web": "node scripts/build-web.mjs",
     "start": "node dist/server.js",
-    "migrate": "tsx src/db/migrate.ts"
+    "migrate": "node dist/db/migrate.js"
   },
   "dependencies": {
     "cors": "2.8.5",
