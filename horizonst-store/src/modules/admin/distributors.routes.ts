@@ -13,6 +13,8 @@ const statusValues = ['pending', 'needs_more_info', 'approved', 'rejected', 'sus
 const documentStatusValues = ['pending', 'approved', 'rejected', 'replaced'] as const;
 const idSchema = z.string().uuid();
 
+export const hasBlockingActiveDistributorDocuments = (summary: { blocking_documents?: number | string | null }): boolean => Number(summary.blocking_documents ?? 0) > 0;
+
 adminDistributorsRouter.get('/distributors', async (req, res, next) => {
   try {
     const query = z.object({ validation_status: z.enum(statusValues).optional(), email: z.string().optional(), company_name: z.string().optional() }).parse(req.query);
@@ -53,14 +55,14 @@ adminDistributorsRouter.patch('/distributors/:id/status', async (req, res, next)
       const docs = await client.query(`SELECT
         COUNT(*)::int AS total_documents,
         COUNT(*) FILTER (WHERE status <> 'replaced')::int AS active_documents,
-        COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_documents
+        COUNT(*) FILTER (WHERE status <> 'replaced' AND status <> 'approved')::int AS blocking_documents
         FROM store.distributor_documents WHERE distributor_profile_id = $1`, [id]);
       const summary = docs.rows[0];
       if (!summary || summary.total_documents < 1 || summary.active_documents < 1) {
         await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot approve distributor without non-replaced documentation' }); return;
       }
-      if (summary.pending_documents > 0) {
-        await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot approve distributor while documents are pending review' }); return;
+      if (hasBlockingActiveDistributorDocuments(summary)) {
+        await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot approve distributor while active documents are not approved' }); return;
       }
     }
     const { rows } = await client.query(`UPDATE store.distributor_profiles SET validation_status = $2, review_notes = COALESCE($3, review_notes),
