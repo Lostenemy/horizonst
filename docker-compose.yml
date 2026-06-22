@@ -258,6 +258,40 @@ services:
     networks:
       - horizonst
 
+  horizonst_store:
+    build:
+      context: ./horizonst-store
+    environment:
+      - NODE_ENV=production
+      - PORT=${STORE_PORT:-4020}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-horizonst}
+      - STORE_DOCUMENTS_PATH=/opt/horizonst/store-data/documents
+      - STORE_CORS_ORIGIN=${STORE_CORS_ORIGIN:-http://127.0.0.1:4020}
+    volumes:
+      - /opt/horizonst/store-data/documents:/opt/horizonst/store-data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${STORE_PORT:-4020}/health || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+    ports:
+      - "127.0.0.1:${STORE_PORT:-4020}:${STORE_PORT:-4020}"
+    networks:
+      - horizonst
+
   postgres:
     image: postgres:15-alpine
     env_file:

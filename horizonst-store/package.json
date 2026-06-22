@@ -1,0 +1,26 @@
+{
+  "name": "horizonst-store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build:web && tsc -p tsconfig.build.json",
+    "build:web": "node scripts/build-web.mjs",
+    "start": "node dist/server.js",
+    "migrate": "node dist/db/migrate.js"
+  },
+  "dependencies": {
+    "cors": "2.8.5",
+    "dotenv": "16.6.1",
+    "express": "4.22.2",
+    "helmet": "7.2.0",
+    "pg": "8.16.3",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

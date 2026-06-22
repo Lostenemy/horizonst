@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","compilerOptions":{"outDir":"dist","rootDir":"src","noEmit":false,"sourceMap":true},"exclude":["web","node_modules"]}
