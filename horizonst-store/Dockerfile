@@ -1,7 +1,9 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
+COPY web/package*.json ./web/
 RUN npm ci
+RUN npm ci --prefix web
 
 FROM deps AS build
 COPY tsconfig*.json ./
