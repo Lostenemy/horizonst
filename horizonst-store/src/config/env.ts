@@ -19,5 +19,11 @@ export const env = {
     database: process.env.DB_NAME ?? 'horizonst'
   },
   documentsPath: process.env.STORE_DOCUMENTS_PATH ?? '/opt/horizonst/store-data/documents',
-  corsOrigin: process.env.STORE_CORS_ORIGIN ?? 'http://127.0.0.1:4020'
+  corsOrigin: process.env.STORE_CORS_ORIGIN ?? 'http://127.0.0.1:4020',
+  auth: {
+    jwtSecret: process.env.STORE_JWT_SECRET ?? 'dev-only-change-me',
+    accessTokenTtl: process.env.STORE_ACCESS_TOKEN_TTL ?? '15m',
+    refreshTokenTtl: process.env.STORE_REFRESH_TOKEN_TTL ?? '30d',
+    passwordResetTtl: process.env.STORE_PASSWORD_RESET_TTL ?? '1h'
+  }
 };

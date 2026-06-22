@@ -8,6 +8,7 @@ import { env } from './config/env.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
+import { customerRouter } from './modules/customer/customer.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
@@ -21,6 +22,7 @@ app.use('/health', healthRouter);
 app.use('/api/health', healthRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/customer', customerRouter);
 app.use(express.static(webDist));
 app.get('*', (_req, res) => res.sendFile(path.join(webDist, 'index.html')));
 
