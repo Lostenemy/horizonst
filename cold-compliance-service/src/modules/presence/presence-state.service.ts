@@ -1,7 +1,6 @@
 import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
-import { sendCriticalExposureAlert } from '../tag-control/application/tag-control.service';
 import { triggerPhysicalAlarmSequence } from '../alerts/alerts.service';
 
 interface PresenceStateTag {
@@ -88,12 +87,14 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
       [tag.id, tag.worker_id, tag.cold_room_id, eventTs]
     );
 
-    await sendCriticalExposureAlert({
+    await triggerPhysicalAlarmSequence({
+      alertId: `grace-reentry:${tag.id}:${Date.parse(eventTs) || Date.now()}`,
       workerId: tag.worker_id ?? undefined,
       tagId: tag.id,
-      reason: 'Reentrada durante ventana de gracia'
+      severity: 'critical',
+      alertType: 'alarm_rule_alarm'
     }).catch((error) => {
-      logger.warn({ error, tagId: tag.id }, 'failed to send immediate physical alert for grace reentry');
+      logger.warn({ error, tagId: tag.id }, 'failed to run immediate physical alarm for grace reentry');
     });
 
     return { isGraceReentry: true };
@@ -203,14 +204,6 @@ export async function sendGraceReentryReminders(): Promise<void> {
   );
 
   for (const row of due.rows) {
-    await sendCriticalExposureAlert({
-      workerId: row.worker_id ?? undefined,
-      tagId: row.tag_id,
-      reason: 'Recordatorio de reentrada en alarma'
-    }).catch((error) => {
-      logger.warn({ error, tagId: row.tag_id }, 'failed to send reminder for alarm reentry');
-    });
-
     await triggerPhysicalAlarmSequence({
       alertId: `reentry-reminder:${row.tag_id}:${Math.floor(Date.now() / cadenceMs)}`,
       workerId: row.worker_id ?? undefined,

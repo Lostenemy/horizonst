@@ -37,6 +37,8 @@ const schema = z.object({
   TAG_CONTROL_REQUIRE_REPLY: z.coerce.boolean().default(true),
   TAG_CONTROL_DEDUP_WINDOW_MS: z.coerce.number().default(10000),
   TAG_CONTROL_GATEWAY_STRATEGY: z.enum(['last_seen', 'camera_assigned', 'hybrid']).default('hybrid'),
+  TAG_CONTROL_GATEWAY_CANDIDATE_LIMIT: z.coerce.number().default(4),
+  TAG_CONTROL_GATEWAY_CANDIDATE_WINDOW_MS: z.coerce.number().default(120000),
   TAG_ALARM_PHYSICAL_ENABLED: z.coerce.boolean().default(true),
   TAG_SESSION_PASSWORD: z.string().default('Moko4321'),
   TAG_ALARM_CONNECT_TIMEOUT_MS: z.coerce.number().default(12000),

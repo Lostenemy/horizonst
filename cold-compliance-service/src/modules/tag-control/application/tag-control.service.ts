@@ -123,20 +123,5 @@ export async function sendTagCommand(input: SendTagCommandInput) {
   return await getCommand(cmd.id);
 }
 
-export async function sendPreLimitAlert(args: { workerId?: string; tagId?: string; tagUid?: string; reason?: string }) {
-  return sendTagCommand({ ...args, templateCode: 'pre_limit', triggerSource: 'compliance', triggerReason: args.reason ?? 'T+40 pre-limit alert' });
-}
-
-export async function sendCriticalExposureAlert(args: { workerId?: string; tagId?: string; tagUid?: string; reason?: string }) {
-  return sendTagCommand({ ...args, templateCode: 'critical', triggerSource: 'compliance', triggerReason: args.reason ?? 'T+45 critical exposure' });
-}
-
-export async function sendEarlyReentryBlockedAlert(args: { workerId?: string; tagId?: string; tagUid?: string; reason?: string }) {
-  return sendTagCommand({ ...args, templateCode: 'early_reentry_blocked', triggerSource: 'compliance', triggerReason: args.reason ?? 'Early reentry blocked' });
-}
-
-export async function sendManDownAlert(args: { workerId?: string; tagId?: string; tagUid?: string; reason?: string }) {
-  return sendTagCommand({ ...args, templateCode: 'man_down', triggerSource: 'compliance', triggerReason: args.reason ?? 'Man down alert' });
-}
 
 export { listCommands, getCommand, listActiveCommands, listTemplates, createTemplate, updateTemplate };

@@ -3,11 +3,6 @@ import { db } from '../../db/pool';
 import { createAlert } from '../alerts/alerts.service';
 import { openIncident } from '../incidents/incidents.service';
 import { ParsedPresenceEvent } from '../presence/types';
-import {
-  sendCriticalExposureAlert,
-  sendEarlyReentryBlockedAlert,
-  sendPreLimitAlert
-} from '../tag-control/application/tag-control.service';
 import { logger } from '../../utils/logger';
 import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
 const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
@@ -192,14 +187,6 @@ async function finalizeSession(
       }
     });
 
-    const sender = prelimit ? sendPreLimitAlert : sendCriticalExposureAlert;
-    await sender({
-      workerId: closed.worker_id ?? undefined,
-      tagId: closed.tag_id,
-      reason: prelimit ? 'Pre-límite continuo alcanzado' : 'Límite continuo excedido'
-    }).catch((error) => {
-      logger.warn({ error }, 'failed to send tag-control compliance alert');
-    });
   }
 
   if (durationMinutes > session.max_continuous_minutes + env.INCIDENT_GRACE_MINUTES) {
@@ -210,13 +197,6 @@ async function finalizeSession(
       incidentType: 'continuous_exposure_breach',
       reason: 'Exceso de permanencia continuada en cámara frigorífica',
       metadata: { durationMinutes, closeReason: reason }
-    });
-    await sendCriticalExposureAlert({
-      workerId: closed.worker_id ?? undefined,
-      tagId: closed.tag_id,
-      reason: 'Persistencia >2 min tras límite de permanencia'
-    }).catch((error) => {
-      logger.warn({ error }, 'failed to send escalation alert');
     });
   }
 
@@ -379,9 +359,6 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
             incidentType: 'non_compliant_reentry',
             reason: 'Intento de reentrada sin descanso reglamentario',
             metadata: { minutesOutside, requiredBreakMinutes: Number(tag.required_break_minutes) }
-          });
-          await sendEarlyReentryBlockedAlert({ workerId: tag.worker_id ?? undefined, tagId: tag.id, reason: 'Reentrada no permitida por descanso incompleto' }).catch((error) => {
-            logger.warn({ error }, 'failed to send early reentry blocked tag alert');
           });
         }
       }

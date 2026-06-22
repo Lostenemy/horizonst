@@ -36,6 +36,14 @@ export async function createAlert(params: {
 
   const alert = inserted.rows[0];
   setImmediate(() => {
+    logger.info({
+      alertId: alert.id,
+      alertType: alert.alert_type,
+      severity: alert.severity,
+      tagId: alert.tag_id,
+      workerId: alert.worker_id
+    }, 'compliance alert dispatching physical alarm sequence');
+
     executeAlarmSequence({
       alertId: alert.id,
       workerId: alert.worker_id ?? undefined,
@@ -43,7 +51,7 @@ export async function createAlert(params: {
       severity: alert.severity,
       alertType: alert.alert_type
     }).catch((error) => {
-      logger.error({ error, alertId: alert.id }, 'failed to execute physical alarm sequence');
+      logger.error({ error, alertId: alert.id, alertType: alert.alert_type, severity: alert.severity, tagId: alert.tag_id, workerId: alert.worker_id }, 'failed to execute physical alarm sequence');
     });
   });
 
