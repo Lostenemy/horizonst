@@ -1,31 +1,14 @@
-const money = (cents) => cents === null || cents === undefined
-  ? 'Consultar'
-  : new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(cents / 100);
-
-const setText = (id, value) => {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-};
-
-const renderCards = (id, items, render) => {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.innerHTML = items.map(render).join('');
-};
-
-fetch('/api/health')
-  .then((res) => res.json())
-  .then((data) => setText('health', data.status))
-  .catch(() => setText('health', 'no disponible'));
-
-fetch('/api/catalog/products')
-  .then((res) => res.json())
-  .then((data) => renderCards('products', data.products ?? [], (p) => `
-    <article><small>${p.category}</small><h3>${p.name}</h3><strong>${money(p.price_cents)}</strong></article>`))
-  .catch(() => renderCards('products', [], () => ''));
-
-fetch('/api/catalog/saas-plans')
-  .then((res) => res.json())
-  .then((data) => renderCards('plans', data.saasPlans ?? [], (p) => `
-    <article><small>${p.is_enterprise ? 'Enterprise' : 'Plan anual'}</small><h3>${p.name}</h3><strong>${money(p.annual_price_cents)}</strong><p>${p.max_tags ? `${p.max_tags} tags · ${p.max_gateways} gateways` : 'Capacidad a medida'}</p></article>`))
-  .catch(() => renderCards('plans', [], () => ''));
+const money=(cents)=>cents==null?'Consultar':new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(cents/100);
+const setText=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
+const renderCards=(id,items,render)=>{const el=document.getElementById(id);if(el)el.innerHTML=items.map(render).join('');};
+const store={get access(){return localStorage.getItem('accessToken')},set access(v){v?localStorage.setItem('accessToken',v):localStorage.removeItem('accessToken')},get refresh(){return localStorage.getItem('refreshToken')},set refresh(v){v?localStorage.setItem('refreshToken',v):localStorage.removeItem('refreshToken')}};
+const api=async(path,options={})=>{const headers={'Content-Type':'application/json',...(options.headers||{})};if(store.access)headers.Authorization=`Bearer ${store.access}`;const res=await fetch(path,{...options,headers});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Error');return data;};
+const updateSession=async()=>{if(!store.access){setText('session','Sin sesión');return;}try{const {user}=await api('/api/auth/me');setText('session',`Sesión: ${user.full_name} · ${user.email} · ${user.role}`);}catch{store.access='';store.refresh='';setText('session','Sin sesión');}};
+fetch('/api/health').then((res)=>res.json()).then((data)=>setText('health',data.status)).catch(()=>setText('health','no disponible'));
+fetch('/api/catalog/products').then((res)=>res.json()).then((data)=>renderCards('products',data.products??[],(p)=>`<article><small>${p.category}</small><h3>${p.name}</h3><strong>${money(p.price_cents)}</strong></article>`));
+fetch('/api/catalog/saas-plans').then((res)=>res.json()).then((data)=>renderCards('plans',data.saasPlans??[],(p)=>`<article><small>${p.is_enterprise?'Enterprise':'Plan anual'}</small><h3>${p.name}</h3><strong>${money(p.annual_price_cents)}</strong><p>${p.max_tags?`${p.max_tags} tags · ${p.max_gateways} gateways`:'Capacidad a medida'}</p></article>`));
+document.getElementById('login-form')?.addEventListener('submit',async(e)=>{e.preventDefault();const body=Object.fromEntries(new FormData(e.currentTarget));try{const data=await api('/api/auth/login',{method:'POST',body:JSON.stringify(body)});store.access=data.accessToken;store.refresh=data.refreshToken;setText('login-msg','Sesión iniciada');updateSession();}catch(err){setText('login-msg',err.message);}});
+document.getElementById('register-form')?.addEventListener('submit',async(e)=>{e.preventDefault();const body=Object.fromEntries(new FormData(e.currentTarget));try{const data=await api('/api/auth/register',{method:'POST',body:JSON.stringify(body)});const suffix=data.verificationToken?` Token dev: ${data.verificationToken}`:'';setText('register-msg',`Cuenta creada pendiente de verificación.${suffix}`);if(data.verificationToken){const input=document.querySelector('#verify-form input[name=\"token\"]');if(input)input.value=data.verificationToken;}e.currentTarget.reset();}catch(err){setText('register-msg',err.message);}});
+document.getElementById('verify-form')?.addEventListener('submit',async(e)=>{e.preventDefault();const body=Object.fromEntries(new FormData(e.currentTarget));try{await api('/api/auth/verify-email',{method:'POST',body:JSON.stringify(body)});setText('verify-msg','Email verificado. Ya puedes iniciar sesión.');e.currentTarget.reset();}catch(err){setText('verify-msg',err.message);}});
+document.getElementById('logout')?.addEventListener('click',async()=>{try{if(store.refresh)await api('/api/auth/logout',{method:'POST',body:JSON.stringify({refreshToken:store.refresh})});}finally{store.access='';store.refresh='';updateSession();}});
+updateSession();
