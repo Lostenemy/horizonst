@@ -1,6 +1,6 @@
 # HorizonST Store
 
-Servicio privado base para la futura tienda HorizonST en `tienda.horizonst.com.es`. Este incremento prepara backend Node.js/TypeScript/Express, frontend React/Vite, migraciones del esquema PostgreSQL `store`, catálogo inicial y healthchecks. No incluye pagos online ni flujos completos de catálogo, presupuestos, distribuidores o administración.
+Servicio privado base para la futura tienda HorizonST en `tienda.horizonst.com.es`. Este incremento prepara backend Node.js/TypeScript/Express, frontend estático sin toolchain pesada, migraciones del esquema PostgreSQL `store`, catálogo inicial y healthchecks. No incluye pagos online ni flujos completos de catálogo, presupuestos, distribuidores o administración.
 
 ## Puerto y Docker
 
@@ -57,7 +57,7 @@ La migración inicial crea `store` y tablas base para usuarios, perfiles de clie
 - `GET /api/health`
 - `GET /api/catalog/products`
 - `GET /api/catalog/saas-plans`
-- `POST /api/auth/register` (preparación segura con bcrypt)
+- `POST /api/auth/register` (preparación segura con hash scrypt nativo de Node.js)
 - `POST /api/auth/login` (sin emisión de sesión/JWT en incremento 1)
 
 ## Catálogo inicial

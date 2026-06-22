@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS store.distributor_documents (
   file_name TEXT NOT NULL,
   file_path TEXT NOT NULL,
   mime_type TEXT NOT NULL,
-  file_size_bytes INTEGER NOT NULL,
+  file_size_bytes INTEGER NOT NULL CHECK (file_size_bytes > 0 AND file_size_bytes <= 10485760),
   status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'replaced')) DEFAULT 'pending',
   uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   reviewed_at TIMESTAMPTZ,
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS store.products (
   name TEXT NOT NULL,
   description TEXT,
   category TEXT NOT NULL CHECK (category IN ('hardware', 'accessory')),
-  price_cents INTEGER NOT NULL,
+  price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
   tax_rate NUMERIC(5,2) NOT NULL DEFAULT 21.00,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS store.saas_plans (
   code TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
-  annual_price_cents INTEGER,
+  annual_price_cents INTEGER CHECK (annual_price_cents IS NULL OR annual_price_cents >= 0),
   tax_rate NUMERIC(5,2) NOT NULL DEFAULT 21.00,
   max_tags INTEGER,
   max_gateways INTEGER,
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS store.saas_plans (
 
 CREATE TABLE IF NOT EXISTS store.leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source TEXT,
+  source TEXT NOT NULL DEFAULT 'landing' CHECK (source IN ('demo', 'appcc_guide', 'contact_form', 'landing')),
   full_name TEXT NOT NULL,
   company_name TEXT,
   email TEXT NOT NULL,
@@ -112,10 +112,10 @@ CREATE TABLE IF NOT EXISTS store.quotes (
   user_id UUID NOT NULL REFERENCES store.users(id) ON DELETE RESTRICT,
   quote_number TEXT UNIQUE NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('draft', 'submitted', 'in_review', 'sent', 'accepted', 'rejected', 'cancelled')) DEFAULT 'draft',
-  subtotal_cents INTEGER NOT NULL DEFAULT 0,
-  discount_cents INTEGER NOT NULL DEFAULT 0,
-  tax_cents INTEGER NOT NULL DEFAULT 0,
-  total_cents INTEGER NOT NULL DEFAULT 0,
+  subtotal_cents INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_cents >= 0),
+  discount_cents INTEGER NOT NULL DEFAULT 0 CHECK (discount_cents >= 0),
+  tax_cents INTEGER NOT NULL DEFAULT 0 CHECK (tax_cents >= 0),
+  total_cents INTEGER NOT NULL DEFAULT 0 CHECK (total_cents >= 0),
   notes TEXT,
   internal_notes TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -132,14 +132,19 @@ CREATE TABLE IF NOT EXISTS store.quote_items (
   product_id UUID REFERENCES store.products(id) ON DELETE RESTRICT,
   saas_plan_id UUID REFERENCES store.saas_plans(id) ON DELETE RESTRICT,
   description TEXT NOT NULL,
-  quantity INTEGER NOT NULL DEFAULT 1,
-  unit_price_cents INTEGER,
-  discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+  quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit_price_cents INTEGER CHECK (unit_price_cents IS NULL OR unit_price_cents >= 0),
+  discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (discount_percent BETWEEN 0 AND 100),
   tax_rate NUMERIC(5,2) NOT NULL DEFAULT 21.00,
-  line_subtotal_cents INTEGER NOT NULL DEFAULT 0,
-  line_discount_cents INTEGER NOT NULL DEFAULT 0,
-  line_tax_cents INTEGER NOT NULL DEFAULT 0,
-  line_total_cents INTEGER NOT NULL DEFAULT 0
+  line_subtotal_cents INTEGER NOT NULL DEFAULT 0 CHECK (line_subtotal_cents >= 0),
+  line_discount_cents INTEGER NOT NULL DEFAULT 0 CHECK (line_discount_cents >= 0),
+  line_tax_cents INTEGER NOT NULL DEFAULT 0 CHECK (line_tax_cents >= 0),
+  line_total_cents INTEGER NOT NULL DEFAULT 0 CHECK (line_total_cents >= 0),
+  CONSTRAINT quote_item_product_or_plan_check CHECK (
+    (item_type = 'product' AND product_id IS NOT NULL AND saas_plan_id IS NULL) OR
+    (item_type = 'saas_plan' AND saas_plan_id IS NOT NULL AND product_id IS NULL) OR
+    (item_type = 'custom' AND product_id IS NULL AND saas_plan_id IS NULL)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS store.settings (
@@ -158,6 +163,24 @@ CREATE TABLE IF NOT EXISTS store.audit_log (
   payload JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+
+CREATE INDEX IF NOT EXISTS store_users_email_idx ON store.users (email);
+CREATE INDEX IF NOT EXISTS store_users_role_idx ON store.users (role);
+CREATE INDEX IF NOT EXISTS store_users_status_idx ON store.users (status);
+CREATE INDEX IF NOT EXISTS store_distributor_profiles_validation_status_idx ON store.distributor_profiles (validation_status);
+CREATE INDEX IF NOT EXISTS store_distributor_documents_profile_id_idx ON store.distributor_documents (distributor_profile_id);
+CREATE INDEX IF NOT EXISTS store_distributor_documents_status_idx ON store.distributor_documents (status);
+CREATE INDEX IF NOT EXISTS store_products_is_active_idx ON store.products (is_active);
+CREATE INDEX IF NOT EXISTS store_saas_plans_is_active_idx ON store.saas_plans (is_active);
+CREATE INDEX IF NOT EXISTS store_leads_status_idx ON store.leads (status);
+CREATE INDEX IF NOT EXISTS store_leads_created_at_idx ON store.leads (created_at);
+CREATE INDEX IF NOT EXISTS store_quotes_user_id_idx ON store.quotes (user_id);
+CREATE INDEX IF NOT EXISTS store_quotes_status_idx ON store.quotes (status);
+CREATE INDEX IF NOT EXISTS store_quote_items_quote_id_idx ON store.quote_items (quote_id);
+CREATE INDEX IF NOT EXISTS store_audit_log_actor_user_id_idx ON store.audit_log (actor_user_id);
+CREATE INDEX IF NOT EXISTS store_audit_log_entity_idx ON store.audit_log (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS store_audit_log_created_at_idx ON store.audit_log (created_at);
 
 INSERT INTO store.products (sku, name, category, price_cents)
 VALUES
@@ -178,5 +201,7 @@ INSERT INTO store.settings (key, value, description)
 VALUES
   ('default_distributor_discount_percent', '{"value":10}', 'Descuento distribuidor por defecto en porcentaje'),
   ('currency', '{"value":"EUR"}', 'Divisa por defecto para importes en céntimos'),
-  ('default_tax_rate', '{"value":21}', 'IVA por defecto en porcentaje')
+  ('default_tax_rate', '{"value":21}', 'IVA por defecto en porcentaje'),
+  ('document_max_size_bytes', '{"value":10485760}', 'Tamaño máximo futuro para documentos en bytes'),
+  ('documents_base_path', '{"value":"/opt/horizonst/store-data/documents"}', 'Ruta base prevista para documentos de distribuidores')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description, updated_at = now();
