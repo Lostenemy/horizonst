@@ -10,7 +10,7 @@
     "build:web": "node scripts/build-web.mjs",
     "start": "node dist/server.js",
     "migrate": "node dist/db/migrate.js",
-    "test": "tsx test/admin-distributor-validation.test.ts"
+    "test": "tsx test/cart-calculations.test.ts"
   },
   "dependencies": {
     "cors": "2.8.5",

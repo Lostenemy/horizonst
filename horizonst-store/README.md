@@ -185,3 +185,54 @@ Tipos documentales permitidos: `certificado_censal`, `modelo_036`, `modelo_037`,
 - `GET /api/admin/distributor-documents/:id/download`: descarga segura de PDFs para administradores sin revelar rutas físicas.
 
 Las acciones principales del portal (`distributor_profile_updated`, `distributor_document_uploaded`, `distributor_validation_status_changed` y `distributor_document_approved`, `distributor_document_rejected`, `distributor_document_replaced`, `admin_distributor_document_downloaded`) quedan registradas en `store.audit_log`.
+
+## Fase 4: carrito persistente y solicitudes de presupuesto
+
+La fase 4 añade un carrito persistente basado en `store.quotes` y `store.quote_items`. El carrito activo de cada usuario autenticado es siempre su quote con `status = draft`; si no existe, `GET /api/cart` lo crea automáticamente. No hay pagos online en esta fase.
+
+### Estados de quote
+
+Estados válidos: `draft`, `submitted`, `in_review`, `sent`, `accepted`, `rejected` y `cancelled`.
+
+### Endpoints de carrito
+
+Todas las rutas requieren `Authorization: Bearer <accessToken>` y rol `customer`, `distributor` o `admin`.
+
+- `GET /api/cart`: devuelve el carrito `draft` del usuario con sus líneas; crea uno vacío si no existe.
+- `POST /api/cart/items`: añade o incrementa una línea de producto o plan SaaS activo.
+  - Producto: `{"item_type":"product","product_id":"uuid","quantity":2}`.
+  - Plan SaaS: `{"item_type":"saas_plan","saas_plan_id":"uuid","quantity":1}`.
+  - Los planes Enterprise o sin precio anual automático devuelven error y deben tratarse por contacto comercial.
+- `PATCH /api/cart/items/:id`: actualiza `quantity` de una línea del carrito `draft` propio; `quantity` debe ser mayor que cero.
+- `DELETE /api/cart/items/:id`: elimina una línea del carrito `draft` propio y recalcula totales.
+- `POST /api/cart/submit`: cambia el carrito de `draft` a `submitted`, genera `quote_number`, guarda `submitted_at` y registra auditoría. No permite enviar carritos vacíos.
+
+### Descuento de distribuidor
+
+Los clientes normales y administradores usan `discount_percent = 0`. Los usuarios con rol `distributor` solo reciben descuento cuando `store.distributor_profiles.validation_status = approved`; en ese caso se aplica el `discount_percent` del perfil. Si el distribuidor está pendiente, rechazado, suspendido o en cualquier estado distinto de `approved`, el descuento aplicado es `0`.
+
+El descuento se calcula por línea en céntimos enteros y se refleja en `line_discount_cents`; el total agregado se guarda en `store.quotes.discount_cents`. El IVA usa el `tax_rate` del producto o plan y todos los importes se almacenan en céntimos (`subtotal_cents`, `discount_cents`, `tax_cents`, `total_cents`).
+
+### Endpoints admin de presupuestos
+
+Todas las rutas requieren rol `admin`.
+
+- `GET /api/admin/quotes`: lista presupuestos con filtros opcionales `status`, `email` y `quote_number`.
+- `GET /api/admin/quotes/:id`: devuelve el presupuesto con datos básicos del usuario y líneas.
+- `PATCH /api/admin/quotes/:id/status`: cambia el estado administrativo a `in_review`, `sent`, `accepted`, `rejected` o `cancelled`; acepta `internal_notes` opcional. No permite modificar quotes en `draft` y registra auditoría.
+
+### Auditoría
+
+Se registran eventos sin payload sensible en `store.audit_log`: `cart_item_added`, `cart_item_updated`, `cart_item_removed`, `quote_submitted` y `quote_status_changed`.
+
+### Pruebas manuales sugeridas
+
+1. Registrar y activar un cliente, hacer login y llamar `GET /api/cart`; debe crearse un carrito `draft` vacío.
+2. Añadir un producto activo con `POST /api/cart/items` y verificar subtotales, IVA y total en céntimos.
+3. Añadir dos veces el mismo producto; debe incrementarse la cantidad de la línea existente.
+4. Actualizar cantidad con `PATCH /api/cart/items/:id` y eliminarla con `DELETE /api/cart/items/:id`.
+5. Intentar `POST /api/cart/submit` con carrito vacío; debe devolver error.
+6. Enviar un carrito con líneas; debe pasar a `submitted` con `quote_number` definitivo y `submitted_at`.
+7. Hacer logout/login y verificar que un carrito `draft` existente se conserva.
+8. Probar distribuidor aprobado y no aprobado para confirmar que solo el aprobado recibe descuento.
+9. Como admin, listar `/api/admin/quotes`, consultar un quote y cambiar estado de un quote no draft.
