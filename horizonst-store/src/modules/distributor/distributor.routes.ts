@@ -96,9 +96,19 @@ distributorRouter.post('/documents', async (req, res, next) => {
     const filePath = path.resolve(dir, safeName); if (!filePath.startsWith(path.resolve(env.documentsPath))) throw new Error('Invalid document path');
     await writeFile(filePath, upload.file, { flag: 'wx' });
     await client.query('BEGIN');
+    const replaced = await client.query(`UPDATE store.distributor_documents
+      SET status = 'replaced', reviewed_at = now(), review_notes = COALESCE(review_notes, 'Replaced by a newer upload of the same document type')
+      WHERE distributor_profile_id = $1 AND document_type = $2 AND status <> 'replaced'
+      RETURNING id`, [profiles[0].id, upload.documentType]);
     const { rows } = await client.query(`INSERT INTO store.distributor_documents (distributor_profile_id, document_type, file_name, file_path, mime_type, file_size_bytes, status, uploaded_at, created_at)
       VALUES ($1,$2,$3,$4,'application/pdf',$5,'pending',now(),now()) RETURNING id, document_type, status, created_at`, [profiles[0].id, upload.documentType, upload.filename, filePath, upload.file.length]);
-    await writeAuditLog({ actorUserId: req.user!.sub, action: 'distributor_document_uploaded', entityType: 'distributor_document', entityId: rows[0].id, payload: { document_type: upload.documentType } }, client);
+    await client.query(`UPDATE store.distributor_profiles
+      SET validation_status = 'pending', approved_at = NULL, approved_by = NULL, reviewed_at = NULL, reviewed_by = NULL, updated_at = now()
+      WHERE id = $1`, [profiles[0].id]);
+    if (replaced.rows.length > 0) {
+      await writeAuditLog({ actorUserId: req.user!.sub, action: 'distributor_document_replaced', entityType: 'distributor_profile', entityId: profiles[0].id, payload: { document_type: upload.documentType, replaced_document_ids: replaced.rows.map((row: any) => row.id), new_document_id: rows[0].id } }, client);
+    }
+    await writeAuditLog({ actorUserId: req.user!.sub, action: 'distributor_document_uploaded', entityType: 'distributor_document', entityId: rows[0].id, payload: { document_type: upload.documentType, validation_status: 'pending' } }, client);
     await client.query('COMMIT'); res.status(201).json({ document: rows[0] });
   } catch (error: any) { await client.query('ROLLBACK'); if (error.status) res.status(error.status).json({ error: error.message }); else next(error); } finally { client.release(); }
 });
