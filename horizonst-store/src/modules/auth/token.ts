@@ -13,6 +13,7 @@ const parseDuration = (value: string): number => {
 export const accessTokenSeconds = (): number => parseDuration(env.auth.accessTokenTtl);
 export const refreshTokenSeconds = (): number => parseDuration(env.auth.refreshTokenTtl);
 export const passwordResetSeconds = (): number => parseDuration(env.auth.passwordResetTtl);
+export const emailVerificationSeconds = (): number => parseDuration(env.auth.emailVerificationTtl);
 
 export type AccessTokenPayload = { sub: string; email: string; role: 'customer' | 'distributor' | 'admin'; status: string };
 

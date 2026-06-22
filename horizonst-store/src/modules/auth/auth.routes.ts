@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth } from './middleware.js';
-import { createOpaqueToken, expiresAtSql, hashToken, passwordResetSeconds, refreshTokenSeconds, signAccessToken } from './token.js';
+import { createOpaqueToken, emailVerificationSeconds, expiresAtSql, hashToken, passwordResetSeconds, refreshTokenSeconds, signAccessToken } from './token.js';
 
 const scrypt = promisify(scryptCallback);
 const HASH_PREFIX = 'scrypt';
@@ -43,12 +43,42 @@ authRouter.post('/register', async (req, res, next) => {
     const passwordHash = await hashPassword(input.password);
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `INSERT INTO store.users (email, password_hash, full_name, phone, role, status) VALUES ($1, $2, $3, $4, 'customer', 'active') RETURNING ${safeUserFields}`,
+      `INSERT INTO store.users (email, password_hash, full_name, phone, role, status) VALUES ($1, $2, $3, $4, 'customer', 'pending_email_verification') RETURNING ${safeUserFields}`,
       [input.email.toLowerCase(), passwordHash, input.fullName, input.phone ?? null]
     );
     await client.query('INSERT INTO store.customer_profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [rows[0].id]);
+    const verificationToken = createOpaqueToken();
+    await client.query('INSERT INTO store.email_verification_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [rows[0].id, hashToken(verificationToken), expiresAtSql(emailVerificationSeconds()), req.header('user-agent') ?? null, req.ip]);
     await client.query('COMMIT');
-    res.status(201).json({ user: rows[0], emailVerification: 'prepared_not_enforced' });
+    res.status(201).json({ user: rows[0], message: 'Account created pending email verification.', verificationToken: process.env.NODE_ENV === 'production' ? undefined : verificationToken });
+  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
+});
+
+
+
+authRouter.post('/verify-email', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const input = z.object({ token: z.string().min(20) }).parse(req.body);
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT evt.id, evt.user_id
+       FROM store.email_verification_tokens evt
+       JOIN store.users u ON u.id = evt.user_id
+       WHERE evt.token_hash = $1
+         AND evt.revoked_at IS NULL
+         AND evt.used_at IS NULL
+         AND evt.expires_at > now()
+         AND u.status = 'pending_email_verification'
+       FOR UPDATE OF evt, u`,
+      [hashToken(input.token)]
+    );
+    if (!rows[0]) { await client.query('ROLLBACK'); res.status(400).json({ error: 'Invalid or expired verification token' }); return; }
+    await client.query("UPDATE store.users SET status = 'active', updated_at = now() WHERE id = $1 AND status = 'pending_email_verification'", [rows[0].user_id]);
+    await client.query('UPDATE store.email_verification_tokens SET used_at = now(), revoked_at = now() WHERE id = $1', [rows[0].id]);
+    const userResult = await client.query(`SELECT ${safeUserFields} FROM store.users WHERE id = $1`, [rows[0].user_id]);
+    await client.query('COMMIT');
+    res.json({ user: userResult.rows[0], message: 'Email verified. Account is active.' });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 
