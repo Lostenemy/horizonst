@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { pool } from '../../db/pool.js';
 
 export type UserRole = 'customer' | 'distributor' | 'admin';
@@ -33,12 +34,14 @@ export const getDistributorDiscountPercent = async (userId: string, role: UserRo
 };
 
 export const generateQuoteNumber = (): string => `Q-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-export const generateDraftQuoteNumber = (userId: string): string => `DRAFT-${userId}-${Date.now()}`;
+export const generateDraftQuoteNumber = (): string => `DRAFT-${randomUUID()}`;
+export const canSubmitCart = (itemCount: number): boolean => itemCount > 0;
+export const canAutoPriceSaasPlan = (plan: { is_enterprise: boolean; annual_price_cents: number | null }): boolean => !plan.is_enterprise && plan.annual_price_cents !== null;
 
 export const getOrCreateDraftQuote = async (userId: string, client: any = pool) => {
   const existing = await client.query('SELECT * FROM store.quotes WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT 1', [userId, 'draft']);
   if (existing.rows[0]) return existing.rows[0];
-  const created = await client.query('INSERT INTO store.quotes (user_id, quote_number, status) VALUES ($1, $2, $3) RETURNING *', [userId, generateDraftQuoteNumber(userId), 'draft']);
+  const created = await client.query('INSERT INTO store.quotes (user_id, quote_number, status) VALUES ($1, $2, $3) RETURNING *', [userId, generateDraftQuoteNumber(), 'draft']);
   return created.rows[0];
 };
 

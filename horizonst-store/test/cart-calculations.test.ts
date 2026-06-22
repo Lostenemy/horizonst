@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateLineTotals, calculateQuoteTotals } from '../src/modules/cart/cart.service.js';
+import { calculateLineTotals, calculateQuoteTotals, canAutoPriceSaasPlan, canSubmitCart, generateDraftQuoteNumber } from '../src/modules/cart/cart.service.js';
 import { hasBlockingActiveDistributorDocuments } from '../src/modules/admin/distributors.routes.js';
 
 // Existing distributor document validation tests.
@@ -20,9 +20,16 @@ assert.deepEqual(approvedDistributorLine, { line_subtotal_cents: 30000, line_dis
 const unapprovedDistributorLine = calculateLineTotals({ quantity: 1, unitPriceCents: 58000, discountPercent: 0, taxRate: 21 });
 assert.deepEqual(unapprovedDistributorLine, { line_subtotal_cents: 58000, line_discount_cents: 0, line_tax_cents: 12180, line_total_cents: 70180 });
 
-// 4. Bloqueo de carrito vacío al submit: la API comprueba COUNT(*) < 1 antes de actualizar a submitted.
-assert.equal(0 < 1, true, 'empty cart item count must block submit');
+// 4. Bloqueo de carrito vacío al submit.
+assert.equal(canSubmitCart(0), false, 'empty cart item count must block submit');
+assert.equal(canSubmitCart(1), true, 'non-empty cart can be submitted');
 
-// 5. Enterprise sin precio automático: un plan enterprise no tiene precio anual automático.
-const enterprisePlan = { is_enterprise: true, annual_price_cents: null };
-assert.equal(enterprisePlan.is_enterprise || enterprisePlan.annual_price_cents === null, true, 'enterprise plan must require commercial contact');
+// 5. Enterprise sin precio automático.
+assert.equal(canAutoPriceSaasPlan({ is_enterprise: true, annual_price_cents: null }), false, 'enterprise plan must require commercial contact');
+assert.equal(canAutoPriceSaasPlan({ is_enterprise: false, annual_price_cents: null }), false, 'plans with null price must require commercial contact');
+assert.equal(canAutoPriceSaasPlan({ is_enterprise: false, annual_price_cents: 58000 }), true, 'standard priced plans can be auto-priced');
+
+// Los quote_number draft no deben exponer UUID de usuario.
+const draftNumber = generateDraftQuoteNumber();
+assert.match(draftNumber, /^DRAFT-[0-9a-f-]{36}$/);
+assert.equal(draftNumber.includes('user-id'), false);

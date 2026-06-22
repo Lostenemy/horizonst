@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
-import { calculateLineTotals, fetchQuoteWithItems, generateQuoteNumber, getDistributorDiscountPercent, getOrCreateDraftQuote, recalculateQuote } from './cart.service.js';
+import { calculateLineTotals, canAutoPriceSaasPlan, canSubmitCart, fetchQuoteWithItems, generateQuoteNumber, getDistributorDiscountPercent, getOrCreateDraftQuote, recalculateQuote } from './cart.service.js';
 
 export const cartRouter = Router();
 cartRouter.use(requireAuth, requireRole('customer', 'distributor', 'admin'));
@@ -37,7 +37,7 @@ cartRouter.post('/items', async (req, res, next) => {
     } else {
       const { rows } = await client.query('SELECT id, name, annual_price_cents, tax_rate, is_enterprise FROM store.saas_plans WHERE id = $1 AND is_active = true', [input.saas_plan_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active SaaS plan not found' }); return; }
-      if (rows[0].is_enterprise || rows[0].annual_price_cents === null) { await client.query('ROLLBACK'); res.status(422).json({ error: 'Enterprise plans require commercial contact' }); return; }
+      if (!canAutoPriceSaasPlan(rows[0])) { await client.query('ROLLBACK'); res.status(422).json({ error: 'Enterprise plans require commercial contact' }); return; }
       item = { product_id: null, saas_plan_id: rows[0].id, description: rows[0].name, unit_price_cents: rows[0].annual_price_cents, tax_rate: rows[0].tax_rate };
     }
     const existing = await client.query(`SELECT * FROM store.quote_items WHERE quote_id = $1 AND item_type = $2 AND product_id IS NOT DISTINCT FROM $3 AND saas_plan_id IS NOT DISTINCT FROM $4`, [quote.id, input.item_type, item.product_id, item.saas_plan_id]);
@@ -89,7 +89,7 @@ cartRouter.post('/submit', async (req, res, next) => {
     await client.query('BEGIN');
     const quote = await getOrCreateDraftQuote(req.user!.sub, client);
     const count = await client.query('SELECT COUNT(*)::int AS count FROM store.quote_items WHERE quote_id = $1', [quote.id]);
-    if (count.rows[0].count < 1) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot submit an empty cart' }); return; }
+    if (!canSubmitCart(Number(count.rows[0].count))) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot submit an empty cart' }); return; }
     const updated = await client.query(`UPDATE store.quotes SET status = 'submitted', quote_number = $2, submitted_at = now(), updated_at = now() WHERE id = $1 AND status = 'draft' RETURNING *`, [quote.id, generateQuoteNumber()]);
     await writeAuditLog({ actorUserId: req.user!.sub, action: 'quote_submitted', entityType: 'quote', entityId: quote.id, payload: { quote_number: updated.rows[0].quote_number, item_count: count.rows[0].count } }, client);
     await client.query('COMMIT'); res.json(await fetchQuoteWithItems(quote.id));
