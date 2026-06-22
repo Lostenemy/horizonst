@@ -103,9 +103,10 @@ authRouter.post('/refresh', async (req, res, next) => {
     const input = z.object({ refreshToken: z.string().min(20) }).parse(req.body);
     const tokenHash = hashToken(input.refreshToken);
     const { rows } = await pool.query(`SELECT rt.id AS token_id, u.${safeUserFields.replaceAll(', ', ', u.')} FROM store.refresh_tokens rt JOIN store.users u ON u.id = rt.user_id WHERE rt.token_hash = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now() AND u.status = 'active'`, [tokenHash]);
-    const user = rows[0];
-    if (!user) { res.status(401).json({ error: 'Invalid refresh token' }); return; }
-    await pool.query('UPDATE store.refresh_tokens SET last_used_at = now() WHERE id = $1', [user.token_id]);
+    const row = rows[0];
+    if (!row) { res.status(401).json({ error: 'Invalid refresh token' }); return; }
+    const { token_id: tokenId, ...user } = row;
+    await pool.query('UPDATE store.refresh_tokens SET last_used_at = now() WHERE id = $1', [tokenId]);
     res.json({ user, accessToken: signAccessToken({ sub: user.id, email: user.email, role: user.role, status: user.status }) });
   } catch (error) { next(error); }
 });
