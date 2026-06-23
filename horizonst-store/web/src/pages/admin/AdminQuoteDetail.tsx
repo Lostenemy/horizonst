@@ -7,7 +7,7 @@ import { apiMessage } from './adminUtils';
 import { useAdminLoad } from './useAdminLoad';
 import type { QuoteDetailResponse } from './types';
 
-const adminStatuses = ['in_review', 'sent', 'accepted', 'rejected', 'cancelled'] as const;
+const adminStatuses = ['draft', 'submitted', 'in_review', 'sent', 'accepted', 'rejected', 'cancelled'] as const;
 
 type AdminStatus = typeof adminStatuses[number];
 
@@ -15,14 +15,16 @@ export default function AdminQuoteDetail() {
   const { id } = useParams();
   const { data, error, loading, load } = useAdminLoad<QuoteDetailResponse>(`/api/admin/quotes/${id}`);
   const [notes, setNotes] = useState('');
+  const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
 
   const changeStatus = async (status: AdminStatus) => {
     setBusy(true);
     try {
-      await patchJson(`/api/admin/quotes/${id}/status`, { status, internal_notes: notes || undefined });
+      await patchJson(`/api/admin/quotes/${id}/status`, { status, internal_notes: notes || undefined, comment: comment || undefined });
       setFeedback('Estado actualizado');
+      setComment('');
       load();
     } catch (statusError) {
       setFeedback(apiMessage(statusError));
@@ -43,8 +45,10 @@ export default function AdminQuoteDetail() {
           <span>Total: {money(quote.total_cents)}</span>
         </div>
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notas internas" />
+        <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comentario para historial (opcional)" />
         <div className="actions">
-          {adminStatuses.map((status) => <button disabled={busy || quote.status === 'draft'} key={status} onClick={() => changeStatus(status)}>{status}</button>)}
+          {adminStatuses.map((status) => <button disabled={busy || quote.status === status} key={status} onClick={() => changeStatus(status)}>{status}</button>)}
+          <a className="button" href={`/api/admin/quotes/${id}/pdf`} target="_blank" rel="noreferrer">PDF</a>
         </div>
         {feedback && <p className={feedback === 'Estado actualizado' ? 'success' : 'error'}>{feedback}</p>}
 
@@ -53,6 +57,15 @@ export default function AdminQuoteDetail() {
           <article className="summary" key={item.id}>
             <b>{item.description}</b>
             <span>{item.quantity} × {money(item.unit_price_cents)} · Total {money(item.line_total_cents)}</span>
+          </article>
+        ))}
+
+        <h2>Historial de estados</h2>
+        {data.history.length === 0 ? <div className="empty">Sin cambios registrados.</div> : data.history.map((event) => (
+          <article className="summary" key={event.id}>
+            <b>{event.old_status} → {event.new_status}</b>
+            <span>{new Date(event.created_at).toLocaleString()} · {event.changed_by_email ?? 'Usuario eliminado'}</span>
+            {event.comment && <span>{event.comment}</span>}
           </article>
         ))}
 

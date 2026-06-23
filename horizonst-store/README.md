@@ -84,6 +84,40 @@ Planes SaaS anuales en céntimos:
 - `professional` — Professional — `80000` — 20 tags / 10 gateways
 - `enterprise` — Enterprise — precio a consultar
 
+
+## FASE 6A.1–6A.3: flujo comercial de presupuestos
+
+Este bloque añade la primera gestión comercial de presupuestos sin pagos, facturas, pedidos, ERP ni logística.
+
+### Estados comerciales
+
+Los presupuestos admiten los estados `draft`, `submitted`, `in_review`, `sent`, `accepted`, `rejected` y `cancelled`. El panel admin permite cambiar entre estos estados desde el detalle del presupuesto y enviar un comentario opcional para trazabilidad.
+
+Cada cambio de estado registra:
+
+- usuario administrador que ejecutó el cambio;
+- fecha del cambio;
+- estado anterior y estado nuevo;
+- comentario opcional;
+- evento de auditoría `quote_status_changed`.
+
+### Historial de estados
+
+La migración `004_quote_status_history.sql` crea `store.quote_status_history` con relaciones restrictivas para presupuestos y preservación de referencia nullable para usuarios eliminados. No usa `ON DELETE CASCADE`.
+
+El endpoint `GET /api/admin/quotes/:id` devuelve `history` ordenado de más reciente a más antiguo junto con el presupuesto y sus líneas.
+
+### PDF bajo demanda
+
+`GET /api/admin/quotes/:id/pdf` genera un PDF en memoria y lo devuelve con `Content-Type: application/pdf`, sin almacenamiento permanente. El documento incluye número, fecha, cliente, empresa, líneas, subtotal, IVA, total y notas.
+
+### Endpoints admin de presupuestos
+
+- `GET /api/admin/quotes`
+- `GET /api/admin/quotes/:id`
+- `PATCH /api/admin/quotes/:id/status` con `{ "status": "sent", "comment": "...", "internal_notes": "..." }`
+- `GET /api/admin/quotes/:id/pdf`
+
 ## Estructura
 
 ```text
