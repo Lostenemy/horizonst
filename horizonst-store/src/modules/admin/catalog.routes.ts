@@ -21,7 +21,7 @@ const productSchema = z.object({
 
 const productPatchSchema = productSchema.partial();
 
-const planSchema = z.object({
+const basePlanSchema = z.object({
   code: z.string().trim().min(1).max(80),
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).nullable().optional(),
@@ -31,11 +31,13 @@ const planSchema = z.object({
   max_gateways: z.number().int().min(0).nullable().optional(),
   is_enterprise: z.boolean().default(false),
   is_active: z.boolean().optional()
-}).strict()
+}).strict();
+
+const planSchema = basePlanSchema
   .refine((value) => value.is_enterprise || value.annual_price_cents != null, { message: 'annual_price_cents is required unless is_enterprise=true' })
   .refine((value) => !value.is_enterprise || value.annual_price_cents == null, { message: 'Enterprise plans must not have annual_price_cents' });
 
-const planPatchSchema = planSchema.partial()
+const planPatchSchema = basePlanSchema.partial()
   .refine((value) => value.is_enterprise !== true || value.annual_price_cents == null, { message: 'Enterprise plans must not have annual_price_cents' });
 
 const buildPatch = (input: Record<string, unknown>, startIndex = 2) => {
