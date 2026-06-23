@@ -297,3 +297,43 @@ Admin:
 - `/admin` es un placeholder; el CRUD administrativo completo queda para fases posteriores.
 - `/distributor/documents` lista documentos, pero la subida multipart PDF se deja para Fase 5B para no ampliar la superficie de formularios en esta entrega.
 - La sesión usa `localStorage` de forma encapsulada mientras el backend no migre a cookies `httpOnly`.
+
+## Fase 5B: consolidación funcional SPA
+
+La SPA React/TypeScript queda consolidada como flujo usable de extremo a extremo para cliente y distribuidor sin añadir pagos, migraciones ni endpoints backend nuevos.
+
+### Rutas funcionales revisadas
+
+- `/`: landing con accesos a catálogo, SaaS, login y registro.
+- `/login`: login con persistencia por refresh token, redirección al destino protegido o al área por rol.
+- `/register` y `/register-distributor`: altas de cliente y distribuidor con token de verificación visible en desarrollo si la API lo devuelve.
+- `/verify-email`, `/forgot-password`, `/reset-password`: verificación y recuperación de password usando los endpoints existentes.
+- `/catalog`: catálogo con loading, error, vacío, CTA de login si no hay sesión y feedback al añadir al carrito.
+- `/saas-plans`: planes SaaS con Enterprise como contacto comercial y alta al carrito solo para planes con precio y sesión activa.
+- `/cart`: carrito autenticado con cantidades, borrado de líneas, subtotal, descuento, IVA, total y envío de solicitud de presupuesto.
+- `/dashboard`: área cliente con datos básicos, enlaces principales y aviso de que el listado propio de presupuestos aún no tiene endpoint público.
+- `/account`: edición del perfil básico de cliente; los distribuidores se redirigen a su portal.
+- `/quotes`: placeholder explícito para presupuestos propios hasta disponer de endpoint público.
+- `/distributor`, `/distributor/profile`, `/distributor/documents`: portal de distribuidor con estado de homologación, perfil, documentos existentes y accesos a catálogo/SaaS/carrito.
+- `/admin`: placeholder protegido por rol admin con secciones previstas de distribuidores, documentos, presupuestos y auditoría.
+
+### Estado real
+
+- La autenticación conserva access token en `localStorage`, usa refresh token para recuperar sesión tras recarga y limpia sesión local en errores de autenticación.
+- Las pantallas principales evitan estados en blanco con mensajes de carga, éxito, error y vacío.
+- El carrito sigue basado en `store.quotes` y `store.quote_items`; el envío cambia el draft a `submitted` y no implementa pagos.
+- No se han añadido dependencias ni se ha modificado manualmente `web/package-lock.json`.
+
+### Limitaciones conocidas
+
+- No existe todavía endpoint público para listar presupuestos propios, por lo que `/quotes` permanece como aviso funcional.
+- Enterprise no genera carrito automáticamente; se muestra como contacto comercial.
+- La subida de documentos de distribuidor existe en API, pero la UI de esta fase solo lista documentos existentes.
+- El panel admin completo queda pendiente; `/admin` solo muestra un placeholder protegido por rol.
+
+### Próximos pasos recomendados
+
+1. Añadir endpoint público de presupuestos propios para cliente/distribuidor y conectar `/quotes`.
+2. Implementar UI de subida de documentos PDF para distribuidores usando `POST /api/distributor/documents`.
+3. Construir el panel admin completo sobre las APIs administrativas ya existentes.
+4. Añadir pruebas de frontend cuando se estabilice la instalación de dependencias del workspace web.
