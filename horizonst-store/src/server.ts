@@ -12,7 +12,9 @@ import { customerRouter } from './modules/customer/customer.routes.js';
 import { distributorRouter } from './modules/distributor/distributor.routes.js';
 import { adminDistributorsRouter } from './modules/admin/distributors.routes.js';
 import { adminQuotesRouter } from './modules/admin/quotes.routes.js';
-import { adminOperationsRouter } from './modules/admin/operations.routes.js';
+import { adminAuditRouter } from './modules/admin/audit.routes.js';
+import { adminCatalogRouter } from './modules/admin/catalog.routes.js';
+import { adminDashboardRouter } from './modules/admin/dashboard.routes.js';
 import { cartRouter } from './modules/cart/cart.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,7 +34,9 @@ app.use('/api/distributor', distributorRouter);
 app.use('/api/cart', cartRouter);
 app.use('/api/admin', adminDistributorsRouter);
 app.use('/api/admin', adminQuotesRouter);
-app.use('/api/admin', adminOperationsRouter);
+app.use('/api/admin', adminDashboardRouter);
+app.use('/api/admin', adminAuditRouter);
+app.use('/api/admin', adminCatalogRouter);
 app.use(express.static(webDist));
 app.get('*', (_req, res) => res.sendFile(path.join(webDist, 'index.html')));
 
