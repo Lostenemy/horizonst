@@ -101,6 +101,7 @@ export type DistributorProfile = {
   contact_person?: string | null;
   validation_status: string;
   review_notes?: string | null;
+  discount_percent?: string | number | null;
 };
 
 export type DistributorDocument = {
