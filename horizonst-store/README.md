@@ -236,3 +236,64 @@ Se registran eventos sin payload sensible en `store.audit_log`: `cart_item_added
 7. Hacer logout/login y verificar que un carrito `draft` existente se conserva.
 8. Probar distribuidor aprobado y no aprobado para confirmar que solo el aprobado recibe descuento.
 9. Como admin, listar `/api/admin/quotes`, consultar un quote y cambiar estado de un quote no draft.
+
+## Fase 5A: Frontend SPA base
+
+La fase 5A sustituye la demo estática por una SPA React + TypeScript + Vite ubicada en `web/`. El build sigue generando `web/dist`, que es el directorio servido por Express y esperado por Docker.
+
+### Desarrollo frontend
+
+```bash
+cd horizonst-store/web
+npm ci
+npm run dev
+npm run typecheck
+npm run build
+```
+
+El servidor Vite puede usarse contra el backend Express publicado en `http://127.0.0.1:4020`; en despliegue, Express sirve los assets compilados desde `web/dist`.
+
+### Rutas implementadas
+
+Públicas:
+
+- `/`
+- `/login`
+- `/register`
+- `/register-distributor`
+- `/verify-email`
+- `/forgot-password`
+- `/reset-password`
+- `/catalog`
+- `/saas-plans`
+
+Privadas:
+
+- `/dashboard`
+- `/account`
+- `/cart`
+- `/quotes`
+
+Distribuidor:
+
+- `/distributor`
+- `/distributor/profile`
+- `/distributor/documents`
+
+Admin:
+
+- `/admin` como placeholder protegido por rol `admin`.
+
+### Decisiones técnicas
+
+- Tokens encapsulados en `web/src/lib/auth.ts` para poder migrar a cookies `httpOnly` sin repartir acceso directo a `localStorage` por la aplicación.
+- Cliente API centralizado en `web/src/lib/api.ts` con cabecera `Authorization: Bearer` automática, refresh token en `401`, reintento único de la petición original y limpieza de sesión si el refresh falla.
+- `AuthProvider` realiza bootstrap con `GET /api/auth/me` al arrancar si hay access token, expone `loading`, `authenticated` y `user`, y permite que `ProtectedRoute` y `RoleRoute` esperen antes de decidir redirecciones.
+- CSS propio en `web/src/styles.css`, sin Tailwind ni frameworks de UI pesados.
+
+### Limitaciones conocidas y Fase 5B
+
+- `/quotes` muestra una pantalla informativa porque todavía no hay endpoint de “mis presupuestos” para cliente/distribuidor.
+- `/admin` es un placeholder; el CRUD administrativo completo queda para fases posteriores.
+- `/distributor/documents` lista documentos, pero la subida multipart PDF se deja para Fase 5B para no ampliar la superficie de formularios en esta entrega.
+- La sesión usa `localStorage` de forma encapsulada mientras el backend no migre a cookies `httpOnly`.

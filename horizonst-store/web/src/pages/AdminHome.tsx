@@ -1,0 +1,14 @@
+export default function AdminHome() {
+  return (
+    <section className="panel">
+      <h1>Panel admin en desarrollo</h1>
+      <p>Placeholder protegido por rol admin.</p>
+      <ul>
+        <li>Distribuidores</li>
+        <li>Documentos</li>
+        <li>Presupuestos</li>
+        <li>Auditoría</li>
+      </ul>
+    </section>
+  );
+}

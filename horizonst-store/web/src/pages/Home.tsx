@@ -1,0 +1,20 @@
+import { Link } from 'react-router-dom';
+
+export default function Home() {
+  return (
+    <section className="hero">
+      <p className="eyebrow">HorizonST Store</p>
+      <h1>Compra B2B para soluciones HorizonST</h1>
+      <p>
+        Catálogo privado para clientes y distribuidores: hardware, planes SaaS y solicitudes de
+        presupuesto con trazabilidad comercial.
+      </p>
+      <div className="actions">
+        <Link className="btn" to="/catalog">Ver catálogo</Link>
+        <Link className="btn secondary" to="/saas-plans">Planes SaaS</Link>
+        <Link className="btn ghost" to="/login">Login</Link>
+        <Link className="btn ghost" to="/register">Registro cliente</Link>
+      </div>
+    </section>
+  );
+}
