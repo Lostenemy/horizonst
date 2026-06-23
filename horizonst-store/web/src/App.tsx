@@ -3,7 +3,14 @@ import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleRoute from './components/RoleRoute';
 import Account from './pages/Account';
-import AdminHome from './pages/AdminHome';
+import AdminAudit from './pages/admin/AdminAudit';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminDistributorDetail from './pages/admin/AdminDistributorDetail';
+import AdminDistributors from './pages/admin/AdminDistributors';
+import AdminProducts from './pages/admin/AdminProducts';
+import AdminQuoteDetail from './pages/admin/AdminQuoteDetail';
+import AdminQuotes from './pages/admin/AdminQuotes';
+import AdminSaasPlans from './pages/admin/AdminSaasPlans';
 import Cart from './pages/Cart';
 import Catalog from './pages/Catalog';
 import Dashboard from './pages/Dashboard';
@@ -46,7 +53,14 @@ export default function App() {
           </Route>
 
           <Route element={<RoleRoute roles={['admin']} />}>
-            <Route path="/admin" element={<AdminHome />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/distributors" element={<AdminDistributors />} />
+            <Route path="/admin/distributors/:id" element={<AdminDistributorDetail />} />
+            <Route path="/admin/quotes" element={<AdminQuotes />} />
+            <Route path="/admin/quotes/:id" element={<AdminQuoteDetail />} />
+            <Route path="/admin/audit" element={<AdminAudit />} />
+            <Route path="/admin/catalog/products" element={<AdminProducts />} />
+            <Route path="/admin/catalog/saas-plans" element={<AdminSaasPlans />} />
           </Route>
         </Route>
       </Route>

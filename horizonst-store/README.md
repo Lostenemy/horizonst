@@ -328,12 +328,27 @@ La SPA React/TypeScript queda consolidada como flujo usable de extremo a extremo
 
 - No existe todavía endpoint público para listar presupuestos propios, por lo que `/quotes` permanece como aviso funcional.
 - Enterprise no genera carrito automáticamente; se muestra como contacto comercial.
-- La subida de documentos de distribuidor existe en API, pero la UI de esta fase solo lista documentos existentes.
-- El panel admin completo queda pendiente; `/admin` solo muestra un placeholder protegido por rol.
+- La subida de documentos de distribuidor existe en API; FASE 5C permite revisar y descargar documentos existentes desde admin.
+- El panel admin ya no es placeholder: FASE 5C incorpora dashboard, auditoría, distribuidores, presupuestos y catálogo.
 
 ### Próximos pasos recomendados
 
 1. Añadir endpoint público de presupuestos propios para cliente/distribuidor y conectar `/quotes`.
 2. Implementar UI de subida de documentos PDF para distribuidores usando `POST /api/distributor/documents`.
-3. Construir el panel admin completo sobre las APIs administrativas ya existentes.
+3. Profundizar en histórico de acciones si se amplían los eventos disponibles por entidad.
 4. Añadir pruebas de frontend cuando se estabilice la instalación de dependencias del workspace web.
+
+## FASE 5C – Portal Administrativo Completo
+
+FASE 5C incorpora un portal operativo protegido por rol `admin` para HorizonST Store. La SPA añade rutas bajo `/admin`: dashboard (`/admin`), distribuidores (`/admin/distributors` y detalle), presupuestos (`/admin/quotes` y detalle), auditoría (`/admin/audit`) y catálogo (`/admin/catalog/products`, `/admin/catalog/saas-plans`).
+
+Nuevos endpoints admin:
+
+- `GET /api/admin/dashboard`: métricas operativas, últimos eventos, presupuestos y distribuidores.
+- `GET /api/admin/audit`: consulta de `store.audit_log` con filtros por acción, entidad, actor, fechas, búsqueda y límite seguro.
+- `GET|POST /api/admin/products`, `GET|PATCH /api/admin/products/:id`: CRUD controlado de productos sin borrado físico.
+- `GET|POST /api/admin/saas-plans`, `GET|PATCH /api/admin/saas-plans/:id`: CRUD controlado de planes SaaS sin borrado físico.
+
+El portal reutiliza los endpoints existentes de administración de distribuidores, documentos y presupuestos para aprobar, rechazar, solicitar más información, cambiar estados y descargar documentación. Las pantallas incluyen estados de carga, errores, vacíos, formularios y botones deshabilitados durante operaciones.
+
+Limitaciones y exclusiones conocidas: no se implementan pagos, Stripe, Redsys, facturas, pedidos, ERP ni logística. No hay borrado físico de catálogo; se usa `is_active`. Los importes se envían y almacenan en céntimos y los planes Enterprise no generan precio automático.
