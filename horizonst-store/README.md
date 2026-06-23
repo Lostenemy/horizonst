@@ -109,7 +109,7 @@ El endpoint `GET /api/admin/quotes/:id` devuelve `history` ordenado de más reci
 
 ### PDF bajo demanda
 
-`GET /api/admin/quotes/:id/pdf` genera un PDF en memoria y lo devuelve con `Content-Type: application/pdf`, sin almacenamiento permanente. El documento incluye número, fecha, cliente, empresa, líneas, subtotal, IVA, total y notas.
+`GET /api/admin/quotes/:id/pdf` genera un PDF en memoria con PDFKit y lo devuelve con `Content-Type: application/pdf`, sin almacenamiento permanente. El documento incluye número, fecha, cliente, empresa, líneas, subtotal, IVA, total y notas, y conserva caracteres habituales en español como acentos y `ñ` sin depender de fuentes externas del sistema.
 
 ### Endpoints admin de presupuestos
 

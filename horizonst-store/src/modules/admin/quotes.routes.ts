@@ -4,7 +4,7 @@ import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { insertQuoteStatusHistory } from './quotes/history.js';
 import { generateQuotePdf } from './quotes/pdf.js';
-import { quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
+import { canTransitionQuoteStatus, quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
 
 export const adminQuotesRouter = Router();
 adminQuotesRouter.use(requireAuth, requireRole('admin'));
@@ -40,7 +40,7 @@ adminQuotesRouter.get('/quotes/:id/pdf', async (req, res, next) => {
     const quote = await pool.query(`SELECT q.quote_number, q.created_at, q.subtotal_cents, q.tax_cents, q.total_cents, q.notes, u.email, u.full_name, cp.company_name FROM store.quotes q JOIN store.users u ON u.id = q.user_id LEFT JOIN store.customer_profiles cp ON cp.user_id = u.id WHERE q.id = $1`, [id]);
     if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
     const items = await pool.query(`SELECT description, quantity, unit_price_cents, line_subtotal_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
-    const pdf = generateQuotePdf({ quote: quote.rows[0], items: items.rows });
+    const pdf = await generateQuotePdf({ quote: quote.rows[0], items: items.rows });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${quote.rows[0].quote_number}.pdf"`);
     res.setHeader('Content-Length', pdf.length.toString());
@@ -56,6 +56,8 @@ adminQuotesRouter.patch('/quotes/:id/status', async (req, res, next) => {
     const existing = await client.query('SELECT id, status FROM store.quotes WHERE id = $1 FOR UPDATE', [id]);
     if (!existing.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Quote not found' }); return; }
     const oldStatus = existing.rows[0].status as QuoteStatus;
+    if (oldStatus === input.status) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote status is already set to the requested value' }); return; }
+    if (!canTransitionQuoteStatus(oldStatus, input.status)) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Invalid quote status transition', previous_status: oldStatus, status: input.status }); return; }
     const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
     await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: input.status, comment: input.comment ?? null, changedBy: req.user!.sub }, client);
     await client.query('COMMIT'); res.json({ quote: rows[0] });

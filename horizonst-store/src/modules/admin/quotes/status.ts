@@ -11,3 +11,21 @@ export const quoteStatusChangeSchema = z.object({
   comment: z.string().trim().max(5000).optional(),
   internal_notes: z.string().trim().max(5000).optional()
 }).strict();
+
+export const allowedQuoteStatusTransitions: Record<QuoteStatus, readonly QuoteStatus[]> = {
+  draft: ['submitted', 'cancelled'],
+  submitted: ['in_review', 'cancelled'],
+  in_review: ['sent', 'rejected', 'cancelled'],
+  sent: ['accepted', 'rejected', 'cancelled'],
+  accepted: [],
+  rejected: [],
+  cancelled: []
+};
+
+export const canTransitionQuoteStatus = (oldStatus: QuoteStatus, newStatus: QuoteStatus): boolean => (
+  allowedQuoteStatusTransitions[oldStatus].includes(newStatus)
+);
+
+export const shouldRecordQuoteStatusHistory = (oldStatus: QuoteStatus, newStatus: QuoteStatus): boolean => (
+  oldStatus !== newStatus && canTransitionQuoteStatus(oldStatus, newStatus)
+);
