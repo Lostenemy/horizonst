@@ -21,16 +21,28 @@ const blockedReadPatterns = [
 ];
 
 const isSensitiveEnvPath = (value) => {
-  const normalized = value.replace(/\\/g, '/');
+  const normalized = value.replace(/\\/g, '/').replace(/^['"`]+|['"`;|&<>]+$/g, '');
   const filename = normalized.split('/').pop() ?? '';
   return filename.startsWith('.env') && filename !== '.env.example' && !filename.endsWith('.example');
+};
+
+const hasSensitiveEnvRead = (command) => {
+  const readCommand = command.match(/^\s*(?:Get-Content|type|cat|more)\b([\s\S]*)$/i);
+  if (!readCommand) return false;
+
+  const args = readCommand[1] ?? '';
+  const envPathPattern = /(?:^|[\s'"`])((?:(?:\.{1,2}|[A-Za-z0-9_.-]+)[\\/])*\.env(?:\.[^\s'"`;|&<>]+)?)(?=$|[\s'"`;|&<>])/gi;
+  for (const match of args.matchAll(envPathPattern)) {
+    if (isSensitiveEnvPath(match[1])) return true;
+  }
+  return false;
 };
 
 export const HorizonSTGuard = async () => ({
   'tool.execute.before': async (input, output) => {
     if (input.tool === 'bash') {
       const command = String(output.args?.command ?? '');
-      if (/\b(?:Get-Content|type|cat|more)\b/i.test(command) && isSensitiveEnvPath(command)) {
+      if (hasSensitiveEnvRead(command)) {
         throw new Error('leer archivos .env esta bloqueado en HorizonST.');
       }
       const blocked = blockedCommandPatterns.find((entry) => entry.pattern.test(command));

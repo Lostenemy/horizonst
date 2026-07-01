@@ -103,9 +103,13 @@ No escribas el valor en archivos versionados.
 
 `horizonst-guard.js` bloquea antes de ejecutar comandos o lecturas sensibles. No usa red, no envía telemetría, no lee secretos y no modifica comandos permitidos.
 
+En este entorno Windows CLI cubre patrones directos y habituales de lectura mediante `type`, `cat`, `more` y `Get-Content` cuando el argumento parece apuntar a `.env`, `.env.local`, `.env.production` o cualquier `.env.*` que no sea un archivo de ejemplo. También bloquea lecturas directas mediante la herramienta `read` de OpenCode para `.env` sensibles y claves privadas comunes.
+
+La comprobación reproducible está en `.opencode/tests/horizonst-guard.test.mjs` y no lee archivos reales; solo invoca el hook con comandos simulados.
+
 Limitaciones:
 
-- No promete protección absoluta frente a shell ofuscado.
+- No promete protección absoluta frente a shell ofuscado ni implementa un parser completo de PowerShell o shell.
 - No puede analizar SQL arbitrario construido dinámicamente.
 - Complementa, pero no sustituye, los permisos nativos y la revisión humana.
 
