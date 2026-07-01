@@ -4,6 +4,7 @@ import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { insertQuoteStatusHistory } from './quotes/history.js';
 import { generateQuotePdf } from './quotes/pdf.js';
+import { quotePdfSelectForAdmin } from '../quotes/quotes.routes.js';
 import { canTransitionQuoteStatus, quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
 
 export const adminQuotesRouter = Router();
@@ -37,7 +38,7 @@ adminQuotesRouter.get('/quotes/:id', async (req, res, next) => {
 adminQuotesRouter.get('/quotes/:id/pdf', async (req, res, next) => {
   try {
     const id = idSchema.parse(req.params.id);
-    const quote = await pool.query(`SELECT q.quote_number, q.created_at, q.subtotal_cents, q.tax_cents, q.total_cents, q.notes, u.email, u.full_name, cp.company_name FROM store.quotes q JOIN store.users u ON u.id = q.user_id LEFT JOIN store.customer_profiles cp ON cp.user_id = u.id WHERE q.id = $1`, [id]);
+    const quote = await pool.query(quotePdfSelectForAdmin, [id]);
     if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
     const items = await pool.query(`SELECT description, quantity, unit_price_cents, line_subtotal_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
     const pdf = await generateQuotePdf({ quote: quote.rows[0], items: items.rows });

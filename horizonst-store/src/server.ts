@@ -16,6 +16,7 @@ import { adminAuditRouter } from './modules/admin/audit.routes.js';
 import { adminCatalogRouter } from './modules/admin/catalog.routes.js';
 import { adminDashboardRouter } from './modules/admin/dashboard.routes.js';
 import { cartRouter } from './modules/cart/cart.routes.js';
+import { quotesRouter } from './modules/quotes/quotes.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
@@ -32,6 +33,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/customer', customerRouter);
 app.use('/api/distributor', distributorRouter);
 app.use('/api/cart', cartRouter);
+app.use('/api/quotes', quotesRouter);
 app.use('/api/admin', adminDistributorsRouter);
 app.use('/api/admin', adminQuotesRouter);
 app.use('/api/admin', adminDashboardRouter);
