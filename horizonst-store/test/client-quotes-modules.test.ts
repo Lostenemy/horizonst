@@ -45,7 +45,7 @@ const makeDecisionHarness = (options: { role?: 'customer' | 'distributor' | 'adm
     async query(sql: string, params?: unknown[]) {
       calls.push({ sql, params, client: true });
       if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
-      if (sql.includes('FOR UPDATE')) return { rows: options.existing === undefined ? [{ ...baseQuote(), email: 'u@example.com', full_name: 'User Test' }] : options.existing ? [{ ...options.existing, email: 'u@example.com', full_name: 'User Test' }] : [] };
+      if (sql.includes('FOR UPDATE')) return { rows: options.existing === undefined ? [{ ...baseQuote(), email: 'u@example.com', full_name: 'User Test', role: options.role ?? 'customer' }] : options.existing ? [{ ...options.existing, email: 'u@example.com', full_name: 'User Test', role: options.role ?? 'customer' }] : [] };
       if (sql.startsWith('UPDATE')) {
         if (options.updateError) throw options.updateError;
         const status = params?.[1] as string;

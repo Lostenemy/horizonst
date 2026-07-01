@@ -2,9 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { connect as netConnect, Socket } from 'node:net';
 import { connect as tlsConnect, TLSSocket } from 'node:tls';
 import { env } from '../../config/env.js';
+import type { StoreMailConfig } from '../../config/env.js';
 
 type SmtpResponse = { code: number; message: string };
+type SmtpSocket = Socket | TLSSocket;
+type SmtpConnector = (config: StoreMailConfig) => { socket: SmtpSocket; readyEvent: string };
 
+export type MailContent = { to: string; subject: string; text: string };
 export type QuoteEmailInput = {
   quote: {
     id: string;
@@ -12,11 +16,12 @@ export type QuoteEmailInput = {
     total_cents: number;
     email: string;
     full_name?: string | null;
+    role?: string | null;
   };
 };
 
 export type QuoteAcceptedCommercialEmailInput = QuoteEmailInput & {
-  order?: { id: string; order_number: string } | null;
+  order: { id: string; order_number: string };
 };
 
 export type OrderConfirmationEmailInput = QuoteEmailInput & {
@@ -24,43 +29,54 @@ export type OrderConfirmationEmailInput = QuoteEmailInput & {
 };
 
 const SMTP_TIMEOUT_MS = 15000;
+const AUTO_FOOTER = 'HorizonST — Este correo ha sido generado automáticamente.';
 
 const formatMoney = (cents: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(cents / 100);
-const quoteUrl = (quoteId: string) => `${env.publicBaseUrl.replace(/\/$/, '')}/quotes/${quoteId}`;
+const baseUrl = () => env.publicBaseUrl.replace(/\/$/, '');
+const quotesUrl = () => `${baseUrl()}/quotes`;
+const ordersUrl = () => `${baseUrl()}/orders`;
+const adminOrderUrl = (orderId: string) => `${baseUrl()}/admin/orders/${orderId}`;
 
-class SmtpClient {
-  private socket: Socket | TLSSocket | null = null;
+const defaultConnector: SmtpConnector = (config) => ({
+  socket: config.secure
+    ? tlsConnect({ host: config.host, port: config.port, servername: config.host, rejectUnauthorized: config.tlsRejectUnauthorized })
+    : netConnect({ host: config.host, port: config.port }),
+  readyEvent: config.secure ? 'secureConnect' : 'connect'
+});
+
+export class SmtpClient {
+  private socket: SmtpSocket | null = null;
+
+  constructor(private readonly config: StoreMailConfig = env.mail, private readonly connector: SmtpConnector = defaultConnector) {}
 
   async connect() {
-    if (!env.mail.enabled) throw new Error('mail_disabled');
-    this.socket = env.mail.secure
-      ? tlsConnect({ host: env.mail.host, port: env.mail.port, servername: env.mail.host, rejectUnauthorized: env.mail.tlsRejectUnauthorized })
-      : netConnect({ host: env.mail.host, port: env.mail.port });
+    if (!this.config.enabled) throw new Error('mail_disabled');
+    const connection = this.connector(this.config);
+    this.socket = connection.socket;
 
     await new Promise<void>((resolve, reject) => {
       const socket = this.ensureSocket();
-      const readyEvent = env.mail.secure ? 'secureConnect' : 'connect';
       const onReady = () => { socket.off('error', onError); resolve(); };
-      const onError = (error: Error) => { socket.off(readyEvent, onReady); reject(error); };
-      socket.once(readyEvent, onReady);
+      const onError = (error: Error) => { socket.off(connection.readyEvent, onReady); reject(error); };
+      socket.once(connection.readyEvent, onReady);
       socket.once('error', onError);
     });
 
     this.expect(await this.readResponse(), [220]);
-    this.expect(await this.send(`EHLO ${env.mail.ehloDomain}`), [250]);
+    this.expect(await this.send(`EHLO ${this.config.ehloDomain}`), [250]);
     this.expect(await this.send('AUTH LOGIN'), [334]);
-    this.expect(await this.send(Buffer.from(env.mail.user).toString('base64')), [334]);
-    this.expect(await this.send(Buffer.from(env.mail.password).toString('base64')), [235]);
+    this.expect(await this.send(Buffer.from(this.config.user).toString('base64')), [334]);
+    this.expect(await this.send(Buffer.from(this.config.password).toString('base64')), [235]);
   }
 
   async sendMail(to: string, subject: string, text: string) {
-    this.expect(await this.send(`MAIL FROM:<${env.mail.from}>`), [250]);
+    this.expect(await this.send(`MAIL FROM:<${this.config.from}>`), [250]);
     this.expect(await this.send(`RCPT TO:<${to}>`), [250, 251]);
     this.expect(await this.send('DATA'), [354]);
     const body = [
-      `Message-ID: <${randomUUID()}@${env.mail.ehloDomain}>`,
+      `Message-ID: <${randomUUID()}@${this.config.ehloDomain}>`,
       `Date: ${new Date().toUTCString()}`,
-      `From: ${env.mail.from}`,
+      `From: ${this.config.from}`,
       `To: ${to}`,
       `Subject: ${subject}`,
       'MIME-Version: 1.0',
@@ -129,7 +145,7 @@ class SmtpClient {
   }
 }
 
-async function sendMail(to: string, subject: string, text: string) {
+async function sendMail({ to, subject, text }: MailContent) {
   if (!env.mail.enabled) return;
   const client = new SmtpClient();
   try {
@@ -140,49 +156,77 @@ async function sendMail(to: string, subject: string, text: string) {
   }
 }
 
-export async function sendQuoteAvailableEmail({ quote }: QuoteEmailInput) {
+export function buildQuoteAvailableEmail({ quote }: QuoteEmailInput): MailContent {
   const name = quote.full_name || 'cliente';
-  await sendMail(quote.email, `Presupuesto ${quote.quote_number} disponible`, [
-    `Hola ${name},`,
-    '',
-    `Tu presupuesto ${quote.quote_number} ya esta disponible en HorizonST Store.`,
-    `Importe total: ${formatMoney(quote.total_cents)}.`,
-    `Puedes revisarlo en: ${quoteUrl(quote.id)}`,
-    '',
-    'Gracias,',
-    'Equipo HorizonST'
-  ].join('\n'));
+  return {
+    to: quote.email,
+    subject: `Presupuesto disponible: ${quote.quote_number}`,
+    text: [
+      `Hola ${name},`,
+      '',
+      `Tu presupuesto ${quote.quote_number} ya está disponible en HorizonST Store.`,
+      `Importe total: ${formatMoney(quote.total_cents)}.`,
+      `Puedes revisarlo, descargar el PDF, aceptarlo o rechazarlo en: ${quotesUrl()}`,
+      '',
+      AUTO_FOOTER
+    ].join('\n')
+  };
 }
 
-export async function sendQuoteAcceptedCommercialEmail({ quote, order }: QuoteAcceptedCommercialEmailInput) {
-  await sendMail(env.mail.commercialTo, `Presupuesto aceptado ${quote.quote_number}`, [
-    `El cliente ${quote.full_name || quote.email} ha aceptado el presupuesto ${quote.quote_number}.`,
-    `Email cliente: ${quote.email}`,
-    `Importe total: ${formatMoney(quote.total_cents)}.`,
-    order ? `Pedido generado: ${order.order_number}` : 'Pedido generado desde aceptacion administrativa.',
-    `Presupuesto: ${quoteUrl(quote.id)}`
-  ].join('\n'));
+export function buildQuoteAcceptedCommercialEmail({ quote, order }: QuoteAcceptedCommercialEmailInput): MailContent {
+  return {
+    to: env.mail.commercialTo,
+    subject: `Presupuesto aceptado: ${quote.quote_number}`,
+    text: [
+      `Cliente: ${quote.full_name || quote.email}`,
+      `Email: ${quote.email}`,
+      quote.role ? `Rol: ${quote.role}` : null,
+      `Presupuesto: ${quote.quote_number}`,
+      `Pedido: ${order.order_number}`,
+      `Importe total: ${formatMoney(quote.total_cents)}.`,
+      `Pedido administrativo: ${adminOrderUrl(order.id)}`,
+      '',
+      AUTO_FOOTER
+    ].filter((line) => line !== null).join('\n')
+  };
 }
 
-export async function sendOrderConfirmationEmail({ quote, order }: OrderConfirmationEmailInput) {
+export function buildOrderConfirmationEmail({ quote, order }: OrderConfirmationEmailInput): MailContent {
   const name = quote.full_name || 'cliente';
-  await sendMail(quote.email, `Confirmacion de pedido ${order.order_number}`, [
-    `Hola ${name},`,
-    '',
-    `Hemos registrado tu pedido ${order.order_number} a partir del presupuesto ${quote.quote_number}.`,
-    `Importe total: ${formatMoney(quote.total_cents)}.`,
-    'Nuestro equipo comercial contactara contigo para los siguientes pasos.',
-    '',
-    'Gracias,',
-    'Equipo HorizonST'
-  ].join('\n'));
+  return {
+    to: quote.email,
+    subject: `Pedido confirmado: ${order.order_number}`,
+    text: [
+      `Hola ${name},`,
+      '',
+      `Hemos registrado tu pedido ${order.order_number} a partir del presupuesto ${quote.quote_number}.`,
+      `Importe total: ${formatMoney(quote.total_cents)}.`,
+      `Puedes consultar tus pedidos en: ${ordersUrl()}`,
+      'Nuestro equipo comercial contactará contigo para los siguientes pasos.',
+      '',
+      AUTO_FOOTER
+    ].join('\n')
+  };
 }
 
-export const sanitizeMailError = (error: unknown) => {
+export async function sendQuoteAvailableEmail(input: QuoteEmailInput) {
+  await sendMail(buildQuoteAvailableEmail(input));
+}
+
+export async function sendQuoteAcceptedCommercialEmail(input: QuoteAcceptedCommercialEmailInput) {
+  await sendMail(buildQuoteAcceptedCommercialEmail(input));
+}
+
+export async function sendOrderConfirmationEmail(input: OrderConfirmationEmailInput) {
+  await sendMail(buildOrderConfirmationEmail(input));
+}
+
+export const sanitizeMailError = (error: unknown, mail: Pick<StoreMailConfig, 'user' | 'password'> = env.mail) => {
   let message = error instanceof Error ? error.message : String(error);
-  if (env.mail.password) message = message.replaceAll(env.mail.password, '[redacted]');
-  if (env.mail.user) message = message.replaceAll(env.mail.user, '[redacted]');
+  if (mail.password) message = message.replaceAll(mail.password, '[redacted]');
+  if (mail.user) message = message.replaceAll(mail.user, '[redacted]');
   return message;
 };
 
 export const commercialMailRecipient = env.mail.commercialTo;
+export const automaticMailFooter = AUTO_FOOTER;

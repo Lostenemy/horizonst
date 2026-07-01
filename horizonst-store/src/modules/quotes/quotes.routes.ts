@@ -86,7 +86,7 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
     try {
       const id = idSchema.parse(req.params.id); const input = quoteDecisionSchema.parse(req.body ?? {});
       await client.query('BEGIN');
-      const existing = await client.query(`SELECT q.id, q.status, q.quote_number, q.total_cents, u.email, u.full_name FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1 AND q.user_id = $2 FOR UPDATE`, [id, req.user.sub]);
+      const existing = await client.query(`SELECT q.id, q.status, q.quote_number, q.total_cents, u.email, u.full_name, u.role FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1 AND q.user_id = $2 FOR UPDATE`, [id, req.user.sub]);
       if (!existing.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Quote not found' }); return; }
       const oldStatus = existing.rows[0].status as QuoteStatus;
       if (oldStatus !== 'sent') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote must be sent before it can be accepted or rejected', previous_status: oldStatus, status }); return; }

@@ -85,7 +85,7 @@ router.patch('/quotes/:id/status', async (req, res, next) => {
   try {
     const id = idSchema.parse(req.params.id); const input = quoteStatusChangeSchema.parse(req.body);
     await client.query('BEGIN');
-    const existing = await client.query('SELECT q.id, q.status, q.quote_number, q.total_cents, u.email, u.full_name FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1 FOR UPDATE', [id]);
+    const existing = await client.query('SELECT q.id, q.status, q.quote_number, q.total_cents, u.email, u.full_name, u.role FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1 FOR UPDATE', [id]);
     if (!existing.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Quote not found' }); return; }
     const oldStatus = existing.rows[0].status as QuoteStatus;
     if (oldStatus === input.status) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote status is already set to the requested value' }); return; }
