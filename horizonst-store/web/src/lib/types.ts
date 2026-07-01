@@ -48,6 +48,8 @@ export type Quote = {
   created_at: string;
   updated_at: string;
   submitted_at?: string | null;
+  accepted_at?: string | null;
+  rejected_at?: string | null;
 };
 
 export type CartItem = {
