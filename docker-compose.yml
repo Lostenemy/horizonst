@@ -276,6 +276,17 @@ services:
       - STORE_REFRESH_TOKEN_TTL=${STORE_REFRESH_TOKEN_TTL:-30d}
       - STORE_PASSWORD_RESET_TTL=${STORE_PASSWORD_RESET_TTL:-1h}
       - STORE_EMAIL_VERIFICATION_TTL=${STORE_EMAIL_VERIFICATION_TTL:-24h}
+      - STORE_PUBLIC_BASE_URL=${STORE_PUBLIC_BASE_URL:-https://tienda.horizonst.com.es}
+      - STORE_MAIL_ENABLED=${STORE_MAIL_ENABLED:-false}
+      - STORE_MAIL_HOST=${STORE_MAIL_HOST:-mail.horizonst.com.es}
+      - STORE_MAIL_PORT=${STORE_MAIL_PORT:-465}
+      - STORE_MAIL_SECURE=${STORE_MAIL_SECURE:-true}
+      - STORE_MAIL_USER=${STORE_MAIL_USER}
+      - STORE_MAIL_PASSWORD=${STORE_MAIL_PASSWORD}
+      - STORE_MAIL_FROM=${STORE_MAIL_FROM:-no_reply@horizonst.com.es}
+      - STORE_MAIL_EHLO_DOMAIN=${STORE_MAIL_EHLO_DOMAIN:-horizonst.com.es}
+      - STORE_MAIL_TLS_REJECT_UNAUTHORIZED=${STORE_MAIL_TLS_REJECT_UNAUTHORIZED:-true}
+      - STORE_MAIL_COMMERCIAL_TO=${STORE_MAIL_COMMERCIAL_TO:-comercial@horizonst.com.es}
     volumes:
       - /opt/horizonst/store-data/documents:/opt/horizonst/store-data/documents
     depends_on:

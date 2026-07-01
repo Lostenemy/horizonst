@@ -22,6 +22,17 @@ Servicio privado base para la futura tienda HorizonST en `tienda.horizonst.com.e
 | `DATABASE_URL` | URL PostgreSQL alternativa | sin valor |
 | `STORE_DOCUMENTS_PATH` | Ruta para documentos de distribuidores | `/opt/horizonst/store-data/documents` |
 | `STORE_CORS_ORIGIN` | Origen permitido para CORS | `http://127.0.0.1:4020` |
+| `STORE_PUBLIC_BASE_URL` | URL publica usada en enlaces de emails | `https://tienda.horizonst.com.es` |
+| `STORE_MAIL_ENABLED` | Activa el envio SMTP transaccional | `false` |
+| `STORE_MAIL_HOST` | Host SMTP | `mail.horizonst.com.es` |
+| `STORE_MAIL_PORT` | Puerto SMTP | `465` |
+| `STORE_MAIL_SECURE` | Usa TLS directo | `true` |
+| `STORE_MAIL_USER` | Usuario SMTP AUTH LOGIN | sin valor |
+| `STORE_MAIL_PASSWORD` | Password SMTP AUTH LOGIN | sin valor |
+| `STORE_MAIL_FROM` | Remitente tecnico | `no_reply@horizonst.com.es` |
+| `STORE_MAIL_EHLO_DOMAIN` | Dominio enviado en EHLO | `horizonst.com.es` |
+| `STORE_MAIL_TLS_REJECT_UNAUTHORIZED` | Valida certificado TLS SMTP | `true` |
+| `STORE_MAIL_COMMERCIAL_TO` | Destinatario de avisos comerciales | `comercial@horizonst.com.es` |
 
 ## Comandos
 
@@ -106,6 +117,18 @@ Cada cambio de estado registra:
 La migración `004_quote_status_history.sql` crea `store.quote_status_history` con relaciones restrictivas para presupuestos y preservación de referencia nullable para usuarios eliminados. No usa `ON DELETE CASCADE`.
 
 El endpoint `GET /api/admin/quotes/:id` devuelve `history` ordenado de más reciente a más antiguo junto con el presupuesto y sus líneas.
+
+### Emails transaccionales mínimos
+
+El store puede enviar emails SMTP propios sin servicios externos. Los envios se ejecutan siempre despues del `COMMIT` de la transaccion: si SMTP falla, la operacion comercial ya confirmada no se revierte y la respuesta HTTP no pasa a `500` por ese fallo.
+
+Eventos cubiertos:
+
+- `in_review` -> `sent`: aviso al cliente de presupuesto disponible.
+- `sent` -> `accepted`: confirmacion de pedido al cliente.
+- `POST /api/quotes/:id/accept`: aviso a `STORE_MAIL_COMMERCIAL_TO` y confirmacion de pedido al cliente.
+
+Los logs de error de correo incluyen evento, destinatario y error sanitizado; no deben incluir usuario/password SMTP. Para prueba manual, definir credenciales reales solo en `.env` local/servidor y activar `STORE_MAIL_ENABLED=true`.
 
 ### PDF bajo demanda
 
