@@ -2,15 +2,14 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { writeAuditLog } from '../shared/audit.js';
+import { insertQuoteStatusHistory } from './quotes/history.js';
+import { generateQuotePdf } from './quotes/pdf.js';
+import { canTransitionQuoteStatus, quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
 
 export const adminQuotesRouter = Router();
 adminQuotesRouter.use(requireAuth, requireRole('admin'));
 
-const quoteStatuses = ['draft', 'submitted', 'in_review', 'sent', 'accepted', 'rejected', 'cancelled'] as const;
-const adminStatuses = ['in_review', 'sent', 'accepted', 'rejected', 'cancelled'] as const;
 const idSchema = z.string().uuid();
-const statusSchema = z.object({ status: z.enum(adminStatuses), internal_notes: z.string().trim().max(5000).optional() }).strict();
 
 adminQuotesRouter.get('/quotes', async (req, res, next) => {
   try {
@@ -30,20 +29,37 @@ adminQuotesRouter.get('/quotes/:id', async (req, res, next) => {
     const quote = await pool.query(`SELECT q.*, u.email, u.full_name, u.role FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1`, [id]);
     if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
     const items = await pool.query(`SELECT id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
-    res.json({ quote: quote.rows[0], items: items.rows });
+    const history = await pool.query(`SELECT h.id, h.quote_id, h.old_status, h.new_status, h.comment, h.changed_by, h.created_at, u.email AS changed_by_email, u.full_name AS changed_by_full_name FROM store.quote_status_history h LEFT JOIN store.users u ON u.id = h.changed_by WHERE h.quote_id = $1 ORDER BY h.created_at DESC`, [id]);
+    res.json({ quote: quote.rows[0], items: items.rows, history: history.rows });
+  } catch (error) { next(error); }
+});
+
+adminQuotesRouter.get('/quotes/:id/pdf', async (req, res, next) => {
+  try {
+    const id = idSchema.parse(req.params.id);
+    const quote = await pool.query(`SELECT q.quote_number, q.created_at, q.subtotal_cents, q.tax_cents, q.total_cents, q.notes, u.email, u.full_name, cp.company_name FROM store.quotes q JOIN store.users u ON u.id = q.user_id LEFT JOIN store.customer_profiles cp ON cp.user_id = u.id WHERE q.id = $1`, [id]);
+    if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
+    const items = await pool.query(`SELECT description, quantity, unit_price_cents, line_subtotal_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
+    const pdf = await generateQuotePdf({ quote: quote.rows[0], items: items.rows });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${quote.rows[0].quote_number}.pdf"`);
+    res.setHeader('Content-Length', pdf.length.toString());
+    res.send(pdf);
   } catch (error) { next(error); }
 });
 
 adminQuotesRouter.patch('/quotes/:id/status', async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const id = idSchema.parse(req.params.id); const input = statusSchema.parse(req.body);
+    const id = idSchema.parse(req.params.id); const input = quoteStatusChangeSchema.parse(req.body);
     await client.query('BEGIN');
-    const existing = await client.query('SELECT id, status FROM store.quotes WHERE id = $1', [id]);
+    const existing = await client.query('SELECT id, status FROM store.quotes WHERE id = $1 FOR UPDATE', [id]);
     if (!existing.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Quote not found' }); return; }
-    if (existing.rows[0].status === 'draft') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Draft quotes cannot be modified from admin' }); return; }
+    const oldStatus = existing.rows[0].status as QuoteStatus;
+    if (oldStatus === input.status) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote status is already set to the requested value' }); return; }
+    if (!canTransitionQuoteStatus(oldStatus, input.status)) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Invalid quote status transition', previous_status: oldStatus, status: input.status }); return; }
     const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
-    await writeAuditLog({ actorUserId: req.user!.sub, action: 'quote_status_changed', entityType: 'quote', entityId: id, payload: { previous_status: existing.rows[0].status, status: input.status } }, client);
+    await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: input.status, comment: input.comment ?? null, changedBy: req.user!.sub }, client);
     await client.query('COMMIT'); res.json({ quote: rows[0] });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });

@@ -101,9 +101,22 @@ export type AdminQuote = AdminQuoteListItem & {
   reviewed_by: string | null;
 };
 
+export type QuoteStatusHistory = {
+  id: string;
+  quote_id: string;
+  old_status: Quote['status'];
+  new_status: Quote['status'];
+  comment: string | null;
+  changed_by: string | null;
+  changed_by_email: string | null;
+  changed_by_full_name: string | null;
+  created_at: string;
+};
+
 export type QuoteDetailResponse = {
   quote: AdminQuote;
   items: CartItem[];
+  history: QuoteStatusHistory[];
 };
 
 export type ProductsResponse = { products: Product[] };
