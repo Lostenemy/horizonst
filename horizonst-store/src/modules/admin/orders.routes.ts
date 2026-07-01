@@ -1,11 +1,14 @@
+import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { z } from 'zod';
-import { pool } from '../../db/pool.js';
+import { pool as defaultPool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { orderItemColumns, orderStatuses, publicOrderColumns } from '../orders/order.service.js';
 
-export const adminOrdersRouter = Router();
-adminOrdersRouter.use(requireAuth, requireRole('admin'));
+type QueryResult = { rows: any[] };
+type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
+
+export type AdminOrdersRouterDependencies = { pool?: Queryable; authMiddleware?: RequestHandler; roleMiddleware?: RequestHandler };
 
 const idSchema = z.string().uuid();
 const filtersSchema = z.object({
@@ -15,7 +18,12 @@ const filtersSchema = z.object({
   quote_number: z.string().trim().max(100).optional()
 }).strict();
 
-adminOrdersRouter.get('/orders', async (req, res, next) => {
+export const createAdminOrdersRouter = (dependencies: AdminOrdersRouterDependencies = {}) => {
+const router = Router();
+const pool = dependencies.pool ?? defaultPool;
+router.use(dependencies.authMiddleware ?? requireAuth, dependencies.roleMiddleware ?? requireRole('admin'));
+
+router.get('/orders', async (req, res, next) => {
   try {
     const query = filtersSchema.parse(req.query);
     const params: unknown[] = []; const where: string[] = [];
@@ -28,7 +36,7 @@ adminOrdersRouter.get('/orders', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-adminOrdersRouter.get('/orders/:id', async (req, res, next) => {
+router.get('/orders/:id', async (req, res, next) => {
   try {
     const id = idSchema.parse(req.params.id);
     const order = await pool.query(`SELECT ${publicOrderColumns}, q.quote_number, u.email, u.full_name, u.role FROM store.orders o JOIN store.quotes q ON q.id = o.quote_id JOIN store.users u ON u.id = o.user_id WHERE o.id = $1`, [id]);
@@ -37,3 +45,8 @@ adminOrdersRouter.get('/orders/:id', async (req, res, next) => {
     res.json({ order: order.rows[0], items: items.rows });
   } catch (error) { next(error); }
 });
+
+return router;
+};
+
+export const adminOrdersRouter = createAdminOrdersRouter();

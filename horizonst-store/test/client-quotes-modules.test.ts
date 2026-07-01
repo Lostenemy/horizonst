@@ -33,7 +33,7 @@ const publicBaseQuote = (status = 'sent') => {
 
 type QueryCall = { sql: string; params?: unknown[]; client?: boolean };
 
-const makeDecisionHarness = (options: { role?: 'customer' | 'distributor' | 'admin'; existing?: any; updateError?: Error } = {}) => {
+const makeDecisionHarness = (options: { role?: 'customer' | 'distributor' | 'admin'; existing?: any; updateError?: Error; orderError?: Error } = {}) => {
   const calls: QueryCall[] = [];
   const historyCalls: any[] = [];
   const auditCalls: any[] = [];
@@ -63,7 +63,7 @@ const makeDecisionHarness = (options: { role?: 'customer' | 'distributor' | 'adm
     insertQuoteStatusHistory: async (input, queryClient) => { historyCalls.push({ input, sameClient: queryClient === client }); },
     writeAuditLog: async (input, queryClient) => { auditCalls.push({ input, sameClient: queryClient === client }); },
     generateQuotePdf: async () => Buffer.from('%PDF-test'),
-    createOrderFromAcceptedQuote: async (input) => { orderCalls.push({ input, sameClient: input.client === client }); return { order: { id: '44444444-4444-4444-8444-444444444444', quote_id: quoteId, user_id: userId, order_number: 'ORD-Q-1', status: 'pending', subtotal_cents: 1000, discount_cents: 0, tax_cents: 210, total_cents: 1210, customer_notes: null, created_at: now, updated_at: now }, items: [], created: true }; }
+    createOrderFromAcceptedQuote: async (input) => { orderCalls.push({ input, sameClient: input.client === client }); if (options.orderError) throw options.orderError; return { order: { id: '44444444-4444-4444-8444-444444444444', quote_id: quoteId, user_id: userId, order_number: 'ORD-Q-1', status: 'pending', subtotal_cents: 1000, discount_cents: 0, tax_cents: 210, total_cents: 1210, customer_notes: null, created_at: now, updated_at: now }, items: [], created: true }; }
   } as any));
   app.use((error: any, _req: any, res: any, _next: any) => {
     if (error instanceof ZodError) { res.status(400).json({ error: 'Validation error' }); return; }
@@ -155,6 +155,7 @@ for (const status of ['draft', 'accepted', 'rejected']) {
   assert.equal(response.status, 409, `${status} quote returns 409`);
   assert.equal(h.historyCalls.length, 0, 'invalid operation must not create history');
   assert.equal(h.auditCalls.length, 0);
+  assert.equal(h.orderCalls.length, 0, 'invalid state must not create order');
 }
 
 {
@@ -163,6 +164,18 @@ for (const status of ['draft', 'accepted', 'rejected']) {
   assert.equal(response.status, 500);
   assert.ok(h.calls.some((call) => call.sql === 'ROLLBACK'));
   assert.equal(h.released, true);
+}
+
+{
+  const h = makeDecisionHarness({ orderError: new Error('order boom') });
+  const response = await request(h.app, `/api/quotes/${quoteId}/accept`, { method: 'POST', body: '{}' });
+  assert.equal(response.status, 500, 'order creation failure rolls back customer acceptance');
+  assert.ok(h.calls.some((call) => call.sql === 'ROLLBACK'));
+  assert.equal(h.calls.some((call) => call.sql === 'COMMIT'), false);
+  assert.equal(h.orderCalls.length, 1);
+  assert.equal(h.released, true);
+  const body = await json(response);
+  assert.equal(body.order, undefined);
 }
 
 for (const body of [{ comment: 42 }, { comment: 'ok', extra: true }]) {
