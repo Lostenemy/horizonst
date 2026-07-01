@@ -5,6 +5,7 @@ const links = [
   ['/admin', 'Dashboard'],
   ['/admin/distributors', 'Distribuidores'],
   ['/admin/quotes', 'Presupuestos'],
+  ['/admin/orders', 'Pedidos'],
   ['/admin/audit', 'Auditoría'],
   ['/admin/catalog/products', 'Productos'],
   ['/admin/catalog/saas-plans', 'Planes SaaS']

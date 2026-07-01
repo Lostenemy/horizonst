@@ -6,6 +6,7 @@ import { insertQuoteStatusHistory } from './quotes/history.js';
 import { generateQuotePdf } from './quotes/pdf.js';
 import { quotePdfSelectForAdmin } from '../quotes/quotes.routes.js';
 import { canTransitionQuoteStatus, quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
+import { createOrderFromAcceptedQuote } from '../orders/order.service.js';
 
 export const adminQuotesRouter = Router();
 adminQuotesRouter.use(requireAuth, requireRole('admin'));
@@ -61,6 +62,7 @@ adminQuotesRouter.patch('/quotes/:id/status', async (req, res, next) => {
     if (!canTransitionQuoteStatus(oldStatus, input.status)) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Invalid quote status transition', previous_status: oldStatus, status: input.status }); return; }
     const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
     await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: input.status, comment: input.comment ?? null, changedBy: req.user!.sub }, client);
-    await client.query('COMMIT'); res.json({ quote: rows[0] });
+    const orderResult = input.status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user!.sub }) : null;
+    await client.query('COMMIT'); res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });

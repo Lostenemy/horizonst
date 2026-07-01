@@ -34,6 +34,7 @@ export default function Layout() {
               <NavLink to="/dashboard">Dashboard</NavLink>
               <NavLink to="/cart">Carrito</NavLink>
               <NavLink to="/quotes">Presupuestos</NavLink>
+              {(user.role === 'customer' || user.role === 'distributor') && <NavLink to="/orders">Pedidos</NavLink>}
               {user.role === 'distributor' && <NavLink to="/distributor">Distribuidor</NavLink>}
               {user.role === 'admin' && <NavLink to="/admin">Admin</NavLink>}
               <button type="button" className="link-button" onClick={handleLogout}>Salir</button>

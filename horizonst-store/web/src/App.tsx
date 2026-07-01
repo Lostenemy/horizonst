@@ -8,6 +8,8 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminDistributorDetail from './pages/admin/AdminDistributorDetail';
 import AdminDistributors from './pages/admin/AdminDistributors';
 import AdminProducts from './pages/admin/AdminProducts';
+import AdminOrderDetail from './pages/admin/AdminOrderDetail';
+import AdminOrders from './pages/admin/AdminOrders';
 import AdminQuoteDetail from './pages/admin/AdminQuoteDetail';
 import AdminQuotes from './pages/admin/AdminQuotes';
 import AdminSaasPlans from './pages/admin/AdminSaasPlans';
@@ -20,6 +22,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Quotes from './pages/Quotes';
+import Orders from './pages/Orders';
 import Register from './pages/Register';
 import RegisterDistributor from './pages/RegisterDistributor';
 import ResetPassword from './pages/ResetPassword';
@@ -44,7 +47,10 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
           <Route path="/cart" element={<Cart />} />
-          <Route path="/quotes" element={<Quotes />} />
+          <Route element={<RoleRoute roles={['customer', 'distributor']} />}>
+            <Route path="/quotes" element={<Quotes />} />
+            <Route path="/orders" element={<Orders />} />
+          </Route>
 
           <Route element={<RoleRoute roles={['distributor']} />}>
             <Route path="/distributor" element={<DistributorProfile />} />
@@ -58,6 +64,8 @@ export default function App() {
             <Route path="/admin/distributors/:id" element={<AdminDistributorDetail />} />
             <Route path="/admin/quotes" element={<AdminQuotes />} />
             <Route path="/admin/quotes/:id" element={<AdminQuoteDetail />} />
+            <Route path="/admin/orders" element={<AdminOrders />} />
+            <Route path="/admin/orders/:id" element={<AdminOrderDetail />} />
             <Route path="/admin/audit" element={<AdminAudit />} />
             <Route path="/admin/catalog/products" element={<AdminProducts />} />
             <Route path="/admin/catalog/saas-plans" element={<AdminSaasPlans />} />

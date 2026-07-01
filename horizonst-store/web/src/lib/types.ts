@@ -69,6 +69,33 @@ export type CartItem = {
   line_total_cents: number;
 };
 
+export type OrderStatus = 'pending' | 'processing' | 'completed' | 'cancelled';
+
+export type Order = {
+  id: string;
+  quote_id: string;
+  user_id?: string;
+  quote_number: string;
+  order_number: string;
+  status: OrderStatus;
+  subtotal_cents: number;
+  discount_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  customer_notes?: string | null;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type OrderItem = Omit<CartItem, 'quote_id'> & { order_id: string; source_quote_item_id: string | null; item_type: 'product' | 'saas_plan' | 'custom'; unit_price_cents: number | null };
+
+export type OrdersResponse = { orders: Order[] };
+export type OrderDetailResponse = { order: Order; items: OrderItem[] };
+
+export type AdminOrder = Order & { user_id: string; email: string; full_name: string; role: Role };
+export type AdminOrdersResponse = { orders: AdminOrder[] };
+export type AdminOrderDetailResponse = { order: AdminOrder; items: OrderItem[] };
+
 export type Cart = {
   quote: Quote;
   items: CartItem[];
