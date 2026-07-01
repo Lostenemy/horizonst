@@ -33,17 +33,19 @@ const publicBaseQuote = (status = 'sent') => {
 
 type QueryCall = { sql: string; params?: unknown[]; client?: boolean };
 
-const makeDecisionHarness = (options: { role?: 'customer' | 'distributor' | 'admin'; existing?: any; updateError?: Error; orderError?: Error } = {}) => {
+const makeDecisionHarness = (options: { role?: 'customer' | 'distributor' | 'admin'; existing?: any; updateError?: Error; orderError?: Error; mailError?: Error } = {}) => {
   const calls: QueryCall[] = [];
   const historyCalls: any[] = [];
   const auditCalls: any[] = [];
   const orderCalls: any[] = [];
+  const commercialEmails: any[] = [];
+  const orderConfirmationEmails: any[] = [];
   let released = false;
   const client = {
     async query(sql: string, params?: unknown[]) {
       calls.push({ sql, params, client: true });
       if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
-      if (sql.includes('FOR UPDATE')) return { rows: options.existing === undefined ? [baseQuote()] : options.existing ? [options.existing] : [] };
+      if (sql.includes('FOR UPDATE')) return { rows: options.existing === undefined ? [{ ...baseQuote(), email: 'u@example.com', full_name: 'User Test' }] : options.existing ? [{ ...options.existing, email: 'u@example.com', full_name: 'User Test' }] : [] };
       if (sql.startsWith('UPDATE')) {
         if (options.updateError) throw options.updateError;
         const status = params?.[1] as string;
@@ -63,13 +65,15 @@ const makeDecisionHarness = (options: { role?: 'customer' | 'distributor' | 'adm
     insertQuoteStatusHistory: async (input, queryClient) => { historyCalls.push({ input, sameClient: queryClient === client }); },
     writeAuditLog: async (input, queryClient) => { auditCalls.push({ input, sameClient: queryClient === client }); },
     generateQuotePdf: async () => Buffer.from('%PDF-test'),
-    createOrderFromAcceptedQuote: async (input) => { orderCalls.push({ input, sameClient: input.client === client }); if (options.orderError) throw options.orderError; return { order: { id: '44444444-4444-4444-8444-444444444444', quote_id: quoteId, user_id: userId, order_number: 'ORD-Q-1', status: 'pending', subtotal_cents: 1000, discount_cents: 0, tax_cents: 210, total_cents: 1210, customer_notes: null, created_at: now, updated_at: now }, items: [], created: true }; }
+    createOrderFromAcceptedQuote: async (input) => { orderCalls.push({ input, sameClient: input.client === client }); if (options.orderError) throw options.orderError; return { order: { id: '44444444-4444-4444-8444-444444444444', quote_id: quoteId, user_id: userId, order_number: 'ORD-Q-1', status: 'pending', subtotal_cents: 1000, discount_cents: 0, tax_cents: 210, total_cents: 1210, customer_notes: null, created_at: now, updated_at: now }, items: [], created: true }; },
+    sendQuoteAcceptedCommercialEmail: async (input) => { commercialEmails.push({ input, callIndex: calls.length }); if (options.mailError) throw options.mailError; },
+    sendOrderConfirmationEmail: async (input) => { orderConfirmationEmails.push({ input, callIndex: calls.length }); if (options.mailError) throw options.mailError; }
   } as any));
   app.use((error: any, _req: any, res: any, _next: any) => {
     if (error instanceof ZodError) { res.status(400).json({ error: 'Validation error' }); return; }
     res.status(500).json({ error: 'Internal server error' });
   });
-  return { app, calls, historyCalls, auditCalls, orderCalls, get released() { return released; } };
+  return { app, calls, historyCalls, auditCalls, orderCalls, commercialEmails, orderConfirmationEmails, get released() { return released; } };
 };
 
 const request = async (app: express.Express, path: string, init: RequestInit = {}) => {
@@ -107,6 +111,11 @@ assert.throws(() => quoteDecisionSchema.parse({ comment: 'ok', unknown: true }))
   assert.equal(h.auditCalls[0].input.action, 'quote_accepted');
   assert.equal(h.orderCalls.length, 1);
   assert.equal(h.orderCalls[0].sameClient, true);
+  assert.equal(h.commercialEmails.length, 1);
+  assert.equal(h.orderConfirmationEmails.length, 1);
+  assert.equal(h.orderConfirmationEmails[0].input.quote.email, 'u@example.com');
+  assert.ok(h.calls.findIndex((call) => call.sql === 'COMMIT') < h.commercialEmails[0].callIndex, 'commercial email is scheduled after commit');
+  assert.ok(h.calls.findIndex((call) => call.sql === 'COMMIT') < h.orderConfirmationEmails[0].callIndex, 'customer email is scheduled after commit');
   assert.deepEqual(h.auditCalls[0].input.payload, { previous_status: 'sent', status: 'accepted', comment: 'ok' });
   assert.deepEqual(h.calls.map((call) => call.sql === 'BEGIN' || call.sql === 'COMMIT' ? call.sql : call.sql.split(' ')[0]), ['BEGIN', 'SELECT', 'UPDATE', 'COMMIT']);
   assert.ok(h.calls[1].sql.includes('FOR UPDATE'));
@@ -125,6 +134,8 @@ assert.throws(() => quoteDecisionSchema.parse({ comment: 'ok', unknown: true }))
   assert.equal(h.historyCalls.length, 1);
   assert.equal(h.auditCalls[0].input.action, 'quote_rejected');
   assert.equal(h.orderCalls.length, 0);
+  assert.equal(h.commercialEmails.length, 0);
+  assert.equal(h.orderConfirmationEmails.length, 0);
 }
 
 {
@@ -176,6 +187,15 @@ for (const status of ['draft', 'accepted', 'rejected']) {
   assert.equal(h.released, true);
   const body = await json(response);
   assert.equal(body.order, undefined);
+}
+
+{
+  const h = makeDecisionHarness({ mailError: new Error('mail boom') });
+  const response = await request(h.app, `/api/quotes/${quoteId}/accept`, { method: 'POST', body: '{}' });
+  assert.equal(response.status, 200, 'post-commit mail failure must not fail customer acceptance');
+  assert.equal(h.calls.some((call) => call.sql === 'ROLLBACK'), false);
+  assert.equal(h.commercialEmails.length, 1);
+  assert.equal(h.orderConfirmationEmails.length, 1);
 }
 
 for (const body of [{ comment: 42 }, { comment: 'ok', extra: true }]) {
