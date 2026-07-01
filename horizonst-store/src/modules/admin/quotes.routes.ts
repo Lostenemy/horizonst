@@ -1,18 +1,40 @@
+import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { z } from 'zod';
-import { pool } from '../../db/pool.js';
+import { pool as defaultPool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { insertQuoteStatusHistory } from './quotes/history.js';
-import { generateQuotePdf } from './quotes/pdf.js';
+import { insertQuoteStatusHistory as defaultInsertQuoteStatusHistory } from './quotes/history.js';
+import { generateQuotePdf as defaultGenerateQuotePdf } from './quotes/pdf.js';
 import { quotePdfSelectForAdmin } from '../quotes/quotes.routes.js';
 import { canTransitionQuoteStatus, quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
+import { createOrderFromAcceptedQuote as defaultCreateOrderFromAcceptedQuote } from '../orders/order.service.js';
 
-export const adminQuotesRouter = Router();
-adminQuotesRouter.use(requireAuth, requireRole('admin'));
+type QueryResult = { rows: any[] };
+type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
+type Client = Queryable & { release: () => void };
+type PoolLike = Queryable & { connect: () => Promise<Client> };
+
+export type AdminQuotesRouterDependencies = {
+  pool?: PoolLike;
+  authMiddleware?: RequestHandler;
+  roleMiddleware?: RequestHandler;
+  insertQuoteStatusHistory?: typeof defaultInsertQuoteStatusHistory;
+  generateQuotePdf?: typeof defaultGenerateQuotePdf;
+  createOrderFromAcceptedQuote?: typeof defaultCreateOrderFromAcceptedQuote;
+};
 
 const idSchema = z.string().uuid();
 
-adminQuotesRouter.get('/quotes', async (req, res, next) => {
+export const createAdminQuotesRouter = (dependencies: AdminQuotesRouterDependencies = {}) => {
+const router = Router();
+const pool = dependencies.pool ?? defaultPool;
+const insertQuoteStatusHistory = dependencies.insertQuoteStatusHistory ?? defaultInsertQuoteStatusHistory;
+const generateQuotePdf = dependencies.generateQuotePdf ?? defaultGenerateQuotePdf;
+const createOrderFromAcceptedQuote = dependencies.createOrderFromAcceptedQuote ?? defaultCreateOrderFromAcceptedQuote;
+
+router.use(dependencies.authMiddleware ?? requireAuth, dependencies.roleMiddleware ?? requireRole('admin'));
+
+router.get('/quotes', async (req, res, next) => {
   try {
     const query = z.object({ status: z.enum(quoteStatuses).optional(), email: z.string().optional(), quote_number: z.string().optional() }).parse(req.query);
     const params: unknown[] = []; const where: string[] = [];
@@ -24,7 +46,7 @@ adminQuotesRouter.get('/quotes', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-adminQuotesRouter.get('/quotes/:id', async (req, res, next) => {
+router.get('/quotes/:id', async (req, res, next) => {
   try {
     const id = idSchema.parse(req.params.id);
     const quote = await pool.query(`SELECT q.*, u.email, u.full_name, u.role FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1`, [id]);
@@ -35,7 +57,7 @@ adminQuotesRouter.get('/quotes/:id', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-adminQuotesRouter.get('/quotes/:id/pdf', async (req, res, next) => {
+router.get('/quotes/:id/pdf', async (req, res, next) => {
   try {
     const id = idSchema.parse(req.params.id);
     const quote = await pool.query(quotePdfSelectForAdmin, [id]);
@@ -49,7 +71,7 @@ adminQuotesRouter.get('/quotes/:id/pdf', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-adminQuotesRouter.patch('/quotes/:id/status', async (req, res, next) => {
+router.patch('/quotes/:id/status', async (req, res, next) => {
   const client = await pool.connect();
   try {
     const id = idSchema.parse(req.params.id); const input = quoteStatusChangeSchema.parse(req.body);
@@ -59,8 +81,16 @@ adminQuotesRouter.patch('/quotes/:id/status', async (req, res, next) => {
     const oldStatus = existing.rows[0].status as QuoteStatus;
     if (oldStatus === input.status) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote status is already set to the requested value' }); return; }
     if (!canTransitionQuoteStatus(oldStatus, input.status)) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Invalid quote status transition', previous_status: oldStatus, status: input.status }); return; }
-    const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
+    const acceptedAtSql = input.status === 'accepted' ? 'now()' : input.status === 'rejected' ? 'NULL' : 'accepted_at';
+    const rejectedAtSql = input.status === 'rejected' ? 'now()' : input.status === 'accepted' ? 'NULL' : 'rejected_at';
+    const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), accepted_at = ${acceptedAtSql}, rejected_at = ${rejectedAtSql}, reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
     await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: input.status, comment: input.comment ?? null, changedBy: req.user!.sub }, client);
-    await client.query('COMMIT'); res.json({ quote: rows[0] });
+    const orderResult = input.status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user!.sub }) : null;
+    await client.query('COMMIT'); res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
+
+return router;
+};
+
+export const adminQuotesRouter = createAdminQuotesRouter();

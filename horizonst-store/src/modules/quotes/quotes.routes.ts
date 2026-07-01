@@ -7,6 +7,7 @@ import { insertQuoteStatusHistory as defaultInsertQuoteStatusHistory } from '../
 import { generateQuotePdf as defaultGenerateQuotePdf } from '../admin/quotes/pdf.js';
 import type { QuoteStatus } from '../admin/quotes/status.js';
 import { writeAuditLog as defaultWriteAuditLog } from '../shared/audit.js';
+import { createOrderFromAcceptedQuote as defaultCreateOrderFromAcceptedQuote } from '../orders/order.service.js';
 
 const idSchema = z.string().uuid();
 export const quoteDecisionSchema = z.object({ comment: z.string().trim().max(5000).optional() }).strict();
@@ -23,6 +24,7 @@ export type QuotesRouterDependencies = {
   insertQuoteStatusHistory?: typeof defaultInsertQuoteStatusHistory;
   writeAuditLog?: typeof defaultWriteAuditLog;
   generateQuotePdf?: typeof defaultGenerateQuotePdf;
+  createOrderFromAcceptedQuote?: typeof defaultCreateOrderFromAcceptedQuote;
 };
 
 const publicQuoteColumns = `q.id, q.user_id, q.quote_number, q.status, q.subtotal_cents, q.discount_cents, q.tax_cents, q.total_cents, q.notes, q.created_at, q.updated_at, q.submitted_at, q.accepted_at, q.rejected_at`;
@@ -34,6 +36,7 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
   const insertQuoteStatusHistory = dependencies.insertQuoteStatusHistory ?? defaultInsertQuoteStatusHistory;
   const writeAuditLog = dependencies.writeAuditLog ?? defaultWriteAuditLog;
   const generateQuotePdf = dependencies.generateQuotePdf ?? defaultGenerateQuotePdf;
+  const createOrderFromAcceptedQuote = dependencies.createOrderFromAcceptedQuote ?? defaultCreateOrderFromAcceptedQuote;
 
   router.use(dependencies.authMiddleware ?? requireAuth, dependencies.roleMiddleware ?? requireRole('customer', 'distributor'));
 
@@ -83,7 +86,8 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
       const { rows } = await client.query(`UPDATE store.quotes q SET status = $2, accepted_at = ${acceptedAtSql}, rejected_at = ${rejectedAtSql}, updated_at = now() WHERE q.id = $1 AND q.user_id = $3 RETURNING ${publicQuoteColumns}`, [id, status, req.user.sub]);
       await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: status, comment: input.comment ?? null, changedBy: req.user.sub }, client);
       await writeAuditLog({ actorUserId: req.user.sub, action: status === 'accepted' ? 'quote_accepted' : 'quote_rejected', entityType: 'quote', entityId: id, payload: { previous_status: oldStatus, status, comment: input.comment ?? null } }, client);
-      await client.query('COMMIT'); res.json({ quote: rows[0] });
+      const orderResult = status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user.sub, writeAuditLog }) : null;
+      await client.query('COMMIT'); res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
     } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
   };
 
