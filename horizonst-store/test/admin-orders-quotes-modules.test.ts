@@ -10,7 +10,7 @@ const adminId = '99999999-9999-4999-8999-999999999999';
 const orderId = '44444444-4444-4444-8444-444444444444';
 const now = '2026-07-01T00:00:00.000Z';
 
-const quote = (status = 'sent') => ({ id: quoteId, user_id: userId, quote_number: 'Q-1', status, subtotal_cents: 1000, discount_cents: 0, tax_cents: 210, total_cents: 1210, created_at: now, updated_at: now });
+const quote = (status = 'sent') => ({ id: quoteId, user_id: userId, quote_number: 'Q-1', status, subtotal_cents: 1000, discount_cents: 0, tax_cents: 210, total_cents: 1210, accepted_at: status === 'accepted' ? now : null, rejected_at: status === 'rejected' ? now : null, created_at: now, updated_at: now });
 const order = { id: orderId, quote_id: quoteId, user_id: userId, order_number: 'ORD-Q-1', status: 'pending', subtotal_cents: 1000, discount_cents: 0, tax_cents: 210, total_cents: 1210, customer_notes: 'nota', created_at: now, updated_at: now, quote_number: 'Q-1', email: 'u@example.com', full_name: 'User Test', role: 'customer' };
 const item = { id: '55555555-5555-4555-8555-555555555555', order_id: orderId, source_quote_item_id: null, item_type: 'custom', product_id: null, saas_plan_id: null, description: 'Custom', quantity: 1, unit_price_cents: 1000, discount_percent: '0.00', tax_rate: '21.00', line_subtotal_cents: 1000, line_discount_cents: 0, line_tax_cents: 210, line_total_cents: 1210 };
 
@@ -39,6 +39,8 @@ const makeAdminQuoteHarness = (options: { existing?: any; orderError?: Error } =
   assert.equal(response.status, 200);
   const body = await json(response);
   assert.equal(body.quote.status, 'accepted');
+  assert.equal(body.quote.accepted_at, now);
+  assert.equal(body.quote.rejected_at, null);
   assert.equal(body.order.order_number, 'ORD-Q-1');
   assert.equal(h.historyCalls.length, 1);
   assert.equal(h.historyCalls[0].sameClient, true);
@@ -48,6 +50,20 @@ const makeAdminQuoteHarness = (options: { existing?: any; orderError?: Error } =
   assert.ok(h.calls.findIndex((call) => call.sql === 'COMMIT') >= h.orderCalls[0].callIndex, 'commit happens after order creation hook');
   assert.equal(h.calls.some((call) => call.sql === 'ROLLBACK'), false);
   assert.equal(h.released, true);
+}
+
+{
+  const h = makeAdminQuoteHarness();
+  const response = await request(h.app, `/api/admin/quotes/${quoteId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'rejected', comment: 'no' }) });
+  assert.equal(response.status, 200);
+  const body = await json(response);
+  assert.equal(body.quote.status, 'rejected');
+  assert.equal(body.quote.accepted_at, null);
+  assert.equal(body.quote.rejected_at, now);
+  assert.equal(body.order, undefined);
+  assert.equal(h.orderCalls.length, 0, 'admin rejection must not create order');
+  assert.equal(h.historyCalls.length, 1);
+  assert.equal(h.calls.some((call) => call.sql === 'COMMIT'), true);
 }
 
 {

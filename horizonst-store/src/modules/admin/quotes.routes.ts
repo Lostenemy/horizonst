@@ -81,7 +81,9 @@ router.patch('/quotes/:id/status', async (req, res, next) => {
     const oldStatus = existing.rows[0].status as QuoteStatus;
     if (oldStatus === input.status) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote status is already set to the requested value' }); return; }
     if (!canTransitionQuoteStatus(oldStatus, input.status)) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Invalid quote status transition', previous_status: oldStatus, status: input.status }); return; }
-    const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
+    const acceptedAtSql = input.status === 'accepted' ? 'now()' : input.status === 'rejected' ? 'NULL' : 'accepted_at';
+    const rejectedAtSql = input.status === 'rejected' ? 'now()' : input.status === 'accepted' ? 'NULL' : 'rejected_at';
+    const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), accepted_at = ${acceptedAtSql}, rejected_at = ${rejectedAtSql}, reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
     await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: input.status, comment: input.comment ?? null, changedBy: req.user!.sub }, client);
     const orderResult = input.status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user!.sub }) : null;
     await client.query('COMMIT'); res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
