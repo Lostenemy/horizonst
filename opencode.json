@@ -1,0 +1,86 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "skills": {
+    "paths": [".opencode/skills"]
+  },
+  "lsp": true,
+  "mcp": {
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "enabled": true,
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:GITHUB_MCP_TOKEN}",
+        "X-MCP-Toolsets": "repos,pull_requests,actions"
+      },
+      "timeout": 10000
+    }
+  },
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.pem": "deny",
+      "*.key": "deny",
+      "*.p12": "deny",
+      "*.pfx": "deny",
+      "id_rsa": "deny",
+      "id_ed25519": "deny",
+      "*.env.example": "allow"
+    },
+    "edit": {
+      "*": "ask",
+      "AGENTS.md": "allow",
+      "opencode.json": "allow",
+      "docs/opencode-phase1.md": "allow",
+      ".opencode/skills/**": "allow",
+      ".opencode/plugins/**": "allow"
+    },
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git branch --show-current*": "allow",
+      "npm.cmd run typecheck*": "allow",
+      "npm.cmd run build*": "allow",
+      "npm.cmd test*": "allow",
+      "npx.cmd tsx test/*": "allow",
+      "docker compose config*": "allow",
+      "docker compose ps*": "allow",
+      "git commit*": "ask",
+      "git push*": "ask",
+      "git merge*": "ask",
+      "git rebase*": "ask",
+      "npm install*": "ask",
+      "npm.cmd install*": "ask",
+      "docker compose up*": "ask",
+      "docker compose down*": "ask",
+      "docker compose restart*": "ask",
+      "docker compose rm*": "ask",
+      "psql*": "ask",
+      "git reset --hard*": "deny",
+      "git clean*": "deny",
+      "git push --force*": "deny",
+      "git push -f*": "deny",
+      "git push origin main*": "deny",
+      "git branch -D*": "deny",
+      "docker system prune*": "deny",
+      "docker volume rm*": "deny",
+      "docker compose down -v*": "deny",
+      "certbot*": "deny"
+    },
+    "external_directory": {
+      "*": "ask",
+      "C:\\Users\\User\\AppData\\Local\\Temp\\opencode\\*": "allow"
+    },
+    "webfetch": "ask",
+    "websearch": "ask",
+    "lsp": "allow",
+    "skill": "allow"
+  }
+}
