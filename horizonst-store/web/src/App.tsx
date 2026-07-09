@@ -21,6 +21,7 @@ import DistributorProfile from './pages/DistributorProfile';
 import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import PublicLanding from './pages/PublicLanding';
 import Quotes from './pages/Quotes';
 import Orders from './pages/Orders';
 import Register from './pages/Register';
@@ -28,8 +29,11 @@ import RegisterDistributor from './pages/RegisterDistributor';
 import ResetPassword from './pages/ResetPassword';
 import SaasPlans from './pages/SaasPlans';
 import VerifyEmail from './pages/VerifyEmail';
+import { isPublicMarketingHost } from './lib/domains';
 
 export default function App() {
+  if (isPublicMarketingHost(window.location.hostname)) return <PublicLanding />;
+
   return (
     <Routes>
       <Route element={<Layout />}>
