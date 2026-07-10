@@ -21,6 +21,7 @@ import DistributorProfile from './pages/DistributorProfile';
 import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import PublicLegal from './pages/PublicLegal';
 import PublicLanding from './pages/PublicLanding';
 import Quotes from './pages/Quotes';
 import Orders from './pages/Orders';
@@ -29,10 +30,14 @@ import RegisterDistributor from './pages/RegisterDistributor';
 import ResetPassword from './pages/ResetPassword';
 import SaasPlans from './pages/SaasPlans';
 import VerifyEmail from './pages/VerifyEmail';
-import { isPublicMarketingHost } from './lib/domains';
+import { isPublicMarketingHost, publicMarketingPage } from './lib/domains';
 
 export default function App() {
-  if (isPublicMarketingHost(window.location.hostname)) return <PublicLanding />;
+  if (isPublicMarketingHost(window.location.hostname)) {
+    const page = publicMarketingPage(window.location.pathname);
+    if (page === 'legal-notice' || page === 'privacy') return <PublicLegal page={page} />;
+    return <PublicLanding />;
+  }
 
   return (
     <Routes>

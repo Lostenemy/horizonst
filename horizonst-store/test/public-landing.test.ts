@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { calculatePotentialSavings, faqItems, landingSections, privateHardwareMessages, privatePlanMessages } from '../web/src/pages/PublicLanding.js';
-import { customerAccessUrl, isPublicMarketingHost } from '../web/src/lib/domains.js';
+import { customerAccessUrl, isPublicMarketingHost, publicMarketingPage } from '../web/src/lib/domains.js';
 
 assert.equal(isPublicMarketingHost('horizonst.com.es'), true, 'LP-01 routes apex domain to public funnel');
 assert.equal(isPublicMarketingHost('www.horizonst.com.es'), true, 'LP-01 routes www domain to public funnel');
 assert.equal(isPublicMarketingHost('tienda.horizonst.com.es'), false, 'LP-01 keeps store private domain on store app');
 assert.equal(customerAccessUrl, 'https://tienda.horizonst.com.es', 'LP-04 customer access points to private store');
+assert.equal(publicMarketingPage('/'), 'landing');
+assert.equal(publicMarketingPage('/aviso-legal'), 'legal-notice');
+assert.equal(publicMarketingPage('/privacidad'), 'privacy');
 
 assert.deepEqual([...landingSections], ['hero', 'problem', 'solution', 'benefits', 'appcc-guide', 'savings-calculator', 'private-catalog', 'trust', 'faq', 'final-cta']);
 assert.ok(privatePlanMessages.find((plan) => plan.description === 'Planes adaptados al tamaño de tu operación.'));
@@ -22,6 +25,7 @@ const app = await readFile(new URL('../web/src/App.tsx', import.meta.url), 'utf-
 assert.match(app, /<PublicLanding \/>/, 'LP-01 public funnel is not Home.tsx');
 assert.match(app, /<Route path="\/catalog" element={<Catalog \/>} \/>/, 'private store keeps catalog route');
 assert.ok(app.indexOf('<Route element={<ProtectedRoute />}>') < app.indexOf('<Route path="/catalog" element={<Catalog />} />'), 'catalog is protected in private store');
+assert.match(app, /<PublicLegal page={page} \/>/, 'public legal routes render their own component');
 
 const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', import.meta.url), 'utf-8');
 assert.match(landing, /source="demo"/);
@@ -37,6 +41,13 @@ assert.match(landing, /Aviso legal/);
 assert.match(landing, /Privacidad/);
 assert.match(landing, /Contacto/);
 assert.doesNotMatch(landing, /580 €\/año|800 €\/año|190 €|150 €|75 €/);
+
+const legal = await readFile(new URL('../web/src/pages/PublicLegal.tsx', import.meta.url), 'utf-8');
+assert.match(legal, /Aviso legal/);
+assert.match(legal, /Política de privacidad/);
+assert.match(legal, /contenido del sitio tiene carácter informativo/);
+assert.match(legal, /Datos tratados/);
+assert.doesNotMatch(legal, /Solicitar demo gratuita/, 'legal pages do not render only the landing content');
 
 const css = await readFile(new URL('../web/src/styles.css', import.meta.url), 'utf-8');
 assert.match(css, /@media\(max-width:860px\)/, 'responsive landing breakpoint exists');

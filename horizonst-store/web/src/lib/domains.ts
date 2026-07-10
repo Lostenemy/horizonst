@@ -4,3 +4,11 @@ export const isPublicMarketingHost = (hostname: string) => {
 };
 
 export const customerAccessUrl = 'https://tienda.horizonst.com.es';
+
+export type PublicMarketingPage = 'landing' | 'legal-notice' | 'privacy';
+
+export const publicMarketingPage = (pathname: string): PublicMarketingPage => {
+  if (pathname === '/aviso-legal') return 'legal-notice';
+  if (pathname === '/privacidad') return 'privacy';
+  return 'landing';
+};
