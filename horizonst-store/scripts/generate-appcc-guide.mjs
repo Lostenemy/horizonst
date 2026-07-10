@@ -9,7 +9,7 @@ const output = path.join(root, 'web', 'public', 'recursos', 'guia-appcc-2026.pdf
 const markdown = await readFile(source, 'utf8');
 const pages = markdown.split('<!-- page -->').map((page) => page.trim()).filter(Boolean);
 const chunks = [];
-const doc = new PDFDocument({ size: 'A4', margin: 54, compress: false, pdfVersion: '1.7', info: { Title: 'Guía APPCC 2026 para cámaras frigoríficas', Author: 'HorizonST', Subject: 'Seguridad, trazabilidad y control operativo' } });
+const doc = new PDFDocument({ size: 'A4', margin: 54, compress: false, pdfVersion: '1.7', info: { Title: 'Guía APPCC 2026 para cámaras frigoríficas', Author: 'HorizonST', Subject: 'Seguridad, trazabilidad y control operativo', CreationDate: new Date('2026-01-01T00:00:00Z'), ModDate: new Date('2026-01-01T00:00:00Z') } });
 doc.on('data', (chunk) => chunks.push(chunk));
 const done = new Promise((resolve, reject) => { doc.on('end', resolve); doc.on('error', reject); });
 
