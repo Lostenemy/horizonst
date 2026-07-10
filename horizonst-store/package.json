@@ -7,7 +7,8 @@
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run build:web && tsc -p tsconfig.build.json",
-    "build:web": "node scripts/build-web.mjs",
+    "build:web": "node scripts/generate-appcc-guide.mjs && node scripts/build-web.mjs",
+    "generate:appcc-guide": "node scripts/generate-appcc-guide.mjs",
     "start": "node dist/server.js",
     "migrate": "node dist/db/migrate.js",
     "test": "tsx scripts/test.mjs"
