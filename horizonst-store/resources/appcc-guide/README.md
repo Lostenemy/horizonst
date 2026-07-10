@@ -1,4 +1,4 @@
-# Guía APPCC 2026
+# Guía 2026 de seguridad en cámaras congeladoras
 
 La fuente editorial es `guia-appcc-2026.md`. El PDF público se genera sin servicios externos ni credenciales:
 
@@ -6,7 +6,9 @@ La fuente editorial es `guia-appcc-2026.md`. El PDF público se genera sin servi
 npm run generate:appcc-guide
 ```
 
-El script `scripts/generate-appcc-guide.mjs` usa PDFKit, dependencia ya incluida en HorizonST Store, y escribe el resultado en `web/public/recursos/guia-appcc-2026.pdf`. Vite copia ese recurso a `web/dist/recursos/` durante `npm run build`.
+El Markdown contiene el copy completo de las ocho páginas, separado mediante marcadores `<!-- page: ... -->`. El script `scripts/generate-appcc-guide.mjs` lo lee y usa PDFKit únicamente para estilos, componentes, composición, enlaces y paginación. Es la única fuente editorial: no se debe duplicar texto de la guía en el generador ni en las pruebas.
+
+El resultado se escribe en `web/public/recursos/guia-appcc-2026.pdf`. Vite copia ese recurso a `web/dist/recursos/` durante `npm run build`.
 
 Antes de publicar cambios editoriales, revisar enlaces, fuentes oficiales, advertencias y el PDF generado. La guía es informativa; no sustituye el APPCC ni la evaluación de riesgos de cada centro.
 

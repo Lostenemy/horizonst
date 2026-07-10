@@ -7,42 +7,32 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = path.join(root, 'resources', 'appcc-guide', 'guia-appcc-2026.md');
 const output = path.join(root, 'web', 'public', 'recursos', 'guia-appcc-2026.pdf');
 const markdown = await readFile(source, 'utf8');
-const pages = markdown.split('<!-- page -->').map((page) => page.trim()).filter(Boolean);
-const chunks = [];
-const doc = new PDFDocument({ size: 'A4', margin: 54, compress: false, pdfVersion: '1.7', info: { Title: 'Guía APPCC 2026 para cámaras frigoríficas', Author: 'HorizonST', Subject: 'Seguridad, trazabilidad y control operativo', CreationDate: new Date('2026-01-01T00:00:00Z'), ModDate: new Date('2026-01-01T00:00:00Z') } });
-doc.on('data', (chunk) => chunks.push(chunk));
-const done = new Promise((resolve, reject) => { doc.on('end', resolve); doc.on('error', reject); });
+const list = (value) => [...value.matchAll(/^(?:- |\d+\. )(?!\[)(.+)$/gm)].map((match) => match[1].trim());
+const paragraphs = (value) => value.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !/^(#|<!--|- |\d+\. )/.test(line));
+const pageData = Object.fromEntries([...markdown.matchAll(/<!-- page: ([\w-]+) -->\s*([\s\S]*?)(?=<!-- page:|$)/g)].map(([, id, content]) => {
+  const blocks = content.split(/^### /m).slice(1).map((block) => { const [heading, ...body] = block.trim().split(/\r?\n/); const raw = body.join('\n'); return { heading, paragraphs: paragraphs(raw), list: list(raw) }; });
+  return [id, { title: content.match(/^# (.+)$/m)?.[1] ?? '', subtitle: content.match(/^## (.+)$/m)?.[1] ?? '', paragraphs: paragraphs(content.split(/^### /m)[0]), list: list(content.split(/^### /m)[0]), blocks, links: [...content.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)].map(([, label, url]) => ({ label, url })) }];
+}));
+const cover = pageData.cover; const risks = pageData.risks; const prevention = pageData.prevention; const permanence = pageData.permanence; const incidents = pageData.incidents; const checklist = pageData.checklist; const horizonst = pageData.horizonst; const sources = pageData.sources;
+const dark = '#08233f'; const teal = '#008d99'; const pale = '#edf8f8'; const ink = '#172c38'; const muted = '#526773'; const margin = 54; const width = 487;
+const doc = new PDFDocument({ size: 'A4', margin, compress: false, pdfVersion: '1.7', info: { Title: cover.title, Author: cover.paragraphs[0], Subject: cover.subtitle, CreationDate: new Date('2026-01-01T00:00:00Z'), ModDate: new Date('2026-01-01T00:00:00Z') } });
+doc._id = Buffer.from('HorizonST-guide-2026-security-000');
+const chunks = []; doc.on('data', (chunk) => chunks.push(chunk)); const done = new Promise((resolve, reject) => { doc.on('end', resolve); doc.on('error', reject); });
+const text = (value, options = {}) => doc.font('Helvetica').fontSize(10.3).fillColor(ink).text(value, { width, lineGap: 3, ...options });
+const title = (value) => { doc.font('Helvetica-Bold').fontSize(25).fillColor(dark).text(value, { width, lineGap: 1 }); doc.moveDown(.45); };
+const eyebrow = (value) => { doc.font('Helvetica-Bold').fontSize(8.5).fillColor(teal).text(value.toUpperCase(), { characterSpacing: 1.4 }); doc.moveDown(.7); };
+const footer = (page) => { doc.font('Helvetica').fontSize(8).fillColor(muted).text(cover.paragraphs[5], margin, 778, { width: 330 }); doc.text(String(page).padStart(2, '0'), 500, 778, { width: 40, align: 'right' }); };
+const page = (number) => { if (number > 1) doc.addPage(); doc.rect(margin, 40, width, 4).fill(teal); doc.y = 70; };
+const card = (x, y, w, h, heading, body, accent = teal) => { doc.roundedRect(x, y, w, h, 10).fillAndStroke('#f6fafb', '#d5e4e7'); doc.rect(x, y, 5, h).fill(accent); doc.font('Helvetica-Bold').fontSize(11).fillColor(dark).text(heading, x + 18, y + 16, { width: w - 32 }); doc.font('Helvetica').fontSize(9.3).fillColor(ink).text(body, x + 18, y + 38, { width: w - 32, lineGap: 2.5 }); };
+const bullet = (value) => { const y = doc.y + 2; doc.circle(margin + 4, y + 4, 2.3).fill(teal); doc.font('Helvetica').fontSize(10.3).fillColor(ink).text(value, margin + 16, y, { width: width - 16, lineGap: 3 }); doc.moveDown(.48); };
+const link = ({ label, url }) => { const y = doc.y; doc.font('Helvetica-Bold').fontSize(10).fillColor(teal).text(label, { width }); doc.link(margin, y, width, 14, url); doc.moveDown(.28); };
 
-const dark = '#08233f'; const teal = '#008d99'; const muted = '#536471';
-const footer = (page) => {
-  doc.font('Helvetica').fontSize(8).fillColor(muted).text('HorizonST | Guía APPCC 2026', 54, 770, { width: 300 });
-  doc.text(String(page), 500, 770, { width: 40, align: 'right' });
-};
-const heading = (text, level) => {
-  const size = level === 1 ? 24 : level === 2 ? 15 : 11;
-  doc.moveDown(level === 1 ? 0.15 : 0.35).font('Helvetica-Bold').fontSize(size).fillColor(level === 1 ? dark : teal).text(text, { width: 487 });
-  doc.moveDown(0.3);
-};
-const body = (text, indent = 0) => doc.font('Helvetica').fontSize(10.2).fillColor('#182a34').text(text, 54 + indent, doc.y, { width: 487 - indent, lineGap: 3, align: 'left' }).moveDown(0.45);
-
-pages.forEach((page, pageIndex) => {
-  if (pageIndex) doc.addPage();
-  doc.rect(54, 42, 487, 4).fill(teal);
-  const lines = page.split(/\r?\n/);
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) { doc.moveDown(0.18); continue; }
-    if (line.startsWith('# ')) heading(line.slice(2), 1);
-    else if (line.startsWith('## ')) heading(line.slice(3), 2);
-    else if (line.startsWith('> ')) { doc.rect(54, doc.y, 4, 42).fill(teal); doc.fillColor('#eef8f8').rect(62, doc.y - 0.5, 479, 42).fill(); doc.fillColor(dark); doc.font('Helvetica-Oblique').fontSize(9.2).text(line.slice(2), 72, doc.y + 7, { width: 455, lineGap: 2 }); doc.y += 48; }
-    else if (line.startsWith('- ')) { doc.fillColor(teal).circle(60, doc.y + 6, 2).fill(); body(line.slice(2), 14); }
-    else if (/^\d+\. \*\*/.test(line)) body(line.replace(/\*\*/g, ''), 0);
-    else if (line.startsWith('|')) body(line.replaceAll('|', '  |  ').replace(/^\s*\|\s*/, ''), 0);
-    else if (!line.startsWith('<!--')) body(line.replace(/\*\*/g, ''), 0);
-  }
-  footer(pageIndex + 1);
-});
-doc.end();
-await done;
-await mkdir(path.dirname(output), { recursive: true });
-await writeFile(output, Buffer.concat(chunks));
+page(1); doc.rect(0, 0, 595, 842).fill('#f8fbfc'); doc.rect(0, 0, 595, 185).fill(dark); doc.rect(0, 181, 595, 4).fill(teal); doc.font('Helvetica-Bold').fontSize(23).fillColor('#ffffff').text(cover.paragraphs[0], margin, 72); doc.font('Helvetica').fontSize(10).fillColor('#a9e9e7').text(cover.paragraphs[1], margin, 106, { characterSpacing: 1.7 }); doc.roundedRect(margin, 252, 94, 28, 14).fill(teal); doc.font('Helvetica-Bold').fontSize(10).fillColor('#ffffff').text(cover.paragraphs[2], margin + 15, 261); doc.font('Helvetica-Bold').fontSize(31).fillColor(dark).text(cover.title, margin, 315, { width: 460, lineGap: 3 }); doc.font('Helvetica').fontSize(15).fillColor(muted).text(cover.subtitle, margin, 455, { width: 430, lineGap: 5 }); doc.rect(margin, 595, width, 1).fill('#cfe0e3'); doc.font('Helvetica-Bold').fontSize(11).fillColor(dark).text(cover.paragraphs[3], margin, 620, { width: 390 }); doc.font('Helvetica').fontSize(9).fillColor(muted).text(cover.paragraphs[4], margin, 645, { width: 390, lineGap: 3 }); footer(1);
+page(2); eyebrow(risks.title); title(risks.subtitle); text(risks.paragraphs[0]); doc.moveDown(.75); risks.blocks.slice(0, 4).forEach((block, index) => card(index % 2 ? 309 : 54, index < 2 ? 210 : 345, 232, 116, block.heading, block.paragraphs[0], index % 3 ? '#146f88' : teal)); doc.y = 505; doc.roundedRect(margin, doc.y, width, 112, 10).fill(pale); doc.font('Helvetica-Bold').fontSize(12).fillColor(dark).text(risks.blocks[4].heading, margin + 18, doc.y + 17); doc.font('Helvetica').fontSize(10).fillColor(ink).text(risks.blocks[4].paragraphs[0], margin + 18, doc.y + 40, { width: width - 36, lineGap: 3 }); footer(2);
+page(3); eyebrow(prevention.title); title(prevention.subtitle); prevention.list.forEach(bullet); doc.moveDown(.5); doc.roundedRect(margin, doc.y, width, 108, 10).fillAndStroke('#ffffff', '#d5e4e7'); doc.font('Helvetica-Bold').fontSize(11).fillColor(dark).text(prevention.blocks[0].heading, margin + 18, doc.y + 16); doc.font('Helvetica').fontSize(10).fillColor(ink).text(prevention.blocks[0].paragraphs[0], margin + 18, doc.y + 39, { width: width - 36, lineGap: 3 }); footer(3);
+page(4); eyebrow(permanence.title); title(permanence.subtitle); text(permanence.paragraphs[0]); doc.moveDown(.7); permanence.blocks[0].heading.split(' → ').forEach((item, index, flow) => { const x = 54 + index * 98; doc.roundedRect(x, 255, 82, 52, 8).fill(index === 2 ? teal : '#eaf4f5'); doc.font('Helvetica-Bold').fontSize(9).fillColor(index === 2 ? '#ffffff' : dark).text(item, x + 7, 276, { width: 68, align: 'center' }); if (index < flow.length - 1) doc.font('Helvetica-Bold').fontSize(15).fillColor(teal).text('→', x + 84, 272); }); doc.y = 350; permanence.blocks[0].list.forEach(bullet); doc.moveDown(.35); doc.roundedRect(margin, doc.y, width, 118, 10).fill('#f6fafb'); doc.font('Helvetica-Bold').fontSize(11).fillColor(dark).text(permanence.blocks[1].heading, margin + 18, doc.y + 17); doc.font('Helvetica').fontSize(10).fillColor(ink).text(permanence.blocks[1].paragraphs[0], margin + 18, doc.y + 41, { width: width - 36, lineGap: 3 }); footer(4);
+page(5); eyebrow(incidents.title); title(incidents.subtitle); incidents.blocks[0].list.forEach((step, index) => { const y = 185 + index * 45; doc.circle(68, y + 11, 11).fill(teal); doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff').text(String(index + 1), 63, y + 7, { width: 10, align: 'center' }); doc.font('Helvetica-Bold').fontSize(10.5).fillColor(dark).text(step, 92, y + 4); }); doc.roundedRect(285, 182, 256, 360, 10).fillAndStroke('#f6fafb', '#d5e4e7'); doc.font('Helvetica-Bold').fontSize(12).fillColor(dark).text(incidents.blocks[1].heading, 305, 204, { width: 215 }); incidents.blocks[1].list.forEach((value, index) => doc.font('Helvetica').fontSize(9.5).fillColor(ink).text(`• ${value}`, 305, 245 + index * 38, { width: 210, lineGap: 2 })); doc.font('Helvetica').fontSize(9).fillColor(muted).text(incidents.blocks[1].paragraphs[0], 305, 490, { width: 210, lineGap: 3 }); footer(5);
+page(6); eyebrow(checklist.title); title(checklist.subtitle); text(checklist.paragraphs[0]); doc.moveDown(.55); checklist.list.forEach((check, index) => { const col = index % 2; const row = Math.floor(index / 2); const x = margin + col * 246; const y = 240 + row * 67; doc.roundedRect(x, y, 230, 50, 8).fillAndStroke('#ffffff', '#d5e4e7'); doc.rect(x + 15, y + 16, 16, 16).stroke(teal); doc.font('Helvetica').fontSize(9.5).fillColor(ink).text(check, x + 43, y + 15, { width: 170, lineGap: 2 }); }); doc.font('Helvetica-Oblique').fontSize(9).fillColor(muted).text(checklist.paragraphs[1], margin, 625, { width }); footer(6);
+page(7); eyebrow(horizonst.title); title(horizonst.subtitle); text(horizonst.paragraphs[0]); doc.moveDown(.8); horizonst.list.forEach(bullet); doc.moveDown(.6); doc.roundedRect(margin, doc.y, width, 142, 10).fill(dark); doc.font('Helvetica-Bold').fontSize(13).fillColor('#ffffff').text(horizonst.blocks[0].heading, margin + 20, doc.y + 20); doc.font('Helvetica').fontSize(10).fillColor('#d8fbff').text(horizonst.blocks[0].paragraphs[0], margin + 20, doc.y + 45, { width: width - 40 }); doc.y += 76; horizonst.links.forEach(link); footer(7);
+page(8); eyebrow(sources.title); title(sources.subtitle); doc.roundedRect(margin, 174, width, 116, 10).fill(pale); doc.font('Helvetica-Bold').fontSize(11).fillColor(dark).text(sources.blocks[0].heading, margin + 18, 193); doc.font('Helvetica').fontSize(9.6).fillColor(ink).text(sources.blocks[0].paragraphs[0], margin + 18, 218, { width: width - 36, lineGap: 3 }); doc.y = 330; doc.font('Helvetica-Bold').fontSize(13).fillColor(dark).text(sources.blocks[1].heading, { width }); doc.moveDown(.55); sources.blocks[1].list.forEach(bullet); doc.moveDown(.5); sources.links.forEach(link); doc.font('Helvetica').fontSize(9).fillColor(muted).text(sources.blocks[1].paragraphs[0], { width, lineGap: 3 }); footer(8);
+doc.end(); await done; await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, Buffer.concat(chunks));

@@ -8,7 +8,7 @@ type SmtpResponse = { code: number; message: string };
 type SmtpSocket = Socket | TLSSocket;
 type SmtpConnector = (config: StoreMailConfig) => { socket: SmtpSocket; readyEvent: string };
 
-export type MailContent = { to: string; subject: string; text: string };
+export type MailContent = { to: string; subject: string; text: string; html: string };
 export type QuoteEmailInput = {
   quote: {
     id: string;
@@ -70,11 +70,15 @@ export class SmtpClient {
     this.expect(await this.send(Buffer.from(this.config.password).toString('base64')), [235]);
   }
 
-  async sendMail(to: string, subject: string, text: string) {
+  async sendMail(to: string, subject: string, text: string, html?: string) {
     this.expect(await this.send(`MAIL FROM:<${this.config.from}>`), [250]);
     this.expect(await this.send(`RCPT TO:<${to}>`), [250, 251]);
     this.expect(await this.send('DATA'), [354]);
-    const body = [
+    const plainText = text.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..');
+    const body = html ? [
+      `Message-ID: <${randomUUID()}@${this.config.ehloDomain}>`, `Date: ${new Date().toUTCString()}`, `From: ${this.config.from}`, `To: ${to}`, `Subject: ${subject}`, 'MIME-Version: 1.0', `Content-Type: multipart/alternative; boundary="horizonst-${randomUUID()}"`, '',
+      // The boundary is repeated below from the header to produce a standards-compliant alternative body.
+    ].join('\r\n') : [
       `Message-ID: <${randomUUID()}@${this.config.ehloDomain}>`,
       `Date: ${new Date().toUTCString()}`,
       `From: ${this.config.from}`,
@@ -84,9 +88,13 @@ export class SmtpClient {
       'Content-Type: text/plain; charset="utf-8"',
       'Content-Transfer-Encoding: 8bit',
       '',
-      text.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..')
+      plainText
     ].join('\r\n');
-    await this.write(`${body}\r\n.\r\n`);
+    if (!html) { await this.write(`${body}\r\n.\r\n`); this.expect(await this.readResponse(), [250]); return; }
+    const boundary = body.match(/boundary="([^"]+)"/)?.[1];
+    if (!boundary) throw new Error('smtp_multipart_boundary_missing');
+    const multipart = `${body}\r\n--${boundary}\r\nContent-Type: text/plain; charset="utf-8"\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${plainText}\r\n--${boundary}\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${html.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..')}\r\n--${boundary}--`;
+    await this.write(`${multipart}\r\n.\r\n`);
     this.expect(await this.readResponse(), [250]);
   }
 
@@ -146,12 +154,14 @@ export class SmtpClient {
   }
 }
 
-async function sendMail({ to, subject, text }: MailContent) {
+const textHtml = (text: string) => `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#08233f">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</div>`;
+
+async function sendMail({ to, subject, text, html }: MailContent) {
   if (!env.mail.enabled) return;
   const client = new SmtpClient();
   try {
     await client.connect();
-    await client.sendMail(to, subject, text);
+    await client.sendMail(to, subject, text, html);
   } finally {
     await client.close();
   }
@@ -170,7 +180,7 @@ export function buildQuoteAvailableEmail({ quote }: QuoteEmailInput): MailConten
       `Puedes revisarlo, descargar el PDF, aceptarlo o rechazarlo en: ${quotesUrl()}`,
       '',
       AUTO_FOOTER
-    ].join('\n')
+    ].join('\n'), html: textHtml(`Hola ${name},\n\nTu presupuesto ${quote.quote_number} ya está disponible en HorizonST Store.`)
   };
 }
 
@@ -188,7 +198,7 @@ export function buildQuoteAcceptedCommercialEmail({ quote, order }: QuoteAccepte
       `Pedido administrativo: ${adminOrderUrl(order.id)}`,
       '',
       AUTO_FOOTER
-    ].filter((line) => line !== null).join('\n')
+    ].filter((line) => line !== null).join('\n'), html: textHtml(`Presupuesto aceptado: ${quote.quote_number}\nPedido: ${order.order_number}`)
   };
 }
 
@@ -206,7 +216,7 @@ export function buildOrderConfirmationEmail({ quote, order }: OrderConfirmationE
       'Nuestro equipo comercial contactará contigo para los siguientes pasos.',
       '',
       AUTO_FOOTER
-    ].join('\n')
+    ].join('\n'), html: textHtml(`Hola ${name},\n\nHemos registrado tu pedido ${order.order_number}.`)
   };
 }
 
@@ -214,20 +224,22 @@ export function buildAppccGuideEmail({ email }: AppccGuideEmailInput, guideUrl =
   if (!guideUrl) throw new Error('appcc_guide_resource_not_configured');
   return {
     to: email,
-    subject: 'Tu guía APPCC 2026 para cámaras frigoríficas',
+    subject: 'Tu guía para mejorar la seguridad de trabajadores en cámaras congeladoras',
     text: [
-      'Gracias por tu interés en HorizonST.',
+      'Gracias por solicitar la guía de HorizonST.',
       '',
-      'Accede a la Guía APPCC 2026 para cámaras frigoríficas:',
+      'Guía 2026 para la seguridad de trabajadores en cámaras congeladoras:',
       guideUrl,
       '',
-      'HorizonST ayuda a centralizar la monitorización, las alertas y la trazabilidad de tus controles críticos.',
+      'Encontrarás riesgos habituales, control de permanencias, alertas, actuación ante incidencias y un checklist de revisión interna.',
+      'HorizonST permite centralizar la supervisión de trabajadores, generar alertas y mantener un historial operativo mediante tecnologías inalámbricas.',
       'Conoce nuestras soluciones: https://horizonst.com.es/planes',
       'Privacidad: https://horizonst.com.es/privacidad',
       'Contacto: comercial@horizonst.es',
       '',
       AUTO_FOOTER
-    ].join('\n')
+    ].join('\n'),
+    html: `<!doctype html><html lang="es"><body style="margin:0;padding:0;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><div style="display:none;max-height:0;overflow:hidden;opacity:0">Recomendaciones prácticas para controlar permanencias, alertas e incidencias en entornos de frío extremo.</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf4f6"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="620" cellspacing="0" cellpadding="0" style="width:100%;max-width:620px;background:#ffffff;border-radius:16px;overflow:hidden"><tr><td style="padding:24px 32px;background:#08233f;color:#ffffff;font-size:22px;font-weight:bold">HorizonST <span style="color:#4bd6d3">/</span> Seguridad operativa</td></tr><tr><td style="padding:36px 32px"><p style="margin:0 0 12px;color:#008d99;font-size:12px;font-weight:bold;letter-spacing:1.2px">GUÍA 2026</p><h1 style="margin:0 0 18px;font-size:30px;line-height:1.18;color:#08233f">Protege mejor a tus trabajadores en cámaras congeladoras</h1><p style="margin:0 0 14px;font-size:16px;line-height:1.6">Gracias por solicitar la guía de HorizonST.</p><p style="margin:0 0 26px;font-size:16px;line-height:1.6">Hemos preparado un documento breve y práctico para ayudarte a revisar cómo controlas la entrada, permanencia y seguridad de los trabajadores que acceden a cámaras congeladoras.</p><table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="border-radius:6px;background:#008d99"><a href="${guideUrl}" style="display:inline-block;padding:14px 24px;color:#ffffff;text-decoration:none;font-weight:bold">Abrir la guía</a></td></tr></table><div style="margin-top:30px;padding:20px;background:#eef8f8;border-left:4px solid #008d99"><strong style="font-size:16px">En la guía encontrarás:</strong><p style="margin:12px 0 0;line-height:1.75">• Riesgos habituales en cámaras congeladoras.<br>• Medidas para controlar tiempos de permanencia.<br>• Alertas y actuación ante incidencias.<br>• Checklist de revisión interna.<br>• Cómo mejorar la trazabilidad de accesos.</p></div><p style="margin:28px 0 12px;font-size:15px;line-height:1.6">HorizonST permite centralizar la supervisión de trabajadores, generar alertas y mantener un historial operativo mediante tecnologías inalámbricas.</p><p style="margin:0"><a href="https://horizonst.com.es/planes" style="color:#007b86;font-weight:bold">Conocer los planes de HorizonST</a></p></td></tr><tr><td style="padding:20px 32px;background:#f5f8f9;color:#536471;font-size:12px;line-height:1.6">Contacto: <a href="mailto:comercial@horizonst.es" style="color:#007b86">comercial@horizonst.es</a> · <a href="https://horizonst.com.es/privacidad" style="color:#007b86">Privacidad</a><br>HorizonST — Este correo ha sido generado automáticamente.</td></tr></table></td></tr></table></body></html>`
   };
 }
 
