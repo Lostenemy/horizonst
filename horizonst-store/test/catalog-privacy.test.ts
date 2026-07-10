@@ -18,14 +18,19 @@ const request = async (app: express.Express, path: string) => {
   app.use('/api/catalog', createCatalogRouter({ authMiddleware: (_req, res) => res.status(401).json({ error: 'Authentication required' }) }));
   assert.equal((await request(app, '/api/catalog/products')).status, 401, 'catalog prices require authentication');
   assert.equal((await request(app, '/api/catalog/saas-plans')).status, 401, 'plan prices require authentication');
+  assert.equal((await request(app, '/api/catalog/packs')).status, 401, 'pack prices require authentication');
 }
 
 {
   const calls: any[] = [];
-  const pool = { async query(sql: string) { calls.push(sql); return { rows: [] }; } };
+  const packs = [{ id: '11111111-1111-4111-8111-111111111111', code: 'starter', name: 'PACK Starter', price_cents: 325000, tax_rate: '21.00', items: [{ name: 'Gateway BLE HorizonST', quantity: 5 }, { name: 'Antenas y accesorios de instalación', quantity: 5 }, { name: 'Inyector PoE de alimentación', quantity: 1 }, { name: 'Tag BLE personal con alarma', quantity: 10 }] }];
+  const pool = { async query(sql: string) { calls.push(sql); return { rows: sql.includes('FROM store.packs') ? packs : [] }; } };
   const app = express();
   app.use('/api/catalog', createCatalogRouter({ pool, authMiddleware: (_req, _res, next) => next() }));
   assert.equal((await request(app, '/api/catalog/products')).status, 200);
   assert.equal((await request(app, '/api/catalog/saas-plans')).status, 200);
-  assert.equal(calls.length, 2, 'authenticated users can access private catalog');
+  const response = await request(app, '/api/catalog/packs');
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json() as any).packs[0], packs[0]);
+  assert.equal(calls.length, 3, 'authenticated users can access private catalog');
 }

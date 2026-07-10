@@ -13,7 +13,7 @@ export default function Dashboard() {
           <div className="actions">
             <Link className="btn" to="/account">Cuenta</Link>
             <Link className="btn" to="/catalog">Catálogo</Link>
-            <Link className="btn" to="/saas-plans">SaaS</Link>
+            <Link className="btn" to="/saas-plans">Planes web</Link>
             <Link className="btn" to="/cart">Carrito</Link>
             <Link className="btn" to="/quotes">Presupuestos</Link>
             {(user.role === 'customer' || user.role === 'distributor') && <Link className="btn" to="/orders">Pedidos</Link>}

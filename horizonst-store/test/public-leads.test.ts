@@ -14,11 +14,12 @@ const request = async (app: express.Express, path: string, init: RequestInit = {
   }
 };
 
-assert.equal(leadSchema.parse({ source: 'demo', fullName: 'Ana', email: 'ana@example.test' }).source, 'demo');
-assert.equal(leadSchema.parse({ source: 'appcc_guide', fullName: 'Ana', companyName: 'Frío Norte', email: 'ana@example.test', phone: '600000000' }).source, 'appcc_guide');
+assert.equal(leadSchema.parse({ source: 'demo', fullName: 'Ana', email: 'ana@example.test', privacyAccepted: true }).source, 'demo');
+assert.equal(leadSchema.parse({ source: 'appcc_guide', fullName: 'Ana', companyName: 'Frío Norte', email: 'ana@example.test', phone: '600000000', privacyAccepted: true }).source, 'appcc_guide');
 assert.throws(() => leadSchema.parse({ source: 'landing', fullName: 'Ana', email: 'ana@example.test' }));
 assert.throws(() => leadSchema.parse({ source: 'demo', fullName: 'A', email: 'bad' }));
 assert.throws(() => leadSchema.parse({ source: 'appcc_guide', fullName: 'Ana', email: 'ana@example.test' }));
+assert.throws(() => leadSchema.parse({ source: 'demo', fullName: 'Ana', email: 'ana@example.test', privacyAccepted: false }), 'backend rejects leads without privacy acceptance');
 
 {
   const calls: any[] = [];
@@ -28,11 +29,11 @@ assert.throws(() => leadSchema.parse({ source: 'appcc_guide', fullName: 'Ana', e
   app.use('/api/leads', createLeadsRouter({ pool }));
   app.use((error: any, _req: any, res: any, _next: any) => { if (error instanceof ZodError) { res.status(400).json({ error: 'Validation error' }); return; } res.status(500).json({ error: 'Internal server error' }); });
 
-  const demo = await request(app, '/api/leads', { method: 'POST', body: JSON.stringify({ source: 'demo', fullName: 'Ana Demo', companyName: 'Restaurante Norte', email: 'ana@example.test', phone: '600000000', message: 'Quiero una demo' }) });
+  const demo = await request(app, '/api/leads', { method: 'POST', body: JSON.stringify({ source: 'demo', fullName: 'Ana Demo', companyName: 'Restaurante Norte', email: 'ana@example.test', phone: '600000000', message: 'Quiero una demo', privacyAccepted: true }) });
   assert.equal(demo.status, 201, 'LP-02 creates demo lead');
   assert.deepEqual(calls[0].params?.slice(0, 4), ['demo', 'Ana Demo', 'Restaurante Norte', 'ana@example.test']);
 
-  const guide = await request(app, '/api/leads', { method: 'POST', body: JSON.stringify({ source: 'appcc_guide', fullName: 'Luis Guía', companyName: 'Cámaras Sur', email: 'luis@example.test', phone: '611111111' }) });
+  const guide = await request(app, '/api/leads', { method: 'POST', body: JSON.stringify({ source: 'appcc_guide', fullName: 'Luis Guía', companyName: 'Cámaras Sur', email: 'luis@example.test', phone: '611111111', privacyAccepted: true }) });
   assert.equal(guide.status, 201, 'LP-03 creates APPCC guide lead');
   assert.equal(calls[1].params?.[0], 'appcc_guide');
 }

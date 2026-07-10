@@ -30,7 +30,7 @@ export default function Layout() {
           {user ? (
             <>
               <NavLink to="/catalog">Catálogo</NavLink>
-              <NavLink to="/saas-plans">Planes SaaS</NavLink>
+              <NavLink to="/saas-plans">Planes web</NavLink>
               <NavLink to="/dashboard">Dashboard</NavLink>
               <NavLink to="/cart">Carrito</NavLink>
               <NavLink to="/quotes">Presupuestos</NavLink>

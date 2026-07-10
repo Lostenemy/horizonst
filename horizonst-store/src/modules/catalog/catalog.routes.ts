@@ -42,6 +42,24 @@ catalogRouter.get('/saas-plans', async (_req, res, next) => {
   }
 });
 
+catalogRouter.get('/packs', async (_req, res, next) => {
+  try {
+    const { rows } = await catalogPool.query(
+      `SELECT p.id, p.code, p.name, p.description, p.price_cents, p.tax_rate, p.is_active, p.presentation_order,
+              COALESCE(json_agg(json_build_object('product_id', product.id, 'name', product.name, 'quantity', pi.quantity, 'presentation_order', pi.presentation_order) ORDER BY pi.presentation_order) FILTER (WHERE pi.id IS NOT NULL), '[]'::json) AS items
+       FROM store.packs p
+       LEFT JOIN store.pack_items pi ON pi.pack_id = p.id
+       LEFT JOIN store.products product ON product.id = pi.product_id
+       WHERE p.is_active = true
+       GROUP BY p.id
+       ORDER BY p.presentation_order ASC, p.name ASC`
+    );
+    res.json({ packs: rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
 return catalogRouter;
 };
 

@@ -2,9 +2,9 @@ import { FormEvent, useState } from 'react';
 import { customerAccessUrl } from '../lib/domains';
 
 type LeadSource = 'demo' | 'appcc_guide';
-type LeadFormState = { fullName: string; companyName: string; email: string; phone: string; message: string; interest: string };
+type LeadFormState = { fullName: string; companyName: string; email: string; phone: string; message: string; interest: string; privacyAccepted: boolean };
 
-const emptyLeadForm: LeadFormState = { fullName: '', companyName: '', email: '', phone: '', message: '', interest: '' };
+const emptyLeadForm: LeadFormState = { fullName: '', companyName: '', email: '', phone: '', message: '', interest: '', privacyAccepted: false };
 
 export const landingSections = [
   'hero',
@@ -23,6 +23,12 @@ export const privatePlanMessages = [
   { name: 'Planes adaptados', description: 'Planes adaptados al tamaño de tu operación.' },
   { name: 'Propuesta personalizada', description: 'Solicita una demo para recibir una propuesta personalizada.' },
   { name: 'Zona privada', description: 'Consulta catálogo y condiciones accediendo como cliente.' }
+];
+
+export const publicWebPlans = [
+  { name: 'Plan web Starter', price: '580 € PVP + IVA', description: 'Para operaciones que comienzan a digitalizar sus controles.' },
+  { name: 'Plan web Professional', price: '800 € PVP + IVA', description: 'Para equipos que necesitan ampliar cobertura y trazabilidad.' },
+  { name: 'Plan web Enterprise', price: '1.200 € PVP + IVA', description: 'Para operaciones con mayor capacidad y configuración comercial avanzada.' }
 ];
 
 export const privateHardwareMessages = [
@@ -49,7 +55,7 @@ function LeadForm({ source, title, cta, defaultInterest, requirePhone = false }:
   const [form, setForm] = useState<LeadFormState>({ ...emptyLeadForm, interest: defaultInterest });
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
-  const update = (field: keyof LeadFormState, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const update = (field: keyof LeadFormState, value: string | boolean) => setForm((current) => ({ ...current, [field]: value }));
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setStatus('sending');
@@ -75,6 +81,7 @@ function LeadForm({ source, title, cta, defaultInterest, requirePhone = false }:
       <label>Email profesional<input required type="email" value={form.email} onChange={(event) => update('email', event.target.value)} /></label>
       <label>Teléfono<input required={requirePhone} value={form.phone} onChange={(event) => update('phone', event.target.value)} /></label>
       <label>Mensaje<textarea rows={3} value={form.message} onChange={(event) => update('message', event.target.value)} /></label>
+      <label className="lp-privacy"><input required type="checkbox" checked={form.privacyAccepted} onChange={(event) => update('privacyAccepted', event.target.checked)} /> He leído y acepto la <a href="/privacidad">política de privacidad</a>.</label>
       <button type="submit" disabled={status === 'sending'}>{status === 'sending' ? 'Enviando...' : cta}</button>
       {status === 'sent' && <p className="success">Solicitud recibida. Te contactaremos para continuar.</p>}
       {status === 'error' && <p className="error">No se pudo registrar la solicitud. Inténtalo de nuevo.</p>}
@@ -170,8 +177,10 @@ export default function PublicLanding() {
       </section>
 
       <section id="catalogo-privado" className="lp-section" data-section="private-catalog">
-        <p className="eyebrow">Catálogo privado</p>
-        <h2>Planes y hardware se consultan dentro de la tienda privada.</h2>
+        <p className="eyebrow">Planes web</p>
+        <h2>Planes web adaptados al tamaño de tu operación.</h2>
+        <div className="lp-grid three">{publicWebPlans.map((plan) => <article className="lp-card" key={plan.name}><h3>{plan.name}</h3><p className="lp-price">{plan.price}</p><p>{plan.description}</p></article>)}</div>
+        <h2 className="lp-subheading">Packs de hardware en zona privada.</h2>
         <div className="lp-grid three">{privatePlanMessages.map((item) => <article className="lp-card" key={item.name}><h3>{item.name}</h3><p>{item.description}</p></article>)}</div>
         <div className="lp-note">{privateHardwareMessages.map((message) => <p key={message}>{message}</p>)}</div>
       </section>
@@ -200,7 +209,7 @@ export default function PublicLanding() {
       <footer className="lp-footer">
         <p>HorizonST · Monitorización inteligente para cámaras frigoríficas</p>
         <nav aria-label="Legal">
-          <a href="mailto:comercial@horizonst.com.es">Contacto</a>
+          <a href="mailto:comercial@horizonst.es">Contacto</a>
           <a href="/aviso-legal">Aviso legal</a>
           <a href="/privacidad">Privacidad</a>
         </nav>

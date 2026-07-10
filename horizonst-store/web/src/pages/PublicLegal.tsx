@@ -5,18 +5,22 @@ const content = {
     eyebrow: 'Información legal',
     title: 'Aviso legal',
     sections: [
-      { title: 'Titularidad', text: 'HorizonST ofrece información comercial sobre soluciones de monitorización y trazabilidad para operaciones profesionales.' },
+      { title: 'Titularidad', text: 'El titular del sitio es HorizonSmartrack, empresario autónomo, NIF 27484575N, con domicilio en Calle Félix Esteban Guerrero, nº 6, Local B-5, 30007 Murcia, España. Contacto: comercial@horizonst.es.' },
       { title: 'Uso del sitio', text: 'El contenido del sitio tiene carácter informativo y no constituye una oferta contractual. Las condiciones comerciales se facilitan en la zona privada o mediante propuesta personalizada.' },
-      { title: 'Contacto', text: 'Para consultas relacionadas con este sitio puedes escribir a comercial@horizonst.com.es.' }
+      { title: 'Propiedad intelectual', text: 'Los textos, marcas, diseños y demás contenidos del sitio están protegidos por la normativa aplicable y no pueden reutilizarse sin autorización.' },
+      { title: 'Limitación de responsabilidad', text: 'HorizonSmartrack procura mantener la información actualizada, pero no garantiza la ausencia de errores ni responde por decisiones tomadas exclusivamente a partir de contenidos informativos.' },
+      { title: 'Legislación aplicable', text: 'La relación con el sitio se rige por la legislación española aplicable.' }
     ]
   },
   privacy: {
     eyebrow: 'Protección de datos',
     title: 'Política de privacidad',
     sections: [
-      { title: 'Datos tratados', text: 'Los formularios públicos solicitan los datos necesarios para atender una solicitud de demo o enviar la guía APPCC: nombre, empresa, email, teléfono y mensaje opcional.' },
-      { title: 'Finalidad', text: 'Los datos se utilizan para gestionar la solicitud comercial y dar seguimiento al interés manifestado. No se emplean para fines incompatibles con esa solicitud.' },
-      { title: 'Derechos', text: 'Puedes solicitar acceso, rectificación, supresión u otros derechos de protección de datos contactando con comercial@horizonst.com.es.' }
+      { title: 'Responsable del tratamiento', text: 'HorizonSmartrack, NIF 27484575N, empresario autónomo, con domicilio en Calle Félix Esteban Guerrero, nº 6, Local B-5, 30007 Murcia, España. Para privacidad y ejercicio de derechos: comercial@horizonst.es.' },
+      { title: 'Datos tratados y finalidades', text: 'Tratamos nombre, empresa, email, teléfono y mensaje de los formularios para gestionar solicitudes de demo, entregar o gestionar solicitudes de la guía APPCC y realizar seguimiento comercial relacionado con la solicitud. No solicitamos categorías especiales de datos.' },
+      { title: 'Base jurídica y conservación', text: 'La base jurídica es el consentimiento del interesado y, cuando corresponda, la aplicación de medidas precontractuales. Conservamos los datos durante el tiempo necesario para atender la solicitud y cumplir obligaciones legales.' },
+      { title: 'Destinatarios', text: 'No comunicamos datos a terceros salvo obligación legal o proveedores necesarios para prestar el servicio, sujetos a las garantías aplicables.' },
+      { title: 'Derechos', text: 'Puedes ejercer acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a comercial@horizonst.es. También puedes reclamar ante la Agencia Española de Protección de Datos.' }
     ]
   }
 } as const;

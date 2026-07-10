@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { calculatePotentialSavings, faqItems, landingSections, privateHardwareMessages, privatePlanMessages } from '../web/src/pages/PublicLanding.js';
+import { calculatePotentialSavings, faqItems, landingSections, privateHardwareMessages, privatePlanMessages, publicWebPlans } from '../web/src/pages/PublicLanding.js';
 import { customerAccessUrl, isPublicMarketingHost, publicMarketingPage } from '../web/src/lib/domains.js';
 
 assert.equal(isPublicMarketingHost('horizonst.com.es'), true, 'LP-01 routes apex domain to public funnel');
@@ -16,6 +16,7 @@ assert.ok(privatePlanMessages.find((plan) => plan.description === 'Planes adapta
 assert.ok(privatePlanMessages.find((plan) => plan.description === 'Solicita una demo para recibir una propuesta personalizada.'));
 assert.ok(privateHardwareMessages.includes('Hardware compatible disponible en la zona privada.'));
 assert.ok(faqItems.find((item) => item.question.includes('catálogo')));
+assert.deepEqual(publicWebPlans.map((plan) => plan.price), ['580 € PVP + IVA', '800 € PVP + IVA', '1.200 € PVP + IVA']);
 
 const low = calculatePotentialSavings(1, 10, 0, 0);
 const high = calculatePotentialSavings(8, 25, 3, 1000);
@@ -40,13 +41,24 @@ assert.match(landing, /Guía APPCC 2026 para cámaras frigoríficas/);
 assert.match(landing, /Aviso legal/);
 assert.match(landing, /Privacidad/);
 assert.match(landing, /Contacto/);
-assert.doesNotMatch(landing, /580 €\/año|800 €\/año|190 €|150 €|75 €/);
+assert.match(landing, /580 € PVP \+ IVA/);
+assert.match(landing, /800 € PVP \+ IVA/);
+assert.match(landing, /1\.200 € PVP \+ IVA/);
+assert.doesNotMatch(landing, /190 €|150 €|75 €/);
+assert.match(landing, /privacyAccepted/);
+assert.match(landing, /política de privacidad/);
 
 const legal = await readFile(new URL('../web/src/pages/PublicLegal.tsx', import.meta.url), 'utf-8');
 assert.match(legal, /Aviso legal/);
 assert.match(legal, /Política de privacidad/);
+assert.match(legal, /HorizonSmartrack/);
+assert.match(legal, /27484575N/);
+assert.match(legal, /Calle Félix Esteban Guerrero, nº 6, Local B-5, 30007 Murcia, España/);
+assert.match(legal, /comercial@horizonst\.es/);
 assert.match(legal, /contenido del sitio tiene carácter informativo/);
 assert.match(legal, /Datos tratados/);
+assert.match(legal, /Agencia Española de Protección de Datos/);
+assert.doesNotMatch(legal, /Registro Mercantil|Teléfono/);
 assert.doesNotMatch(legal, /Solicitar demo gratuita/, 'legal pages do not render only the landing content');
 
 const css = await readFile(new URL('../web/src/styles.css', import.meta.url), 'utf-8');

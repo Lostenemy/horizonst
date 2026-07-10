@@ -14,7 +14,8 @@ export const leadSchema = z.object({
   email: z.string().trim().email().max(320),
   phone: z.string().trim().max(60).optional(),
   message: z.string().trim().max(2000).optional(),
-  interest: z.string().trim().max(200).optional()
+  interest: z.string().trim().max(200).optional(),
+  privacyAccepted: z.literal(true)
 }).strict().superRefine((input, ctx) => {
   if (input.source !== 'appcc_guide') return;
   if (!input.companyName?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['companyName'], message: 'Company is required for APPCC guide leads' });
@@ -29,10 +30,10 @@ export const createLeadsRouter = (dependencies: LeadsRouterDependencies = {}) =>
     try {
       const input = leadSchema.parse(req.body ?? {});
       const { rows } = await leadPool.query(
-        `INSERT INTO store.leads (source, full_name, company_name, email, phone, message, interest)
-         VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''))
+        `INSERT INTO store.leads (source, full_name, company_name, email, phone, message, interest, privacy_accepted, privacy_accepted_at)
+         VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), $8, now())
          RETURNING id, source, status, created_at`,
-        [input.source, input.fullName, input.companyName ?? '', input.email, input.phone ?? '', input.message ?? '', input.interest ?? '']
+        [input.source, input.fullName, input.companyName ?? '', input.email, input.phone ?? '', input.message ?? '', input.interest ?? '', input.privacyAccepted]
       );
       res.status(201).json({ lead: rows[0] });
     } catch (error) { next(error); }
