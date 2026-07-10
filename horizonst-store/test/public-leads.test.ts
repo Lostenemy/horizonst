@@ -15,8 +15,10 @@ const request = async (app: express.Express, path: string, init: RequestInit = {
 };
 
 assert.equal(leadSchema.parse({ source: 'demo', fullName: 'Ana', email: 'ana@example.test' }).source, 'demo');
+assert.equal(leadSchema.parse({ source: 'appcc_guide', fullName: 'Ana', companyName: 'Frío Norte', email: 'ana@example.test', phone: '600000000' }).source, 'appcc_guide');
 assert.throws(() => leadSchema.parse({ source: 'landing', fullName: 'Ana', email: 'ana@example.test' }));
 assert.throws(() => leadSchema.parse({ source: 'demo', fullName: 'A', email: 'bad' }));
+assert.throws(() => leadSchema.parse({ source: 'appcc_guide', fullName: 'Ana', email: 'ana@example.test' }));
 
 {
   const calls: any[] = [];
@@ -30,7 +32,7 @@ assert.throws(() => leadSchema.parse({ source: 'demo', fullName: 'A', email: 'ba
   assert.equal(demo.status, 201, 'LP-02 creates demo lead');
   assert.deepEqual(calls[0].params?.slice(0, 4), ['demo', 'Ana Demo', 'Restaurante Norte', 'ana@example.test']);
 
-  const guide = await request(app, '/api/leads', { method: 'POST', body: JSON.stringify({ source: 'appcc_guide', fullName: 'Luis Guía', email: 'luis@example.test' }) });
+  const guide = await request(app, '/api/leads', { method: 'POST', body: JSON.stringify({ source: 'appcc_guide', fullName: 'Luis Guía', companyName: 'Cámaras Sur', email: 'luis@example.test', phone: '611111111' }) });
   assert.equal(guide.status, 201, 'LP-03 creates APPCC guide lead');
   assert.equal(calls[1].params?.[0], 'appcc_guide');
 }

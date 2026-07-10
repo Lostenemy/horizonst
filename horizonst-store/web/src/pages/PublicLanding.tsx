@@ -10,25 +10,33 @@ export const landingSections = [
   'hero',
   'problem',
   'solution',
+  'benefits',
   'appcc-guide',
   'savings-calculator',
-  'plans-pricing',
-  'hardware-pricing',
+  'private-catalog',
   'trust',
+  'faq',
   'final-cta'
 ] as const;
 
-export const planPricing = [
-  { name: 'Starter', price: '580 €/año', limits: 'Hasta 12 tags y 5 gateways' },
-  { name: 'Professional', price: '800 €/año', limits: 'Hasta 20 tags y 10 gateways' },
-  { name: 'Enterprise', price: 'A consultar', limits: 'Límites a medida y acompañamiento comercial' }
+export const privatePlanMessages = [
+  { name: 'Planes adaptados', description: 'Planes adaptados al tamaño de tu operación.' },
+  { name: 'Propuesta personalizada', description: 'Solicita una demo para recibir una propuesta personalizada.' },
+  { name: 'Zona privada', description: 'Consulta catálogo y condiciones accediendo como cliente.' }
 ];
 
-export const hardwarePricing = [
-  { name: 'Gateway BLE HorizonST', price: '190 €' },
-  { name: 'Antena para Gateway BLE', price: '150 €' },
-  { name: 'Tag BLE HorizonST', price: '75 €' },
-  { name: 'Fuente PoE', price: '150 €' }
+export const privateHardwareMessages = [
+  'Hardware compatible disponible en la zona privada.',
+  'Gateways, tags y accesorios se dimensionan según cámaras, cobertura y operación.',
+  'El acceso al catálogo requiere entrar como cliente en tienda.horizonst.com.es.'
+];
+
+export const faqItems = [
+  { question: '¿Cómo funciona HorizonST?', answer: 'Los tags BLE recogen señales operativas y los gateways las envían a una plataforma privada con alertas, historial y trazabilidad.' },
+  { question: '¿La instalación requiere obra?', answer: 'La demo permite revisar cobertura, cámaras y puntos críticos antes de proponer una instalación ajustada.' },
+  { question: '¿Ayuda con APPCC?', answer: 'Facilita evidencias y registros para tus controles, aunque cada empresa debe validar su propio plan APPCC.' },
+  { question: '¿Cómo accedo al catálogo?', answer: 'El catálogo y las condiciones comerciales están disponibles solo dentro de tienda.horizonst.com.es para usuarios registrados.' },
+  { question: '¿La demo es gratuita?', answer: 'Puedes solicitar una demo gratuita para analizar tu caso y recibir una propuesta personalizada.' }
 ];
 
 export const calculatePotentialSavings = (hoursPerWeek: number, hourlyCost: number, incidentsPerYear: number, incidentCost: number) => {
@@ -37,7 +45,7 @@ export const calculatePotentialSavings = (hoursPerWeek: number, hourlyCost: numb
   return Math.round((manualControlCost * 0.35) + (incidentExposure * 0.2));
 };
 
-function LeadForm({ source, title, cta, defaultInterest }: { source: LeadSource; title: string; cta: string; defaultInterest: string }) {
+function LeadForm({ source, title, cta, defaultInterest, requirePhone = false }: { source: LeadSource; title: string; cta: string; defaultInterest: string; requirePhone?: boolean }) {
   const [form, setForm] = useState<LeadFormState>({ ...emptyLeadForm, interest: defaultInterest });
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
@@ -63,9 +71,9 @@ function LeadForm({ source, title, cta, defaultInterest }: { source: LeadSource;
     <form className="lp-form" onSubmit={submit} data-lead-source={source}>
       <h3>{title}</h3>
       <label>Nombre y apellidos<input required value={form.fullName} onChange={(event) => update('fullName', event.target.value)} /></label>
-      <label>Empresa<input value={form.companyName} onChange={(event) => update('companyName', event.target.value)} /></label>
+      <label>Empresa<input required={source === 'appcc_guide'} value={form.companyName} onChange={(event) => update('companyName', event.target.value)} /></label>
       <label>Email profesional<input required type="email" value={form.email} onChange={(event) => update('email', event.target.value)} /></label>
-      <label>Teléfono<input value={form.phone} onChange={(event) => update('phone', event.target.value)} /></label>
+      <label>Teléfono<input required={requirePhone} value={form.phone} onChange={(event) => update('phone', event.target.value)} /></label>
       <label>Mensaje<textarea rows={3} value={form.message} onChange={(event) => update('message', event.target.value)} /></label>
       <button type="submit" disabled={status === 'sending'}>{status === 'sending' ? 'Enviando...' : cta}</button>
       {status === 'sent' && <p className="success">Solicitud recibida. Te contactaremos para continuar.</p>}
@@ -99,17 +107,17 @@ export default function PublicLanding() {
       <nav className="lp-nav" aria-label="Navegación pública">
         <a className="lp-brand" href="#inicio">HorizonST</a>
         <a href="#appcc">Guía APPCC</a>
-        <a href="#precios">Precios</a>
+        <a href="#catalogo-privado">Catálogo privado</a>
         <a className="btn secondary" href={customerAccessUrl}>Acceso clientes</a>
       </nav>
 
       <section id="inicio" className="lp-hero" data-section="hero">
         <p className="eyebrow">Trazabilidad, frío y cumplimiento APPCC</p>
-        <h1>Control operativo para empresas que no pueden permitirse perder temperatura, stock ni evidencias.</h1>
-        <p>HorizonST combina sensores BLE, gateways y software para digitalizar controles, alertas y registros críticos sin convertir el día a día en una carga administrativa.</p>
+        <h1>Protege a tu equipo y cumple APPCC con monitorización inteligente de cámaras frigoríficas.</h1>
+        <p>Controla tiempos de exposición al frío, recibe alertas automáticas y mantén la trazabilidad en tiempo real.</p>
         <div className="actions">
-          <a className="btn" href="#demo">Solicitar demo</a>
-          <a className="btn ghost" href="#calculadora">Calcular ahorro potencial</a>
+          <a className="btn" href="#demo">Solicitar demo gratuita</a>
+          <a className="btn ghost" href="#solucion">Ver cómo funciona</a>
         </div>
       </section>
 
@@ -123,7 +131,7 @@ export default function PublicLanding() {
         </div>
       </section>
 
-      <section className="lp-section split" data-section="solution">
+      <section id="solucion" className="lp-section split" data-section="solution">
         <div>
           <p className="eyebrow">La solución</p>
           <h2>Monitorización continua con alertas y registros listos para revisar.</h2>
@@ -136,13 +144,23 @@ export default function PublicLanding() {
         </ul>
       </section>
 
+      <section className="lp-section" data-section="benefits">
+        <p className="eyebrow">Beneficios</p>
+        <h2>Menos tareas manuales y más capacidad de reacción.</h2>
+        <div className="lp-grid three">
+          <article><h3>Protección del equipo</h3><p>Control de exposición al frío para detectar situaciones que requieren intervención.</p></article>
+          <article><h3>Alertas accionables</h3><p>Notificaciones automáticas para actuar antes de que una incidencia escale.</p></article>
+          <article><h3>Trazabilidad APPCC</h3><p>Historial centralizado para revisar evidencias, tendencias y controles críticos.</p></article>
+        </div>
+      </section>
+
       <section id="appcc" className="lp-section split" data-section="appcc-guide">
         <div>
           <p className="eyebrow">Guía APPCC</p>
-          <h2>Descarga una guía práctica para revisar tus controles críticos.</h2>
-          <p>Recibe una guía orientativa para identificar puntos de control, evidencias y oportunidades de automatización.</p>
+          <h2>Guía APPCC 2026 para cámaras frigoríficas.</h2>
+          <p>Solicita una guía orientativa para revisar controles críticos, evidencias y oportunidades de automatización en cámaras frigoríficas.</p>
         </div>
-        <LeadForm source="appcc_guide" title="Descarga de guía APPCC" cta="Solicitar guía" defaultInterest="Guía APPCC" />
+        <LeadForm source="appcc_guide" title="Descarga de guía APPCC" cta="Solicitar guía APPCC 2026" defaultInterest="Guía APPCC 2026 para cámaras frigoríficas" requirePhone />
       </section>
 
       <section id="calculadora" className="lp-section" data-section="savings-calculator">
@@ -151,22 +169,23 @@ export default function PublicLanding() {
         <SavingsCalculator />
       </section>
 
-      <section id="precios" className="lp-section" data-section="plans-pricing">
-        <p className="eyebrow">Planes SaaS</p>
-        <h2>Precios públicos y límites claros.</h2>
-        <div className="lp-grid three">{planPricing.map((plan) => <article className="lp-card" key={plan.name}><h3>{plan.name}</h3><p className="lp-price">{plan.price}</p><p>{plan.limits}</p></article>)}</div>
-      </section>
-
-      <section className="lp-section" data-section="hardware-pricing">
-        <p className="eyebrow">Hardware</p>
-        <h2>Componentes base para desplegar HorizonST.</h2>
-        <div className="lp-grid four">{hardwarePricing.map((item) => <article className="lp-card" key={item.name}><h3>{item.name}</h3><p className="lp-price">{item.price}</p></article>)}</div>
+      <section id="catalogo-privado" className="lp-section" data-section="private-catalog">
+        <p className="eyebrow">Catálogo privado</p>
+        <h2>Planes y hardware se consultan dentro de la tienda privada.</h2>
+        <div className="lp-grid three">{privatePlanMessages.map((item) => <article className="lp-card" key={item.name}><h3>{item.name}</h3><p>{item.description}</p></article>)}</div>
+        <div className="lp-note">{privateHardwareMessages.map((message) => <p key={message}>{message}</p>)}</div>
       </section>
 
       <section className="lp-section" data-section="trust">
         <p className="eyebrow">Confianza</p>
         <h2>Diseñado para operaciones B2B que necesitan trazabilidad verificable.</h2>
         <p>Implantación progresiva, acceso privado para clientes y distribuidores, y soporte comercial para dimensionar hardware y licencias.</p>
+      </section>
+
+      <section className="lp-section" data-section="faq">
+        <p className="eyebrow">FAQ</p>
+        <h2>Preguntas frecuentes.</h2>
+        <div className="lp-grid two">{faqItems.map((item) => <article className="lp-card" key={item.question}><h3>{item.question}</h3><p>{item.answer}</p></article>)}</div>
       </section>
 
       <section id="demo" className="lp-section split final" data-section="final-cta">
@@ -177,6 +196,15 @@ export default function PublicLanding() {
         </div>
         <LeadForm source="demo" title="Solicitud de demo" cta="Solicitar demo" defaultInterest="Demo comercial" />
       </section>
+
+      <footer className="lp-footer">
+        <p>HorizonST · Monitorización inteligente para cámaras frigoríficas</p>
+        <nav aria-label="Legal">
+          <a href="mailto:comercial@horizonst.com.es">Contacto</a>
+          <a href="/aviso-legal">Aviso legal</a>
+          <a href="/privacidad">Privacidad</a>
+        </nav>
+      </footer>
     </main>
   );
 }

@@ -15,7 +15,11 @@ export const leadSchema = z.object({
   phone: z.string().trim().max(60).optional(),
   message: z.string().trim().max(2000).optional(),
   interest: z.string().trim().max(200).optional()
-}).strict();
+}).strict().superRefine((input, ctx) => {
+  if (input.source !== 'appcc_guide') return;
+  if (!input.companyName?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['companyName'], message: 'Company is required for APPCC guide leads' });
+  if (!input.phone?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['phone'], message: 'Phone is required for APPCC guide leads' });
+});
 
 export const createLeadsRouter = (dependencies: LeadsRouterDependencies = {}) => {
   const router = Router();
