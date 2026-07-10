@@ -62,7 +62,7 @@ export default function Cart() {
           {submitted && <p className="success">Presupuesto {cart.quote.quote_number} enviado con estado {cart.quote.status}.</p>}
           {cart.items.map((item) => (
             <div className="line" key={item.id}>
-              <span><b>{item.description}</b><small>{item.item_type === 'saas_plan' ? ' SaaS' : ' Producto'}</small></span>
+              <span><b>{item.description}</b><small>{item.item_type === 'saas_plan' ? ' Plan web' : item.item_type === 'pack' ? ' Pack' : ' Producto'}</small></span>
               <input aria-label={`Cantidad de ${item.description}`} type="number" min="1" value={item.quantity} disabled={busy === item.id || submitted} onChange={(event) => updateQuantity(item.id, event)} />
               <b>{money(item.line_total_cents)}</b>
               <button type="button" disabled={busy === item.id || submitted} onClick={() => removeItem(item.id)}>Eliminar</button>

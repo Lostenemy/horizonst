@@ -27,10 +27,10 @@ export default function Layout() {
       <header className="topbar">
         <Link to="/" className="brand">HorizonST Store</Link>
         <nav aria-label="Navegación principal">
-          <NavLink to="/catalog">Catálogo</NavLink>
-          <NavLink to="/saas-plans">Planes SaaS</NavLink>
           {user ? (
             <>
+              <NavLink to="/catalog">Catálogo</NavLink>
+              <NavLink to="/saas-plans">Planes web</NavLink>
               <NavLink to="/dashboard">Dashboard</NavLink>
               <NavLink to="/cart">Carrito</NavLink>
               <NavLink to="/quotes">Presupuestos</NavLink>

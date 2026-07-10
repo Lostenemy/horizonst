@@ -60,7 +60,7 @@ router.get('/quotes/:id', async (req, res, next) => {
     const id = idSchema.parse(req.params.id);
     const quote = await pool.query(`SELECT q.*, u.email, u.full_name, u.role FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1`, [id]);
     if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
-    const items = await pool.query(`SELECT id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
+    const items = await pool.query(`SELECT id, item_type, product_id, saas_plan_id, pack_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
     const history = await pool.query(`SELECT h.id, h.quote_id, h.old_status, h.new_status, h.comment, h.changed_by, h.created_at, u.email AS changed_by_email, u.full_name AS changed_by_full_name FROM store.quote_status_history h LEFT JOIN store.users u ON u.id = h.changed_by WHERE h.quote_id = $1 ORDER BY h.created_at DESC`, [id]);
     res.json({ quote: quote.rows[0], items: items.rows, history: history.rows });
   } catch (error) { next(error); }

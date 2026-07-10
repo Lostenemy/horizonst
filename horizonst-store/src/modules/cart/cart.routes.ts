@@ -10,9 +10,10 @@ cartRouter.use(requireAuth, requireRole('customer', 'distributor', 'admin'));
 
 const idSchema = z.string().uuid();
 const quantitySchema = z.object({ quantity: z.number().int().positive().max(9999) }).strict();
-const addItemSchema = z.discriminatedUnion('item_type', [
+export const addItemSchema = z.discriminatedUnion('item_type', [
   z.object({ item_type: z.literal('product'), product_id: z.string().uuid(), quantity: z.number().int().positive().max(9999) }).strict(),
-  z.object({ item_type: z.literal('saas_plan'), saas_plan_id: z.string().uuid(), quantity: z.number().int().positive().max(9999) }).strict()
+  z.object({ item_type: z.literal('saas_plan'), saas_plan_id: z.string().uuid(), quantity: z.number().int().positive().max(9999) }).strict(),
+  z.object({ item_type: z.literal('pack'), pack_id: z.string().uuid(), quantity: z.number().int().positive().max(9999) }).strict()
 ]);
 
 cartRouter.get('/', async (req, res, next) => {
@@ -33,20 +34,24 @@ cartRouter.post('/items', async (req, res, next) => {
     if (input.item_type === 'product') {
       const { rows } = await client.query('SELECT id, name, price_cents, tax_rate FROM store.products WHERE id = $1 AND is_active = true', [input.product_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active product not found' }); return; }
-      item = { product_id: rows[0].id, saas_plan_id: null, description: rows[0].name, unit_price_cents: rows[0].price_cents, tax_rate: rows[0].tax_rate };
+      item = { product_id: rows[0].id, saas_plan_id: null, pack_id: null, description: rows[0].name, unit_price_cents: rows[0].price_cents, tax_rate: rows[0].tax_rate };
+    } else if (input.item_type === 'saas_plan') {
+      const { rows } = await client.query('SELECT id, name, annual_price_cents, tax_rate FROM store.saas_plans WHERE id = $1 AND is_active = true', [input.saas_plan_id]);
+      if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active web plan not found' }); return; }
+      if (!canAutoPriceSaasPlan(rows[0])) { await client.query('ROLLBACK'); res.status(422).json({ error: 'Web plan requires commercial contact' }); return; }
+      item = { product_id: null, saas_plan_id: rows[0].id, pack_id: null, description: `Plan web ${rows[0].name}`, unit_price_cents: rows[0].annual_price_cents, tax_rate: rows[0].tax_rate };
     } else {
-      const { rows } = await client.query('SELECT id, name, annual_price_cents, tax_rate, is_enterprise FROM store.saas_plans WHERE id = $1 AND is_active = true', [input.saas_plan_id]);
-      if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active SaaS plan not found' }); return; }
-      if (!canAutoPriceSaasPlan(rows[0])) { await client.query('ROLLBACK'); res.status(422).json({ error: 'Enterprise plans require commercial contact' }); return; }
-      item = { product_id: null, saas_plan_id: rows[0].id, description: rows[0].name, unit_price_cents: rows[0].annual_price_cents, tax_rate: rows[0].tax_rate };
+      const { rows } = await client.query('SELECT id, name, description, price_cents, tax_rate FROM store.packs WHERE id = $1 AND is_active = true', [input.pack_id]);
+      if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active pack not found' }); return; }
+      item = { product_id: null, saas_plan_id: null, pack_id: rows[0].id, description: rows[0].description ? `${rows[0].name}: ${rows[0].description}` : rows[0].name, unit_price_cents: rows[0].price_cents, tax_rate: rows[0].tax_rate };
     }
-    const existing = await client.query(`SELECT * FROM store.quote_items WHERE quote_id = $1 AND item_type = $2 AND product_id IS NOT DISTINCT FROM $3 AND saas_plan_id IS NOT DISTINCT FROM $4`, [quote.id, input.item_type, item.product_id, item.saas_plan_id]);
+    const existing = await client.query(`SELECT * FROM store.quote_items WHERE quote_id = $1 AND item_type = $2 AND product_id IS NOT DISTINCT FROM $3 AND saas_plan_id IS NOT DISTINCT FROM $4 AND pack_id IS NOT DISTINCT FROM $5`, [quote.id, input.item_type, item.product_id, item.saas_plan_id, item.pack_id]);
     const quantity = Number(existing.rows[0]?.quantity ?? 0) + input.quantity;
     const totals = calculateLineTotals({ quantity, unitPriceCents: Number(item.unit_price_cents), discountPercent, taxRate: item.tax_rate });
-    const params = [quote.id, input.item_type, item.product_id, item.saas_plan_id, item.description, quantity, item.unit_price_cents, discountPercent, item.tax_rate, totals.line_subtotal_cents, totals.line_discount_cents, totals.line_tax_cents, totals.line_total_cents];
+    const params = [quote.id, input.item_type, item.product_id, item.saas_plan_id, item.pack_id, item.description, quantity, item.unit_price_cents, discountPercent, item.tax_rate, totals.line_subtotal_cents, totals.line_discount_cents, totals.line_tax_cents, totals.line_total_cents];
     const { rows } = existing.rows[0]
-      ? await client.query(`UPDATE store.quote_items SET quantity = $6, discount_percent = $8, tax_rate = $9, line_subtotal_cents = $10, line_discount_cents = $11, line_tax_cents = $12, line_total_cents = $13 WHERE id = $14 RETURNING *`, [...params, existing.rows[0].id])
-      : await client.query(`INSERT INTO store.quote_items (quote_id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`, params);
+      ? await client.query(`UPDATE store.quote_items SET quantity = $2, discount_percent = $3, tax_rate = $4, line_subtotal_cents = $5, line_discount_cents = $6, line_tax_cents = $7, line_total_cents = $8 WHERE id = $1 RETURNING *`, [existing.rows[0].id, quantity, discountPercent, item.tax_rate, totals.line_subtotal_cents, totals.line_discount_cents, totals.line_tax_cents, totals.line_total_cents])
+      : await client.query(`INSERT INTO store.quote_items (quote_id, item_type, product_id, saas_plan_id, pack_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`, params);
     await recalculateQuote(quote.id, client);
     await writeAuditLog({ actorUserId: req.user!.sub, action: 'cart_item_added', entityType: 'quote_item', entityId: rows[0].id, payload: { quote_id: quote.id, item_type: input.item_type, quantity: input.quantity } }, client);
     await client.query('COMMIT'); res.status(201).json(await fetchQuoteWithItems(quote.id));

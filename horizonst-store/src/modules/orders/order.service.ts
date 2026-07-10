@@ -25,9 +25,10 @@ export type OrderItem = {
   id: string;
   order_id: string;
   source_quote_item_id: string | null;
-  item_type: 'product' | 'saas_plan' | 'custom';
+  item_type: 'product' | 'saas_plan' | 'pack' | 'custom';
   product_id: string | null;
   saas_plan_id: string | null;
+  pack_id: string | null;
   description: string;
   quantity: number;
   unit_price_cents: number | null;
@@ -48,7 +49,7 @@ export type CreateOrderFromAcceptedQuoteInput = {
 
 const orderColumns = `id, quote_id, user_id, order_number, status, subtotal_cents, discount_cents, tax_cents, total_cents, customer_notes, created_at, updated_at`;
 export const publicOrderColumns = `o.id, o.quote_id, o.user_id, o.order_number, o.status, o.subtotal_cents, o.discount_cents, o.tax_cents, o.total_cents, o.customer_notes, o.created_at, o.updated_at`;
-export const orderItemColumns = `id, order_id, source_quote_item_id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents`;
+export const orderItemColumns = `id, order_id, source_quote_item_id, item_type, product_id, saas_plan_id, pack_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents`;
 
 export const createOrderFromAcceptedQuote = async ({ client, quoteId, actorUserId, writeAuditLog = defaultWriteAuditLog }: CreateOrderFromAcceptedQuoteInput): Promise<{ order: Order; items: OrderItem[]; created: boolean }> => {
   const quoteResult = await client.query<{
@@ -76,8 +77,8 @@ export const createOrderFromAcceptedQuote = async ({ client, quoteId, actorUserI
 
   if (created) {
     await client.query<OrderItem>(
-      `INSERT INTO store.order_items (order_id, source_quote_item_id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents)
-       SELECT $1, id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents
+      `INSERT INTO store.order_items (order_id, source_quote_item_id, item_type, product_id, saas_plan_id, pack_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents)
+       SELECT $1, id, item_type, product_id, saas_plan_id, pack_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents
        FROM store.quote_items
        WHERE quote_id = $2`,
       [order.id, quote.id]
