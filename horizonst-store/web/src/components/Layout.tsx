@@ -27,6 +27,7 @@ export default function Layout() {
       <header className="topbar">
         <Link to="/" className="brand">HorizonST Store</Link>
         <nav aria-label="Navegación principal">
+          <a href="https://horizonst.com.es">Web HorizonST</a>
           {user ? (
             <>
               <NavLink to="/catalog">Catálogo</NavLink>

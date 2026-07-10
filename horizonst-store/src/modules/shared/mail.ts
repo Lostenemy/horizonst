@@ -27,6 +27,7 @@ export type QuoteAcceptedCommercialEmailInput = QuoteEmailInput & {
 export type OrderConfirmationEmailInput = QuoteEmailInput & {
   order: { id: string; order_number: string };
 };
+export type AppccGuideEmailInput = { email: string };
 
 const SMTP_TIMEOUT_MS = 15000;
 const AUTO_FOOTER = 'HorizonST — Este correo ha sido generado automáticamente.';
@@ -209,6 +210,27 @@ export function buildOrderConfirmationEmail({ quote, order }: OrderConfirmationE
   };
 }
 
+export function buildAppccGuideEmail({ email }: AppccGuideEmailInput): MailContent {
+  if (!env.mail.appccGuideUrl) throw new Error('appcc_guide_resource_not_configured');
+  return {
+    to: email,
+    subject: 'Tu guía APPCC 2026 para cámaras frigoríficas',
+    text: [
+      'Gracias por tu interés en HorizonST.',
+      '',
+      'Accede a la Guía APPCC 2026 para cámaras frigoríficas:',
+      env.mail.appccGuideUrl,
+      '',
+      'HorizonST ayuda a centralizar la monitorización, las alertas y la trazabilidad de tus controles críticos.',
+      'Conoce nuestras soluciones: https://horizonst.com.es/planes',
+      'Privacidad: https://horizonst.com.es/privacidad',
+      'Contacto: comercial@horizonst.es',
+      '',
+      AUTO_FOOTER
+    ].join('\n')
+  };
+}
+
 export async function sendQuoteAvailableEmail(input: QuoteEmailInput) {
   await sendMail(buildQuoteAvailableEmail(input));
 }
@@ -219,6 +241,12 @@ export async function sendQuoteAcceptedCommercialEmail(input: QuoteAcceptedComme
 
 export async function sendOrderConfirmationEmail(input: OrderConfirmationEmailInput) {
   await sendMail(buildOrderConfirmationEmail(input));
+}
+
+export async function sendAppccGuideEmail(input: AppccGuideEmailInput) {
+  const content = buildAppccGuideEmail(input);
+  if (!env.mail.enabled) throw new Error('mail_disabled');
+  await sendMail(content);
 }
 
 export const sanitizeMailError = (error: unknown, mail: Pick<StoreMailConfig, 'user' | 'password'> = env.mail) => {
