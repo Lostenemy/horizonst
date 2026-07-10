@@ -25,7 +25,7 @@ export const leadSchema = z.object({
 export const createLeadsRouter = (dependencies: LeadsRouterDependencies = {}) => {
   const router = Router();
   const leadPool = dependencies.pool ?? defaultPool;
-  const sendGuideEmail = dependencies.sendGuideEmail ?? sendAppccGuideEmail;
+  const sendGuideEmail = dependencies.sendGuideEmail ?? ((email: string) => sendAppccGuideEmail({ email }));
   const attempts = new Map<string, number[]>();
   const now = dependencies.now ?? Date.now;
 

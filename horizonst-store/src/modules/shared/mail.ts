@@ -210,8 +210,8 @@ export function buildOrderConfirmationEmail({ quote, order }: OrderConfirmationE
   };
 }
 
-export function buildAppccGuideEmail({ email }: AppccGuideEmailInput): MailContent {
-  if (!env.mail.appccGuideUrl) throw new Error('appcc_guide_resource_not_configured');
+export function buildAppccGuideEmail({ email }: AppccGuideEmailInput, guideUrl = env.mail.appccGuideUrl): MailContent {
+  if (!guideUrl) throw new Error('appcc_guide_resource_not_configured');
   return {
     to: email,
     subject: 'Tu guía APPCC 2026 para cámaras frigoríficas',
@@ -219,7 +219,7 @@ export function buildAppccGuideEmail({ email }: AppccGuideEmailInput): MailConte
       'Gracias por tu interés en HorizonST.',
       '',
       'Accede a la Guía APPCC 2026 para cámaras frigoríficas:',
-      env.mail.appccGuideUrl,
+      guideUrl,
       '',
       'HorizonST ayuda a centralizar la monitorización, las alertas y la trazabilidad de tus controles críticos.',
       'Conoce nuestras soluciones: https://horizonst.com.es/planes',
@@ -243,10 +243,10 @@ export async function sendOrderConfirmationEmail(input: OrderConfirmationEmailIn
   await sendMail(buildOrderConfirmationEmail(input));
 }
 
-export async function sendAppccGuideEmail(input: AppccGuideEmailInput) {
-  const content = buildAppccGuideEmail(input);
-  if (!env.mail.enabled) throw new Error('mail_disabled');
-  await sendMail(content);
+export async function sendAppccGuideEmail(input: AppccGuideEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail, guideUrl = env.mail.appccGuideUrl) {
+  const content = buildAppccGuideEmail(input, guideUrl);
+  if (!env.mail.enabled && deliver === sendMail) throw new Error('mail_disabled');
+  await deliver(content);
 }
 
 export const sanitizeMailError = (error: unknown, mail: Pick<StoreMailConfig, 'user' | 'password'> = env.mail) => {

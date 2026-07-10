@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { validateStoreMailConfig, type StoreMailConfig } from '../src/config/env.js';
-import { automaticMailFooter, buildOrderConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
+import { automaticMailFooter, buildOrderConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
 
 const quoteId = '11111111-1111-4111-8111-111111111111';
 const orderId = '44444444-4444-4444-8444-444444444444';
@@ -18,7 +18,8 @@ const mailConfig: StoreMailConfig = {
   from: 'no_reply@horizonst.com.es',
   ehloDomain: 'horizonst.com.es',
   tlsRejectUnauthorized: true,
-  commercialTo: 'comercial@horizonst.com.es'
+  commercialTo: 'comercial@horizonst.com.es',
+  appccGuideUrl: 'https://horizonst.com.es/guia-appcc.pdf'
 };
 
 {
@@ -53,6 +54,12 @@ const mailConfig: StoreMailConfig = {
   assert.match(email.text, /https:\/\/tienda\.horizonst\.com\.es\/orders/);
   assert.match(email.text, /contactará contigo/);
   assert.match(email.text, new RegExp(automaticMailFooter));
+}
+
+{
+  let delivered: { to: string } | undefined;
+  await sendAppccGuideEmail({ email: 'ana@example.test' }, async (content) => { delivered = content; }, 'https://horizonst.com.es/guia-appcc.pdf');
+  assert.equal(delivered?.to, 'ana@example.test');
 }
 
 for (const invalid of [
