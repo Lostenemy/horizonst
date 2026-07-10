@@ -62,6 +62,12 @@ const mailConfig: StoreMailConfig = {
   const content = buildAppccGuideEmail({ email: 'ana@example.test' }, guideUrl);
   assert.equal(content.to, 'ana@example.test');
   assert.match(content.text, new RegExp(guideUrl));
+  assert.match(content.html, new RegExp(guideUrl));
+  assert.match(content.html, /Abrir la guía/);
+  assert.match(content.html, /https:\/\/horizonst\.com\.es\/planes/);
+  assert.match(content.html, /https:\/\/horizonst\.com\.es\/privacidad/);
+  assert.match(content.html, /comercial@horizonst\.es/);
+  assert.doesNotMatch(content.html, /<script|stylesheet/i);
   await sendAppccGuideEmail({ email: 'ana@example.test' }, async (mail) => { delivered = mail; }, guideUrl);
   assert.equal(delivered?.to, 'ana@example.test');
 }
@@ -119,9 +125,10 @@ class FakeSocket extends EventEmitter {
   socket.emit('secureConnect');
   setTimeout(() => socket.emit('data', Buffer.from('220-mail.horizonst.com.es\r\n220 ready\r\n')), 0);
   await connectPromise;
-  await client.sendMail('u@example.com', 'Subject', '.line');
+  await client.sendMail('u@example.com', 'Subject', '.line', '<strong>HTML</strong>');
   await client.close();
-  assert.ok(socket.writes.some((write) => write.includes('\r\n..line\r\n.\r\n')), 'DATA applies dot-stuffing');
+  assert.ok(socket.writes.some((write) => write.includes('\r\n..line\r\n--')), 'DATA applies dot-stuffing');
+  assert.ok(socket.writes.some((write) => write.includes('multipart/alternative')), 'DATA includes HTML alternative');
   assert.equal(socket.ended, true);
   assert.equal(socket.destroyed, true);
 }

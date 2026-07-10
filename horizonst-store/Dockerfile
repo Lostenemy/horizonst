@@ -13,6 +13,16 @@ COPY scripts ./scripts
 COPY resources ./resources
 RUN npm run build
 
+FROM deps AS test
+COPY tsconfig*.json ./
+COPY src ./src
+COPY web ./web
+COPY scripts ./scripts
+COPY resources ./resources
+COPY test ./test
+COPY migrations ./migrations
+RUN npm test
+
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production PORT=4020
