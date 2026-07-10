@@ -2565,7 +2565,7 @@ endobj
 (HorizonST)
 endobj
 48 0 obj
-(Control de accesos, permanencia, alertas e incidencias)
+(þÿ C o n t r o l   d e   a c c e s o s ,   t i e m p o s   d e   p e r m a n e n c i a ,   a l e r t a s   e   i n c i d e n c i a s   e n   e n t o r n o s   d e   f r í o   e x t r e m o)
 endobj
 49 0 obj
 (D:20260101000000Z)
@@ -2611,10 +2611,10 @@ endobj
 endobj
 50 0 obj
 <<
-/length 1535
+/length 1574
 /Type /Metadata
 /Subtype /XML
-/Length 1539
+/Length 1579
 >>
 stream
 <?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
@@ -2646,7 +2646,7 @@ stream
 
                 <dc:description>
                     <rdf:Alt>
-                        <rdf:li xml:lang="x-default">Control de accesos, permanencia, alertas e incidencias</rdf:li>
+                        <rdf:li xml:lang="x-default">Control de accesos, tiempos de permanencia, alertas e incidencias en entornos de frÃ­o extremo</rdf:li>
                     </rdf:Alt>
                 </dc:description>
                 
@@ -2690,15 +2690,15 @@ endobj
 xref
 0 51
 0000000000 65535 f 
-0000056288 00000 n 
-0000056394 00000 n 
-0000056209 00000 n 
-0000054553 00000 n 
+0000056462 00000 n 
+0000056568 00000 n 
+0000056383 00000 n 
+0000054687 00000 n 
 0000000224 00000 n 
 0000000125 00000 n 
 0000000015 00000 n 
-0000054345 00000 n 
-0000054248 00000 n 
+0000054479 00000 n 
+0000054382 00000 n 
 0000003609 00000 n 
 0000003509 00000 n 
 0000003396 00000 n 
@@ -2714,7 +2714,7 @@ xref
 0000033153 00000 n 
 0000033042 00000 n 
 0000032929 00000 n 
-0000054447 00000 n 
+0000054581 00000 n 
 0000041707 00000 n 
 0000041607 00000 n 
 0000041463 00000 n 
@@ -2731,15 +2731,15 @@ xref
 0000047634 00000 n 
 0000047752 00000 n 
 0000047810 00000 n 
-0000054111 00000 n 
+0000054245 00000 n 
 0000053733 00000 n 
 0000053758 00000 n 
 0000053783 00000 n 
 0000053819 00000 n 
 0000053974 00000 n 
 0000054002 00000 n 
-0000054075 00000 n 
-0000054574 00000 n 
+0000054209 00000 n 
+0000054708 00000 n 
 trailer
 <<
 /Size 51
@@ -2748,5 +2748,5 @@ trailer
 /ID [<486f72697a6f6e53542d67756964652d323032362d73656375726974792d303030> <486f72697a6f6e53542d67756964652d323032362d73656375726974792d303030>]
 >>
 startxref
-56441
+56615
 %%EOF
