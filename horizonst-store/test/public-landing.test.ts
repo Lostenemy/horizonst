@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { hardwarePacks, publicWebPlans } from '../web/src/pages/PublicLanding.js';
+import { customerAccessUrl, isPublicMarketingHost, publicMarketingPage } from '../web/src/lib/domains.js';
+
+assert.equal(isPublicMarketingHost('horizonst.com.es'), true);
+assert.equal(isPublicMarketingHost('www.horizonst.com.es'), true);
+assert.equal(isPublicMarketingHost('tienda.horizonst.com.es'), false);
+assert.equal(customerAccessUrl, 'https://tienda.horizonst.com.es');
+assert.equal(publicMarketingPage('/'), 'home');
+assert.equal(publicMarketingPage('/planes'), 'plans');
+assert.equal(publicMarketingPage('/info-faqs'), 'info-faqs');
+assert.equal(publicMarketingPage('/aviso-legal'), 'legal-notice');
+assert.equal(publicMarketingPage('/privacidad'), 'privacy');
+assert.equal(publicMarketingPage('/desconocida'), 'not-found');
+assert.deepEqual(publicWebPlans.map((plan) => plan.price), ['580 € PVP + IVA', '800 € PVP + IVA', '1.200 € PVP + IVA']);
+assert.equal(hardwarePacks.length, 3);
+assert.ok(hardwarePacks.every((pack) => pack.items.length === 4));
+
+const app = await readFile(new URL('../web/src/App.tsx', import.meta.url), 'utf-8');
+assert.match(app, /<PublicHome \/>/);
+assert.match(app, /<PublicPlans \/>/);
+assert.match(app, /<PublicInfoFaqs \/>/);
+assert.match(app, /Página no encontrada/);
+const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', import.meta.url), 'utf-8');
+assert.match(landing, /Inicio/); assert.match(landing, /INFO\/FAQS/); assert.match(landing, /Acceso clientes/);
+assert.match(landing, /source: 'appcc_guide'/); assert.match(landing, /privacyAccepted/);
+assert.doesNotMatch(landing, /Solicitar demo|source="demo"|\bBLE\b|Gateway BLE|Tag BLE/);
+assert.doesNotMatch(landing, /3\.250 €|6\.500 €|12\.995 €/);
+assert.match(landing, /tecnologías inalámbricas|monitorización inalámbrica/);
+const layout = await readFile(new URL('../web/src/components/Layout.tsx', import.meta.url), 'utf-8');
+assert.match(layout, /https:\/\/horizonst\.com\.es/);
+const css = await readFile(new URL('../web/src/styles.css', import.meta.url), 'utf-8');
+assert.match(css, /\.lp-nav \.secondary\{background:#fff;color:#08233f/);
+assert.match(css, /\.lp-nav \.secondary:focus-visible/);

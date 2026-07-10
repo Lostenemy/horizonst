@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { pool } from '../../db/pool.js';
 
 export type UserRole = 'customer' | 'distributor' | 'admin';
-export type CartItemType = 'product' | 'saas_plan';
+export type CartItemType = 'product' | 'saas_plan' | 'pack';
 
 export const toBasisPoints = (value: string | number | null | undefined): number => Math.round(Number(value ?? 0) * 100);
 export const calculatePercentCents = (amountCents: number, percent: string | number): number => Math.round((amountCents * toBasisPoints(percent)) / 10000);
@@ -36,7 +36,7 @@ export const getDistributorDiscountPercent = async (userId: string, role: UserRo
 export const generateQuoteNumber = (): string => `Q-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 export const generateDraftQuoteNumber = (): string => `DRAFT-${randomUUID()}`;
 export const canSubmitCart = (itemCount: number): boolean => itemCount > 0;
-export const canAutoPriceSaasPlan = (plan: { is_enterprise: boolean; annual_price_cents: number | null }): boolean => !plan.is_enterprise && plan.annual_price_cents !== null;
+export const canAutoPriceSaasPlan = (plan: { annual_price_cents: number | null }): boolean => plan.annual_price_cents !== null;
 
 export const getOrCreateDraftQuote = async (userId: string, client: any = pool) => {
   const existing = await client.query('SELECT * FROM store.quotes WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT 1', [userId, 'draft']);
@@ -54,6 +54,6 @@ export const recalculateQuote = async (quoteId: string, client: any) => {
 
 export const fetchQuoteWithItems = async (quoteId: string, client: any = pool) => {
   const quote = await client.query('SELECT id, user_id, quote_number, status, subtotal_cents, discount_cents, tax_cents, total_cents, notes, created_at, updated_at, submitted_at FROM store.quotes WHERE id = $1', [quoteId]);
-  const items = await client.query(`SELECT id, quote_id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [quoteId]);
+  const items = await client.query(`SELECT id, quote_id, item_type, product_id, saas_plan_id, pack_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [quoteId]);
   return { quote: quote.rows[0], items: items.rows };
 };

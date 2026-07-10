@@ -21,6 +21,8 @@ import DistributorProfile from './pages/DistributorProfile';
 import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import PublicLegal from './pages/PublicLegal';
+import { PublicHome, PublicInfoFaqs, PublicPlans } from './pages/PublicLanding';
 import Quotes from './pages/Quotes';
 import Orders from './pages/Orders';
 import Register from './pages/Register';
@@ -28,8 +30,18 @@ import RegisterDistributor from './pages/RegisterDistributor';
 import ResetPassword from './pages/ResetPassword';
 import SaasPlans from './pages/SaasPlans';
 import VerifyEmail from './pages/VerifyEmail';
+import { isPublicMarketingHost, publicMarketingPage } from './lib/domains';
 
 export default function App() {
+  if (isPublicMarketingHost(window.location.hostname)) {
+    const page = publicMarketingPage(window.location.pathname);
+    if (page === 'legal-notice' || page === 'privacy') return <PublicLegal page={page} />;
+    if (page === 'plans') return <PublicPlans />;
+    if (page === 'info-faqs') return <PublicInfoFaqs />;
+    if (page === 'home') return <PublicHome />;
+    return <main className="public-not-found"><h1>Página no encontrada</h1><a href="/">Volver al inicio</a></main>;
+  }
+
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -40,12 +52,11 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/catalog" element={<Catalog />} />
-        <Route path="/saas-plans" element={<SaasPlans />} />
-
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/catalog" element={<Catalog />} />
+          <Route path="/saas-plans" element={<SaasPlans />} />
           <Route path="/cart" element={<Cart />} />
           <Route element={<RoleRoute roles={['customer', 'distributor']} />}>
             <Route path="/quotes" element={<Quotes />} />

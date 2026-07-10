@@ -287,6 +287,7 @@ services:
       - STORE_MAIL_EHLO_DOMAIN=${STORE_MAIL_EHLO_DOMAIN:-horizonst.com.es}
       - STORE_MAIL_TLS_REJECT_UNAUTHORIZED=${STORE_MAIL_TLS_REJECT_UNAUTHORIZED:-true}
       - STORE_MAIL_COMMERCIAL_TO=${STORE_MAIL_COMMERCIAL_TO:-comercial@horizonst.com.es}
+      - STORE_APPCC_GUIDE_URL=${STORE_APPCC_GUIDE_URL:-}
     volumes:
       - /opt/horizonst/store-data/documents:/opt/horizonst/store-data/documents
     depends_on:

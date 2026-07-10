@@ -35,6 +35,18 @@ export type SaasPlan = {
   is_active: boolean;
 };
 
+export type Pack = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  tax_rate: string | number;
+  is_active: boolean;
+  presentation_order: number;
+  items: Array<{ product_id: string; name: string; quantity: number; presentation_order: number }>;
+};
+
 export type Quote = {
   id: string;
   user_id: string;
@@ -55,9 +67,10 @@ export type Quote = {
 export type CartItem = {
   id: string;
   quote_id: string;
-  item_type: 'product' | 'saas_plan';
+  item_type: 'product' | 'saas_plan' | 'pack';
   product_id: string | null;
   saas_plan_id: string | null;
+  pack_id: string | null;
   description: string;
   quantity: number;
   unit_price_cents: number;
@@ -87,7 +100,7 @@ export type Order = {
   updated_at?: string;
 };
 
-export type OrderItem = Omit<CartItem, 'quote_id'> & { order_id: string; source_quote_item_id: string | null; item_type: 'product' | 'saas_plan' | 'custom'; unit_price_cents: number | null };
+export type OrderItem = Omit<CartItem, 'quote_id'> & { order_id: string; source_quote_item_id: string | null; item_type: 'product' | 'saas_plan' | 'pack' | 'custom'; unit_price_cents: number | null };
 
 export type OrdersResponse = { orders: Order[] };
 export type OrderDetailResponse = { order: Order; items: OrderItem[] };

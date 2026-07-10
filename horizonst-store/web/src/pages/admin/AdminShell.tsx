@@ -8,7 +8,7 @@ const links = [
   ['/admin/orders', 'Pedidos'],
   ['/admin/audit', 'Auditoría'],
   ['/admin/catalog/products', 'Productos'],
-  ['/admin/catalog/saas-plans', 'Planes SaaS']
+  ['/admin/catalog/saas-plans', 'Planes web']
 ] as const;
 
 export function AdminShell({ title, children }: { title: string; children: ReactNode }) {

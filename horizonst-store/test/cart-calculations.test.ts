@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { calculateLineTotals, calculateQuoteTotals, canAutoPriceSaasPlan, canSubmitCart, generateDraftQuoteNumber } from '../src/modules/cart/cart.service.js';
+import { addItemSchema } from '../src/modules/cart/cart.routes.js';
 import { hasBlockingActiveDistributorDocuments } from '../src/modules/admin/distributors.routes.js';
 
 // Existing distributor document validation tests.
@@ -24,10 +25,15 @@ assert.deepEqual(unapprovedDistributorLine, { line_subtotal_cents: 58000, line_d
 assert.equal(canSubmitCart(0), false, 'empty cart item count must block submit');
 assert.equal(canSubmitCart(1), true, 'non-empty cart can be submitted');
 
-// 5. Enterprise sin precio automático.
-assert.equal(canAutoPriceSaasPlan({ is_enterprise: true, annual_price_cents: null }), false, 'enterprise plan must require commercial contact');
-assert.equal(canAutoPriceSaasPlan({ is_enterprise: false, annual_price_cents: null }), false, 'plans with null price must require commercial contact');
-assert.equal(canAutoPriceSaasPlan({ is_enterprise: false, annual_price_cents: 58000 }), true, 'standard priced plans can be auto-priced');
+// 5. Planes web con precio en céntimos, incluido Enterprise.
+assert.equal(canAutoPriceSaasPlan({ annual_price_cents: null }), false, 'plans without price cannot be added');
+assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 58000 }), true, 'starter web plan can be added');
+assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 120000 }), true, 'enterprise web plan can be added');
+
+// 6. Pack Starter con IVA y descuento de distribuidor aprobado.
+const starterPack = calculateLineTotals({ quantity: 1, unitPriceCents: 325000, discountPercent: '10.00', taxRate: '21.00' });
+assert.deepEqual(starterPack, { line_subtotal_cents: 325000, line_discount_cents: 32500, line_tax_cents: 61425, line_total_cents: 353925 });
+assert.deepEqual(addItemSchema.parse({ item_type: 'pack', pack_id: '11111111-1111-4111-8111-111111111111', quantity: 1 }), { item_type: 'pack', pack_id: '11111111-1111-4111-8111-111111111111', quantity: 1 });
 
 // Los quote_number draft no deben exponer UUID de usuario.
 const draftNumber = generateDraftQuoteNumber();

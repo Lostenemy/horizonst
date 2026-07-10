@@ -29,7 +29,7 @@ export default function AdminSaasPlans() {
   const planPrice = (plan: SaasPlan) => plan.is_enterprise ? 'Enterprise' : money(plan.annual_price_cents);
 
   return (
-    <AdminShell title="Planes SaaS">
+    <AdminShell title="Planes web">
       <button onClick={() => setEditing({ is_active: true, is_enterprise: false })}>Crear plan</button>
       {feedback && <p className={feedback === 'Guardado' ? 'success' : 'error'}>{feedback}</p>}
       {editing && <CatalogForm kind="saas-plan" value={editing} onSubmit={save} />}

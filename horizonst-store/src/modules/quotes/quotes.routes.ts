@@ -61,7 +61,7 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
       const id = idSchema.parse(req.params.id);
       const quote = await quotePool.query(`SELECT ${publicQuoteColumns} FROM store.quotes q WHERE q.id = $1 AND q.user_id = $2`, [id, req.user!.sub]);
       if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
-      const items = await quotePool.query(`SELECT id, item_type, product_id, saas_plan_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
+      const items = await quotePool.query(`SELECT id, item_type, product_id, saas_plan_id, pack_id, description, quantity, unit_price_cents, discount_percent, tax_rate, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
       const history = await quotePool.query(`SELECT id, quote_id, old_status, new_status, comment, changed_by, created_at FROM store.quote_status_history WHERE quote_id = $1 ORDER BY created_at DESC`, [id]);
       res.json({ quote: quote.rows[0], items: items.rows, history: history.rows });
     } catch (error) { next(error); }
