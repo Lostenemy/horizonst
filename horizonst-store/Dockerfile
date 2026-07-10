@@ -10,6 +10,7 @@ COPY tsconfig*.json ./
 COPY src ./src
 COPY web ./web
 COPY scripts ./scripts
+COPY resources ./resources
 RUN npm run build
 
 FROM node:22-alpine AS runtime

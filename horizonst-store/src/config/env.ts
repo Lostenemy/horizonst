@@ -23,6 +23,7 @@ export type StoreMailConfig = {
   ehloDomain: string;
   tlsRejectUnauthorized: boolean;
   commercialTo: string;
+  appccGuideUrl: string;
 };
 
 const isPlaceholderMailValue = (value: string) => {
@@ -60,7 +61,8 @@ const mail: StoreMailConfig = {
   from: process.env.STORE_MAIL_FROM ?? 'no_reply@horizonst.com.es',
   ehloDomain: process.env.STORE_MAIL_EHLO_DOMAIN ?? 'horizonst.com.es',
   tlsRejectUnauthorized: booleanFromEnv(process.env.STORE_MAIL_TLS_REJECT_UNAUTHORIZED, true),
-  commercialTo: process.env.STORE_MAIL_COMMERCIAL_TO ?? 'comercial@horizonst.com.es'
+  commercialTo: process.env.STORE_MAIL_COMMERCIAL_TO ?? 'comercial@horizonst.com.es',
+  appccGuideUrl: process.env.STORE_APPCC_GUIDE_URL ?? ''
 };
 
 export const env = {

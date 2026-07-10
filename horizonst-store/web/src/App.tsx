@@ -22,7 +22,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import PublicLegal from './pages/PublicLegal';
-import PublicLanding from './pages/PublicLanding';
+import { PublicHome, PublicInfoFaqs, PublicPlans } from './pages/PublicLanding';
 import Quotes from './pages/Quotes';
 import Orders from './pages/Orders';
 import Register from './pages/Register';
@@ -36,7 +36,10 @@ export default function App() {
   if (isPublicMarketingHost(window.location.hostname)) {
     const page = publicMarketingPage(window.location.pathname);
     if (page === 'legal-notice' || page === 'privacy') return <PublicLegal page={page} />;
-    return <PublicLanding />;
+    if (page === 'plans') return <PublicPlans />;
+    if (page === 'info-faqs') return <PublicInfoFaqs />;
+    if (page === 'home') return <PublicHome />;
+    return <main className="public-not-found"><h1>Página no encontrada</h1><a href="/">Volver al inicio</a></main>;
   }
 
   return (
