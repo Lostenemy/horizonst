@@ -23,9 +23,19 @@ assert.match(register, /new FormData\(form\)/, 'registration reads the retained 
 assert.match(register, /form\.reset\(\)/, 'successful registration resets the retained form');
 
 const plans = await readFile(new URL('../web/src/pages/admin/AdminSaasPlans.tsx', import.meta.url), 'utf8');
-assert.match(plans, /if \(value\.id\) await patchJson\(`\/api\/admin\/saas-plans\/\$\{value\.id\}`/, 'editing Starter uses PATCH');
-assert.match(plans, /else await postJson\('\/api\/admin\/saas-plans', value\)/, 'creating a plan uses POST');
+assert.match(plans, /const \{ id, \.\.\.payload \} = value;/, 'plan save separates the id from its payload');
+assert.match(plans, /if \(id\) await patchJson\(`\/api\/admin\/saas-plans\/\$\{id\}`, payload\)/, 'editing Starter uses PATCH without id in its body');
+assert.match(plans, /else await postJson\('\/api\/admin\/saas-plans', payload\)/, 'creating a plan uses POST without an id');
 assert.match(plans, /Ya existe un plan con ese código\./, 'plan conflicts have a clear message');
+
+const products = await readFile(new URL('../web/src/pages/admin/AdminProducts.tsx', import.meta.url), 'utf8');
+assert.match(products, /const \{ id, \.\.\.payload \} = value;/, 'product save separates the id from its payload');
+assert.match(products, /if \(id\) await patchJson\(`\/api\/admin\/products\/\$\{id\}`, payload\)/, 'editing a product uses PATCH without id in its body');
+assert.match(products, /else await postJson\('\/api\/admin\/products', payload\)/, 'creating a product uses POST without an id');
+
+const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', import.meta.url), 'utf8');
+assert.match(landing, /Planes de servicios Web/);
+assert.match(landing, /Planes de hardware/);
 
 const server = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
 assert.match(server, /error\.code === '23505'.*status\(409\)/, 'duplicate database codes still map to HTTP 409');
