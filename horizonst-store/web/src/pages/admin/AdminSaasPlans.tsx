@@ -21,7 +21,7 @@ export default function AdminSaasPlans() {
       setFeedback('Guardado');
       load();
     } catch (saveError) {
-      setFeedback(apiMessage(saveError));
+      setFeedback(apiMessage(saveError, 'Ya existe un plan con ese código.'));
     }
   };
 

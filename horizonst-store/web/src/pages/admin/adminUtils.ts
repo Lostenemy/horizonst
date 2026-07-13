@@ -1,7 +1,8 @@
 import { ApiError } from '../../lib/api';
 import type { AuditPayload } from './types';
 
-export const apiMessage = (error: unknown): string => error instanceof ApiError ? error.message : 'Error inesperado';
+export const apiMessage = (error: unknown, conflictMessage?: string): string =>
+  error instanceof ApiError ? (error.status === 409 && conflictMessage ? conflictMessage : error.message) : 'Error inesperado';
 
 export const payloadSummary = (payload: AuditPayload): string => JSON.stringify(payload ?? {}, null, 2).slice(0, 500);
 
