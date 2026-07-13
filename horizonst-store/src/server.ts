@@ -16,6 +16,7 @@ import { adminQuotesRouter } from './modules/admin/quotes.routes.js';
 import { adminOrdersRouter } from './modules/admin/orders.routes.js';
 import { adminAuditRouter } from './modules/admin/audit.routes.js';
 import { adminCatalogRouter } from './modules/admin/catalog.routes.js';
+import { adminCustomersRouter } from './modules/admin/customers.routes.js';
 import { adminDashboardRouter } from './modules/admin/dashboard.routes.js';
 import { cartRouter } from './modules/cart/cart.routes.js';
 import { quotesRouter } from './modules/quotes/quotes.routes.js';
@@ -47,6 +48,7 @@ export const createServer = (staticRoot = webDist) => {
   app.use('/api/admin', adminDashboardRouter);
   app.use('/api/admin', adminAuditRouter);
   app.use('/api/admin', adminCatalogRouter);
+  app.use('/api/admin', adminCustomersRouter);
   app.get('/recursos/guia-appcc-2026.pdf', (_req, res, next) => {
     res.sendFile(guidePath, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="guia-appcc-2026-horizonst.pdf"' } }, (error) => error ? next(error) : undefined);
   });

@@ -121,5 +121,17 @@ export type QuoteDetailResponse = {
 
 export type ProductsResponse = { products: Product[] };
 export type SaasPlansResponse = { saasPlans: SaasPlan[] };
+export type AdminCustomer = {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  role: 'customer';
+  status: 'pending_email_verification' | 'active' | 'suspended' | 'closed';
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+};
+export type AdminCustomersResponse = { customers: AdminCustomer[] };
 export type AuditResponse = { events: AuditEvent[] };
 export type QuotesResponse = { quotes: AdminQuoteListItem[] };
