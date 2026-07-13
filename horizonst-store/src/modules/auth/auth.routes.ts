@@ -38,6 +38,17 @@ const buildAuthResponse = (user: any, refreshToken: string) => ({
 
 export const authRouter = Router();
 
+export const consumeEmailVerificationToken = async (client: any, tokenId: string, userId: string) => {
+  await client.query(
+    'UPDATE store.email_verification_tokens SET used_at = now(), revoked_at = now() WHERE id = $1',
+    [tokenId]
+  );
+  await client.query(
+    'UPDATE store.email_verification_tokens SET revoked_at = now() WHERE user_id = $2 AND id <> $1 AND revoked_at IS NULL AND used_at IS NULL',
+    [tokenId, userId]
+  );
+};
+
 const verificationUrl = (token: string) => `${env.publicBaseUrl.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(token)}`;
 const createVerificationToken = async (client: any, userId: string, userAgent: string | null, ip: string | undefined, revokeExisting = false) => {
   if (revokeExisting) await client.query('UPDATE store.email_verification_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL AND used_at IS NULL', [userId]);
@@ -129,7 +140,7 @@ authRouter.post('/verify-email', async (req, res, next) => {
     );
     if (!rows[0]) { await client.query('ROLLBACK'); res.status(400).json({ error: 'Invalid or expired verification token' }); return; }
     await client.query("UPDATE store.users SET status = 'active', updated_at = now() WHERE id = $1 AND status = 'pending_email_verification'", [rows[0].user_id]);
-    await client.query('UPDATE store.email_verification_tokens SET used_at = now(), revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [rows[0].user_id]);
+    await consumeEmailVerificationToken(client, rows[0].id, rows[0].user_id);
     await writeAuditLog({ actorUserId: rows[0].user_id, action: 'customer_email_verified', entityType: 'customer', entityId: rows[0].user_id, payload: { previous_status: 'pending_email_verification', status: 'active' } }, client);
     const userResult = await client.query(`SELECT ${safeUserFields} FROM store.users WHERE id = $1`, [rows[0].user_id]);
     await client.query('COMMIT');

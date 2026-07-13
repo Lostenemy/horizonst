@@ -7,6 +7,17 @@ import { createOpaqueToken, emailVerificationSeconds, expiresAtSql, hashToken } 
 import { sanitizeMailError, sendEmailVerificationEmail } from '../shared/mail.js';
 import { env } from '../../config/env.js';
 
+type AdminCustomersDependencies = {
+  pool: typeof pool;
+  authMiddleware: typeof requireAuth;
+  roleMiddleware: ReturnType<typeof requireRole>;
+  sendVerificationEmail: typeof sendEmailVerificationEmail;
+  audit: typeof writeAuditLog;
+  sanitizeEmailError: typeof sanitizeMailError;
+  publicBaseUrl: string;
+  logEmailError: (message: string, error: string) => void;
+};
+
 const customerStatuses = ['pending_email_verification', 'active', 'suspended', 'closed'] as const;
 const mutableStatuses = ['active', 'suspended', 'closed'] as const;
 const idSchema = z.string().uuid();
@@ -34,8 +45,20 @@ const actionFor = (previousStatus: string, status: string) => {
   return 'customer_closed';
 };
 
-export const adminCustomersRouter = Router();
-adminCustomersRouter.use(requireAuth, requireRole('admin'));
+export const createAdminCustomersRouter = (overrides: Partial<AdminCustomersDependencies> = {}) => {
+  const dependencies: AdminCustomersDependencies = {
+    pool,
+    authMiddleware: requireAuth,
+    roleMiddleware: requireRole('admin'),
+    sendVerificationEmail: sendEmailVerificationEmail,
+    audit: writeAuditLog,
+    sanitizeEmailError: sanitizeMailError,
+    publicBaseUrl: env.publicBaseUrl,
+    logEmailError: (message, error) => console.error(message, error),
+    ...overrides
+  };
+  const adminCustomersRouter = Router();
+  adminCustomersRouter.use(dependencies.authMiddleware, dependencies.roleMiddleware);
 
 adminCustomersRouter.get('/customers', async (req, res, next) => {
   try {
@@ -46,7 +69,7 @@ adminCustomersRouter.get('/customers', async (req, res, next) => {
     if (input.email) { values.push(`%${input.email}%`); filters.push(`email ILIKE $${values.length}`); }
     if (input.full_name) { values.push(`%${input.full_name}%`); filters.push(`full_name ILIKE $${values.length}`); }
     values.push(input.limit);
-    const { rows } = await pool.query(
+    const { rows } = await dependencies.pool.query(
       `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.created_at, u.updated_at, u.last_login_at,
               evt.created_at AS verification_last_sent_at, evt.expires_at AS verification_expires_at,
               (evt.id IS NOT NULL AND evt.revoked_at IS NULL AND evt.used_at IS NULL AND evt.expires_at > now()) AS verification_pending
@@ -61,7 +84,7 @@ adminCustomersRouter.get('/customers', async (req, res, next) => {
 adminCustomersRouter.get('/customers/:id', async (req, res, next) => {
   try {
     const id = idSchema.parse(req.params.id);
-    const { rows } = await pool.query(
+    const { rows } = await dependencies.pool.query(
       `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.created_at, u.updated_at, u.last_login_at,
               cp.company_name, cp.tax_id, cp.billing_address, cp.city, cp.province, cp.postal_code, cp.country,
               evt.created_at AS verification_last_sent_at, evt.expires_at AS verification_expires_at,
@@ -77,7 +100,7 @@ adminCustomersRouter.get('/customers/:id', async (req, res, next) => {
 });
 
 adminCustomersRouter.post('/customers/:id/resend-verification', async (req, res, next) => {
-  const client = await pool.connect();
+  const client = await dependencies.pool.connect();
   try {
     const id = idSchema.parse(req.params.id);
     await client.query('BEGIN');
@@ -91,16 +114,22 @@ adminCustomersRouter.post('/customers/:id/resend-verification', async (req, res,
     await client.query('UPDATE store.email_verification_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL AND used_at IS NULL', [id]);
     const token = createOpaqueToken();
     await client.query('INSERT INTO store.email_verification_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [id, hashToken(token), expiresAtSql(emailVerificationSeconds()), req.header('user-agent') ?? null, req.ip]);
-    await writeAuditLog({ actorUserId: req.user!.sub, action: 'customer_verification_email_resent', entityType: 'customer', entityId: id }, client);
     await client.query('COMMIT');
-    try { await sendEmailVerificationEmail({ email: customer.email, fullName: customer.full_name, verificationUrl: `${env.publicBaseUrl.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(token)}`, expiresInSeconds: emailVerificationSeconds() }); }
-    catch (error) { console.error('Verification email delivery failed', sanitizeMailError(error)); }
+    try {
+      await dependencies.sendVerificationEmail({ email: customer.email, fullName: customer.full_name, verificationUrl: `${dependencies.publicBaseUrl.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(token)}`, expiresInSeconds: emailVerificationSeconds() });
+    } catch (error) {
+      const sanitizedError = dependencies.sanitizeEmailError(error).replaceAll(token, '[redacted]');
+      dependencies.logEmailError('Verification email delivery failed', sanitizedError);
+      res.status(502).json({ error: 'No se pudo enviar el correo de verificaciÃ³n' });
+      return;
+    }
+    await dependencies.audit({ actorUserId: req.user!.sub, action: 'customer_verification_email_resent', entityType: 'customer', entityId: id });
     res.json({ message: 'Verification email resent' });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 
 adminCustomersRouter.patch('/customers/:id/status', async (req, res, next) => {
-  const client = await pool.connect();
+  const client = await dependencies.pool.connect();
   try {
     const id = idSchema.parse(req.params.id);
     const input = statusSchema.parse(req.body);
@@ -123,7 +152,7 @@ adminCustomersRouter.patch('/customers/:id/status', async (req, res, next) => {
     if (input.status === 'suspended' || input.status === 'closed') {
       await client.query('UPDATE store.refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [id]);
     }
-    await writeAuditLog({ actorUserId: req.user!.sub, action: actionFor(customer.status, input.status), entityType: 'customer', entityId: id, payload: { previous_status: customer.status, status: input.status } }, client);
+    await dependencies.audit({ actorUserId: req.user!.sub, action: actionFor(customer.status, input.status), entityType: 'customer', entityId: id, payload: { previous_status: customer.status, status: input.status } }, client);
     await client.query('COMMIT');
     res.json({ customer: updatedRows[0] });
   } catch (error) {
@@ -131,3 +160,8 @@ adminCustomersRouter.patch('/customers/:id/status', async (req, res, next) => {
     next(error);
   } finally { client.release(); }
 });
+
+  return adminCustomersRouter;
+};
+
+export const adminCustomersRouter = createAdminCustomersRouter();

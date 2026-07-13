@@ -13,7 +13,8 @@ assert.equal(canChangeCustomerStatus('pending_email_verification', 'active'), fa
 assert.equal(canChangeCustomerStatus('admin', 'active'), false, 'roles are not statuses');
 
 const router = await readFile(new URL('../src/modules/admin/customers.routes.ts', import.meta.url), 'utf8');
-assert.match(router, /adminCustomersRouter\.use\(requireAuth, requireRole\('admin'\)\)/, 'customers require an authenticated administrator');
+assert.match(router, /authMiddleware: requireAuth/, 'customers use the authenticated middleware by default');
+assert.match(router, /roleMiddleware: requireRole\('admin'\)/, 'customers require the administrator role by default');
 assert.match(router, /\.strict\(\)/, 'query and body schemas are strict');
 assert.match(router, /role = 'customer'/g, 'all customer queries exclude administrators and distributors');
 assert.doesNotMatch(router, /password_hash/, 'customer responses never select password hashes');
