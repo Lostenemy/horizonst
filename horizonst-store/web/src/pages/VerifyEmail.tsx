@@ -1,32 +1,24 @@
-import { FormEvent, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import ErrorMessage from '../components/ErrorMessage';
 import { postJson } from '../lib/api';
 
 export default function VerifyEmail() {
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [params] = useSearchParams();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const token = params.get('token');
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  useEffect(() => {
+    if (!token) { setStatus('error'); return; }
+    postJson('/api/auth/verify-email', { token })
+      .then(() => setStatus('success'))
+      .catch(() => setStatus('error'));
+  }, [token]);
 
-    try {
-      await postJson('/api/auth/verify-email', Object.fromEntries(new FormData(event.currentTarget)));
-      setMessage('Email verificado. Ya puedes iniciar sesión.');
-      setError('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo verificar el email');
-    }
-  }
-
-  return (
-    <section className="panel narrow">
-      <h1>Verificar email</h1>
-      <form onSubmit={submit}>
-        <input name="token" placeholder="Token" required />
-        <button type="submit">Verificar</button>
-      </form>
-      {message && <p className="success">{message}</p>}
-      <ErrorMessage message={error} />
-    </section>
-  );
+  return <section className="panel narrow">
+    <h1>Verificar email</h1>
+    {status === 'loading' && <p>Verificando tu correo...</p>}
+    {status === 'success' && <><p className="success">Correo verificado correctamente.</p><p>Tu cuenta ya está activa. Ya puedes iniciar sesión.</p><Link className="btn" to="/login">Iniciar sesión</Link></>}
+    {status === 'error' && <><ErrorMessage message="El enlace no es válido o ha caducado." /><Link to="/login">Solicitar un nuevo correo de verificación</Link></>}
+  </section>;
 }

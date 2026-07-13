@@ -15,8 +15,9 @@ export default function AdminProducts() {
 
   const save = async (value: ProductFormValue) => {
     try {
-      if (value.id) await patchJson(`/api/admin/products/${value.id}`, value);
-      else await postJson('/api/admin/products', value);
+      const { id, ...payload } = value;
+      if (id) await patchJson(`/api/admin/products/${id}`, payload);
+      else await postJson('/api/admin/products', payload);
       setEditing(null);
       setFeedback('Guardado');
       load();

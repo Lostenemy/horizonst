@@ -15,13 +15,14 @@ export default function AdminSaasPlans() {
 
   const save = async (value: SaasPlanFormValue) => {
     try {
-      if (value.id) await patchJson(`/api/admin/saas-plans/${value.id}`, value);
-      else await postJson('/api/admin/saas-plans', value);
+      const { id, ...payload } = value;
+      if (id) await patchJson(`/api/admin/saas-plans/${id}`, payload);
+      else await postJson('/api/admin/saas-plans', payload);
       setEditing(null);
       setFeedback('Guardado');
       load();
     } catch (saveError) {
-      setFeedback(apiMessage(saveError));
+      setFeedback(apiMessage(saveError, 'Ya existe un plan con ese código.'));
     }
   };
 

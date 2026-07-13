@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { validateStoreMailConfig, type StoreMailConfig } from '../src/config/env.js';
-import { automaticMailFooter, buildAppccGuideEmail, buildOrderConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
+import { automaticMailFooter, buildAppccGuideEmail, buildEmailVerificationEmail, buildOrderConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
 
 const quoteId = '11111111-1111-4111-8111-111111111111';
 const orderId = '44444444-4444-4444-8444-444444444444';
@@ -31,6 +31,17 @@ const mailConfig: StoreMailConfig = {
   assert.match(email.text, /https:\/\/tienda\.horizonst\.com\.es\/quotes/);
   assert.doesNotMatch(email.text, new RegExp(`/quotes/${quoteId}`));
   assert.match(email.text, new RegExp(automaticMailFooter));
+}
+
+{
+  const verificationUrl = 'https://tienda.horizonst.com.es/verify-email?token=verification-token-for-test';
+  const email = buildEmailVerificationEmail({ email: 'ana@example.test', fullName: 'Ana', verificationUrl, expiresInSeconds: 3600 });
+  assert.equal(email.to, 'ana@example.test');
+  assert.equal(email.subject, 'Verifica tu cuenta de HorizonST');
+  assert.ok(email.text.includes(verificationUrl));
+  assert.ok(email.html.includes(verificationUrl));
+  assert.match(email.html, /Verificar mi cuenta/);
+  assert.doesNotMatch(email.html, /<script|stylesheet/i);
 }
 
 {

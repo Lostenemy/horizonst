@@ -20,7 +20,7 @@ export default function CatalogForm(props: Props) {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    props.onSubmit(isPlan ? readPlan(formData) : readProduct(formData));
+    props.onSubmit(isPlan ? readPlan(formData, props.value.id) : readProduct(formData, props.value.id));
   };
 
   return (
@@ -56,8 +56,9 @@ function PlanFields({ value }: { value: SaasPlanFormValue }) {
   </>;
 }
 
-function readProduct(formData: FormData): ProductFormValue {
+export function readProduct(formData: FormData, id?: string): ProductFormValue {
   return {
+    id,
     sku: stringValue(formData, 'sku'),
     name: stringValue(formData, 'name'),
     description: stringValue(formData, 'description') || null,
@@ -68,9 +69,10 @@ function readProduct(formData: FormData): ProductFormValue {
   };
 }
 
-function readPlan(formData: FormData): SaasPlanFormValue {
+export function readPlan(formData: FormData, id?: string): SaasPlanFormValue {
   const isEnterprise = formData.get('is_enterprise') === 'on';
   return {
+    id,
     code: stringValue(formData, 'code'),
     name: stringValue(formData, 'name'),
     description: stringValue(formData, 'description') || null,
