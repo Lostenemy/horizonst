@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { patchJson } from '../../lib/api';
+import { patchJson, postJson } from '../../lib/api';
 import { AdminShell, AsyncState } from './AdminShell';
 import { apiMessage, submitParams } from './adminUtils';
 import { useAdminLoad } from './useAdminLoad';
@@ -8,7 +8,7 @@ import type { AdminCustomer, AdminCustomersResponse } from './types';
 const statuses = ['pending_email_verification', 'active', 'suspended', 'closed'] as const;
 const filters = ['status', 'email', 'full_name'];
 const messages = {
-  active: 'Cliente activado correctamente.',
+  active: 'Cliente reactivado correctamente.',
   suspended: 'Cliente suspendido correctamente.',
   closed: 'Cliente cerrado correctamente.'
 } as const;
@@ -35,6 +35,17 @@ export default function AdminCustomers() {
     } catch (changeError) { setFeedback(apiMessage(changeError)); }
   };
 
+  const resendVerification = async (customer: AdminCustomer) => {
+    try {
+      await postJson(`/api/admin/customers/${customer.id}/resend-verification`, {});
+      setFeedback('Correo de verificación reenviado correctamente.');
+      load();
+    } catch (resendError) {
+      const message = apiMessage(resendError);
+      setFeedback(message.includes('temporarily limited') ? 'Debes esperar antes de volver a enviar el correo de verificación.' : message);
+    }
+  };
+
   return <AdminShell title="Clientes">
     <form className="filters" onSubmit={onFilter}>
       <select name="status"><option value="">Estado</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select>
@@ -49,7 +60,7 @@ export default function AdminCustomers() {
       <span>{customer.email} · {customer.phone || 'Sin teléfono'} · {customer.status}</span>
       <span>Alta: {formatDate(customer.created_at)} · Último acceso: {formatDate(customer.last_login_at)}</span>
       <div className="actions">
-        {customer.status === 'pending_email_verification' && <button onClick={() => changeStatus(customer, 'active')}>Activar</button>}
+        {customer.status === 'pending_email_verification' && <><button onClick={() => resendVerification(customer)}>Reenviar correo de verificación</button><button onClick={() => changeStatus(customer, 'closed')}>Cerrar</button></>}
         {customer.status === 'active' && <><button onClick={() => changeStatus(customer, 'suspended')}>Suspender</button><button onClick={() => changeStatus(customer, 'closed')}>Cerrar</button></>}
         {customer.status === 'suspended' && <><button onClick={() => changeStatus(customer, 'active')}>Reactivar</button><button onClick={() => changeStatus(customer, 'closed')}>Cerrar</button></>}
       </div>

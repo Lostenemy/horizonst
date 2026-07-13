@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { canChangeCustomerStatus } from '../src/modules/admin/customers.routes.js';
 
-assert.equal(canChangeCustomerStatus('pending_email_verification', 'active'), true);
 assert.equal(canChangeCustomerStatus('pending_email_verification', 'closed'), true);
 assert.equal(canChangeCustomerStatus('active', 'suspended'), true);
 assert.equal(canChangeCustomerStatus('suspended', 'active'), true);
@@ -10,6 +9,7 @@ assert.equal(canChangeCustomerStatus('active', 'closed'), true);
 assert.equal(canChangeCustomerStatus('suspended', 'closed'), true);
 assert.equal(canChangeCustomerStatus('closed', 'active'), false, 'closed is final');
 assert.equal(canChangeCustomerStatus('pending_email_verification', 'suspended'), false, 'pending customers cannot be suspended directly');
+assert.equal(canChangeCustomerStatus('pending_email_verification', 'active'), false, 'pending customers require email verification');
 assert.equal(canChangeCustomerStatus('admin', 'active'), false, 'roles are not statuses');
 
 const router = await readFile(new URL('../src/modules/admin/customers.routes.ts', import.meta.url), 'utf8');
@@ -28,7 +28,8 @@ assert.match(auth, /user\.status !== 'active'/, 'suspended customers cannot log 
 assert.match(auth, /u\.status = 'active'/, 'suspended customers cannot refresh sessions');
 
 const customersPage = await readFile(new URL('../web/src/pages/admin/AdminCustomers.tsx', import.meta.url), 'utf8');
-assert.match(customersPage, /Activar/);
+assert.doesNotMatch(customersPage, />Activar</);
+assert.match(customersPage, /Reenviar correo de verificación/);
 assert.match(customersPage, /Suspender/);
 assert.match(customersPage, /Reactivar/);
 assert.match(customersPage, /cerrar definitivamente esta cuenta/);

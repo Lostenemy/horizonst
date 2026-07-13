@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react';
 import ErrorMessage from '../components/ErrorMessage';
 import { postJson } from '../lib/api';
 
-type RegisterResponse = { verificationToken?: string };
+type RegisterResponse = { verificationToken?: string; verificationEmailSent?: boolean };
 
 export default function Register() {
   const [message, setMessage] = useState('');
@@ -19,9 +19,9 @@ export default function Register() {
         '/api/auth/register',
         Object.fromEntries(new FormData(form))
       );
-      setMessage(
-        `Cuenta creada pendiente de verificación.${data.verificationToken ? ` Token dev: ${data.verificationToken}` : ''}`
-      );
+      setMessage(data.verificationEmailSent === false
+        ? 'Cuenta creada, pero no se pudo enviar el correo de verificación. Puedes solicitar un nuevo envío desde la pantalla de acceso.'
+        : `Cuenta creada. Te hemos enviado un correo para verificar tu dirección.${data.verificationToken ? ` Token dev: ${data.verificationToken}` : ''}`);
       form.reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear la cuenta');

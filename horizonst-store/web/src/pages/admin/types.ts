@@ -131,6 +131,9 @@ export type AdminCustomer = {
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
+  verification_last_sent_at: string | null;
+  verification_expires_at: string | null;
+  verification_pending: boolean;
 };
 export type AdminCustomersResponse = { customers: AdminCustomer[] };
 export type AuditResponse = { events: AuditEvent[] };

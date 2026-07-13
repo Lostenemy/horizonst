@@ -28,6 +28,7 @@ export type OrderConfirmationEmailInput = QuoteEmailInput & {
   order: { id: string; order_number: string };
 };
 export type AppccGuideEmailInput = { email: string };
+export type EmailVerificationEmailInput = { email: string; fullName: string; verificationUrl: string; expiresInSeconds: number };
 
 const SMTP_TIMEOUT_MS = 15000;
 const AUTO_FOOTER = 'HorizonST — Este correo ha sido generado automáticamente.';
@@ -155,6 +156,7 @@ export class SmtpClient {
 }
 
 const textHtml = (text: string) => `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#08233f">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</div>`;
+const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 async function sendMail({ to, subject, text, html }: MailContent) {
   if (!env.mail.enabled) return;
@@ -243,6 +245,17 @@ export function buildAppccGuideEmail({ email }: AppccGuideEmailInput, guideUrl =
   };
 }
 
+export function buildEmailVerificationEmail({ email, fullName, verificationUrl, expiresInSeconds }: EmailVerificationEmailInput): MailContent {
+  const hours = Math.max(1, Math.ceil(expiresInSeconds / 3600));
+  const safeName = escapeHtml(fullName);
+  return {
+    to: email,
+    subject: 'Verifica tu cuenta de HorizonST',
+    text: [`Hola ${fullName},`, '', 'Hemos creado tu cuenta de HorizonST. Verifica tu dirección de correo para activarla:', verificationUrl, '', `El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}. Si no solicitaste el alta, puedes ignorar este correo.`, '', AUTO_FOOTER].join('\n'),
+    html: `<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px"><tr><td style="padding:28px;background:#08233f;color:#fff;font-size:22px;font-weight:bold">HorizonST</td></tr><tr><td style="padding:32px"><h1 style="margin:0 0 16px;font-size:26px">Verifica tu cuenta</h1><p>Hola ${safeName},</p><p>Hemos creado tu cuenta de HorizonST. Verifica tu dirección de correo para activarla.</p><p style="margin:28px 0"><a href="${verificationUrl}" style="display:inline-block;padding:14px 22px;background:#008d99;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">Verificar mi cuenta</a></p><p>Este enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}. Si no solicitaste el alta, puedes ignorar este correo.</p><p style="word-break:break-all;color:#536471">${verificationUrl}</p></td></tr><tr><td style="padding:18px 32px;background:#f5f8f9;color:#536471;font-size:12px">${AUTO_FOOTER}</td></tr></table></td></tr></table></body></html>`
+  };
+}
+
 export async function sendQuoteAvailableEmail(input: QuoteEmailInput) {
   await sendMail(buildQuoteAvailableEmail(input));
 }
@@ -259,6 +272,10 @@ export async function sendAppccGuideEmail(input: AppccGuideEmailInput, deliver: 
   const content = buildAppccGuideEmail(input, guideUrl);
   if (!env.mail.enabled && deliver === sendMail) throw new Error('mail_disabled');
   await deliver(content);
+}
+
+export async function sendEmailVerificationEmail(input: EmailVerificationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
+  await deliver(buildEmailVerificationEmail(input));
 }
 
 export const sanitizeMailError = (error: unknown, mail: Pick<StoreMailConfig, 'user' | 'password'> = env.mail) => {

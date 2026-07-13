@@ -12,6 +12,7 @@ type LocationState = { from?: string } | null;
 export default function Login() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
@@ -33,6 +34,12 @@ export default function Login() {
     }
   }
 
+  async function resendVerification(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await postJson('/api/auth/resend-verification', formDataObject(event.currentTarget)).catch(() => undefined);
+    setResendMessage('Si existe una cuenta pendiente, recibirás un nuevo correo de verificación.');
+  }
+
   return (
     <section className="panel narrow">
       <h1>Iniciar sesión</h1>
@@ -47,6 +54,11 @@ export default function Login() {
         <Link to="/forgot-password">¿Has olvidado la contraseña?</Link>
         <Link to="/verify-email">Verificar email</Link>
       </div>
+      <form onSubmit={resendVerification}>
+        <label>¿No has recibido el correo de verificación?<input name="email" type="email" required /></label>
+        <button type="submit">Reenviar correo de verificación</button>
+      </form>
+      {resendMessage && <p className="success">{resendMessage}</p>}
     </section>
   );
 }

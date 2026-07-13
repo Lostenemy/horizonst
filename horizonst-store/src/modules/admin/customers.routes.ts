@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
+import { createOpaqueToken, emailVerificationSeconds, expiresAtSql, hashToken } from '../auth/token.js';
+import { sanitizeMailError, sendEmailVerificationEmail } from '../shared/mail.js';
+import { env } from '../../config/env.js';
 
 const customerStatuses = ['pending_email_verification', 'active', 'suspended', 'closed'] as const;
 const mutableStatuses = ['active', 'suspended', 'closed'] as const;
@@ -16,7 +19,7 @@ const listSchema = z.object({
 const statusSchema = z.object({ status: z.enum(mutableStatuses) }).strict();
 
 const transitions: Record<(typeof customerStatuses)[number], Array<(typeof mutableStatuses)[number]>> = {
-  pending_email_verification: ['active', 'closed'],
+  pending_email_verification: ['closed'],
   active: ['suspended', 'closed'],
   suspended: ['active', 'closed'],
   closed: []
@@ -26,7 +29,6 @@ export const canChangeCustomerStatus = (previousStatus: string, status: string) 
   transitions[previousStatus as keyof typeof transitions]?.includes(status as (typeof mutableStatuses)[number]) ?? false;
 
 const actionFor = (previousStatus: string, status: string) => {
-  if (status === 'active' && previousStatus === 'pending_email_verification') return 'customer_activated_by_admin';
   if (status === 'active') return 'customer_reactivated';
   if (status === 'suspended') return 'customer_suspended';
   return 'customer_closed';
@@ -45,8 +47,11 @@ adminCustomersRouter.get('/customers', async (req, res, next) => {
     if (input.full_name) { values.push(`%${input.full_name}%`); filters.push(`full_name ILIKE $${values.length}`); }
     values.push(input.limit);
     const { rows } = await pool.query(
-      `SELECT id, email, full_name, phone, role, status, created_at, updated_at, last_login_at
-       FROM store.users WHERE ${filters.join(' AND ')} ORDER BY created_at DESC LIMIT $${values.length}`,
+      `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.created_at, u.updated_at, u.last_login_at,
+              evt.created_at AS verification_last_sent_at, evt.expires_at AS verification_expires_at,
+              (evt.id IS NOT NULL AND evt.revoked_at IS NULL AND evt.used_at IS NULL AND evt.expires_at > now()) AS verification_pending
+       FROM store.users u LEFT JOIN LATERAL (SELECT * FROM store.email_verification_tokens WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) evt ON true
+       WHERE ${filters.map((filter) => filter.replace(/\b(role|status|email|full_name)\b/g, 'u.$1')).join(' AND ')} ORDER BY u.created_at DESC LIMIT $${values.length}`,
       values
     );
     res.json({ customers: rows });
@@ -58,14 +63,40 @@ adminCustomersRouter.get('/customers/:id', async (req, res, next) => {
     const id = idSchema.parse(req.params.id);
     const { rows } = await pool.query(
       `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.created_at, u.updated_at, u.last_login_at,
-              cp.company_name, cp.tax_id, cp.billing_address, cp.city, cp.province, cp.postal_code, cp.country
+              cp.company_name, cp.tax_id, cp.billing_address, cp.city, cp.province, cp.postal_code, cp.country,
+              evt.created_at AS verification_last_sent_at, evt.expires_at AS verification_expires_at,
+              (evt.id IS NOT NULL AND evt.revoked_at IS NULL AND evt.used_at IS NULL AND evt.expires_at > now()) AS verification_pending
        FROM store.users u LEFT JOIN store.customer_profiles cp ON cp.user_id = u.id
+       LEFT JOIN LATERAL (SELECT * FROM store.email_verification_tokens WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) evt ON true
        WHERE u.id = $1 AND u.role = 'customer'`,
       [id]
     );
     if (!rows[0]) { res.status(404).json({ error: 'Customer not found' }); return; }
     res.json({ customer: rows[0] });
   } catch (error) { next(error); }
+});
+
+adminCustomersRouter.post('/customers/:id/resend-verification', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const id = idSchema.parse(req.params.id);
+    await client.query('BEGIN');
+    const { rows } = await client.query("SELECT id, email, full_name, status FROM store.users WHERE id = $1 AND role = 'customer' FOR UPDATE", [id]);
+    const customer = rows[0];
+    if (!customer) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Customer not found' }); return; }
+    if (customer.status !== 'pending_email_verification') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Customer is not pending email verification' }); return; }
+    const rate = await client.query("SELECT MAX(created_at) AS last_sent_at, COUNT(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS sent_last_hour FROM store.email_verification_tokens WHERE user_id = $1", [id]);
+    const rateRow = rate.rows[0];
+    if (Number(rateRow?.sent_last_hour ?? 0) >= 5 || (rateRow?.last_sent_at && Date.now() - new Date(rateRow.last_sent_at).getTime() < 60_000)) { await client.query('ROLLBACK'); res.status(429).json({ error: 'Verification email resend is temporarily limited' }); return; }
+    await client.query('UPDATE store.email_verification_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL AND used_at IS NULL', [id]);
+    const token = createOpaqueToken();
+    await client.query('INSERT INTO store.email_verification_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [id, hashToken(token), expiresAtSql(emailVerificationSeconds()), req.header('user-agent') ?? null, req.ip]);
+    await writeAuditLog({ actorUserId: req.user!.sub, action: 'customer_verification_email_resent', entityType: 'customer', entityId: id }, client);
+    await client.query('COMMIT');
+    try { await sendEmailVerificationEmail({ email: customer.email, fullName: customer.full_name, verificationUrl: `${env.publicBaseUrl.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(token)}`, expiresInSeconds: emailVerificationSeconds() }); }
+    catch (error) { console.error('Verification email delivery failed', sanitizeMailError(error)); }
+    res.json({ message: 'Verification email resent' });
+  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 
 adminCustomersRouter.patch('/customers/:id/status', async (req, res, next) => {
@@ -89,9 +120,6 @@ adminCustomersRouter.patch('/customers/:id/status', async (req, res, next) => {
       "UPDATE store.users SET status = $2, updated_at = now() WHERE id = $1 AND role = 'customer' RETURNING id, email, full_name, phone, role, status, created_at, updated_at, last_login_at",
       [id, input.status]
     );
-    if (customer.status === 'pending_email_verification' && input.status === 'active') {
-      await client.query('UPDATE store.email_verification_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [id]);
-    }
     if (input.status === 'suspended' || input.status === 'closed') {
       await client.query('UPDATE store.refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [id]);
     }
