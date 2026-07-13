@@ -120,7 +120,7 @@ adminCustomersRouter.post('/customers/:id/resend-verification', async (req, res,
     } catch (error) {
       const sanitizedError = dependencies.sanitizeEmailError(error).replaceAll(token, '[redacted]');
       dependencies.logEmailError('Verification email delivery failed', sanitizedError);
-      res.status(502).json({ error: 'No se pudo enviar el correo de verificaciÃ³n' });
+      res.status(502).json({ error: 'No se pudo enviar el correo de verificación' });
       return;
     }
     await dependencies.audit({ actorUserId: req.user!.sub, action: 'customer_verification_email_resent', entityType: 'customer', entityId: id });
