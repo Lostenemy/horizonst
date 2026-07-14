@@ -12,8 +12,6 @@ export const createCatalogRouter = (dependencies: CatalogRouterDependencies = {}
 const catalogRouter = Router();
 const catalogPool = dependencies.pool ?? defaultPool;
 
-catalogRouter.use(dependencies.authMiddleware ?? requireAuth);
-
 catalogRouter.get('/products', async (_req, res, next) => {
   try {
     const { rows } = await catalogPool.query(
@@ -42,7 +40,7 @@ catalogRouter.get('/saas-plans', async (_req, res, next) => {
   }
 });
 
-catalogRouter.get('/packs', async (_req, res, next) => {
+catalogRouter.get('/packs', dependencies.authMiddleware ?? requireAuth, async (_req, res, next) => {
   try {
     const { rows } = await catalogPool.query(
       `SELECT p.id, p.code, p.name, p.description, p.price_cents, p.tax_rate, p.is_active, p.presentation_order,

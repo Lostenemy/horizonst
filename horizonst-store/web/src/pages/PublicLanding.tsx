@@ -1,11 +1,41 @@
-import { FormEvent, useState } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
+import { api } from '../lib/api';
 import { customerAccessUrl } from '../lib/domains';
+import { money } from '../lib/money';
+import type { SaasPlan } from '../lib/types';
 
-export const publicWebPlans = [
-  { name: 'Plan Starter', price: '580 € PVP + IVA', description: 'Para operaciones que comienzan a digitalizar su supervisión.' },
-  { name: 'Plan Professional', price: '800 € PVP + IVA', description: 'Para equipos que necesitan ampliar cobertura y trazabilidad.' },
-  { name: 'Plan Enterprise', price: '1.200 € PVP + IVA', description: 'Para operaciones con mayor capacidad y configuración comercial avanzada.' }
-];
+const publicPlanPresentation: Record<string, { description: string }> = {
+  starter: { description: 'Para operaciones que comienzan a digitalizar su supervisión.' },
+  professional: { description: 'Para equipos que necesitan ampliar cobertura y trazabilidad.' },
+  enterprise: { description: 'Para operaciones con mayor capacidad y configuración comercial avanzada.' }
+};
+const publicPlanCodes = Object.keys(publicPlanPresentation);
+
+export const publicPlanPrice = (priceCents: number | null) =>
+  priceCents == null || priceCents <= 0 ? 'Contactar' : `${money(priceCents)} PVP + IVA / año`;
+
+export const buildPublicPlanCards = (plans: SaasPlan[]) => {
+  const plansByCode = new Map(plans.filter((plan) => plan.is_active).map((plan) => [plan.code, plan]));
+  return publicPlanCodes.flatMap((code) => {
+    const plan = plansByCode.get(code);
+    return plan ? [{
+      code: plan.code,
+      name: `Plan ${plan.name}`,
+      price: publicPlanPrice(plan.annual_price_cents),
+      description: plan.description ?? publicPlanPresentation[code].description
+    }] : [];
+  });
+};
+
+export function PublicPlanCards({ plans, loading, error }: { plans: SaasPlan[]; loading: boolean; error: boolean }) {
+  if (loading) return <p className="lp-note" role="status">Cargando precios de los planes...</p>;
+  if (error) return <p className="lp-note error" role="alert">No se pudieron cargar los precios. Solicita presupuesto y te ayudaremos.</p>;
+
+  const cards = buildPublicPlanCards(plans);
+  if (cards.length === 0) return <p className="lp-note">No hay planes disponibles en este momento. Solicita presupuesto para recibir orientación.</p>;
+
+  return <><div className="lp-grid three">{cards.map((card) => <article className="lp-card" key={card.code}><h2>{card.name}</h2><p className="lp-price">{card.price}</p><p>{card.description}</p></article>)}</div>{cards.length < publicPlanCodes.length && <p className="lp-note">Algunas opciones no están disponibles en este momento. Contacta con nosotros para recibir orientación.</p>}</>;
+}
 
 export const hardwarePacks = [
   { name: 'Pack Starter', items: ['5 puntos de comunicación inalámbrica', '5 antenas y accesorios de instalación', '1 inyector de alimentación PoE', '10 dispositivos personales inalámbricos con alarma'] },
@@ -64,7 +94,22 @@ export function PublicHome() {
     <section className="lp-section lp-plans-cta"><p>¿Quieres conocer las soluciones disponibles?</p><h2>Consulta los planes de HorizonST.</h2><a className="btn" href="/planes">Ver planes</a></section><PublicFooter /></main>;
 }
 
-export function PublicPlans() { return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1><div className="lp-grid three">{publicWebPlans.map((plan) => <article className="lp-card" key={plan.name}><h2>{plan.name}</h2><p className="lp-price">{plan.price}</p><p>{plan.description}</p></article>)}</div><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card" key={pack.name}><h2>{pack.name}</h2><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section><PublicFooter /></main>; }
+export function PublicPlans() {
+  const [plans, setPlans] = useState<SaasPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api<{ saasPlans: SaasPlan[] }>('/api/catalog/saas-plans')
+      .then((data) => { if (active) setPlans(data.saasPlans); })
+      .catch(() => { if (active) setError(true); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1><PublicPlanCards plans={plans} loading={loading} error={error} /><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card" key={pack.name}><h2>{pack.name}</h2><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section><PublicFooter /></main>;
+}
 
 export function PublicInfoFaqs() { return <main className="public-landing"><PublicNav /><section className="lp-info-hero"><p className="eyebrow">Información y preguntas frecuentes</p><h1>Todo lo que necesitas saber sobre HorizonST</h1><p>Consulta cómo funciona la solución, qué problemas ayuda a resolver y las respuestas a las dudas más habituales.</p></section>
   <section className="lp-section"><p className="eyebrow">El problema</p><h2>Situaciones que necesitan más visibilidad.</h2><div className="lp-grid three"><article className="lp-card lp-icon-card"><span>01</span><h3>Permanencias sin controlar</h3><p>Sin una referencia operativa clara, detectar una permanencia prolongada depende de revisiones manuales.</p></article><article className="lp-card lp-icon-card"><span>02</span><h3>Alarmas tardías</h3><p>Una señal sin aviso estructurado puede retrasar la comprobación y la intervención necesaria.</p></article><article className="lp-card lp-icon-card"><span>03</span><h3>Registros dispersos</h3><p>La información repartida dificulta reconstruir una incidencia y mejorar el procedimiento.</p></article></div></section>
