@@ -4,6 +4,7 @@ import Loading from '../components/Loading';
 import { api, postJson } from '../lib/api';
 import { money } from '../lib/money';
 import type { Cart, Pack } from '../lib/types';
+import { coverageLabel } from '../lib/coverage';
 
 export default function Catalog() {
   const [packs, setPacks] = useState<Pack[]>([]);
@@ -44,6 +45,7 @@ export default function Catalog() {
               <small>Pack comercial</small>
               <h2>{pack.name}</h2>
               <p>{pack.description ?? 'Configuración de hardware HorizonST.'}</p>
+              {coverageLabel(pack.coverage_square_meters) && <p><strong>{coverageLabel(pack.coverage_square_meters)}</strong></p>}
               <ul>{pack.items.map((item) => <li key={item.product_id}>{item.quantity} × {item.name}</li>)}</ul>
               <strong>{money(pack.price_cents)}</strong>
               <button type="button" disabled={addingId === pack.id} onClick={() => addToCart(pack.id)}>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { validateStoreMailConfig, type StoreMailConfig } from '../src/config/env.js';
-import { automaticMailFooter, buildAppccGuideEmail, buildEmailVerificationEmail, buildOrderConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
+import { automaticMailFooter, buildAppccGuideEmail, buildEmailVerificationEmail, buildOrderConfirmationEmail, buildPrereservationCommercialEmail, buildPrereservationConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
 
 const quoteId = '11111111-1111-4111-8111-111111111111';
 const orderId = '44444444-4444-4444-8444-444444444444';
@@ -21,6 +21,44 @@ const mailConfig: StoreMailConfig = {
   commercialTo: 'comercial@horizonst.com.es',
   appccGuideUrl: 'https://horizonst.com.es/guia-appcc.pdf'
 };
+
+const prereservationInput = {
+  prereservation: { id: '33333333-3333-4333-8333-333333333333', email: 'interesado@example.test', code: 'professional', confirmedAt: '2026-08-01T10:00:00.000Z' },
+  offer: { hardware: { name: 'Pack Professional', priceCents: 650000, coverageSquareMeters: 1000 }, webPlan: { name: 'Professional', priceCents: 80000 }, subtotalCents: 730000, discountCents: 36500, taxCents: 145635, totalCents: 839135 }
+};
+
+{
+  const email = buildPrereservationConfirmationEmail(prereservationInput);
+  assert.equal(email.to, 'interesado@example.test');
+  assert.match(email.text, /Pack Professional/);
+  assert.match(email.text, /Cobertura aproximada: hasta 1000 m²/);
+  assert.match(email.text, /Professional/);
+  assert.match(email.text, /5 %/);
+  assert.match(email.text, /IVA/);
+  assert.match(email.text, /1 de septiembre de 2026/);
+  assert.match(email.text, /No se ha realizado ningún cobro/);
+  assert.match(email.text, /ni se ha generado un pedido definitivo/i);
+  assert.match(email.text, /HorizonST contactará contigo/);
+  assert.doesNotMatch(email.text + email.html, /token|access_token_hash/i);
+  assert.match(email.html, /<!doctype html>/i);
+  assert.match(email.html, /width="100%"/);
+  assert.match(email.html, /style="[^"]+"/);
+  assert.match(email.html, /Contactar con HorizonST/);
+  assert.match(email.html, /mailto:comercial@horizonst\.es/);
+  assert.doesNotMatch(email.html, /<img|src="https?:\/\//i, 'the customer email loads no external resources');
+}
+
+{
+  const email = buildPrereservationCommercialEmail(prereservationInput);
+  assert.match(email.text, /interesado@example\.test/);
+  assert.match(email.text, /professional/);
+  assert.match(email.text, /33333333-3333-4333-8333-333333333333/);
+  assert.match(email.text, /\/admin\/prereservations\/33333333-3333-4333-8333-333333333333/);
+  assert.doesNotMatch(email.text + email.html, /token|access_token_hash/i);
+  assert.match(email.html, /Aviso comercial/);
+  assert.match(email.html, /Consultar en administración/);
+  assert.doesNotMatch(email.html, /<img|src="https?:\/\//i, 'the commercial email loads no external resources');
+}
 
 {
   const email = buildQuoteAvailableEmail({ quote });

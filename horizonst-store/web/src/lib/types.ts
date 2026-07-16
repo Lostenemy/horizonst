@@ -44,6 +44,7 @@ export type Pack = {
   tax_rate: string | number;
   is_active: boolean;
   presentation_order: number;
+  coverage_square_meters: number | null;
   items: Array<{ product_id: string; name: string; quantity: number; presentation_order: number }>;
 };
 
@@ -108,6 +109,28 @@ export type OrderDetailResponse = { order: Order; items: OrderItem[] };
 export type AdminOrder = Order & { user_id: string; email: string; full_name: string; role: Role };
 export type AdminOrdersResponse = { orders: AdminOrder[] };
 export type AdminOrderDetailResponse = { order: AdminOrder; items: OrderItem[] };
+
+export type AdminPrereservation = {
+  id: string;
+  email: string;
+  offer_code: 'starter' | 'professional' | 'enterprise';
+  campaign_code: string;
+  created_at: string;
+  last_interest_at: string;
+  confirmed_at: string | null;
+  lead_id: string;
+  status: 'pending' | 'confirmed';
+  confirmation_email_status: 'pending' | 'sent' | 'failed';
+  confirmation_email_sent_at: string | null;
+  confirmation_email_last_error_at: string | null;
+  confirmation_email_attempts: number;
+  commercial_email_sent_at: string | null;
+  commercial_email_last_error_at: string | null;
+  commercial_email_attempts: number;
+};
+
+export type AdminPrereservationsResponse = { prereservations: AdminPrereservation[] };
+export type AdminPrereservationDetailResponse = { prereservation: AdminPrereservation };
 
 export type Cart = {
   quote: Quote;

@@ -14,23 +14,30 @@ const request = async (app: express.Express, path: string) => {
 };
 
 {
+  const calls: string[] = [];
+  const pool = { async query(sql: string) { calls.push(sql); return { rows: [] }; } };
   const app = express();
-  app.use('/api/catalog', createCatalogRouter({ authMiddleware: (_req, res) => res.status(401).json({ error: 'Authentication required' }) }));
-  assert.equal((await request(app, '/api/catalog/products')).status, 401, 'catalog prices require authentication');
-  assert.equal((await request(app, '/api/catalog/saas-plans')).status, 401, 'plan prices require authentication');
+  app.use('/api/catalog', createCatalogRouter({ pool, authMiddleware: (_req, res) => res.status(401).json({ error: 'Authentication required' }) }));
+  assert.equal((await request(app, '/api/catalog/products')).status, 404, 'individual products are not exposed in the customer catalog');
+  assert.equal((await request(app, '/api/catalog/saas-plans')).status, 200, 'active plan prices are public');
   assert.equal((await request(app, '/api/catalog/packs')).status, 401, 'pack prices require authentication');
+  assert.equal(calls.length, 1, 'unavailable product and rejected pack requests do not query the database');
+  assert.match(calls[0], /FROM store\.saas_plans[\s\S]*WHERE is_active = true/, 'the public plan endpoint only returns active records');
 }
 
 {
   const calls: any[] = [];
-  const packs = [{ id: '11111111-1111-4111-8111-111111111111', code: 'starter', name: 'PACK Starter', price_cents: 325000, tax_rate: '21.00', items: [{ name: 'Gateway BLE HorizonST', quantity: 5 }, { name: 'Antenas y accesorios de instalación', quantity: 5 }, { name: 'Inyector PoE de alimentación', quantity: 1 }, { name: 'Tag BLE personal con alarma', quantity: 10 }] }];
+  const packs = [{ id: '11111111-1111-4111-8111-111111111111', code: 'starter', name: 'PACK Starter', price_cents: 325000, tax_rate: '21.00', coverage_square_meters: 500, items: [{ name: 'Gateway BLE HorizonST', quantity: 5 }, { name: 'Antenas y accesorios de instalación', quantity: 5 }, { name: 'Inyector PoE de alimentación', quantity: 1 }, { name: 'Tag BLE personal con alarma', quantity: 10 }] }];
   const pool = { async query(sql: string) { calls.push(sql); return { rows: sql.includes('FROM store.packs') ? packs : [] }; } };
   const app = express();
   app.use('/api/catalog', createCatalogRouter({ pool, authMiddleware: (_req, _res, next) => next() }));
-  assert.equal((await request(app, '/api/catalog/products')).status, 200);
+  assert.equal((await request(app, '/api/catalog/products')).status, 404, 'authenticated customers cannot browse individual products either');
   assert.equal((await request(app, '/api/catalog/saas-plans')).status, 200);
   const response = await request(app, '/api/catalog/packs');
-  assert.equal(response.status, 200);
-  assert.deepEqual((await response.json() as any).packs[0], packs[0]);
-  assert.equal(calls.length, 3, 'authenticated users can access private catalog');
+  assert.equal(response.status, 200, 'authenticated users can access packs');
+  const body = await response.json() as any;
+  assert.deepEqual(body.packs[0], packs[0]);
+  assert.equal(body.packs[0].coverage_square_meters, 500);
+  assert.match(calls.find((sql) => sql.includes('FROM store.packs')), /p\.coverage_square_meters/);
+  assert.equal(calls.length, 2, 'customers can access packs and public plans without querying individual products');
 }

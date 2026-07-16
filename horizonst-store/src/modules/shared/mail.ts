@@ -29,6 +29,17 @@ export type OrderConfirmationEmailInput = QuoteEmailInput & {
 };
 export type AppccGuideEmailInput = { email: string };
 export type EmailVerificationEmailInput = { email: string; fullName: string; verificationUrl: string; expiresInSeconds: number };
+export type PrereservationEmailInput = {
+  prereservation: { id: string; email: string; code: string; confirmedAt: string | Date };
+  offer: {
+    hardware: { name: string; priceCents: number; coverageSquareMeters: number | null };
+    webPlan: { name: string; priceCents: number };
+    subtotalCents: number;
+    discountCents: number;
+    taxCents: number;
+    totalCents: number;
+  };
+};
 
 const SMTP_TIMEOUT_MS = 15000;
 const AUTO_FOOTER = 'HorizonST — Este correo ha sido generado automáticamente.';
@@ -38,6 +49,7 @@ const baseUrl = () => env.publicBaseUrl.replace(/\/$/, '');
 const quotesUrl = () => `${baseUrl()}/quotes`;
 const ordersUrl = () => `${baseUrl()}/orders`;
 const adminOrderUrl = (orderId: string) => `${baseUrl()}/admin/orders/${orderId}`;
+const adminPrereservationUrl = (id: string) => `${baseUrl()}/admin/prereservations/${id}`;
 
 const defaultConnector: SmtpConnector = (config) => ({
   socket: config.secure
@@ -256,6 +268,58 @@ export function buildEmailVerificationEmail({ email, fullName, verificationUrl, 
   };
 }
 
+export function buildPrereservationConfirmationEmail({ prereservation, offer }: PrereservationEmailInput): MailContent {
+  const coverage = offer.hardware.coverageSquareMeters && offer.hardware.coverageSquareMeters > 0
+    ? `Cobertura aproximada: hasta ${new Intl.NumberFormat('es-ES').format(offer.hardware.coverageSquareMeters)} m²`
+    : null;
+  const summary = [
+    `Plan Web: ${offer.webPlan.name} (${formatMoney(offer.webPlan.priceCents)})`,
+    `Pack hardware: ${offer.hardware.name} (${formatMoney(offer.hardware.priceCents)})`,
+    coverage,
+    `Precio base: ${formatMoney(offer.subtotalCents)}`,
+    `Descuento de prerreserva (5 %): -${formatMoney(offer.discountCents)}`,
+    `IVA: ${formatMoney(offer.taxCents)}`,
+    `Total prerreservado: ${formatMoney(offer.totalCents)}`
+  ];
+  const text = [
+    'Tu prerreserva de HorizonST ha quedado confirmada.', '', ...summary.filter((line): line is string => line !== null), '',
+    'La campaña es válida hasta el 1 de septiembre de 2026.',
+    'No se ha realizado ningún cobro ni se ha generado un pedido definitivo.',
+    'HorizonST contactará contigo para formalizar la propuesta.', '',
+    'Contacto: comercial@horizonst.es', AUTO_FOOTER
+  ].join('\n');
+  const safePlan = escapeHtml(offer.webPlan.name);
+  const safePack = escapeHtml(offer.hardware.name);
+  const priceRow = (label: string, value: string, accent = false) => `<tr><td style="padding:10px 0;color:${accent ? '#008d99' : '#536471'};font-size:14px;font-weight:${accent ? '700' : '400'}">${label}</td><td align="right" style="padding:10px 0;color:${accent ? '#008d99' : '#08233f'};font-size:${accent ? '18px' : '14px'};font-weight:700">${value}</td></tr>`;
+  const html = `<!doctype html><html lang="es"><body style="margin:0;padding:0;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#edf4f6"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="620" cellspacing="0" cellpadding="0" style="width:100%;max-width:620px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 12px 36px rgba(8,35,63,.12)"><tr><td style="padding:24px 30px;background:#08233f;color:#ffffff;font-size:24px;font-weight:800">HorizonST <span style="color:#4bd6d3">/</span> Prerreserva</td></tr><tr><td style="padding:32px 30px"><p style="margin:0 0 8px;color:#008d99;font-size:12px;font-weight:700;letter-spacing:1.2px">PRERRESERVA CONFIRMADA</p><h1 style="margin:0 0 14px;color:#08233f;font-size:28px;line-height:1.2">Gracias por confiar en HorizonST</h1><p style="margin:0 0 24px;color:#536471;font-size:16px;line-height:1.6">Hemos registrado tu interés. No se ha realizado ningún cobro ni se ha creado un pedido definitivo.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;margin-bottom:22px;background:#eef8f8;border-left:4px solid #008d99;border-radius:10px"><tr><td style="padding:20px"><p style="margin:0 0 6px;color:#008d99;font-size:12px;font-weight:700;letter-spacing:1px">OFERTA SELECCIONADA</p><p style="margin:0;color:#08233f;font-size:22px;font-weight:800">Plan Web ${safePlan}</p><p style="margin:8px 0 0;color:#536471;font-size:15px">${safePack}${coverage ? `<br>${escapeHtml(coverage)}` : ''}</p></td></tr></table><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse">${priceRow('Plan Web', formatMoney(offer.webPlan.priceCents))}${priceRow('Pack hardware', formatMoney(offer.hardware.priceCents))}${priceRow('Precio base', formatMoney(offer.subtotalCents))}${priceRow('Descuento de prerreserva (5 %)', `-${formatMoney(offer.discountCents)}`, true)}${priceRow('IVA', formatMoney(offer.taxCents))}<tr><td style="padding:16px 0 4px;border-top:2px solid #dce9ed;color:#08233f;font-size:17px;font-weight:800">Total final</td><td align="right" style="padding:16px 0 4px;border-top:2px solid #dce9ed;color:#08233f;font-size:23px;font-weight:800">${formatMoney(offer.totalCents)}</td></tr></table><div style="margin:26px 0;padding:18px;background:#f5f8f9;border-radius:10px;color:#536471;font-size:14px;line-height:1.6"><strong style="color:#08233f">Campaña válida hasta el 1 de septiembre de 2026.</strong><br>HorizonST contactará contigo para formalizar la propuesta. Esta confirmación no supone un cobro ni la creación de un pedido definitivo.</div><table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="border-radius:999px;background:#18c3cf"><a href="mailto:comercial@horizonst.es" style="display:inline-block;padding:14px 24px;color:#08233f;text-decoration:none;font-size:15px;font-weight:800">Contactar con HorizonST</a></td></tr></table></td></tr><tr><td style="padding:20px 30px;background:#08233f;color:#c9e5e8;font-size:12px;line-height:1.6">comercial@horizonst.es<br>HorizonST — Este correo ha sido generado automáticamente.</td></tr></table></td></tr></table></body></html>`;
+  return {
+    to: prereservation.email,
+    subject: `Prerreserva confirmada: ${offer.webPlan.name}`,
+    text,
+    html
+  };
+}
+
+export function buildPrereservationCommercialEmail({ prereservation, offer }: PrereservationEmailInput): MailContent {
+  const text = [
+    'Nueva prerreserva pública confirmada.',
+    `Interesado: ${prereservation.email}`,
+    `Oferta: ${prereservation.code}`,
+    `Total: ${formatMoney(offer.totalCents)}`,
+    `Fecha: ${new Date(prereservation.confirmedAt).toISOString()}`,
+    `Identificador: ${prereservation.id}`,
+    `Administración: ${adminPrereservationUrl(prereservation.id)}`,
+    '', AUTO_FOOTER
+  ].join('\n');
+  const html = `<!doctype html><html lang="es"><body style="margin:0;padding:0;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#edf4f6"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden"><tr><td style="padding:22px 28px;background:#08233f;color:#ffffff;font-size:21px;font-weight:800">HorizonST · Aviso comercial</td></tr><tr><td style="padding:28px"><h1 style="margin:0 0 20px;font-size:24px;color:#08233f">Nueva prerreserva confirmada</h1><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;font-size:14px;line-height:1.6"><tr><td style="padding:7px 0;color:#536471">Interesado</td><td align="right" style="padding:7px 0;font-weight:700">${escapeHtml(prereservation.email)}</td></tr><tr><td style="padding:7px 0;color:#536471">Oferta</td><td align="right" style="padding:7px 0;font-weight:700">${escapeHtml(prereservation.code)}</td></tr><tr><td style="padding:7px 0;color:#536471">Total</td><td align="right" style="padding:7px 0;font-weight:700">${formatMoney(offer.totalCents)}</td></tr><tr><td style="padding:7px 0;color:#536471">Identificador</td><td align="right" style="padding:7px 0;font-weight:700">${escapeHtml(prereservation.id)}</td></tr></table><p style="margin:24px 0 0"><a href="${adminPrereservationUrl(prereservation.id)}" style="display:inline-block;padding:12px 20px;border-radius:999px;background:#18c3cf;color:#08233f;text-decoration:none;font-weight:800">Consultar en administración</a></p></td></tr><tr><td style="padding:18px 28px;background:#f5f8f9;color:#536471;font-size:12px">${AUTO_FOOTER}</td></tr></table></td></tr></table></body></html>`;
+  return {
+    to: env.mail.commercialTo,
+    subject: `Prerreserva confirmada: ${prereservation.code}`,
+    text,
+    html
+  };
+}
+
 export async function sendQuoteAvailableEmail(input: QuoteEmailInput) {
   await sendMail(buildQuoteAvailableEmail(input));
 }
@@ -276,6 +340,14 @@ export async function sendAppccGuideEmail(input: AppccGuideEmailInput, deliver: 
 
 export async function sendEmailVerificationEmail(input: EmailVerificationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
   await deliver(buildEmailVerificationEmail(input));
+}
+
+export async function sendPrereservationConfirmationEmail(input: PrereservationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
+  await deliver(buildPrereservationConfirmationEmail(input));
+}
+
+export async function sendPrereservationCommercialEmail(input: PrereservationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
+  await deliver(buildPrereservationCommercialEmail(input));
 }
 
 export const sanitizeMailError = (error: unknown, mail: Pick<StoreMailConfig, 'user' | 'password'> = env.mail) => {

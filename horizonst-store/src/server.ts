@@ -5,10 +5,12 @@ import express from 'express';
 import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { env } from './config/env.js';
+import { configureTrustProxy } from './config/trust-proxy.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { leadsRouter } from './modules/leads/leads.routes.js';
+import { prereservationRouter } from './modules/prereservation/prereservation.routes.js';
 import { customerRouter } from './modules/customer/customer.routes.js';
 import { distributorRouter } from './modules/distributor/distributor.routes.js';
 import { adminDistributorsRouter } from './modules/admin/distributors.routes.js';
@@ -17,6 +19,7 @@ import { adminOrdersRouter } from './modules/admin/orders.routes.js';
 import { adminAuditRouter } from './modules/admin/audit.routes.js';
 import { adminCatalogRouter } from './modules/admin/catalog.routes.js';
 import { adminCustomersRouter } from './modules/admin/customers.routes.js';
+import { adminPrereservationsRouter } from './modules/admin/prereservations.routes.js';
 import { adminDashboardRouter } from './modules/admin/dashboard.routes.js';
 import { cartRouter } from './modules/cart/cart.routes.js';
 import { quotesRouter } from './modules/quotes/quotes.routes.js';
@@ -26,6 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
 export const createServer = (staticRoot = webDist) => {
   const app = express();
+  configureTrustProxy(app);
   const guidePath = path.join(staticRoot, 'recursos', 'guia-appcc-2026.pdf');
 
   app.use(helmet({ contentSecurityPolicy: false }));
@@ -35,6 +39,7 @@ export const createServer = (staticRoot = webDist) => {
   app.use('/health', healthRouter);
   app.use('/api/health', healthRouter);
   app.use('/api/leads', leadsRouter);
+  app.use('/api/public/prereservation', prereservationRouter);
   app.use('/api/catalog', catalogRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/customer', customerRouter);
@@ -49,6 +54,8 @@ export const createServer = (staticRoot = webDist) => {
   app.use('/api/admin', adminAuditRouter);
   app.use('/api/admin', adminCatalogRouter);
   app.use('/api/admin', adminCustomersRouter);
+  app.use('/api/admin', adminPrereservationsRouter);
+  app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found' }));
   app.get('/recursos/guia-appcc-2026.pdf', (_req, res, next) => {
     res.sendFile(guidePath, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="guia-appcc-2026-horizonst.pdf"' } }, (error) => error ? next(error) : undefined);
   });
