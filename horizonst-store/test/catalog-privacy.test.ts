@@ -18,12 +18,11 @@ const request = async (app: express.Express, path: string) => {
   const pool = { async query(sql: string) { calls.push(sql); return { rows: [] }; } };
   const app = express();
   app.use('/api/catalog', createCatalogRouter({ pool, authMiddleware: (_req, res) => res.status(401).json({ error: 'Authentication required' }) }));
-  assert.equal((await request(app, '/api/catalog/products')).status, 200, 'active product prices are public');
+  assert.equal((await request(app, '/api/catalog/products')).status, 401, 'product prices require authentication');
   assert.equal((await request(app, '/api/catalog/saas-plans')).status, 200, 'active plan prices are public');
   assert.equal((await request(app, '/api/catalog/packs')).status, 401, 'pack prices require authentication');
-  assert.equal(calls.length, 2, 'rejected private pack requests do not query the database');
-  assert.match(calls[0], /FROM store\.products[\s\S]*WHERE is_active = true/, 'the public product endpoint only returns active records');
-  assert.match(calls[1], /FROM store\.saas_plans[\s\S]*WHERE is_active = true/, 'the public plan endpoint only returns active records');
+  assert.equal(calls.length, 1, 'rejected private catalog requests do not query the database');
+  assert.match(calls[0], /FROM store\.saas_plans[\s\S]*WHERE is_active = true/, 'the public plan endpoint only returns active records');
 }
 
 {
@@ -32,10 +31,10 @@ const request = async (app: express.Express, path: string) => {
   const pool = { async query(sql: string) { calls.push(sql); return { rows: sql.includes('FROM store.packs') ? packs : [] }; } };
   const app = express();
   app.use('/api/catalog', createCatalogRouter({ pool, authMiddleware: (_req, _res, next) => next() }));
-  assert.equal((await request(app, '/api/catalog/products')).status, 200);
+  assert.equal((await request(app, '/api/catalog/products')).status, 200, 'authenticated users can access products');
   assert.equal((await request(app, '/api/catalog/saas-plans')).status, 200);
   const response = await request(app, '/api/catalog/packs');
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 200, 'authenticated users can access packs');
   assert.deepEqual((await response.json() as any).packs[0], packs[0]);
-  assert.equal(calls.length, 3, 'authenticated users can also access the private pack catalog');
+  assert.equal(calls.length, 3, 'authenticated users can access products and packs alongside public plans');
 }
