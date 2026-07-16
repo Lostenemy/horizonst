@@ -1,15 +1,16 @@
-import React, { FormEvent, useEffect, useState } from 'react';
+import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { customerAccessUrl } from '../lib/domains';
 import { money } from '../lib/money';
+import { isPrereservationCode, prereservationCodes, prereservationEndLabel, prereservationSessionKey, type PrereservationCampaign, type PrereservationCode } from '../lib/prereservation';
 import type { SaasPlan } from '../lib/types';
 
-const publicPlanPresentation: Record<string, { description: string }> = {
+const publicPlanPresentation: Record<PrereservationCode, { description: string }> = {
   starter: { description: 'Para operaciones que comienzan a digitalizar su supervisión.' },
   professional: { description: 'Para equipos que necesitan ampliar cobertura y trazabilidad.' },
   enterprise: { description: 'Para operaciones con mayor capacidad y configuración comercial avanzada.' }
 };
-const publicPlanCodes = Object.keys(publicPlanPresentation);
+const publicPlanCodes = prereservationCodes;
 
 export const publicPlanPrice = (priceCents: number | null) =>
   priceCents == null || priceCents <= 0 ? 'Contactar' : `${money(priceCents)} PVP + IVA / año`;
@@ -19,7 +20,7 @@ export const buildPublicPlanCards = (plans: SaasPlan[]) => {
   return publicPlanCodes.flatMap((code) => {
     const plan = plansByCode.get(code);
     return plan ? [{
-      code: plan.code,
+      code,
       name: `Plan ${plan.name}`,
       price: publicPlanPrice(plan.annual_price_cents),
       description: plan.description ?? publicPlanPresentation[code].description
@@ -27,14 +28,14 @@ export const buildPublicPlanCards = (plans: SaasPlan[]) => {
   });
 };
 
-export function PublicPlanCards({ plans, loading, error }: { plans: SaasPlan[]; loading: boolean; error: boolean }) {
+export function PublicPlanCards({ plans, loading, error, campaign, onPrereserve }: { plans: SaasPlan[]; loading: boolean; error: boolean; campaign?: PrereservationCampaign | null; onPrereserve?: (code: PrereservationCode, trigger: HTMLButtonElement) => void }) {
   if (loading) return <p className="lp-note" role="status">Cargando precios de los planes...</p>;
   if (error) return <p className="lp-note error" role="alert">No se pudieron cargar los precios. Solicita presupuesto y te ayudaremos.</p>;
 
   const cards = buildPublicPlanCards(plans);
   if (cards.length === 0) return <p className="lp-note">No hay planes disponibles en este momento. Solicita presupuesto para recibir orientación.</p>;
 
-  return <><div className="lp-grid three">{cards.map((card) => <article className="lp-card" key={card.code}><h2>{card.name}</h2><p className="lp-price">{card.price}</p><p>{card.description}</p></article>)}</div>{cards.length < publicPlanCodes.length && <p className="lp-note">Algunas opciones no están disponibles en este momento. Contacta con nosotros para recibir orientación.</p>}</>;
+  return <><div className="lp-grid three">{cards.map((card) => <article className="lp-card" key={card.code}><h2>{card.name}</h2><p className="lp-price">{card.price}</p><p>{card.description}</p>{onPrereserve && campaign && <button type="button" disabled={!campaign.active} onClick={(event) => onPrereserve(card.code, event.currentTarget)}>{campaign.active ? 'Prerreservar con 5 % de descuento' : 'Campaña finalizada'}</button>}</article>)}</div>{cards.length < publicPlanCodes.length && <p className="lp-note">Algunas opciones no están disponibles en este momento. Contacta con nosotros para recibir orientación.</p>}</>;
 }
 
 export const hardwarePacks = [
@@ -53,9 +54,6 @@ export const faqItems = [
   ['¿Cómo se accede a los planes?', 'Puedes consultar las opciones disponibles en la página de planes y solicitar orientación comercial.'],
   ['¿Puede adaptarse a varias cámaras o centros?', 'Sí. La solución puede crecer de forma progresiva según el número de cámaras y la organización.']
 ];
-
-export const calculatePotentialSavings = (hoursPerWeek: number, hourlyCost: number, incidentsPerYear: number, incidentCost: number) =>
-  Math.round((Math.max(0, hoursPerWeek) * Math.max(0, hourlyCost) * 52 * 0.35) + (Math.max(0, incidentsPerYear) * Math.max(0, incidentCost) * 0.2));
 
 export function PublicNav() {
   return <nav className="lp-nav" aria-label="Navegación pública">
@@ -82,11 +80,6 @@ function GuideForm() {
   </form>;
 }
 
-function SavingsCalculator() {
-  const [hours, setHours] = useState(6); const [hourlyCost, setHourlyCost] = useState(22); const [incidents, setIncidents] = useState(2); const [incidentCost, setIncidentCost] = useState(900); const estimate = calculatePotentialSavings(hours, hourlyCost, incidents, incidentCost);
-  return <section className="lp-calculator" aria-label="Calculadora de ahorro potencial"><div><p className="eyebrow">Calculadora orientativa</p><h2>Estima el margen de mejora operativo</h2><p>Introduce una referencia de tu operación. El resultado no constituye una previsión ni una garantía.</p></div><div className="lp-calculator-fields"><label>Horas semanales en controles manuales<input type="number" min="0" value={hours} onChange={(event) => setHours(Number(event.target.value))} /></label><label>Coste hora estimado<input type="number" min="0" value={hourlyCost} onChange={(event) => setHourlyCost(Number(event.target.value))} /></label><label>Incidencias anuales evitables<input type="number" min="0" value={incidents} onChange={(event) => setIncidents(Number(event.target.value))} /></label><label>Coste medio por incidencia<input type="number" min="0" value={incidentCost} onChange={(event) => setIncidentCost(Number(event.target.value))} /></label></div><p className="lp-estimate">Ahorro potencial orientativo <strong>{estimate.toLocaleString('es-ES')} €/año</strong></p></section>;
-}
-
 export function PublicHome() {
   return <main className="public-landing"><PublicNav /><section className="lp-hero"><p className="eyebrow">Seguridad en frío extremo</p><h1>Supervisa mejor a quienes trabajan en cámaras congeladoras.</h1><p>Controla permanencias, recibe alertas y conserva un historial operativo para actuar con mayor rapidez.</p><div className="actions"><a className="btn" href="#guia">Recibir la guía</a><a className="btn ghost" href="/info-faqs">Cómo funciona</a></div></section>
     <section className="lp-section lp-intro"><p className="eyebrow">Una operación más preparada</p><h2>Visibilidad cuando más importa.</h2><p>HorizonST ayuda a organizar el control de accesos y tiempos de permanencia mediante tecnologías inalámbricas, con alertas y trazabilidad pensadas para el equipo responsable.</p></section>
@@ -94,27 +87,89 @@ export function PublicHome() {
     <section className="lp-section lp-plans-cta"><p>¿Quieres conocer las soluciones disponibles?</p><h2>Consulta los planes de HorizonST.</h2><a className="btn" href="/planes">Ver planes</a></section><PublicFooter /></main>;
 }
 
+function PrereservationAccessModal({ code, trigger, onClose }: { code: PrereservationCode; trigger: HTMLButtonElement | null; onClose: () => void }) {
+  const [email, setEmail] = useState('');
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [website, setWebsite] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'error' | 'expired'>('idle');
+  const emailRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    emailRef.current?.focus();
+    const handleKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { onClose(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(modalRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href]') ?? [])];
+      if (focusable.length === 0) return;
+      const first = focusable[0]; const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', handleKeyboard);
+    return () => { document.removeEventListener('keydown', handleKeyboard); trigger?.focus(); };
+  }, [onClose, trigger]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (status === 'sending') return;
+    setStatus('sending');
+    try {
+      const response = await fetch('/api/public/prereservation/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), code, privacyAccepted, website })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 410) { setStatus('expired'); return; }
+      if (!response.ok || typeof data.accessToken !== 'string' || data.code !== code) throw new Error('access_failed');
+      sessionStorage.setItem(prereservationSessionKey(code), data.accessToken);
+      window.location.assign(`/prerreserva/${code}`);
+    } catch { setStatus('error'); }
+  };
+
+  return <div className="lp-modal-backdrop"><section ref={modalRef} className="lp-modal" role="dialog" aria-modal="true" aria-labelledby="prereservation-modal-title">
+    <button className="lp-modal-close" type="button" aria-label="Cerrar" onClick={onClose}>×</button>
+    <p className="eyebrow">Prerreserva {code}</p><h2 id="prereservation-modal-title">Accede a la oferta de prerreserva</h2>
+    <form className="lp-form" onSubmit={submit}>
+      <label>Email profesional<input ref={emailRef} required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+      <label className="lp-honeypot" aria-hidden="true">Web<input tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} /></label>
+      <label className="lp-privacy"><input required type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} /> He leído y acepto la <a href="/privacidad">política de privacidad</a>.</label>
+      <button type="submit" disabled={status === 'sending'}>{status === 'sending' ? 'Validando...' : 'Ver oferta'}</button>
+      {status === 'error' && <p className="error" role="alert">No se pudo autorizar el acceso. Revisa el email e inténtalo de nuevo.</p>}
+      {status === 'expired' && <p className="error" role="alert">La campaña de prerreserva ha finalizado.</p>}
+    </form>
+  </section></div>;
+}
+
 export function PublicPlans() {
   const [plans, setPlans] = useState<SaasPlan[]>([]);
+  const [campaign, setCampaign] = useState<PrereservationCampaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const requestedCode = new URLSearchParams(window.location.search).get('prerreserva');
+  const [selectedCode, setSelectedCode] = useState<PrereservationCode | null>(isPrereservationCode(requestedCode) ? requestedCode : null);
+  const [modalTrigger, setModalTrigger] = useState<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let active = true;
-    api<{ saasPlans: SaasPlan[] }>('/api/catalog/saas-plans')
-      .then((data) => { if (active) setPlans(data.saasPlans); })
+    Promise.all([
+      api<{ saasPlans: SaasPlan[] }>('/api/catalog/saas-plans'),
+      api<PrereservationCampaign>('/api/public/prereservation/campaign')
+    ])
+      .then(([data, campaignData]) => { if (active) { setPlans(data.saasPlans); setCampaign(campaignData); } })
       .catch(() => { if (active) setError(true); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
-  return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1><PublicPlanCards plans={plans} loading={loading} error={error} /><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card" key={pack.name}><h2>{pack.name}</h2><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section><PublicFooter /></main>;
+  const openPrereservation = (code: PrereservationCode, trigger: HTMLButtonElement) => { setModalTrigger(trigger); setSelectedCode(code); };
+  return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1>{campaign && <p>Oferta de prerreserva disponible hasta el {prereservationEndLabel(campaign.endAt)}.</p>}<PublicPlanCards plans={plans} loading={loading} error={error} campaign={campaign} onPrereserve={openPrereservation} /><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card" key={pack.name}><h2>{pack.name}</h2><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section>{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={() => setSelectedCode(null)} />}<PublicFooter /></main>;
 }
 
 export function PublicInfoFaqs() { return <main className="public-landing"><PublicNav /><section className="lp-info-hero"><p className="eyebrow">Información y preguntas frecuentes</p><h1>Todo lo que necesitas saber sobre HorizonST</h1><p>Consulta cómo funciona la solución, qué problemas ayuda a resolver y las respuestas a las dudas más habituales.</p></section>
   <section className="lp-section"><p className="eyebrow">El problema</p><h2>Situaciones que necesitan más visibilidad.</h2><div className="lp-grid three"><article className="lp-card lp-icon-card"><span>01</span><h3>Permanencias sin controlar</h3><p>Sin una referencia operativa clara, detectar una permanencia prolongada depende de revisiones manuales.</p></article><article className="lp-card lp-icon-card"><span>02</span><h3>Alarmas tardías</h3><p>Una señal sin aviso estructurado puede retrasar la comprobación y la intervención necesaria.</p></article><article className="lp-card lp-icon-card"><span>03</span><h3>Registros dispersos</h3><p>La información repartida dificulta reconstruir una incidencia y mejorar el procedimiento.</p></article></div></section>
   <section className="lp-section"><p className="eyebrow">Beneficios</p><h2>Información útil para reaccionar mejor.</h2><div className="lp-grid four"><article className="lp-card"><h3>Mayor capacidad de reacción</h3><p>Avisos para que el equipo responsable pueda comprobar la situación.</p></article><article className="lp-card"><h3>Control de tiempos</h3><p>Supervisión de permanencias según los umbrales internos definidos.</p></article><article className="lp-card"><h3>Trazabilidad operativa</h3><p>Contexto para revisar accesos, alertas e incidencias.</p></article><article className="lp-card"><h3>Historial centralizado</h3><p>Consulta organizada desde un acceso privado.</p></article></div></section>
   <section className="lp-section"><p className="eyebrow">Cómo funciona</p><h2>Un proceso claro, de la entrada al registro.</h2><ol className="lp-steps"><li><strong>El trabajador accede.</strong><span>El acceso queda identificado en la operación.</span></li><li><strong>El sistema supervisa.</strong><span>Se controla la permanencia conforme a los criterios internos.</span></li><li><strong>Se generan alertas.</strong><span>El equipo responsable recibe el aviso cuando corresponde.</span></li><li><strong>La incidencia queda registrada.</strong><span>El historial facilita la revisión posterior.</span></li></ol></section>
-  <section className="lp-section"><SavingsCalculator /></section>
   <section className="lp-section lp-faq"><p className="eyebrow">FAQ</p><h2>Preguntas frecuentes</h2><div>{faqItems.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></section>
   <section className="lp-section lp-final-cta"><p>¿Quieres conocer la solución adecuada para tu operación?</p><h2>Consulta los planes o accede a la zona de clientes.</h2><div className="actions"><a className="btn" href="/planes">Ver planes</a><a className="btn ghost" href={customerAccessUrl}>Acceso clientes</a></div></section><PublicFooter /></main>; }

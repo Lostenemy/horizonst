@@ -9,6 +9,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { leadsRouter } from './modules/leads/leads.routes.js';
+import { prereservationRouter } from './modules/prereservation/prereservation.routes.js';
 import { customerRouter } from './modules/customer/customer.routes.js';
 import { distributorRouter } from './modules/distributor/distributor.routes.js';
 import { adminDistributorsRouter } from './modules/admin/distributors.routes.js';
@@ -35,6 +36,7 @@ export const createServer = (staticRoot = webDist) => {
   app.use('/health', healthRouter);
   app.use('/api/health', healthRouter);
   app.use('/api/leads', leadsRouter);
+  app.use('/api/public/prereservation', prereservationRouter);
   app.use('/api/catalog', catalogRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/customer', customerRouter);

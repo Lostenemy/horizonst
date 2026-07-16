@@ -11,6 +11,10 @@ assert.equal(customerAccessUrl, 'https://tienda.horizonst.com.es');
 assert.equal(publicMarketingPage('/'), 'home');
 assert.equal(publicMarketingPage('/planes'), 'plans');
 assert.equal(publicMarketingPage('/info-faqs'), 'info-faqs');
+assert.equal(publicMarketingPage('/prerreserva/starter'), 'prereservation');
+assert.equal(publicMarketingPage('/prerreserva/professional'), 'prereservation');
+assert.equal(publicMarketingPage('/prerreserva/enterprise'), 'prereservation');
+assert.equal(publicMarketingPage('/prerreserva/unknown'), 'not-found');
 assert.equal(publicMarketingPage('/aviso-legal'), 'legal-notice');
 assert.equal(publicMarketingPage('/privacidad'), 'privacy');
 assert.equal(publicMarketingPage('/desconocida'), 'not-found');
@@ -34,11 +38,18 @@ assert.deepEqual(buildPublicPlanCards([plan('starter', 99900, { is_active: false
 assert.match(String((PublicPlanCards({ plans: [], loading: true, error: false }) as any).props.children), /Cargando precios/, 'loading state remains renderable');
 assert.match(String((PublicPlanCards({ plans: [], loading: false, error: true }) as any).props.children), /No se pudieron cargar los precios/, 'catalog errors remain renderable');
 assert.match(String((PublicPlanCards({ plans: [], loading: false, error: false }) as any).props.children), /No hay planes disponibles/, 'missing expected plans remain renderable');
+const campaignCards = JSON.stringify(PublicPlanCards({
+  plans: [plan('starter', 1), plan('professional', 2), plan('enterprise', 3)], loading: false, error: false,
+  campaign: { campaign: 'prereservation_2026', endAt: '2026-09-01T21:59:59.999Z', active: true, codes: ['starter', 'professional', 'enterprise'] },
+  onPrereserve: () => undefined
+}));
+assert.equal(campaignCards.match(/Prerreservar con 5 % de descuento/g)?.length, 3, 'all three commercial levels expose their own prereservation action');
 
 const app = await readFile(new URL('../web/src/App.tsx', import.meta.url), 'utf-8');
 assert.match(app, /<PublicHome \/>/);
 assert.match(app, /<PublicPlans \/>/);
 assert.match(app, /<PublicInfoFaqs \/>/);
+assert.match(app, /<PublicPrereservation code=/);
 assert.match(app, /Página no encontrada/);
 const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', import.meta.url), 'utf-8');
 assert.doesNotMatch(landing, />Inicio</); assert.match(landing, /className="lp-brand" href="\/">HorizonST/); assert.match(landing, /INFO\/FAQS/); assert.match(landing, /Acceso clientes/);
@@ -52,7 +63,14 @@ assert.match(landing, /publicPlanPrice/, 'the landing uses the shared Spanish cu
 assert.doesNotMatch(landing, /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i, 'the landing does not hardcode catalog UUIDs');
 assert.match(landing, /tecnologías inalámbricas|monitorización inalámbrica/);
 assert.match(landing, /Visibilidad cuando más importa/); assert.match(landing, /Guía 2026 para la seguridad en cámaras congeladoras/); assert.match(landing, /href="\/planes">Ver planes/);
-assert.match(landing, /El problema/); assert.match(landing, /Beneficios/); assert.match(landing, /Cómo funciona/); assert.match(landing, /Calculadora orientativa/); assert.match(landing, /<details/); assert.match(landing, /<summary>/);
+assert.match(landing, /El problema/); assert.match(landing, /Beneficios/); assert.match(landing, /Cómo funciona/); assert.doesNotMatch(landing, /Calculadora orientativa|Calculadora de ahorro|Ahorro potencial orientativo|calculatePotentialSavings/); assert.match(landing, /<details/); assert.match(landing, /<summary>/);
+assert.match(landing, /Prerreservar con 5 % de descuento/);
+assert.match(landing, /PrereservationAccessModal/);
+assert.match(landing, /required type="email"/);
+assert.match(landing, /href="\/privacidad"/);
+assert.match(landing, /sessionStorage\.setItem\(prereservationSessionKey\(code\), data\.accessToken\)/);
+assert.doesNotMatch(landing, /localStorage/);
+assert.doesNotMatch(landing, /email.*window\.location|window\.location.*email/i, 'the email is never added to the URL');
 assert.doesNotMatch(landing, /Planes web|Ver todos los planes y packs/);
 const layout = await readFile(new URL('../web/src/components/Layout.tsx', import.meta.url), 'utf-8');
 assert.match(layout, /https:\/\/horizonst\.com\.es/);
@@ -60,3 +78,8 @@ const css = await readFile(new URL('../web/src/styles.css', import.meta.url), 'u
 assert.match(css, /\.lp-nav \.secondary\{background:#fff;color:#08233f/);
 assert.match(css, /\.lp-nav \.secondary:focus-visible/);
 assert.match(css, /\.lp-section h2\{font-size:clamp\(1\.75rem,3\.3vw,2\.75rem\)/);
+const prereservationPage = await readFile(new URL('../web/src/pages/PublicPrereservation.tsx', import.meta.url), 'utf-8');
+assert.match(prereservationPage, /sessionStorage\.getItem\(prereservationSessionKey\(code\)\)/);
+assert.doesNotMatch(prereservationPage, /localStorage|new URLSearchParams\([^)]*email/);
+assert.match(prereservationPage, /!offer\.available/);
+assert.match(prereservationPage, /No es una compra y no se realizará ningún cargo/);
