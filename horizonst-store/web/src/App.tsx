@@ -6,6 +6,8 @@ import Account from './pages/Account';
 import AdminAudit from './pages/admin/AdminAudit';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCustomers from './pages/admin/AdminCustomers';
+import AdminPrereservations from './pages/admin/AdminPrereservations';
+import AdminPrereservationDetail from './pages/admin/AdminPrereservationDetail';
 import AdminDistributorDetail from './pages/admin/AdminDistributorDetail';
 import AdminDistributors from './pages/admin/AdminDistributors';
 import AdminProducts from './pages/admin/AdminProducts';
@@ -76,6 +78,8 @@ export default function App() {
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/distributors" element={<AdminDistributors />} />
             <Route path="/admin/customers" element={<AdminCustomers />} />
+            <Route path="/admin/prereservations" element={<AdminPrereservations />} />
+            <Route path="/admin/prereservations/:id" element={<AdminPrereservationDetail />} />
             <Route path="/admin/distributors/:id" element={<AdminDistributorDetail />} />
             <Route path="/admin/quotes" element={<AdminQuotes />} />
             <Route path="/admin/quotes/:id" element={<AdminQuoteDetail />} />

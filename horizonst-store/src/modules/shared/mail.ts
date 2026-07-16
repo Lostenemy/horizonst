@@ -29,6 +29,17 @@ export type OrderConfirmationEmailInput = QuoteEmailInput & {
 };
 export type AppccGuideEmailInput = { email: string };
 export type EmailVerificationEmailInput = { email: string; fullName: string; verificationUrl: string; expiresInSeconds: number };
+export type PrereservationEmailInput = {
+  prereservation: { id: string; email: string; code: string; confirmedAt: string | Date };
+  offer: {
+    hardware: { name: string; priceCents: number };
+    webPlan: { name: string; priceCents: number };
+    subtotalCents: number;
+    discountCents: number;
+    taxCents: number;
+    totalCents: number;
+  };
+};
 
 const SMTP_TIMEOUT_MS = 15000;
 const AUTO_FOOTER = 'HorizonST — Este correo ha sido generado automáticamente.';
@@ -38,6 +49,7 @@ const baseUrl = () => env.publicBaseUrl.replace(/\/$/, '');
 const quotesUrl = () => `${baseUrl()}/quotes`;
 const ordersUrl = () => `${baseUrl()}/orders`;
 const adminOrderUrl = (orderId: string) => `${baseUrl()}/admin/orders/${orderId}`;
+const adminPrereservationUrl = (id: string) => `${baseUrl()}/admin/prereservations/${id}`;
 
 const defaultConnector: SmtpConnector = (config) => ({
   socket: config.secure
@@ -256,6 +268,49 @@ export function buildEmailVerificationEmail({ email, fullName, verificationUrl, 
   };
 }
 
+export function buildPrereservationConfirmationEmail({ prereservation, offer }: PrereservationEmailInput): MailContent {
+  const summary = [
+    `Plan Web: ${offer.webPlan.name} (${formatMoney(offer.webPlan.priceCents)})`,
+    `Pack hardware: ${offer.hardware.name} (${formatMoney(offer.hardware.priceCents)})`,
+    `Precio base: ${formatMoney(offer.subtotalCents)}`,
+    `Descuento de prerreserva (5 %): -${formatMoney(offer.discountCents)}`,
+    `IVA: ${formatMoney(offer.taxCents)}`,
+    `Total prerreservado: ${formatMoney(offer.totalCents)}`
+  ];
+  const text = [
+    'Tu prerreserva de HorizonST ha quedado confirmada.', '', ...summary, '',
+    'La campaña es válida hasta el 1 de septiembre de 2026.',
+    'No se ha realizado ningún cobro ni se ha generado un pedido definitivo.',
+    'HorizonST contactará contigo para formalizar la propuesta.', '',
+    'Contacto: comercial@horizonst.es', AUTO_FOOTER
+  ].join('\n');
+  return {
+    to: prereservation.email,
+    subject: `Prerreserva confirmada: ${offer.webPlan.name}`,
+    text,
+    html: textHtml(text)
+  };
+}
+
+export function buildPrereservationCommercialEmail({ prereservation, offer }: PrereservationEmailInput): MailContent {
+  const text = [
+    'Nueva prerreserva pública confirmada.',
+    `Interesado: ${prereservation.email}`,
+    `Oferta: ${prereservation.code}`,
+    `Total: ${formatMoney(offer.totalCents)}`,
+    `Fecha: ${new Date(prereservation.confirmedAt).toISOString()}`,
+    `Identificador: ${prereservation.id}`,
+    `Administración: ${adminPrereservationUrl(prereservation.id)}`,
+    '', AUTO_FOOTER
+  ].join('\n');
+  return {
+    to: env.mail.commercialTo,
+    subject: `Prerreserva confirmada: ${prereservation.code}`,
+    text,
+    html: textHtml(text)
+  };
+}
+
 export async function sendQuoteAvailableEmail(input: QuoteEmailInput) {
   await sendMail(buildQuoteAvailableEmail(input));
 }
@@ -276,6 +331,14 @@ export async function sendAppccGuideEmail(input: AppccGuideEmailInput, deliver: 
 
 export async function sendEmailVerificationEmail(input: EmailVerificationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
   await deliver(buildEmailVerificationEmail(input));
+}
+
+export async function sendPrereservationConfirmationEmail(input: PrereservationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
+  await deliver(buildPrereservationConfirmationEmail(input));
+}
+
+export async function sendPrereservationCommercialEmail(input: PrereservationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
+  await deliver(buildPrereservationCommercialEmail(input));
 }
 
 export const sanitizeMailError = (error: unknown, mail: Pick<StoreMailConfig, 'user' | 'password'> = env.mail) => {

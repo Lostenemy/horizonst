@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
 import { createOpaqueToken, hashToken } from '../auth/token.js';
 import {
+  sanitizeMailError,
+  sendPrereservationCommercialEmail,
+  sendPrereservationConfirmationEmail,
+  type PrereservationEmailInput
+} from '../shared/mail.js';
+import {
   calculatePrereservationOffer,
   isPrereservationCampaignActive,
   PRERESERVATION_ACCESS_SECONDS,
@@ -18,7 +24,14 @@ type QueryResult = { rows: any[] };
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
 type QueryClient = Queryable & { release: () => void };
 type TransactionPool = Queryable & { connect: () => Promise<QueryClient> };
-export type PrereservationRouterDependencies = { pool?: TransactionPool; now?: () => number; createToken?: () => string };
+export type PrereservationRouterDependencies = {
+  pool?: TransactionPool;
+  now?: () => number;
+  createToken?: () => string;
+  sendConfirmationEmail?: (input: PrereservationEmailInput) => Promise<void>;
+  sendCommercialEmail?: (input: PrereservationEmailInput) => Promise<void>;
+  logMailError?: (event: string, prereservationId: string, error: string) => void;
+};
 
 const accessSchema = z.object({
   email: z.string().trim().email().max(320),
@@ -38,6 +51,9 @@ export const createPrereservationRouter = (dependencies: PrereservationRouterDep
   const pool = dependencies.pool ?? defaultPool;
   const now = dependencies.now ?? Date.now;
   const createToken = dependencies.createToken ?? createOpaqueToken;
+  const sendConfirmationEmail = dependencies.sendConfirmationEmail ?? sendPrereservationConfirmationEmail;
+  const sendCommercialEmail = dependencies.sendCommercialEmail ?? sendPrereservationCommercialEmail;
+  const logMailError = dependencies.logMailError ?? ((event, prereservationId, error) => console.error('prereservation_mail_failed', { event, prereservationId, error }));
   const attempts = new Map<string, number[]>();
   const consumeRate = (key: string, limit: number, current: number) => {
     if (attempts.size >= 5000) {
@@ -51,8 +67,8 @@ export const createPrereservationRouter = (dependencies: PrereservationRouterDep
     attempts.set(key, [...recent, current]);
     return true;
   };
-  const loadOffer = async (code: PrereservationCode) => {
-    const catalog = await pool.query(
+  const loadOffer = async (code: PrereservationCode, queryable: Queryable = pool) => {
+    const catalog = await queryable.query(
       `SELECT p.code AS pack_code, p.name AS pack_name, p.price_cents AS pack_price_cents,
               p.tax_rate AS pack_tax_rate, p.is_active AS pack_is_active,
               s.code AS plan_code, s.name AS plan_name, s.annual_price_cents AS plan_price_cents,
@@ -143,27 +159,70 @@ export const createPrereservationRouter = (dependencies: PrereservationRouterDep
   });
 
   router.post('/confirm', async (req, res, next) => {
+    let client: QueryClient | null = null;
     try {
       const { code } = codeSchema.parse(req.body ?? {});
       if (!isPrereservationCampaignActive(now())) return res.status(410).json({ error: 'Prereservation campaign has ended' });
       const token = bearerToken(req.header('authorization'));
       if (!token) return res.status(401).json({ error: 'Invalid or expired prereservation access' });
-      const matched = await pool.query(
-        `SELECT id, confirmed_at FROM store.public_prereservations
-         WHERE access_token_hash = $1 AND campaign_code = $2 AND offer_code = $3 AND access_expires_at > now()`,
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const matched = await client.query(
+        `SELECT id, email, confirmed_at FROM store.public_prereservations
+         WHERE access_token_hash = $1 AND campaign_code = $2 AND offer_code = $3 AND access_expires_at > now()
+         FOR UPDATE`,
         [hashToken(token), PRERESERVATION_CAMPAIGN, code]
       );
-      if (!matched.rows[0]) return res.status(401).json({ error: 'Invalid or expired prereservation access' });
-      const offer = await loadOffer(code);
-      if (!offer.available) return res.status(409).json({ error: 'Prereservation offer requires commercial contact' });
+      if (!matched.rows[0]) { await client.query('ROLLBACK'); client.release(); client = null; return res.status(401).json({ error: 'Invalid or expired prereservation access' }); }
+      const offer = await loadOffer(code, client);
+      if (!offer.available) { await client.query('ROLLBACK'); client.release(); client = null; return res.status(409).json({ error: 'Prereservation offer requires commercial contact' }); }
       const alreadyConfirmed = matched.rows[0].confirmed_at != null;
-      const confirmed = await pool.query(
+      const confirmed = await client.query(
         `UPDATE store.public_prereservations SET confirmed_at = COALESCE(confirmed_at, now()), updated_at = now()
          WHERE id = $1 RETURNING confirmed_at`,
         [matched.rows[0].id]
       );
+      await client.query('COMMIT');
+      client.release();
+      client = null;
+
+      if (!alreadyConfirmed) {
+        const prereservation = {
+          id: matched.rows[0].id,
+          email: matched.rows[0].email,
+          code,
+          confirmedAt: confirmed.rows[0].confirmed_at
+        };
+        const mailInput: PrereservationEmailInput = { prereservation, offer };
+        const safeMailError = (error: unknown) => sanitizeMailError(error).replaceAll(prereservation.email, '[redacted]');
+        const deliver = async (kind: 'confirmation' | 'commercial', send: () => Promise<void>) => {
+          try {
+            await send();
+          } catch (error) {
+            logMailError(kind, prereservation.id, safeMailError(error));
+            await pool.query(
+              kind === 'confirmation'
+                ? `UPDATE store.public_prereservations SET confirmation_email_last_error_at = now(), confirmation_email_attempts = confirmation_email_attempts + 1 WHERE id = $1 AND confirmation_email_sent_at IS NULL`
+                : `UPDATE store.public_prereservations SET commercial_email_last_error_at = now(), commercial_email_attempts = commercial_email_attempts + 1 WHERE id = $1 AND commercial_email_sent_at IS NULL`,
+              [prereservation.id]
+            ).catch((recordError) => logMailError(`${kind}_status`, prereservation.id, safeMailError(recordError)));
+            return;
+          }
+          await pool.query(
+            kind === 'confirmation'
+              ? `UPDATE store.public_prereservations SET confirmation_email_sent_at = now(), confirmation_email_last_error_at = NULL, confirmation_email_attempts = confirmation_email_attempts + 1 WHERE id = $1 AND confirmation_email_sent_at IS NULL`
+              : `UPDATE store.public_prereservations SET commercial_email_sent_at = now(), commercial_email_last_error_at = NULL, commercial_email_attempts = commercial_email_attempts + 1 WHERE id = $1 AND commercial_email_sent_at IS NULL`,
+            [prereservation.id]
+          ).catch((recordError) => logMailError(`${kind}_status`, prereservation.id, safeMailError(recordError)));
+        };
+        await deliver('confirmation', () => sendConfirmationEmail(mailInput));
+        await deliver('commercial', () => sendCommercialEmail(mailInput));
+      }
       return res.json({ confirmed: true, alreadyConfirmed, code, confirmedAt: confirmed.rows[0].confirmed_at });
-    } catch (error) { return next(error); }
+    } catch (error) {
+      if (client) { await client.query('ROLLBACK').catch(() => undefined); client.release(); }
+      return next(error);
+    }
   });
 
   return router;

@@ -60,10 +60,10 @@ const pool = {
       const value = prices[code];
       return { rows: value ? [{ pack_code: code, pack_name: `Pack ${code}`, pack_price_cents: value.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: code, plan_name: code, plan_price_cents: value.plan, plan_tax_rate: '21.00', plan_is_active: true }] : [] };
     }
-    if (sql.includes('SELECT id, confirmed_at FROM store.public_prereservations')) {
+    if (sql.includes('SELECT id, email, confirmed_at FROM store.public_prereservations')) {
       const [tokenHash, campaign, code] = params as string[];
       const row = [...stored.values()].find((value) => value.tokenHash === tokenHash && value.code === code && campaign === PRERESERVATION_CAMPAIGN);
-      return { rows: row ? [{ id: row.id, confirmed_at: row.confirmedAt }] : [] };
+      return { rows: row ? [{ id: row.id, email: row.email, confirmed_at: row.confirmedAt }] : [] };
     }
     if (sql.includes('UPDATE store.public_prereservations SET confirmed_at')) {
       const row = [...stored.values()].find((value) => value.id === params[0]);
@@ -95,7 +95,7 @@ const pool = {
           stored.set(key, { id: previous?.id ?? `record-${stored.size + 1}`, leadId, email, code, tokenHash, confirmedAt: previous?.confirmedAt ?? null });
           return { rows: [{ id: stored.get(key)!.id }] };
         }
-        return { rows: [] };
+        return pool.query(sql, params);
       },
       release() { return undefined; }
     };
@@ -104,10 +104,18 @@ const pool = {
 
 const tokens = ['s'.repeat(43), 'p'.repeat(43), 'e'.repeat(43)];
 let tokenIndex = 0;
+const confirmationEmails: any[] = [];
+const commercialEmails: any[] = [];
 const app = express();
 configureTrustProxy(app);
 app.use(express.json());
-app.use('/api/public/prereservation', createPrereservationRouter({ pool, now: () => Date.parse('2026-08-01T10:00:00Z'), createToken: () => tokens[tokenIndex++] ?? 'r'.repeat(43) }));
+app.use('/api/public/prereservation', createPrereservationRouter({
+  pool,
+  now: () => Date.parse('2026-08-01T10:00:00Z'),
+  createToken: () => tokens[tokenIndex++] ?? 'r'.repeat(43),
+  sendConfirmationEmail: async (input) => { confirmationEmails.push({ input, callIndex: sqlCalls.length }); },
+  sendCommercialEmail: async (input) => { commercialEmails.push({ input, callIndex: sqlCalls.length }); }
+}));
 app.use((error: unknown, _req: unknown, res: express.Response, _next: unknown) => error instanceof ZodError ? res.status(400).json({ error: 'Validation error' }) : res.status(500).json({ error: 'Internal server error' }));
 
 const request = async (path: string, options: RequestInit = {}) => {
@@ -167,16 +175,63 @@ assert.equal((await request('/api/public/prereservation/offer?code=professional'
 const confirmation = await request('/api/public/prereservation/confirm', { method: 'POST', headers: { Authorization: `Bearer ${accessTokens.get('professional')}` }, body: JSON.stringify({ code: 'professional' }) });
 assert.equal(confirmation.status, 200);
 assert.equal((await confirmation.json() as any).alreadyConfirmed, false);
+assert.equal(confirmationEmails.length, 1, 'the initial confirmation sends one customer email');
+assert.equal(commercialEmails.length, 1, 'the initial confirmation sends one commercial notification');
+assert.equal(confirmationEmails[0].input.prereservation.code, 'professional');
+const professionalOffer = calculatePrereservationOffer('professional', component('professional', prices.professional.pack), component('professional', prices.professional.plan));
+assert.equal(professionalOffer.available, true);
+if (professionalOffer.available) assert.equal(confirmationEmails[0].input.offer.totalCents, professionalOffer.totalCents);
+const confirmationCommitIndex = sqlCalls.findLastIndex((call) => call.sql === 'COMMIT');
+assert.ok(confirmationCommitIndex < confirmationEmails[0].callIndex, 'customer email is sent after confirmation commit');
+assert.ok(confirmationCommitIndex < commercialEmails[0].callIndex, 'commercial email is sent after confirmation commit');
+assert.ok(sqlCalls.some((call) => call.sql.includes('confirmation_email_sent_at = now()')), 'successful customer delivery is persisted');
+assert.ok(sqlCalls.some((call) => call.sql.includes('commercial_email_sent_at = now()')), 'successful commercial delivery is persisted');
 const repeatedConfirmation = await request('/api/public/prereservation/confirm', { method: 'POST', headers: { Authorization: `Bearer ${accessTokens.get('professional')}` }, body: JSON.stringify({ code: 'professional' }) });
 assert.equal((await repeatedConfirmation.json() as any).alreadyConfirmed, true, 'confirmation is idempotent');
+assert.equal(confirmationEmails.length, 1, 'repeating confirmation does not resend the customer email');
+assert.equal(commercialEmails.length, 1, 'repeating confirmation does not duplicate the commercial notification');
 assert.equal((await request('/api/public/prereservation/confirm', { method: 'POST', headers: { Authorization: `Bearer ${accessTokens.get('professional')}` }, body: JSON.stringify({ code: 'starter' }) })).status, 401, 'confirmation code cannot be manipulated');
+
+const failedMailLogs: any[] = [];
+const failedMailCommercial: any[] = [];
+const failedMailApp = express();
+failedMailApp.use(express.json());
+failedMailApp.use('/api/public/prereservation', createPrereservationRouter({
+  pool,
+  now: () => Date.parse('2026-08-01T10:00:00Z'),
+  sendConfirmationEmail: async () => { throw new Error('smtp failed for person@example.test'); },
+  sendCommercialEmail: async (input) => { failedMailCommercial.push(input); },
+  logMailError: (event, prereservationId, error) => failedMailLogs.push({ event, prereservationId, error })
+}));
+failedMailApp.use((_error: unknown, _req: unknown, res: express.Response, _next: unknown) => res.status(500).json({ error: 'Internal server error' }));
+const failedMailServer = failedMailApp.listen(0);
+try {
+  const address = failedMailServer.address(); assert.ok(address && typeof address === 'object');
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/public/prereservation/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessTokens.get('starter')}` }, body: JSON.stringify({ code: 'starter' }) });
+  assert.equal(response.status, 200, 'SMTP failure does not roll back a persisted confirmation');
+  assert.equal((await response.json() as any).confirmed, true);
+} finally { await new Promise<void>((resolve, reject) => failedMailServer.close((error) => error ? reject(error) : resolve())); }
+assert.ok([...stored.values()].find((row) => row.code === 'starter')?.confirmedAt, 'the reservation remains confirmed after SMTP failure');
+assert.equal(failedMailCommercial.length, 1, 'commercial notification is attempted independently after customer SMTP failure');
+assert.equal(failedMailLogs.length, 1);
+assert.doesNotMatch(JSON.stringify(failedMailLogs), /person@example\.test|[spe]{43}/, 'mail failure logs expose neither customer email nor opaque tokens');
+assert.ok(sqlCalls.some((call) => call.sql.includes('confirmation_email_last_error_at = now()')), 'customer SMTP failure state is persisted without rollback');
 
 const unavailablePool = {
   async query(sql: string, params: unknown[] = []) {
     if (sql.includes('FROM (SELECT $1::text AS code)')) return { rows: [{ pack_code: 'enterprise', pack_name: 'Enterprise', pack_price_cents: prices.enterprise.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: 'enterprise', plan_name: 'Enterprise', plan_price_cents: null, plan_tax_rate: '21.00', plan_is_active: true }] };
     return pool.query(sql, params);
   },
-  connect: () => pool.connect()
+  async connect() {
+    const client = await pool.connect();
+    return {
+      async query(sql: string, params: unknown[] = []) {
+        if (sql.includes('FROM (SELECT $1::text AS code)')) return { rows: [{ pack_code: 'enterprise', pack_name: 'Enterprise', pack_price_cents: prices.enterprise.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: 'enterprise', plan_name: 'Enterprise', plan_price_cents: null, plan_tax_rate: '21.00', plan_is_active: true }] };
+        return client.query(sql, params);
+      },
+      release: () => client.release()
+    };
+  }
 };
 const unavailableApp = express();
 unavailableApp.use(express.json());
@@ -269,7 +324,8 @@ try {
 } finally { await new Promise<void>((resolve, reject) => expiredServer.close((error) => error ? reject(error) : resolve())); }
 
 const routerSource = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/modules/prereservation/prereservation.routes.ts', import.meta.url), 'utf8'));
-assert.doesNotMatch(routerSource, /console\.(log|error)/, 'tokens and emails are not written to logs');
+assert.doesNotMatch(routerSource, /console\.log/);
+assert.match(routerSource, /console\.error\('prereservation_mail_failed', \{ event, prereservationId, error \}\)/, 'mail logs contain only the event, reservation id and sanitized error');
 assert.match(routerSource, /consumeRate\(`email:\$\{email\}:\$\{input\.code\}`,[\s\S]*consumeRate\(`ip:\$\{req\.ip\}`/, 'access attempts are independently rate limited by email and trusted req.ip');
 assert.match(routerSource, /LEFT JOIN store\.packs p ON p\.code = requested\.code/);
 assert.match(routerSource, /LEFT JOIN store\.saas_plans s ON s\.code = requested\.code/, 'pack and plan are loaded exclusively from the same selected code');

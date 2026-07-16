@@ -83,6 +83,7 @@ function GuideForm() {
 export function PublicHome() {
   return <main className="public-landing"><PublicNav /><section className="lp-hero"><p className="eyebrow">Seguridad en frío extremo</p><h1>Supervisa mejor a quienes trabajan en cámaras congeladoras.</h1><p>Controla permanencias, recibe alertas y conserva un historial operativo para actuar con mayor rapidez.</p><div className="actions"><a className="btn" href="#guia">Recibir la guía</a><a className="btn ghost" href="/info-faqs">Cómo funciona</a></div></section>
     <section className="lp-section lp-intro"><p className="eyebrow">Una operación más preparada</p><h2>Visibilidad cuando más importa.</h2><p>HorizonST ayuda a organizar el control de accesos y tiempos de permanencia mediante tecnologías inalámbricas, con alertas y trazabilidad pensadas para el equipo responsable.</p></section>
+    <section className="lp-section lp-success-case" aria-labelledby="horneo-case-title"><div><p className="eyebrow">Caso de éxito</p><h2 id="horneo-case-title">Horneo</h2><p>Horneo confía en HorizonST para apoyar la supervisión y el control de sus operaciones.</p></div><img src="/images/casos-exito/horneo.png" alt="Logotipo de Horneo" width="320" height="320" loading="lazy" /></section>
     <section id="guia" className="lp-section"><GuideForm /></section>
     <section className="lp-section lp-plans-cta"><p>¿Quieres conocer las soluciones disponibles?</p><h2>Consulta los planes de HorizonST.</h2><a className="btn" href="/planes">Ver planes</a></section><PublicFooter /></main>;
 }
