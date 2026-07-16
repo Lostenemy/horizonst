@@ -55,6 +55,7 @@ export const createServer = (staticRoot = webDist) => {
   app.use('/api/admin', adminCatalogRouter);
   app.use('/api/admin', adminCustomersRouter);
   app.use('/api/admin', adminPrereservationsRouter);
+  app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found' }));
   app.get('/recursos/guia-appcc-2026.pdf', (_req, res, next) => {
     res.sendFile(guidePath, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="guia-appcc-2026-horizonst.pdf"' } }, (error) => error ? next(error) : undefined);
   });
