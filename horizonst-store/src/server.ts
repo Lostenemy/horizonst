@@ -5,6 +5,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { ZodError } from 'zod';
 import { env } from './config/env.js';
+import { configureTrustProxy } from './config/trust-proxy.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { catalogRouter } from './modules/catalog/catalog.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
@@ -27,6 +28,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
 export const createServer = (staticRoot = webDist) => {
   const app = express();
+  configureTrustProxy(app);
   const guidePath = path.join(staticRoot, 'recursos', 'guia-appcc-2026.pdf');
 
   app.use(helmet({ contentSecurityPolicy: false }));

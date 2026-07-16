@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { isIP } from 'node:net';
 import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
 import { createOpaqueToken, hashToken } from '../auth/token.js';
@@ -9,6 +8,7 @@ import {
   PRERESERVATION_ACCESS_SECONDS,
   PRERESERVATION_CAMPAIGN,
   PRERESERVATION_END_AT,
+  PUBLIC_PRERESERVATION_SOURCE,
   prereservationCodeSchema,
   prereservationCodes,
   type PrereservationCode
@@ -16,7 +16,9 @@ import {
 
 type QueryResult = { rows: any[] };
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
-export type PrereservationRouterDependencies = { pool?: Queryable; now?: () => number; createToken?: () => string };
+type QueryClient = Queryable & { release: () => void };
+type TransactionPool = Queryable & { connect: () => Promise<QueryClient> };
+export type PrereservationRouterDependencies = { pool?: TransactionPool; now?: () => number; createToken?: () => string };
 
 const accessSchema = z.object({
   email: z.string().trim().email().max(320),
@@ -29,11 +31,6 @@ const codeSchema = z.object({ code: prereservationCodeSchema }).strict();
 const bearerToken = (authorization?: string): string | null => {
   const match = /^Bearer ([A-Za-z0-9_-]{32,})$/.exec(authorization ?? '');
   return match?.[1] ?? null;
-};
-
-const requestIp = (req: { ip?: string; header: (name: string) => string | undefined }) => {
-  const forwarded = req.header('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwarded && isIP(forwarded) ? forwarded : (req.ip ?? 'unknown');
 };
 
 export const createPrereservationRouter = (dependencies: PrereservationRouterDependencies = {}) => {
@@ -84,26 +81,45 @@ export const createPrereservationRouter = (dependencies: PrereservationRouterDep
       if (input.website) return res.status(202).json({ ok: true });
       const email = input.email.trim().toLowerCase();
       const current = now();
-      if (!consumeRate(`email:${email}:${input.code}`, 5, current) || !consumeRate(`ip:${requestIp(req)}`, 20, current)) {
+      if (!consumeRate(`email:${email}:${input.code}`, 5, current) || !consumeRate(`ip:${req.ip}`, 20, current)) {
         return res.status(429).json({ error: 'Too many requests' });
       }
 
       const token = createToken();
       const expiresAt = new Date(now() + PRERESERVATION_ACCESS_SECONDS * 1000);
-      await pool.query(
-        `INSERT INTO store.public_prereservations
-           (email, campaign_code, offer_code, privacy_accepted, privacy_accepted_at, access_token_hash, access_expires_at)
-         VALUES ($1, $2, $3, $4, now(), $5, $6)
-         ON CONFLICT (email, campaign_code, offer_code) DO UPDATE SET
-           privacy_accepted = EXCLUDED.privacy_accepted,
-           privacy_accepted_at = now(),
-           access_token_hash = EXCLUDED.access_token_hash,
-           access_expires_at = EXCLUDED.access_expires_at,
-           last_interest_at = now(),
-           updated_at = now()
-         RETURNING id`,
-        [email, PRERESERVATION_CAMPAIGN, input.code, input.privacyAccepted, hashToken(token), expiresAt]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const lead = await client.query(
+          `INSERT INTO store.leads
+             (source, full_name, email, interest, privacy_accepted, privacy_accepted_at, campaign_code, offer_code)
+           VALUES ($1, '', $2, 'Prerreserva pública 2026', $5, now(), $3, $4)
+           ON CONFLICT (lower(email), campaign_code, offer_code) WHERE source = 'public_prereservation_2026'
+           DO UPDATE SET privacy_accepted = EXCLUDED.privacy_accepted, privacy_accepted_at = now(),
+                         interest = EXCLUDED.interest, updated_at = now()
+           RETURNING id`,
+          [PUBLIC_PRERESERVATION_SOURCE, email, PRERESERVATION_CAMPAIGN, input.code, input.privacyAccepted]
+        );
+        await client.query(
+          `INSERT INTO store.public_prereservations
+             (lead_id, email, campaign_code, offer_code, privacy_accepted, privacy_accepted_at, access_token_hash, access_expires_at)
+           VALUES ($1, $2, $3, $4, $5, now(), $6, $7)
+           ON CONFLICT (email, campaign_code, offer_code) DO UPDATE SET
+             lead_id = EXCLUDED.lead_id,
+             privacy_accepted = EXCLUDED.privacy_accepted,
+             privacy_accepted_at = now(),
+             access_token_hash = EXCLUDED.access_token_hash,
+             access_expires_at = EXCLUDED.access_expires_at,
+             last_interest_at = now(),
+             updated_at = now()
+           RETURNING id`,
+          [lead.rows[0].id, email, PRERESERVATION_CAMPAIGN, input.code, input.privacyAccepted, hashToken(token), expiresAt]
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally { client.release(); }
       return res.status(201).json({ accessToken: token, code: input.code, expiresAt: expiresAt.toISOString() });
     } catch (error) { return next(error); }
   });

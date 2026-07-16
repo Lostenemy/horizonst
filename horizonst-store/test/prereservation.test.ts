@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import express from 'express';
 import { ZodError } from 'zod';
+import { configureTrustProxy } from '../src/config/trust-proxy.js';
 import { hashToken } from '../src/modules/auth/token.js';
 import { createPrereservationRouter } from '../src/modules/prereservation/prereservation.routes.js';
 import { calculatePrereservationOffer, PRERESERVATION_CAMPAIGN, prereservationCodes } from '../src/modules/prereservation/prereservation.service.js';
@@ -42,20 +43,14 @@ if (mixedTaxOffer.available) {
   assert.equal(mixedTaxOffer.totalCents, 33440);
 }
 
-type Stored = { id: string; email: string; code: string; tokenHash: string; confirmedAt: string | null };
+type Stored = { id: string; leadId: string; email: string; code: string; tokenHash: string; confirmedAt: string | null };
+type Lead = { id: string; email: string; code: string; source: string };
 const stored = new Map<string, Stored>();
+const leads = new Map<string, Lead>();
 const sqlCalls: Array<{ sql: string; params?: unknown[] }> = [];
 const pool = {
   async query(sql: string, params: unknown[] = []) {
     sqlCalls.push({ sql, params });
-    if (sql.includes('INSERT INTO store.public_prereservations')) {
-      const [email, campaign, code, , tokenHash] = params as string[];
-      assert.equal(campaign, PRERESERVATION_CAMPAIGN);
-      const key = `${email}:${code}`;
-      const previous = stored.get(key);
-      stored.set(key, { id: previous?.id ?? `record-${stored.size + 1}`, email, code, tokenHash, confirmedAt: previous?.confirmedAt ?? null });
-      return { rows: [{ id: stored.get(key)!.id }] };
-    }
     if (sql.includes('SELECT id FROM store.public_prereservations')) {
       const [tokenHash, campaign, code] = params as string[];
       return { rows: [...stored.values()].filter((row) => row.tokenHash === tokenHash && row.code === code && campaign === PRERESERVATION_CAMPAIGN).map((row) => ({ id: row.id })) };
@@ -76,12 +71,41 @@ const pool = {
       return { rows: row ? [{ confirmed_at: row.confirmedAt }] : [] };
     }
     return { rows: [] };
+  },
+  async connect() {
+    return {
+      query: async (sql: string, params: unknown[] = []) => {
+        sqlCalls.push({ sql, params });
+        if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
+        if (sql.includes('INSERT INTO store.leads')) {
+          const [source, email, campaign, code] = params as string[];
+          assert.equal(source, 'public_prereservation_2026');
+          assert.equal(campaign, PRERESERVATION_CAMPAIGN);
+          const key = `${email}:${code}`;
+          const previous = leads.get(key);
+          const lead = { id: previous?.id ?? `lead-${leads.size + 1}`, email, code, source };
+          leads.set(key, lead);
+          return { rows: [{ id: lead.id }] };
+        }
+        if (sql.includes('INSERT INTO store.public_prereservations')) {
+          const [leadId, email, campaign, code, , tokenHash] = params as string[];
+          assert.equal(campaign, PRERESERVATION_CAMPAIGN);
+          const key = `${email}:${code}`;
+          const previous = stored.get(key);
+          stored.set(key, { id: previous?.id ?? `record-${stored.size + 1}`, leadId, email, code, tokenHash, confirmedAt: previous?.confirmedAt ?? null });
+          return { rows: [{ id: stored.get(key)!.id }] };
+        }
+        return { rows: [] };
+      },
+      release() { return undefined; }
+    };
   }
 };
 
 const tokens = ['s'.repeat(43), 'p'.repeat(43), 'e'.repeat(43)];
 let tokenIndex = 0;
 const app = express();
+configureTrustProxy(app);
 app.use(express.json());
 app.use('/api/public/prereservation', createPrereservationRouter({ pool, now: () => Date.parse('2026-08-01T10:00:00Z'), createToken: () => tokens[tokenIndex++] ?? 'r'.repeat(43) }));
 app.use((error: unknown, _req: unknown, res: express.Response, _next: unknown) => error instanceof ZodError ? res.status(400).json({ error: 'Validation error' }) : res.status(500).json({ error: 'Internal server error' }));
@@ -108,11 +132,19 @@ for (const code of prereservationCodes) {
   accessTokens.set(code, body.accessToken);
 }
 assert.equal(stored.size, 3, 'the same email can register interest independently in all three levels');
+assert.equal(leads.size, 3, 'the same email creates one general lead for each selected level');
 assert.ok([...stored.values()].every((row) => row.email === 'person@example.test'), 'emails are normalized before persistence');
+assert.deepEqual([...leads.values()].map((lead) => lead.code), ['starter', 'professional', 'enterprise']);
+assert.ok([...stored.values()].every((record) => leads.get(`${record.email}:${record.code}`)?.id === record.leadId), 'each prereservation is linked unambiguously to its lead');
+const leadInsert = sqlCalls.find((call) => call.sql.includes('INSERT INTO store.leads'))!;
+assert.match(leadInsert.sql, /public_prereservation_2026/);
+assert.doesNotMatch(leadInsert.sql, /access_token/);
+assert.ok(!leadInsert.params?.some((value) => value === hashToken(accessTokens.get('starter')!)), 'access token hashes are never stored in leads');
 
 const repeated = await request('/api/public/prereservation/access', { method: 'POST', body: JSON.stringify({ email: 'person@example.test', code: 'starter', privacyAccepted: true }) });
 assert.equal(repeated.status, 201);
 assert.equal(stored.size, 3, 'repeated interest in the same campaign and code is idempotent');
+assert.equal(leads.size, 3, 'repeated interest does not duplicate the general lead');
 assert.match(sqlCalls.find((call) => call.sql.includes('INSERT INTO store.public_prereservations'))!.sql, /ON CONFLICT \(email, campaign_code, offer_code\)/);
 
 assert.equal((await request('/api/public/prereservation/access', { method: 'POST', body: JSON.stringify({ email: 'bad', code: 'starter', privacyAccepted: true }) })).status, 400);
@@ -143,7 +175,8 @@ const unavailablePool = {
   async query(sql: string, params: unknown[] = []) {
     if (sql.includes('FROM (SELECT $1::text AS code)')) return { rows: [{ pack_code: 'enterprise', pack_name: 'Enterprise', pack_price_cents: prices.enterprise.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: 'enterprise', plan_name: 'Enterprise', plan_price_cents: null, plan_tax_rate: '21.00', plan_is_active: true }] };
     return pool.query(sql, params);
-  }
+  },
+  connect: () => pool.connect()
 };
 const unavailableApp = express();
 unavailableApp.use(express.json());
@@ -165,6 +198,65 @@ try {
 for (let index = 0; index < 3; index += 1) assert.equal((await request('/api/public/prereservation/access', { method: 'POST', body: JSON.stringify({ email: 'person@example.test', code: 'starter', privacyAccepted: true }) })).status, 201);
 assert.equal((await request('/api/public/prereservation/access', { method: 'POST', body: JSON.stringify({ email: 'person@example.test', code: 'starter', privacyAccepted: true }) })).status, 429, 'access attempts are rate limited by normalized email, IP and code');
 
+for (let index = 0; index < 20; index += 1) {
+  const response = await request('/api/public/prereservation/access', {
+    method: 'POST',
+    headers: { 'X-Forwarded-For': `203.0.113.${index + 1}, 198.51.100.42` },
+    body: JSON.stringify({ email: `proxy-${index}@example.test`, code: 'professional', privacyAccepted: true })
+  });
+  assert.equal(response.status, 201);
+}
+const spoofedIpLimit = await request('/api/public/prereservation/access', {
+  method: 'POST',
+  headers: { 'X-Forwarded-For': '192.0.2.200, 198.51.100.42' },
+  body: JSON.stringify({ email: 'proxy-final@example.test', code: 'professional', privacyAccepted: true })
+});
+assert.equal(spoofedIpLimit.status, 429, 'changing an arbitrary earlier X-Forwarded-For value does not evade the trusted req.ip limit');
+
+const transactionFailure = async (failOn: 'lead' | 'prereservation') => {
+  const calls: string[] = [];
+  let persistedLead = false; let persistedPrereservation = false;
+  let pendingLead = false; let pendingPrereservation = false;
+  const failingPool = {
+    async query() { return { rows: [] }; },
+    async connect() {
+      return {
+        async query(sql: string) {
+          calls.push(sql);
+          if (sql === 'BEGIN') return { rows: [] };
+          if (sql.includes('INSERT INTO store.leads')) {
+            if (failOn === 'lead') throw new Error('lead write failed');
+            pendingLead = true; return { rows: [{ id: 'lead-test' }] };
+          }
+          if (sql.includes('INSERT INTO store.public_prereservations')) {
+            if (failOn === 'prereservation') throw new Error('prereservation write failed');
+            pendingPrereservation = true; return { rows: [{ id: 'prereservation-test' }] };
+          }
+          if (sql === 'COMMIT') { persistedLead = pendingLead; persistedPrereservation = pendingPrereservation; return { rows: [] }; }
+          if (sql === 'ROLLBACK') { pendingLead = false; pendingPrereservation = false; return { rows: [] }; }
+          return { rows: [] };
+        },
+        release() { return undefined; }
+      };
+    }
+  };
+  const failureApp = express(); failureApp.use(express.json());
+  failureApp.use('/api/public/prereservation', createPrereservationRouter({ pool: failingPool, now: () => Date.parse('2026-08-01T10:00:00Z'), createToken: () => 'f'.repeat(43) }));
+  failureApp.use((_error: unknown, _req: unknown, res: express.Response, _next: unknown) => res.status(500).json({ error: 'Internal server error' }));
+  const server = failureApp.listen(0);
+  try {
+    const address = server.address(); assert.ok(address && typeof address === 'object');
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/public/prereservation/access`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `${failOn}@example.test`, code: 'starter', privacyAccepted: true }) });
+    assert.equal(response.status, 500);
+  } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); }
+  assert.ok(calls.includes('ROLLBACK'), `${failOn} failure rolls the transaction back`);
+  assert.equal(calls.includes('COMMIT'), false);
+  assert.equal(persistedLead, false);
+  assert.equal(persistedPrereservation, false);
+};
+await transactionFailure('lead');
+await transactionFailure('prereservation');
+
 const expiredApp = express();
 expiredApp.use(express.json());
 expiredApp.use('/api/public/prereservation', createPrereservationRouter({ pool, now: () => Date.parse('2026-09-02T00:00:00Z') }));
@@ -178,7 +270,7 @@ try {
 
 const routerSource = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/modules/prereservation/prereservation.routes.ts', import.meta.url), 'utf8'));
 assert.doesNotMatch(routerSource, /console\.(log|error)/, 'tokens and emails are not written to logs');
-assert.match(routerSource, /consumeRate\(`email:\$\{email\}:\$\{input\.code\}`,[\s\S]*consumeRate\(`ip:\$\{requestIp\(req\)\}`/, 'access attempts are independently rate limited by email and IP');
+assert.match(routerSource, /consumeRate\(`email:\$\{email\}:\$\{input\.code\}`,[\s\S]*consumeRate\(`ip:\$\{req\.ip\}`/, 'access attempts are independently rate limited by email and trusted req.ip');
 assert.match(routerSource, /LEFT JOIN store\.packs p ON p\.code = requested\.code/);
 assert.match(routerSource, /LEFT JOIN store\.saas_plans s ON s\.code = requested\.code/, 'pack and plan are loaded exclusively from the same selected code');
 assert.match(routerSource, /access_expires_at > now\(\)/, 'expired access tokens are rejected');

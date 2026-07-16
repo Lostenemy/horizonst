@@ -9,6 +9,18 @@ Servicio privado base para la futura tienda HorizonST en `tienda.horizonst.com.e
 - Servicio Compose: `horizonst_store`
 - Documentos futuros: `/opt/horizonst/store-data/documents` montado en el contenedor en la misma ruta.
 
+### Proxy inverso
+
+Express confía exactamente en un salto de proxy (`trust proxy = 1`), correspondiente al Nginx frontal. Esta política permite usar `req.ip` para límites de peticiones sin confiar en el primer valor arbitrario de `X-Forwarded-For`. El servicio debe continuar publicado únicamente en `127.0.0.1:4020` y Nginx debe conservar estas cabeceras:
+
+```nginx
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+No debe exponerse Express directamente a Internet ni ampliarse la política a `trust proxy = true`.
+
 ## Variables de entorno
 
 | Variable | Descripción | Valor por defecto |
