@@ -13,20 +13,6 @@ const catalogRouter = Router();
 const catalogPool = dependencies.pool ?? defaultPool;
 const catalogAuth = dependencies.authMiddleware ?? requireAuth;
 
-catalogRouter.get('/products', catalogAuth, async (_req, res, next) => {
-  try {
-    const { rows } = await catalogPool.query(
-      `SELECT id, sku, name, description, category, price_cents, tax_rate, is_active
-       FROM store.products
-       WHERE is_active = true
-       ORDER BY name ASC`
-    );
-    res.json({ products: rows });
-  } catch (error) {
-    next(error);
-  }
-});
-
 catalogRouter.get('/saas-plans', async (_req, res, next) => {
   try {
     const { rows } = await catalogPool.query(
@@ -44,7 +30,7 @@ catalogRouter.get('/saas-plans', async (_req, res, next) => {
 catalogRouter.get('/packs', catalogAuth, async (_req, res, next) => {
   try {
     const { rows } = await catalogPool.query(
-      `SELECT p.id, p.code, p.name, p.description, p.price_cents, p.tax_rate, p.is_active, p.presentation_order,
+      `SELECT p.id, p.code, p.name, p.description, p.price_cents, p.tax_rate, p.is_active, p.presentation_order, p.coverage_square_meters,
               COALESCE(json_agg(json_build_object('product_id', product.id, 'name', product.name, 'quantity', pi.quantity, 'presentation_order', pi.presentation_order) ORDER BY pi.presentation_order) FILTER (WHERE pi.id IS NOT NULL), '[]'::json) AS items
        FROM store.packs p
        LEFT JOIN store.pack_items pi ON pi.pack_id = p.id

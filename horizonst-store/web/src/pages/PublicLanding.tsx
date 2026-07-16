@@ -4,6 +4,7 @@ import { customerAccessUrl } from '../lib/domains';
 import { money } from '../lib/money';
 import { isPrereservationCode, prereservationCodes, prereservationEndLabel, prereservationSessionKey, type PrereservationCampaign, type PrereservationCode } from '../lib/prereservation';
 import type { SaasPlan } from '../lib/types';
+import { coverageLabel } from '../lib/coverage';
 
 const publicPlanPresentation: Record<PrereservationCode, { description: string }> = {
   starter: { description: 'Para operaciones que comienzan a digitalizar su supervisión.' },
@@ -39,9 +40,9 @@ export function PublicPlanCards({ plans, loading, error, campaign, onPrereserve 
 }
 
 export const hardwarePacks = [
-  { name: 'Pack Starter', items: ['5 puntos de comunicación inalámbrica', '5 antenas y accesorios de instalación', '1 inyector de alimentación PoE', '10 dispositivos personales inalámbricos con alarma'] },
-  { name: 'Pack Professional', items: ['10 puntos de comunicación inalámbrica', '10 antenas y accesorios de instalación', '2 inyectores de alimentación PoE', '20 dispositivos personales inalámbricos con alarma'] },
-  { name: 'Pack Enterprise', items: ['20 puntos de comunicación inalámbrica', '20 antenas y accesorios de instalación', '4 inyectores de alimentación PoE', '40 dispositivos personales inalámbricos con alarma'] }
+  { name: 'Pack Starter', coverageSquareMeters: 500, items: ['5 puntos de comunicación inalámbrica', '5 antenas y accesorios de instalación', '1 inyector de alimentación PoE', '10 dispositivos personales inalámbricos con alarma'] },
+  { name: 'Pack Professional', coverageSquareMeters: 1000, items: ['10 puntos de comunicación inalámbrica', '10 antenas y accesorios de instalación', '2 inyectores de alimentación PoE', '20 dispositivos personales inalámbricos con alarma'] },
+  { name: 'Pack Enterprise', coverageSquareMeters: 2000, items: ['20 puntos de comunicación inalámbrica', '20 antenas y accesorios de instalación', '4 inyectores de alimentación PoE', '40 dispositivos personales inalámbricos con alarma'] }
 ];
 
 export const faqItems = [
@@ -83,7 +84,7 @@ function GuideForm() {
 export function PublicHome() {
   return <main className="public-landing"><PublicNav /><section className="lp-hero"><p className="eyebrow">Seguridad en frío extremo</p><h1>Supervisa mejor a quienes trabajan en cámaras congeladoras.</h1><p>Controla permanencias, recibe alertas y conserva un historial operativo para actuar con mayor rapidez.</p><div className="actions"><a className="btn" href="#guia">Recibir la guía</a><a className="btn ghost" href="/info-faqs">Cómo funciona</a></div></section>
     <section className="lp-section lp-intro"><p className="eyebrow">Una operación más preparada</p><h2>Visibilidad cuando más importa.</h2><p>HorizonST ayuda a organizar el control de accesos y tiempos de permanencia mediante tecnologías inalámbricas, con alertas y trazabilidad pensadas para el equipo responsable.</p></section>
-    <section className="lp-section lp-success-case" aria-labelledby="horneo-case-title"><div><p className="eyebrow">Caso de éxito</p><h2 id="horneo-case-title">Horneo</h2><p>Horneo confía en HorizonST para apoyar la supervisión y el control de sus operaciones.</p></div><img src="/images/casos-exito/horneo.png" alt="Logotipo de Horneo" width="320" height="320" loading="lazy" /></section>
+    <section className="lp-section lp-success-case" aria-labelledby="horneo-case-title"><div><p className="eyebrow">Caso de éxito</p><h2 id="horneo-case-title">Horneo</h2><p>Horneo ya utiliza HorizonST en una cámara frigorífica de aproximadamente 400 m², donde el sistema ayuda a supervisar la actividad de 10 trabajadores distintos y aporta una visión más clara y centralizada de la operativa diaria.</p></div><img src="/images/casos-exito/horneo.png" alt="Logotipo de Horneo" width="320" height="320" loading="lazy" /></section>
     <section id="guia" className="lp-section"><GuideForm /></section>
     <section className="lp-section lp-plans-cta"><p>¿Quieres conocer las soluciones disponibles?</p><h2>Consulta los planes de HorizonST.</h2><a className="btn" href="/planes">Ver planes</a></section><PublicFooter /></main>;
 }
@@ -165,7 +166,7 @@ export function PublicPlans() {
   }, []);
 
   const openPrereservation = (code: PrereservationCode, trigger: HTMLButtonElement) => { setModalTrigger(trigger); setSelectedCode(code); };
-  return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1>{campaign && <p>Oferta de prerreserva disponible hasta el {prereservationEndLabel(campaign.endAt)}.</p>}<PublicPlanCards plans={plans} loading={loading} error={error} campaign={campaign} onPrereserve={openPrereservation} /><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card" key={pack.name}><h2>{pack.name}</h2><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section>{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={() => setSelectedCode(null)} />}<PublicFooter /></main>;
+  return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1>{campaign && <p>Oferta de prerreserva disponible hasta el {prereservationEndLabel(campaign.endAt)}.</p>}<PublicPlanCards plans={plans} loading={loading} error={error} campaign={campaign} onPrereserve={openPrereservation} /><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card" key={pack.name}><h2>{pack.name}</h2><p><strong>{coverageLabel(pack.coverageSquareMeters)}</strong></p><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section>{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={() => setSelectedCode(null)} />}<PublicFooter /></main>;
 }
 
 export function PublicInfoFaqs() { return <main className="public-landing"><PublicNav /><section className="lp-info-hero"><p className="eyebrow">Información y preguntas frecuentes</p><h1>Todo lo que necesitas saber sobre HorizonST</h1><p>Consulta cómo funciona la solución, qué problemas ayuda a resolver y las respuestas a las dudas más habituales.</p></section>

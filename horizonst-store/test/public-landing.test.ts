@@ -20,6 +20,7 @@ assert.equal(publicMarketingPage('/privacidad'), 'privacy');
 assert.equal(publicMarketingPage('/desconocida'), 'not-found');
 assert.equal(hardwarePacks.length, 3);
 assert.ok(hardwarePacks.every((pack) => pack.items.length === 4));
+assert.deepEqual(hardwarePacks.map((pack) => pack.coverageSquareMeters), [500, 1000, 2000]);
 
 const plan = (code: string, price: number | null, overrides: Partial<SaasPlan> = {}): SaasPlan => ({
   id: `${code}-id`, code, name: code[0].toUpperCase() + code.slice(1), description: null,
@@ -55,10 +56,15 @@ const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', imp
 const horneoLogo = await readFile(new URL('../web/public/images/casos-exito/horneo.png', import.meta.url));
 assert.ok(horneoLogo.length > 0, 'the Horneo logo is stored locally');
 assert.equal(horneoLogo.subarray(1, 4).toString('ascii'), 'PNG', 'the local success-case asset is a PNG');
-assert.match(landing, /Horneo confía en HorizonST para apoyar la supervisión y el control de sus operaciones\./);
+assert.match(landing, /Horneo ya utiliza HorizonST en una cámara frigorífica de aproximadamente 400 m²/);
+assert.match(landing, /10 trabajadores distintos/);
 assert.match(landing, /src="\/images\/casos-exito\/horneo\.png"/);
 assert.match(landing, /alt="Logotipo de Horneo"/);
 assert.doesNotMatch(landing, /horneo\.es\/Media|logo_horneo2\.png/, 'the landing never hotlinks the official image');
+assert.match(landing, /coverageSquareMeters: 500/);
+assert.match(landing, /coverageSquareMeters: 1000/);
+assert.match(landing, /coverageSquareMeters: 2000/);
+assert.match(landing, /coverageLabel\(pack\.coverageSquareMeters\)/, 'public pack cards render their coverage');
 assert.doesNotMatch(landing, />Inicio</); assert.match(landing, /className="lp-brand" href="\/">HorizonST/); assert.match(landing, /INFO\/FAQS/); assert.match(landing, /Acceso clientes/);
 assert.match(landing, /source: 'appcc_guide'/); assert.match(landing, /privacyAccepted/);
 assert.doesNotMatch(landing, /Solicitar demo|source="demo"|\bBLE\b|Gateway BLE|Tag BLE/);
@@ -90,3 +96,11 @@ assert.match(prereservationPage, /sessionStorage\.getItem\(prereservationSession
 assert.doesNotMatch(prereservationPage, /localStorage|new URLSearchParams\([^)]*email/);
 assert.match(prereservationPage, /!offer\.available/);
 assert.match(prereservationPage, /No es una compra y no se realizará ningún cargo/);
+assert.match(prereservationPage, /coverageLabel\(offer\.hardware!\.coverageSquareMeters\)/, 'the prereservation shows current pack coverage');
+const catalogPage = await readFile(new URL('../web/src/pages/Catalog.tsx', import.meta.url), 'utf8');
+assert.match(catalogPage, /coverageLabel\(pack\.coverage_square_meters\)/, 'the private pack catalog renders coverage');
+assert.doesNotMatch(catalogPage, /\/api\/catalog\/products|item_type: 'product'/, 'the private storefront has no individual-product API or purchase action');
+const catalogRouter = await readFile(new URL('../src/modules/catalog/catalog.routes.ts', import.meta.url), 'utf8');
+assert.doesNotMatch(catalogRouter, /catalogRouter\.get\('\/products'/, 'the customer product catalog endpoint no longer exists');
+const adminCatalogRouter = await readFile(new URL('../src/modules/admin/catalog.routes.ts', import.meta.url), 'utf8');
+assert.match(adminCatalogRouter, /adminCatalogRouter\.get\('\/products'/, 'internal product administration is preserved');

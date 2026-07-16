@@ -15,15 +15,17 @@ const prices = {
   professional: { pack: 303003, plan: 40404 },
   enterprise: { pack: 505005, plan: 60606 }
 };
+const coverage = { starter: 500, professional: 1000, enterprise: 2000 };
 
 for (const code of prereservationCodes) {
-  const offer = calculatePrereservationOffer(code, component(code, prices[code].pack), component(code, prices[code].plan));
+  const offer = calculatePrereservationOffer(code, component(code, prices[code].pack, { coverage_square_meters: coverage[code] }), component(code, prices[code].plan));
   assert.equal(offer.available, true, `${code} is calculated when both matching components are active and priced`);
   if (offer.available) {
     const subtotal = prices[code].pack + prices[code].plan;
     assert.equal(offer.subtotalCents, subtotal);
     assert.equal(offer.discountCents, Math.round(subtotal * 5 / 100), `${code} receives its own exact five percent discount`);
     assert.equal(offer.hardware.priceCents, prices[code].pack);
+    assert.equal(offer.hardware.coverageSquareMeters, coverage[code]);
     assert.equal(offer.webPlan.priceCents, prices[code].plan);
     assert.equal(offer.totalCents, offer.discountedSubtotalCents + offer.taxCents);
   }
@@ -58,7 +60,7 @@ const pool = {
     if (sql.includes('FROM (SELECT $1::text AS code)')) {
       const code = params[0] as keyof typeof prices;
       const value = prices[code];
-      return { rows: value ? [{ pack_code: code, pack_name: `Pack ${code}`, pack_price_cents: value.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: code, plan_name: code, plan_price_cents: value.plan, plan_tax_rate: '21.00', plan_is_active: true }] : [] };
+      return { rows: value ? [{ pack_code: code, pack_name: `Pack ${code}`, pack_price_cents: value.pack, coverage_square_meters: coverage[code], pack_tax_rate: '21.00', pack_is_active: true, plan_code: code, plan_name: code, plan_price_cents: value.plan, plan_tax_rate: '21.00', plan_is_active: true }] : [] };
     }
     if (sql.includes('SELECT id, email, confirmed_at FROM store.public_prereservations')) {
       const [tokenHash, campaign, code] = params as string[];
@@ -168,6 +170,7 @@ for (const code of prereservationCodes) {
   const body = await response.json() as any;
   assert.equal(body.offer.code, code);
   assert.equal(body.offer.hardware.priceCents, prices[code].pack);
+  assert.equal(body.offer.hardware.coverageSquareMeters, coverage[code]);
   assert.equal(body.offer.webPlan.priceCents, prices[code].plan);
 }
 

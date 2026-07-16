@@ -11,7 +11,6 @@ cartRouter.use(requireAuth, requireRole('customer', 'distributor', 'admin'));
 const idSchema = z.string().uuid();
 const quantitySchema = z.object({ quantity: z.number().int().positive().max(9999) }).strict();
 export const addItemSchema = z.discriminatedUnion('item_type', [
-  z.object({ item_type: z.literal('product'), product_id: z.string().uuid(), quantity: z.number().int().positive().max(9999) }).strict(),
   z.object({ item_type: z.literal('saas_plan'), saas_plan_id: z.string().uuid(), quantity: z.number().int().positive().max(9999) }).strict(),
   z.object({ item_type: z.literal('pack'), pack_id: z.string().uuid(), quantity: z.number().int().positive().max(9999) }).strict()
 ]);
@@ -31,19 +30,16 @@ cartRouter.post('/items', async (req, res, next) => {
     const quote = await getOrCreateDraftQuote(req.user!.sub, client);
     const discountPercent = await getDistributorDiscountPercent(req.user!.sub, req.user!.role, client);
     let item: any;
-    if (input.item_type === 'product') {
-      const { rows } = await client.query('SELECT id, name, price_cents, tax_rate FROM store.products WHERE id = $1 AND is_active = true', [input.product_id]);
-      if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active product not found' }); return; }
-      item = { product_id: rows[0].id, saas_plan_id: null, pack_id: null, description: rows[0].name, unit_price_cents: rows[0].price_cents, tax_rate: rows[0].tax_rate };
-    } else if (input.item_type === 'saas_plan') {
+    if (input.item_type === 'saas_plan') {
       const { rows } = await client.query('SELECT id, name, annual_price_cents, tax_rate FROM store.saas_plans WHERE id = $1 AND is_active = true', [input.saas_plan_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active web plan not found' }); return; }
       if (!canAutoPriceSaasPlan(rows[0])) { await client.query('ROLLBACK'); res.status(422).json({ error: 'Web plan requires commercial contact' }); return; }
       item = { product_id: null, saas_plan_id: rows[0].id, pack_id: null, description: `Plan web ${rows[0].name}`, unit_price_cents: rows[0].annual_price_cents, tax_rate: rows[0].tax_rate };
     } else {
-      const { rows } = await client.query('SELECT id, name, description, price_cents, tax_rate FROM store.packs WHERE id = $1 AND is_active = true', [input.pack_id]);
+      const { rows } = await client.query('SELECT id, name, description, price_cents, tax_rate, coverage_square_meters FROM store.packs WHERE id = $1 AND is_active = true', [input.pack_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active pack not found' }); return; }
-      item = { product_id: null, saas_plan_id: null, pack_id: rows[0].id, description: rows[0].description ? `${rows[0].name}: ${rows[0].description}` : rows[0].name, unit_price_cents: rows[0].price_cents, tax_rate: rows[0].tax_rate };
+      const coverage = rows[0].coverage_square_meters ? `Cobertura aproximada: hasta ${new Intl.NumberFormat('es-ES').format(rows[0].coverage_square_meters)} m²` : null;
+      item = { product_id: null, saas_plan_id: null, pack_id: rows[0].id, description: [rows[0].name, rows[0].description, coverage].filter(Boolean).join(': '), unit_price_cents: rows[0].price_cents, tax_rate: rows[0].tax_rate };
     }
     const existing = await client.query(`SELECT * FROM store.quote_items WHERE quote_id = $1 AND item_type = $2 AND product_id IS NOT DISTINCT FROM $3 AND saas_plan_id IS NOT DISTINCT FROM $4 AND pack_id IS NOT DISTINCT FROM $5`, [quote.id, input.item_type, item.product_id, item.saas_plan_id, item.pack_id]);
     const quantity = Number(existing.rows[0]?.quantity ?? 0) + input.quantity;

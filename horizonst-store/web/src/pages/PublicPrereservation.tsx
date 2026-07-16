@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { money } from '../lib/money';
 import { prereservationEndLabel, prereservationSessionKey, type PrereservationCode, type PrereservationOffer } from '../lib/prereservation';
 import { PublicNav } from './PublicLanding';
+import { coverageLabel } from '../lib/coverage';
 
 type OfferResponse = { campaign: string; endAt: string; offer: PrereservationOffer };
 
@@ -52,7 +53,7 @@ export default function PublicPrereservation({ code }: { code: PrereservationCod
   return <main className="public-landing"><PublicNav /><section className="lp-section lp-offer"><p className="eyebrow">Prerreserva 2026</p><h1>Oferta {code}</h1><p>Disponible hasta el {prereservationEndLabel(data.endAt)}.</p>
     {!offer.available ? <div className="lp-note"><h2>Configuración personalizada</h2><p>Esta oferta no puede calcularse automáticamente con la configuración actual. Contacta con nuestro equipo comercial.</p><a className="btn" href="mailto:comercial@horizonst.es">Contactar</a></div> : <>
       <div className="lp-offer-lines">
-        <div><span>{offer.hardware!.name}</span><strong>{money(offer.hardware!.priceCents)}</strong></div>
+        <div><span>{offer.hardware!.name}<small>{coverageLabel(offer.hardware!.coverageSquareMeters) ? ` · ${coverageLabel(offer.hardware!.coverageSquareMeters)}` : ''}</small></span><strong>{money(offer.hardware!.priceCents)}</strong></div>
         <div><span>Plan Web {offer.webPlan!.name}</span><strong>{money(offer.webPlan!.priceCents)}</strong></div>
         <div><span>Subtotal</span><strong>{money(offer.subtotalCents)}</strong></div>
         <div className="discount"><span>Descuento 5 %</span><strong>-{money(offer.discountCents)}</strong></div>

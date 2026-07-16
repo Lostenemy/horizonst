@@ -24,13 +24,14 @@ const mailConfig: StoreMailConfig = {
 
 const prereservationInput = {
   prereservation: { id: '33333333-3333-4333-8333-333333333333', email: 'interesado@example.test', code: 'professional', confirmedAt: '2026-08-01T10:00:00.000Z' },
-  offer: { hardware: { name: 'Pack Professional', priceCents: 650000 }, webPlan: { name: 'Professional', priceCents: 80000 }, subtotalCents: 730000, discountCents: 36500, taxCents: 145635, totalCents: 839135 }
+  offer: { hardware: { name: 'Pack Professional', priceCents: 650000, coverageSquareMeters: 1000 }, webPlan: { name: 'Professional', priceCents: 80000 }, subtotalCents: 730000, discountCents: 36500, taxCents: 145635, totalCents: 839135 }
 };
 
 {
   const email = buildPrereservationConfirmationEmail(prereservationInput);
   assert.equal(email.to, 'interesado@example.test');
   assert.match(email.text, /Pack Professional/);
+  assert.match(email.text, /Cobertura aproximada: hasta 1000 m²/);
   assert.match(email.text, /Professional/);
   assert.match(email.text, /5 %/);
   assert.match(email.text, /IVA/);
@@ -39,6 +40,12 @@ const prereservationInput = {
   assert.match(email.text, /ni se ha generado un pedido definitivo/i);
   assert.match(email.text, /HorizonST contactará contigo/);
   assert.doesNotMatch(email.text + email.html, /token|access_token_hash/i);
+  assert.match(email.html, /<!doctype html>/i);
+  assert.match(email.html, /width="100%"/);
+  assert.match(email.html, /style="[^"]+"/);
+  assert.match(email.html, /Contactar con HorizonST/);
+  assert.match(email.html, /mailto:comercial@horizonst\.es/);
+  assert.doesNotMatch(email.html, /<img|src="https?:\/\//i, 'the customer email loads no external resources');
 }
 
 {
@@ -48,6 +55,9 @@ const prereservationInput = {
   assert.match(email.text, /33333333-3333-4333-8333-333333333333/);
   assert.match(email.text, /\/admin\/prereservations\/33333333-3333-4333-8333-333333333333/);
   assert.doesNotMatch(email.text + email.html, /token|access_token_hash/i);
+  assert.match(email.html, /Aviso comercial/);
+  assert.match(email.html, /Consultar en administración/);
+  assert.doesNotMatch(email.html, /<img|src="https?:\/\//i, 'the commercial email loads no external resources');
 }
 
 {

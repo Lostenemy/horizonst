@@ -26,12 +26,13 @@ export type OfferComponent = {
   price_cents: number | null;
   tax_rate: string | number;
   is_active: boolean;
+  coverage_square_meters?: number | null;
 };
 
 export type CalculatedOffer = {
   available: true;
   code: PrereservationCode;
-  hardware: { name: string; priceCents: number; discountCents: number; taxCents: number; taxRate: string | number };
+  hardware: { name: string; priceCents: number; discountCents: number; taxCents: number; taxRate: string | number; coverageSquareMeters: number | null };
   webPlan: { name: string; priceCents: number; discountCents: number; taxCents: number; taxRate: string | number };
   subtotalCents: number;
   discountCents: number;
@@ -70,7 +71,7 @@ export const calculatePrereservationOffer = (
   return {
     available: true,
     code,
-    hardware: { name: pack.name, priceCents: packPrice, discountCents: hardwareDiscountCents, taxCents: hardwareTaxCents, taxRate: pack.tax_rate },
+    hardware: { name: pack.name, priceCents: packPrice, discountCents: hardwareDiscountCents, taxCents: hardwareTaxCents, taxRate: pack.tax_rate, coverageSquareMeters: pack.coverage_square_meters ?? null },
     webPlan: { name: webPlan.name, priceCents: planPrice, discountCents: planDiscountCents, taxCents: planTaxCents, taxRate: webPlan.tax_rate },
     subtotalCents,
     discountCents,

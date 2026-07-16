@@ -34,6 +34,15 @@ assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 120000 }), true, 'enterp
 const starterPack = calculateLineTotals({ quantity: 1, unitPriceCents: 325000, discountPercent: '10.00', taxRate: '21.00' });
 assert.deepEqual(starterPack, { line_subtotal_cents: 325000, line_discount_cents: 32500, line_tax_cents: 61425, line_total_cents: 353925 });
 assert.deepEqual(addItemSchema.parse({ item_type: 'pack', pack_id: '11111111-1111-4111-8111-111111111111', quantity: 1 }), { item_type: 'pack', pack_id: '11111111-1111-4111-8111-111111111111', quantity: 1 });
+assert.equal(addItemSchema.safeParse({ item_type: 'product', product_id: '11111111-1111-4111-8111-111111111111', quantity: 1 }).success, false, 'new individual product lines are rejected');
+
+const cartRouterSource = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/modules/cart/cart.routes.ts', import.meta.url), 'utf8'));
+assert.doesNotMatch(cartRouterSource, /z\.literal\('product'\)|SELECT id, name, price_cents, tax_rate FROM store\.products/, 'the client cart has no product purchase path');
+assert.match(cartRouterSource, /coverage_square_meters/);
+assert.match(cartRouterSource, /Cobertura aproximada: hasta/, 'new pack lines snapshot coverage for carts, quotes and orders');
+
+const orderServiceSource = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/modules/orders/order.service.ts', import.meta.url), 'utf8'));
+assert.match(orderServiceSource, /item_type, product_id, saas_plan_id, pack_id/, 'historical product lines remain copyable into orders');
 
 // Los quote_number draft no deben exponer UUID de usuario.
 const draftNumber = generateDraftQuoteNumber();

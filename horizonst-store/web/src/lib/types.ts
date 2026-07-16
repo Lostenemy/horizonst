@@ -44,6 +44,7 @@ export type Pack = {
   tax_rate: string | number;
   is_active: boolean;
   presentation_order: number;
+  coverage_square_meters: number | null;
   items: Array<{ product_id: string; name: string; quantity: number; presentation_order: number }>;
 };
 

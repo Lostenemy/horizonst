@@ -20,7 +20,7 @@ export type PrereservationOffer = {
   available: boolean;
   code: PrereservationCode;
   contactRequired?: boolean;
-  hardware?: { name: string; priceCents: number; discountCents: number; taxCents: number; taxRate: string | number };
+  hardware?: { name: string; priceCents: number; discountCents: number; taxCents: number; taxRate: string | number; coverageSquareMeters: number | null };
   webPlan?: { name: string; priceCents: number; discountCents: number; taxCents: number; taxRate: string | number };
   subtotalCents?: number;
   discountCents?: number;
