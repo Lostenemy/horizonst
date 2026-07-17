@@ -40,7 +40,7 @@ assert.match(String((PublicPlanCards({ plans: [], loading: true, error: false })
 assert.match(String((PublicPlanCards({ plans: [], loading: false, error: true }) as any).props.children), /No se pudieron cargar los precios/, 'catalog errors remain renderable');
 assert.match(String((PublicPlanCards({ plans: [], loading: false, error: false }) as any).props.children), /No hay planes disponibles/, 'missing expected plans remain renderable');
 const campaignCards = JSON.stringify(PublicPlanCards({
-  plans: [plan('starter', 1), plan('professional', 2), plan('enterprise', 3)], loading: false, error: false,
+  plans: [plan('starter', 1), plan('professional', 2), plan('enterprise', null)], loading: false, error: false,
   campaign: { campaign: 'prereservation_2026', endAt: '2026-09-01T21:59:59.999Z', active: true, codes: ['starter', 'professional', 'enterprise'] },
   onPrereserve: () => undefined
 }));

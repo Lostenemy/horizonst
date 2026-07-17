@@ -36,7 +36,8 @@ export const getDistributorDiscountPercent = async (userId: string, role: UserRo
 export const generateQuoteNumber = (): string => `Q-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 export const generateDraftQuoteNumber = (): string => `DRAFT-${randomUUID()}`;
 export const canSubmitCart = (itemCount: number): boolean => itemCount > 0;
-export const canAutoPriceSaasPlan = (plan: { annual_price_cents: number | null }): boolean => plan.annual_price_cents !== null;
+export const canAutoPriceSaasPlan = (plan: { annual_price_cents: number | null; is_enterprise: boolean }): boolean =>
+  plan.is_enterprise !== true && plan.annual_price_cents !== null;
 
 export const getOrCreateDraftQuote = async (userId: string, client: any = pool) => {
   const existing = await client.query('SELECT * FROM store.quotes WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT 1', [userId, 'draft']);
