@@ -230,9 +230,12 @@ A helper script is included at `scripts/create-database.sql`.
 ## Web MVP integrado
 
 - UI servida por el propio servicio en `/` (estáticos en `/web/*`).
-- Credencial inicial obligatoria:
-  - usuario: `super`
-  - contraseña inicial: `20025@BLELoRa?`
+- El superadministrador inicial debe crearse mediante un procedimiento separado de bootstrap o administración:
+  - proporcionar el correo y una contraseña generada específicamente para el entorno mediante variables de entorno o entrada interactiva;
+  - almacenar únicamente un hash bcrypt y no guardar credenciales ni secretos en Git;
+  - abortar si el usuario ya existe, salvo confirmación administrativa explícita;
+  - exigir el cambio inmediato de la contraseña inicial.
+- Cualquier credencial inicial compartida anteriormente debe considerarse comprometida y no debe reutilizarse.
 - Endpoints funcionales añadidos para MVP:
   - Auth: `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/forgot-password`, `/auth/reset-password`
     - Recuperación de contraseña con correo SMTP real (token + enlace); no depende de logs manuales.
