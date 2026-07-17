@@ -44,17 +44,3 @@ SELECT a.*, w.full_name AS worker_name, t.tag_uid AS tag_mac
 FROM worker_tag_assignments a
 JOIN workers w ON w.id = a.worker_id
 JOIN tags t ON t.id = a.tag_id;
-
-INSERT INTO app_users(first_name, last_name, email, phone, dni, role, status, password_hash, shift)
-VALUES(
-  'Super',
-  'Administrador',
-  'super@horizonst.local',
-  NULL,
-  'SUPER0001',
-  'superadministrador',
-  'active',
-  crypt('20025@BLELoRa?', gen_salt('bf')),
-  'general'
-)
-ON CONFLICT (email) DO NOTHING;
