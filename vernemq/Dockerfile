@@ -28,4 +28,12 @@ RUN mkdir -p /vernemq/share/lua \
   && (find /vernemq/.luarocks -type f \( -name "bcrypt.so" -o -name "*bcrypt*.so" \) -exec cp -v {} /vernemq/share/lua/ \; || true) \
   && ls -la /vernemq/share/lua
 
+COPY --chown=vernemq:vernemq vernemq/vernemq.conf /opt/horizonst/vernemq.conf
+COPY --chown=vernemq:vernemq vernemq/start-vernemq.sh /usr/local/bin/start-horizonst-vernemq
+COPY --chown=vernemq:vernemq vernemq/validate-runtime.sh /usr/local/bin/validate-vernemq-runtime
+
+RUN chmod 0755 /usr/local/bin/start-horizonst-vernemq /usr/local/bin/validate-vernemq-runtime
+
 USER vernemq
+
+CMD ["/usr/local/bin/start-horizonst-vernemq"]

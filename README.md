@@ -130,6 +130,10 @@ El script `scripts/migrate-mqtt.sh` también crea/actualiza de forma idempotente
 
 Esta instalación utiliza una imagen Docker personalizada de VerneMQ para incluir el módulo Lua `bcrypt`, requerido por el script oficial `auth/postgres.lua`.
 
+La configuración de producción, la precedencia del entrypoint, las variables
+PostgreSQL y las comprobaciones seguras se describen en
+[`docs/vernemq-postgresql-production.md`](docs/vernemq-postgresql-production.md).
+
 ```bash
 docker compose build vernemq
 docker compose up -d vernemq
