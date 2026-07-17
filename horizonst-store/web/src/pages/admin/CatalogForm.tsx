@@ -52,7 +52,7 @@ function PlanFields({ value }: { value: SaasPlanFormValue }) {
     <input name="annual_price_cents" type="number" defaultValue={value.annual_price_cents ?? ''} placeholder="Precio anual céntimos" />
     <input name="max_tags" type="number" defaultValue={value.max_tags ?? ''} placeholder="Max tags" />
     <input name="max_gateways" type="number" defaultValue={value.max_gateways ?? ''} placeholder="Max gateways" />
-    <label><input name="is_enterprise" type="checkbox" defaultChecked={value.is_enterprise ?? false} /> Enterprise sin precio automático</label>
+    <label><input name="is_enterprise" type="checkbox" defaultChecked={value.is_enterprise ?? false} /> Requiere precio y presupuesto manual</label>
   </>;
 }
 

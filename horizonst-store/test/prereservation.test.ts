@@ -35,7 +35,14 @@ assert.equal(calculatePrereservationOffer('starter', component('professional', 1
 assert.equal(calculatePrereservationOffer('enterprise', component('enterprise', 0), component('enterprise', 100)).available, false, 'zero Enterprise pack price requires contact');
 assert.equal(calculatePrereservationOffer('enterprise', component('enterprise', 100), component('enterprise', null)).available, false, 'missing Enterprise plan price requires contact');
 assert.equal(calculatePrereservationOffer('enterprise', component('enterprise', 100, { is_active: false }), component('enterprise', 100)).available, false, 'inactive Enterprise pack requires contact');
+assert.equal(calculatePrereservationOffer('enterprise', component('enterprise', 100), component('enterprise', 100, { is_active: false })).available, false, 'inactive Enterprise plan requires contact');
+assert.equal(calculatePrereservationOffer('enterprise', component('enterprise', 100), component('enterprise', 100, { is_enterprise: true })).available, false, 'the current database manual-pricing flag requires contact');
 assert.equal(calculatePrereservationOffer('enterprise', component('enterprise', 100), component('enterprise', -1)).available, false, 'negative Enterprise plan price requires contact');
+const enterpriseOriginal = calculatePrereservationOffer('enterprise', component('enterprise', 1299500), component('enterprise', 120000, { is_enterprise: false }));
+const enterprisePlanChanged = calculatePrereservationOffer('enterprise', component('enterprise', 1299500), component('enterprise', 135000, { is_enterprise: false }));
+const enterprisePackChanged = calculatePrereservationOffer('enterprise', component('enterprise', 1400000), component('enterprise', 120000, { is_enterprise: false }));
+assert.equal(enterpriseOriginal.available && enterprisePlanChanged.available && enterpriseOriginal.totalCents !== enterprisePlanChanged.totalCents, true, 'changing the database plan price changes Enterprise preresevation totals');
+assert.equal(enterpriseOriginal.available && enterprisePackChanged.available && enterpriseOriginal.totalCents !== enterprisePackChanged.totalCents, true, 'changing the database pack price changes Enterprise preresevation totals');
 const mixedTaxOffer = calculatePrereservationOffer('starter', component('starter', 10000, { tax_rate: '10.00' }), component('starter', 20000, { tax_rate: '21.00' }));
 assert.equal(mixedTaxOffer.available, true);
 if (mixedTaxOffer.available) {
@@ -60,7 +67,7 @@ const pool = {
     if (sql.includes('FROM (SELECT $1::text AS code)')) {
       const code = params[0] as keyof typeof prices;
       const value = prices[code];
-      return { rows: value ? [{ pack_code: code, pack_name: `Pack ${code}`, pack_price_cents: value.pack, coverage_square_meters: coverage[code], pack_tax_rate: '21.00', pack_is_active: true, plan_code: code, plan_name: code, plan_price_cents: value.plan, plan_tax_rate: '21.00', plan_is_active: true }] : [] };
+      return { rows: value ? [{ pack_code: code, pack_name: `Pack ${code}`, pack_price_cents: value.pack, coverage_square_meters: coverage[code], pack_tax_rate: '21.00', pack_is_active: true, plan_code: code, plan_name: code, plan_price_cents: value.plan, plan_tax_rate: '21.00', plan_is_active: true, plan_is_enterprise: false }] : [] };
     }
     if (sql.includes('SELECT id, email, confirmed_at FROM store.public_prereservations')) {
       const [tokenHash, campaign, code] = params as string[];
@@ -173,6 +180,15 @@ for (const code of prereservationCodes) {
   assert.equal(body.offer.hardware.coverageSquareMeters, coverage[code]);
   assert.equal(body.offer.webPlan.priceCents, prices[code].plan);
 }
+const originalEnterpriseResponse = await request('/api/public/prereservation/offer?code=enterprise', { headers: { Authorization: `Bearer ${accessTokens.get('enterprise')}` } });
+const originalEnterpriseBody = await originalEnterpriseResponse.json() as any;
+prices.enterprise.plan += 11111;
+const changedEnterpriseResponse = await request('/api/public/prereservation/offer?code=enterprise', { headers: { Authorization: `Bearer ${accessTokens.get('enterprise')}` } });
+const changedEnterpriseBody = await changedEnterpriseResponse.json() as any;
+assert.equal(changedEnterpriseBody.offer.webPlan.priceCents, prices.enterprise.plan, 'each request reads the latest plan price from the database');
+assert.notEqual(changedEnterpriseBody.offer.totalCents, originalEnterpriseBody.offer.totalCents, 'a database price change is reflected without application cache');
+prices.enterprise.plan -= 11111;
+assert.ok(sqlCalls.some((call) => call.sql.includes('s.is_enterprise AS plan_is_enterprise')), 'prereservation queries the current commercial flag');
 
 assert.equal((await request('/api/public/prereservation/offer?code=professional', { headers: { Authorization: `Bearer ${accessTokens.get('starter')}` } })).status, 401, 'a token cannot be reused for a different code');
 const confirmation = await request('/api/public/prereservation/confirm', { method: 'POST', headers: { Authorization: `Bearer ${accessTokens.get('professional')}` }, body: JSON.stringify({ code: 'professional' }) });
@@ -222,14 +238,14 @@ assert.ok(sqlCalls.some((call) => call.sql.includes('confirmation_email_last_err
 
 const unavailablePool = {
   async query(sql: string, params: unknown[] = []) {
-    if (sql.includes('FROM (SELECT $1::text AS code)')) return { rows: [{ pack_code: 'enterprise', pack_name: 'Enterprise', pack_price_cents: prices.enterprise.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: 'enterprise', plan_name: 'Enterprise', plan_price_cents: null, plan_tax_rate: '21.00', plan_is_active: true }] };
+    if (sql.includes('FROM (SELECT $1::text AS code)')) return { rows: [{ pack_code: 'enterprise', pack_name: 'Enterprise', pack_price_cents: prices.enterprise.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: 'enterprise', plan_name: 'Enterprise', plan_price_cents: null, plan_tax_rate: '21.00', plan_is_active: true, plan_is_enterprise: false }] };
     return pool.query(sql, params);
   },
   async connect() {
     const client = await pool.connect();
     return {
       async query(sql: string, params: unknown[] = []) {
-        if (sql.includes('FROM (SELECT $1::text AS code)')) return { rows: [{ pack_code: 'enterprise', pack_name: 'Enterprise', pack_price_cents: prices.enterprise.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: 'enterprise', plan_name: 'Enterprise', plan_price_cents: null, plan_tax_rate: '21.00', plan_is_active: true }] };
+        if (sql.includes('FROM (SELECT $1::text AS code)')) return { rows: [{ pack_code: 'enterprise', pack_name: 'Enterprise', pack_price_cents: prices.enterprise.pack, pack_tax_rate: '21.00', pack_is_active: true, plan_code: 'enterprise', plan_name: 'Enterprise', plan_price_cents: null, plan_tax_rate: '21.00', plan_is_active: true, plan_is_enterprise: false }] };
         return client.query(sql, params);
       },
       release: () => client.release()

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import ErrorMessage from '../components/ErrorMessage';
 import Loading from '../components/Loading';
 import { api, postJson } from '../lib/api';
+import { canAutoPriceSaasPlan } from '../lib/commercialPricing';
 import { money } from '../lib/money';
 import type { Cart, SaasPlan } from '../lib/types';
 
@@ -39,16 +40,19 @@ export default function SaasPlans() {
       <ErrorMessage message={error} />
       {loading ? <Loading /> : plans.length === 0 ? <p className="empty">No hay planes web activos.</p> : (
         <div className="cards">
-          {plans.map((plan) => (
-            <article className="card" key={plan.id}>
-              <small>Plan web anual</small>
-              <h2>{plan.name}</h2>
-              <p>{plan.description ?? 'Sin descripción disponible.'}</p>
-              <strong>{money(plan.annual_price_cents)}</strong>
-              {plan.max_tags && <p>{plan.max_tags} tags · {plan.max_gateways} gateways</p>}
-              <button type="button" disabled={addingId === plan.id} onClick={() => addToCart(plan.id)}>{addingId === plan.id ? 'Añadiendo…' : 'Añadir al carrito'}</button>
-            </article>
-          ))}
+          {plans.map((plan) => {
+            const canAdd = canAutoPriceSaasPlan(plan);
+            return (
+              <article className="card" key={plan.id}>
+                <small>Plan web anual</small>
+                <h2>{plan.name}</h2>
+                <p>{plan.description ?? 'Sin descripción disponible.'}</p>
+                <strong>{canAdd ? money(plan.annual_price_cents) : 'Contactar'}</strong>
+                {plan.max_tags && <p>{plan.max_tags} tags · {plan.max_gateways} gateways</p>}
+                <button type="button" disabled={!canAdd || addingId === plan.id} onClick={() => addToCart(plan.id)}>{canAdd ? (addingId === plan.id ? 'Añadiendo…' : 'Añadir al carrito') : 'Contactar para presupuesto'}</button>
+              </article>
+            );
+          })}
         </div>
       )}
     </section>

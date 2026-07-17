@@ -103,12 +103,20 @@ Precios en céntimos:
 
 Regla comercial vigente para planes web (precios antes de IVA):
 
-- `starter` — Starter — 580 € + IVA (`58000` céntimos) — 12 tags / 5 gateways
-- `professional` — Professional — 800 € + IVA (`80000` céntimos) — 20 tags / 10 gateways
-- `enterprise` — Enterprise — sin precio automático; requiere contacto y presupuesto manual
+- `starter` — Starter — 600 € + IVA (`60000` céntimos) — 12 tags / 5 gateways
+- `professional` — Professional — 900 € + IVA (`90000` céntimos) — 20 tags / 10 gateways
+- `enterprise` — Enterprise — 1.200 € + IVA (`120000` céntimos)
 
-El precio del `PACK Enterprise` corresponde exclusivamente al hardware y no
-convierte el plan web Enterprise en un producto de compra automática.
+PostgreSQL es la única fuente de verdad para precios, IVA, disponibilidad y
+el indicador `is_enterprise`. Los catálogos, el carrito y la prerreserva
+consultan los valores actuales sin caché. Los tres planes iniciales tienen
+`is_enterprise = false`; el campo se conserva como indicador configurable de
+precio manual y no como una regla basada en el código del plan.
+
+Los presupuestos y pedidos conservan el precio e IVA de sus líneas como
+snapshot comercial. Al crear o actualizar una línea de carrito se vuelven a
+leer los datos actuales del plan o pack; una vez enviado el presupuesto, sus
+importes históricos no se reescriben.
 
 
 ## FASE 6A.1–6A.3: flujo comercial de presupuestos

@@ -26,6 +26,7 @@ export type OfferComponent = {
   price_cents: number | null;
   tax_rate: string | number;
   is_active: boolean;
+  is_enterprise?: boolean;
   coverage_square_meters?: number | null;
 };
 
@@ -50,7 +51,7 @@ export const calculatePrereservationOffer = (
 ): CalculatedOffer | UnavailableOffer => {
   const packTax = pack ? taxRateBasisPoints(pack.tax_rate) : null;
   const planTax = webPlan ? taxRateBasisPoints(webPlan.tax_rate) : null;
-  if (!pack || !webPlan || pack.code !== code || webPlan.code !== code || !pack.is_active || !webPlan.is_active ||
+  if (!pack || !webPlan || pack.code !== code || webPlan.code !== code || !pack.is_active || !webPlan.is_active || webPlan.is_enterprise === true ||
       !Number.isInteger(pack.price_cents) || Number(pack.price_cents) <= 0 ||
       !Number.isInteger(webPlan.price_cents) || Number(webPlan.price_cents) <= 0 ||
       packTax == null || planTax == null) {

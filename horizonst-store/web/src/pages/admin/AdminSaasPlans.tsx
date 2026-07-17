@@ -27,7 +27,7 @@ export default function AdminSaasPlans() {
   };
 
   const edit = (plan: SaasPlan) => setEditing(plan);
-  const planPrice = (plan: SaasPlan) => plan.is_enterprise ? 'Enterprise' : money(plan.annual_price_cents);
+  const planPrice = (plan: SaasPlan) => plan.is_enterprise ? 'Precio manual' : money(plan.annual_price_cents);
 
   return (
     <AdminShell title="Planes web">

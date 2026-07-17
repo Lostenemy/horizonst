@@ -35,12 +35,13 @@ assert.match(originalCards[0].price, /580,00/);
 assert.match(changedCards[0].price, /615,00/, 'a changed API price changes the value rendered by the landing card');
 assert.doesNotMatch(changedCards[0].price, /580,00/);
 assert.equal(buildPublicPlanCards([plan('enterprise', null)])[0].price, 'Contactar', 'plans without an automatic price show contact text');
+assert.match(buildPublicPlanCards([plan('enterprise', 120000, { is_enterprise: false })])[0].price, /1\.?200,00/, 'Enterprise renders its current database price when automatic pricing is enabled');
 assert.deepEqual(buildPublicPlanCards([plan('starter', 99900, { is_active: false })]), [], 'inactive plans are not rendered');
 assert.match(String((PublicPlanCards({ plans: [], loading: true, error: false }) as any).props.children), /Cargando precios/, 'loading state remains renderable');
 assert.match(String((PublicPlanCards({ plans: [], loading: false, error: true }) as any).props.children), /No se pudieron cargar los precios/, 'catalog errors remain renderable');
 assert.match(String((PublicPlanCards({ plans: [], loading: false, error: false }) as any).props.children), /No hay planes disponibles/, 'missing expected plans remain renderable');
 const campaignCards = JSON.stringify(PublicPlanCards({
-  plans: [plan('starter', 1), plan('professional', 2), plan('enterprise', null)], loading: false, error: false,
+  plans: [plan('starter', 1), plan('professional', 2), plan('enterprise', 3, { is_enterprise: false })], loading: false, error: false,
   campaign: { campaign: 'prereservation_2026', endAt: '2026-09-01T21:59:59.999Z', active: true, codes: ['starter', 'professional', 'enterprise'] },
   onPrereserve: () => undefined
 }));
