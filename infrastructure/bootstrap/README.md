@@ -7,7 +7,7 @@ Esta carpeta contiene documentación y plantillas seguras para preparar un servi
 - `horizonst-clean-init.md`: pasos para crear la base principal `horizonst`, aplicar esquema, seed seguro de admin e importar ACL MQTT.
 - `horizonst-admin-seed-template.sql`: plantilla SQL parametrizada para crear/rotar el admin principal sin tocar `db/seed.sql`.
 - `cold-compliance-clean-init.md`: pasos para crear `cold_compliance`, aplicar migraciones e importar únicamente usuarios técnicos/aplicación aprobados.
-- `mqtt-acl-import-template.sql`: plantilla de import desde CSV externo de `vmq_auth_acl`.
+- `mqtt-acl-import-template.sql`: plantilla de import desde CSV externo de `vmq_auth_acl`; requiere `acl_csv` (ruta absoluta) y `expected_rows` (número exacto de filas de datos).
 - `app-users-import-template.sql`: plantilla de import desde CSV externo de usuarios técnicos/aplicación de `cold_compliance.app_users`.
 - `mail-accounts-horizonst-es.example`: plantilla sin secretos para buzones y alias de correo.
 

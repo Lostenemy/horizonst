@@ -28,7 +28,7 @@ Este documento define el procedimiento seguro para preparar un servidor nuevo de
    - `psql "$HORIZONST_DATABASE_URL" -f db/schema.sql`
    - `psql "$HORIZONST_DATABASE_URL" -f db/mqtt.sql`
 4. Aplicar seed seguro del administrador principal mediante `infrastructure/bootstrap/horizonst-clean-init.md` y un script local no versionado.
-5. Importar las 16 entradas técnicas actuales de `vmq_auth_acl` usando `infrastructure/bootstrap/mqtt-acl-import-template.sql` y un CSV/SQL externo generado en el origen.
+5. Importar las entradas técnicas aprobadas de `vmq_auth_acl` usando `infrastructure/bootstrap/mqtt-acl-import-template.sql`, el recuento esperado y un CSV externo generado en el origen.
 6. Aplicar migraciones de `cold_compliance` en orden lexicográfico desde `001_init.sql` hasta `009_tags_physical_alarm_action_durations.sql`.
 7. Importar usuarios técnicos/aplicación aprobados mediante `infrastructure/bootstrap/app-users-import-template.sql` y un CSV/SQL externo generado en el origen.
 8. Configurar buzones y alias de correo de `horizonst.es` desde cero, sin migrar mensajes antiguos.
@@ -50,7 +50,7 @@ No se deben migrar ni copiar al servidor `horizonst.es`:
 
 Solo se migran, previa revisión manual:
 
-- Las **16 entradas actuales** de `vmq_auth_acl`, porque son configuración técnica requerida por VerneMQ.
+- Las entradas aprobadas de `vmq_auth_acl`, porque son configuración técnica requerida por VerneMQ.
 - Usuarios técnicos/de aplicación seleccionados, sin sesiones asociadas ni tokens de recuperación.
 - Configuración mínima de correo de `horizonst.es` recreada desde cero.
 - Opcionalmente reglas o catálogos técnicos indispensables si se aprueban como parte del corte y se documentan fuera de Git.
@@ -67,7 +67,7 @@ psql "$HORIZONST_DATABASE_URL" \
   -c "\\copy (SELECT mountpoint, client_id, username, password, publish_acl::text, subscribe_acl::text FROM vmq_auth_acl ORDER BY mountpoint, client_id) TO '/root/horizonst-clean-bootstrap/private/vmq_auth_acl.csv' WITH (FORMAT csv, HEADER true, FORCE_QUOTE *)"
 ```
 
-Validar que contiene exactamente 16 filas de datos además de la cabecera:
+Contar las filas de datos, sin incluir la cabecera, y conservar el resultado para pasarlo como `expected_rows` durante la importación:
 
 ```bash
 python3 - <<'PY'
@@ -75,8 +75,16 @@ import csv
 with open('/root/horizonst-clean-bootstrap/private/vmq_auth_acl.csv', newline='') as fh:
     rows = list(csv.DictReader(fh))
 print(len(rows))
-assert len(rows) == 16
 PY
+```
+
+Importar indicando la ruta absoluta del CSV y el recuento exacto obtenido (en este ejemplo, `4`):
+
+```bash
+psql "$HORIZONST_DATABASE_URL" \
+  -v acl_csv=/root/horizonst-clean-bootstrap/private/vmq_auth_acl.csv \
+  -v expected_rows=4 \
+  -f infrastructure/bootstrap/mqtt-acl-import-template.sql
 ```
 
 ### Exportar usuarios técnicos/aplicación aprobados
@@ -109,7 +117,7 @@ Usar `infrastructure/bootstrap/mail-accounts-horizonst-es.example` como plantill
 - [ ] Las bases nuevas existen y están vacías antes de aplicar esquemas.
 - [ ] `db/schema.sql` y `db/mqtt.sql` se aplican sin errores en `horizonst`.
 - [ ] El admin principal de `horizonst.es` existe con email del nuevo dominio y contraseña rotada fuera de Git.
-- [ ] `SELECT count(*) FROM vmq_auth_acl;` devuelve `16` tras el import técnico.
+- [ ] `SELECT count(*) FROM vmq_auth_acl;` devuelve el valor indicado en `expected_rows` tras el import técnico.
 - [ ] Las migraciones `cold-compliance-service/migrations/001_*.sql` a `009_*.sql` se aplican en orden y sin errores.
 - [ ] `SELECT count(*) FROM auth_sessions;` devuelve `0`.
 - [ ] `SELECT count(*) FROM password_reset_tokens;` devuelve `0`.
