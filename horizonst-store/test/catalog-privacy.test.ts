@@ -15,11 +15,22 @@ const request = async (app: express.Express, path: string) => {
 
 {
   const calls: string[] = [];
-  const pool = { async query(sql: string) { calls.push(sql); return { rows: [] }; } };
+  const plans = [
+    { code: 'starter', annual_price_cents: 58000, is_enterprise: false },
+    { code: 'professional', annual_price_cents: 80000, is_enterprise: false },
+    { code: 'enterprise', annual_price_cents: null, is_enterprise: true }
+  ];
+  const pool = { async query(sql: string) { calls.push(sql); return { rows: plans }; } };
   const app = express();
   app.use('/api/catalog', createCatalogRouter({ pool, authMiddleware: (_req, res) => res.status(401).json({ error: 'Authentication required' }) }));
   assert.equal((await request(app, '/api/catalog/products')).status, 404, 'individual products are not exposed in the customer catalog');
-  assert.equal((await request(app, '/api/catalog/saas-plans')).status, 200, 'active plan prices are public');
+  const plansResponse = await request(app, '/api/catalog/saas-plans');
+  assert.equal(plansResponse.status, 200, 'active plan prices are public');
+  const plansBody = await plansResponse.json() as any;
+  assert.deepEqual(plansBody.saasPlans, plans);
+  assert.deepEqual(plansBody.saasPlans.find((plan: any) => plan.code === 'enterprise'), { code: 'enterprise', annual_price_cents: null, is_enterprise: true });
+  assert.equal(plansBody.saasPlans.find((plan: any) => plan.code === 'starter').annual_price_cents, 58000);
+  assert.equal(plansBody.saasPlans.find((plan: any) => plan.code === 'professional').annual_price_cents, 80000);
   assert.equal((await request(app, '/api/catalog/packs')).status, 401, 'pack prices require authentication');
   assert.equal(calls.length, 1, 'unavailable product and rejected pack requests do not query the database');
   assert.match(calls[0], /FROM store\.saas_plans[\s\S]*WHERE is_active = true/, 'the public plan endpoint only returns active records');

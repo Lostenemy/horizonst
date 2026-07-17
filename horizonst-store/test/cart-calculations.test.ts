@@ -25,10 +25,11 @@ assert.deepEqual(unapprovedDistributorLine, { line_subtotal_cents: 58000, line_d
 assert.equal(canSubmitCart(0), false, 'empty cart item count must block submit');
 assert.equal(canSubmitCart(1), true, 'non-empty cart can be submitted');
 
-// 5. Planes web con precio en céntimos, incluido Enterprise.
-assert.equal(canAutoPriceSaasPlan({ annual_price_cents: null }), false, 'plans without price cannot be added');
-assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 58000 }), true, 'starter web plan can be added');
-assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 120000 }), true, 'enterprise web plan can be added');
+// 5. Solo los planes web no Enterprise con precio se añaden automáticamente.
+assert.equal(canAutoPriceSaasPlan({ annual_price_cents: null, is_enterprise: true }), false, 'Enterprise without price cannot be added');
+assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 120000, is_enterprise: true }), false, 'Enterprise remains blocked even if inconsistent data contains a price');
+assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 58000, is_enterprise: false }), true, 'Starter web plan can be added');
+assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 80000, is_enterprise: false }), true, 'Professional web plan can be added');
 
 // 6. Pack Starter con IVA y descuento de distribuidor aprobado.
 const starterPack = calculateLineTotals({ quantity: 1, unitPriceCents: 325000, discountPercent: '10.00', taxRate: '21.00' });
@@ -40,6 +41,7 @@ const cartRouterSource = await import('node:fs/promises').then(({ readFile }) =>
 assert.doesNotMatch(cartRouterSource, /z\.literal\('product'\)|SELECT id, name, price_cents, tax_rate FROM store\.products/, 'the client cart has no product purchase path');
 assert.match(cartRouterSource, /coverage_square_meters/);
 assert.match(cartRouterSource, /Cobertura aproximada: hasta/, 'new pack lines snapshot coverage for carts, quotes and orders');
+assert.match(cartRouterSource, /annual_price_cents, tax_rate, is_enterprise FROM store\.saas_plans/, 'cart pricing reads the Enterprise flag from the database');
 
 const orderServiceSource = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/modules/orders/order.service.ts', import.meta.url), 'utf8'));
 assert.match(orderServiceSource, /item_type, product_id, saas_plan_id, pack_id/, 'historical product lines remain copyable into orders');

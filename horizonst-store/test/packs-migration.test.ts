@@ -9,7 +9,6 @@ assert.match(migration, /pack_id UUID REFERENCES store\.packs\(id\) ON DELETE RE
 assert.match(migration, /'starter', 'PACK Starter'.*325000/s);
 assert.match(migration, /'professional', 'PACK Professional'.*650000/s);
 assert.match(migration, /'enterprise', 'PACK Enterprise'.*1299500/s);
-assert.match(migration, /annual_price_cents = 120000/);
 assert.match(migration, /'starter', 'gateway_ble', 5, 1/);
 assert.match(migration, /'starter', 'gateway_antenna', 5, 2/);
 assert.match(migration, /'starter', 'poe_power_supply', 1, 3/);

@@ -101,11 +101,14 @@ Precios en céntimos:
 - `tag_ble` — Tag BLE HorizonST — `7500`
 - `poe_power_supply` — Fuente PoE — `15000`
 
-Planes SaaS anuales en céntimos:
+Regla comercial vigente para planes web (precios antes de IVA):
 
-- `starter` — Starter — `58000` — 12 tags / 5 gateways
-- `professional` — Professional — `80000` — 20 tags / 10 gateways
-- `enterprise` — Enterprise — precio a consultar
+- `starter` — Starter — 580 € + IVA (`58000` céntimos) — 12 tags / 5 gateways
+- `professional` — Professional — 800 € + IVA (`80000` céntimos) — 20 tags / 10 gateways
+- `enterprise` — Enterprise — sin precio automático; requiere contacto y presupuesto manual
+
+El precio del `PACK Enterprise` corresponde exclusivamente al hardware y no
+convierte el plan web Enterprise en un producto de compra automática.
 
 
 ## FASE 6A.1–6A.3: flujo comercial de presupuestos

@@ -31,7 +31,7 @@ cartRouter.post('/items', async (req, res, next) => {
     const discountPercent = await getDistributorDiscountPercent(req.user!.sub, req.user!.role, client);
     let item: any;
     if (input.item_type === 'saas_plan') {
-      const { rows } = await client.query('SELECT id, name, annual_price_cents, tax_rate FROM store.saas_plans WHERE id = $1 AND is_active = true', [input.saas_plan_id]);
+      const { rows } = await client.query('SELECT id, name, annual_price_cents, tax_rate, is_enterprise FROM store.saas_plans WHERE id = $1 AND is_active = true', [input.saas_plan_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Active web plan not found' }); return; }
       if (!canAutoPriceSaasPlan(rows[0])) { await client.query('ROLLBACK'); res.status(422).json({ error: 'Web plan requires commercial contact' }); return; }
       item = { product_id: null, saas_plan_id: rows[0].id, pack_id: null, description: `Plan web ${rows[0].name}`, unit_price_cents: rows[0].annual_price_cents, tax_rate: rows[0].tax_rate };
