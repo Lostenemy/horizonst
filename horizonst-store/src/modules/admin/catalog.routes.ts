@@ -35,10 +35,10 @@ const basePlanSchema = z.object({
 
 const planSchema = basePlanSchema
   .refine((value) => value.is_enterprise || value.annual_price_cents != null, { message: 'annual_price_cents is required unless is_enterprise=true' })
-  .refine((value) => !value.is_enterprise || value.annual_price_cents == null, { message: 'Enterprise plans must not have annual_price_cents' });
+  .refine((value) => !value.is_enterprise || value.annual_price_cents == null, { message: 'Plans marked for manual pricing must not have annual_price_cents' });
 
 const planPatchSchema = basePlanSchema.partial()
-  .refine((value) => value.is_enterprise !== true || value.annual_price_cents == null, { message: 'Enterprise plans must not have annual_price_cents' });
+  .refine((value) => value.is_enterprise !== true || value.annual_price_cents == null, { message: 'Plans marked for manual pricing must not have annual_price_cents' });
 
 const buildPatch = (input: Record<string, unknown>, startIndex = 2) => {
   const sets: string[] = [];

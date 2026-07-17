@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateLineTotals, calculateQuoteTotals, canAutoPriceSaasPlan, canSubmitCart, generateDraftQuoteNumber } from '../src/modules/cart/cart.service.js';
+import { calculateLineTotals, calculateQuoteTotals, canAutoPricePack, canAutoPriceSaasPlan, canSubmitCart, generateDraftQuoteNumber } from '../src/modules/cart/cart.service.js';
 import { addItemSchema } from '../src/modules/cart/cart.routes.js';
 import { hasBlockingActiveDistributorDocuments } from '../src/modules/admin/distributors.routes.js';
 
@@ -25,11 +25,26 @@ assert.deepEqual(unapprovedDistributorLine, { line_subtotal_cents: 58000, line_d
 assert.equal(canSubmitCart(0), false, 'empty cart item count must block submit');
 assert.equal(canSubmitCart(1), true, 'non-empty cart can be submitted');
 
-// 5. Solo los planes web no Enterprise con precio se añaden automáticamente.
-assert.equal(canAutoPriceSaasPlan({ annual_price_cents: null, is_enterprise: true }), false, 'Enterprise without price cannot be added');
-assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 120000, is_enterprise: true }), false, 'Enterprise remains blocked even if inconsistent data contains a price');
-assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 58000, is_enterprise: false }), true, 'Starter web plan can be added');
-assert.equal(canAutoPriceSaasPlan({ annual_price_cents: 80000, is_enterprise: false }), true, 'Professional web plan can be added');
+// 5. La disponibilidad y los importes dependen del dato actual de catálogo.
+const currentPlan = (annual_price_cents: number | null, overrides: Record<string, unknown> = {}) => ({ annual_price_cents, tax_rate: '21.00', is_active: true, is_enterprise: false, ...overrides });
+assert.equal(canAutoPriceSaasPlan(currentPlan(60000)), true, 'Starter can be added at its current database price');
+assert.equal(canAutoPriceSaasPlan(currentPlan(90000)), true, 'Professional can be added at its current database price');
+assert.equal(canAutoPriceSaasPlan(currentPlan(120000)), true, 'Enterprise can be added when its current database flag allows automatic pricing');
+assert.equal(canAutoPriceSaasPlan(currentPlan(null)), false, 'null prices block automatic pricing');
+assert.equal(canAutoPriceSaasPlan(currentPlan(0)), false, 'non-positive prices block automatic pricing');
+assert.equal(canAutoPriceSaasPlan(currentPlan(120000, { is_active: false })), false, 'inactive plans cannot be sold');
+assert.equal(canAutoPriceSaasPlan(currentPlan(120000, { is_enterprise: true })), false, 'the current database manual-pricing flag is respected');
+assert.equal(canAutoPriceSaasPlan(currentPlan(120000, { tax_rate: 'invalid' })), false, 'invalid database tax prevents automatic pricing');
+const originalEnterpriseLine = calculateLineTotals({ quantity: 1, unitPriceCents: 120000, discountPercent: 0, taxRate: 21 });
+const changedEnterpriseLine = calculateLineTotals({ quantity: 1, unitPriceCents: 135000, discountPercent: 0, taxRate: 21 });
+assert.notEqual(changedEnterpriseLine.line_total_cents, originalEnterpriseLine.line_total_cents, 'changing the simulated database price changes the cart total without code changes');
+const originalStarterLine = calculateLineTotals({ quantity: 1, unitPriceCents: 60000, discountPercent: 0, taxRate: 21 });
+const changedStarterLine = calculateLineTotals({ quantity: 1, unitPriceCents: 61500, discountPercent: 0, taxRate: 21 });
+assert.notEqual(changedStarterLine.line_total_cents, originalStarterLine.line_total_cents, 'changing the simulated Starter database price changes the cart total without code changes');
+
+assert.equal(canAutoPricePack({ price_cents: 325000, tax_rate: '21.00', is_active: true }), true);
+assert.equal(canAutoPricePack({ price_cents: 0, tax_rate: '21.00', is_active: true }), false);
+assert.equal(canAutoPricePack({ price_cents: 325000, tax_rate: '21.00', is_active: false }), false);
 
 // 6. Pack Starter con IVA y descuento de distribuidor aprobado.
 const starterPack = calculateLineTotals({ quantity: 1, unitPriceCents: 325000, discountPercent: '10.00', taxRate: '21.00' });
@@ -41,7 +56,9 @@ const cartRouterSource = await import('node:fs/promises').then(({ readFile }) =>
 assert.doesNotMatch(cartRouterSource, /z\.literal\('product'\)|SELECT id, name, price_cents, tax_rate FROM store\.products/, 'the client cart has no product purchase path');
 assert.match(cartRouterSource, /coverage_square_meters/);
 assert.match(cartRouterSource, /Cobertura aproximada: hasta/, 'new pack lines snapshot coverage for carts, quotes and orders');
-assert.match(cartRouterSource, /annual_price_cents, tax_rate, is_enterprise FROM store\.saas_plans/, 'cart pricing reads the Enterprise flag from the database');
+assert.match(cartRouterSource, /annual_price_cents, tax_rate, is_active, is_enterprise FROM store\.saas_plans/, 'cart pricing reads current plan data from the database');
+assert.match(cartRouterSource, /price_cents, tax_rate, is_active, coverage_square_meters FROM store\.packs/, 'cart pricing reads current pack data from the database');
+assert.match(cartRouterSource, /unit_price_cents = \$4/, 'updating an existing line persists the current database price');
 
 const orderServiceSource = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../src/modules/orders/order.service.ts', import.meta.url), 'utf8'));
 assert.match(orderServiceSource, /item_type, product_id, saas_plan_id, pack_id/, 'historical product lines remain copyable into orders');

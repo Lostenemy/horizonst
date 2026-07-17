@@ -72,7 +72,7 @@ export const createPrereservationRouter = (dependencies: PrereservationRouterDep
       `SELECT p.code AS pack_code, p.name AS pack_name, p.price_cents AS pack_price_cents, p.coverage_square_meters,
               p.tax_rate AS pack_tax_rate, p.is_active AS pack_is_active,
               s.code AS plan_code, s.name AS plan_name, s.annual_price_cents AS plan_price_cents,
-              s.tax_rate AS plan_tax_rate, s.is_active AS plan_is_active
+              s.tax_rate AS plan_tax_rate, s.is_active AS plan_is_active, s.is_enterprise AS plan_is_enterprise
        FROM (SELECT $1::text AS code) requested
        LEFT JOIN store.packs p ON p.code = requested.code
        LEFT JOIN store.saas_plans s ON s.code = requested.code`,
@@ -82,7 +82,7 @@ export const createPrereservationRouter = (dependencies: PrereservationRouterDep
     return calculatePrereservationOffer(
       code,
       row.pack_code ? { code: row.pack_code, name: row.pack_name, price_cents: row.pack_price_cents, tax_rate: row.pack_tax_rate, is_active: row.pack_is_active, coverage_square_meters: row.coverage_square_meters } : undefined,
-      row.plan_code ? { code: row.plan_code, name: row.plan_name, price_cents: row.plan_price_cents, tax_rate: row.plan_tax_rate, is_active: row.plan_is_active } : undefined
+      row.plan_code ? { code: row.plan_code, name: row.plan_name, price_cents: row.plan_price_cents, tax_rate: row.plan_tax_rate, is_active: row.plan_is_active, is_enterprise: row.plan_is_enterprise } : undefined
     );
   };
 

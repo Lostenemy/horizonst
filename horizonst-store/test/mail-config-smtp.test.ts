@@ -24,7 +24,7 @@ const mailConfig: StoreMailConfig = {
 
 const prereservationInput = {
   prereservation: { id: '33333333-3333-4333-8333-333333333333', email: 'interesado@example.test', code: 'professional', confirmedAt: '2026-08-01T10:00:00.000Z' },
-  offer: { hardware: { name: 'Pack Professional', priceCents: 650000, coverageSquareMeters: 1000 }, webPlan: { name: 'Professional', priceCents: 80000 }, subtotalCents: 730000, discountCents: 36500, taxCents: 145635, totalCents: 839135 }
+  offer: { hardware: { name: 'Pack Professional', priceCents: 650000, coverageSquareMeters: 1000 }, webPlan: { name: 'Professional', priceCents: 90000 }, subtotalCents: 740000, discountCents: 37000, taxCents: 147630, totalCents: 850630 }
 };
 
 {
@@ -33,6 +33,7 @@ const prereservationInput = {
   assert.match(email.text, /Pack Professional/);
   assert.match(email.text, /Cobertura aproximada: hasta 1000 m²/);
   assert.match(email.text, /Professional/);
+  assert.match(email.text, /900,00/, 'the email renders the plan price supplied by the current database calculation');
   assert.match(email.text, /5 %/);
   assert.match(email.text, /IVA/);
   assert.match(email.text, /1 de septiembre de 2026/);

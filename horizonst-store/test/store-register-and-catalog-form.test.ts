@@ -7,9 +7,15 @@ import { readPlan, readProduct } from '../web/src/pages/admin/CatalogForm.js';
 const planId = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
 const planData = new FormData();
-planData.set('code', 'starter'); planData.set('name', 'Starter'); planData.set('annual_price_cents', '58000'); planData.set('tax_rate', '21'); planData.set('is_active', 'on');
+planData.set('code', 'starter'); planData.set('name', 'Starter'); planData.set('annual_price_cents', '60000'); planData.set('tax_rate', '21'); planData.set('is_active', 'on');
 assert.equal(readPlan(planData, planId).id, planId, 'editing a plan preserves its id');
 assert.equal(readPlan(planData).id, undefined, 'creating a plan has no id');
+
+const enterpriseData = new FormData();
+enterpriseData.set('code', 'enterprise'); enterpriseData.set('name', 'Enterprise'); enterpriseData.set('annual_price_cents', '120000'); enterpriseData.set('tax_rate', '21'); enterpriseData.set('is_active', 'on');
+assert.deepEqual({ annual_price_cents: readPlan(enterpriseData).annual_price_cents, is_enterprise: readPlan(enterpriseData).is_enterprise }, { annual_price_cents: 120000, is_enterprise: false }, 'Enterprise pricing follows current admin data rather than its code');
+enterpriseData.set('is_enterprise', 'on');
+assert.deepEqual({ annual_price_cents: readPlan(enterpriseData).annual_price_cents, is_enterprise: readPlan(enterpriseData).is_enterprise }, { annual_price_cents: null, is_enterprise: true }, 'the stored manual-pricing flag remains configurable');
 
 const productData = new FormData();
 productData.set('sku', 'STARTER-TAG'); productData.set('name', 'Tag'); productData.set('category', 'hardware'); productData.set('price_cents', '1200'); productData.set('tax_rate', '21'); productData.set('is_active', 'on');

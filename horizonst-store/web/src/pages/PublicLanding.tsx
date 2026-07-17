@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { canAutoPriceSaasPlan } from '../lib/commercialPricing';
 import { customerAccessUrl } from '../lib/domains';
 import { money } from '../lib/money';
 import { isPrereservationCode, prereservationCodes, prereservationEndLabel, prereservationSessionKey, type PrereservationCampaign, type PrereservationCode } from '../lib/prereservation';
@@ -23,7 +24,7 @@ export const buildPublicPlanCards = (plans: SaasPlan[]) => {
     return plan ? [{
       code,
       name: `Plan ${plan.name}`,
-      price: publicPlanPrice(plan.annual_price_cents),
+      price: canAutoPriceSaasPlan(plan) ? publicPlanPrice(plan.annual_price_cents) : 'Contactar',
       description: plan.description ?? publicPlanPresentation[code].description
     }] : [];
   });

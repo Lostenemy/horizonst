@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import ErrorMessage from '../components/ErrorMessage';
 import Loading from '../components/Loading';
 import { api, postJson } from '../lib/api';
+import { canAutoPricePack } from '../lib/commercialPricing';
 import { money } from '../lib/money';
 import type { Cart, Pack } from '../lib/types';
 import { coverageLabel } from '../lib/coverage';
@@ -40,19 +41,22 @@ export default function Catalog() {
       <ErrorMessage message={error} />
       {loading ? <Loading /> : packs.length === 0 ? <p className="empty">No hay packs activos publicados.</p> : (
         <div className="cards">
-          {packs.map((pack) => (
-            <article className="card" key={pack.id}>
-              <small>Pack comercial</small>
-              <h2>{pack.name}</h2>
-              <p>{pack.description ?? 'Configuración de hardware HorizonST.'}</p>
-              {coverageLabel(pack.coverage_square_meters) && <p><strong>{coverageLabel(pack.coverage_square_meters)}</strong></p>}
-              <ul>{pack.items.map((item) => <li key={item.product_id}>{item.quantity} × {item.name}</li>)}</ul>
-              <strong>{money(pack.price_cents)}</strong>
-              <button type="button" disabled={addingId === pack.id} onClick={() => addToCart(pack.id)}>
-                {addingId === pack.id ? 'Añadiendo…' : 'Añadir pack al carrito'}
-              </button>
-            </article>
-          ))}
+          {packs.map((pack) => {
+            const canAdd = canAutoPricePack(pack);
+            return (
+              <article className="card" key={pack.id}>
+                <small>Pack comercial</small>
+                <h2>{pack.name}</h2>
+                <p>{pack.description ?? 'Configuración de hardware HorizonST.'}</p>
+                {coverageLabel(pack.coverage_square_meters) && <p><strong>{coverageLabel(pack.coverage_square_meters)}</strong></p>}
+                <ul>{pack.items.map((item) => <li key={item.product_id}>{item.quantity} × {item.name}</li>)}</ul>
+                <strong>{money(pack.price_cents)}</strong>
+                <button type="button" disabled={!canAdd || addingId === pack.id} onClick={() => addToCart(pack.id)}>
+                  {canAdd ? (addingId === pack.id ? 'Añadiendo…' : 'Añadir pack al carrito') : 'No disponible'}
+                </button>
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
