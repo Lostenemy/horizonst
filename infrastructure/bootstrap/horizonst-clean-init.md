@@ -31,11 +31,13 @@ psql "$HORIZONST_DATABASE_URL" \
 
 1. Generar el CSV en el servidor origen fuera de Git.
 2. Copiarlo manualmente al destino por canal seguro.
-3. Ejecutar la plantilla:
+3. Contar sus filas de datos, sin incluir la cabecera.
+4. Ejecutar la plantilla pasando la ruta absoluta y el número exacto esperado (en este ejemplo, `4`):
 
 ```bash
 psql "$HORIZONST_DATABASE_URL" \
   -v acl_csv=/root/horizonst-clean-bootstrap/private/vmq_auth_acl.csv \
+  -v expected_rows=4 \
   -f infrastructure/bootstrap/mqtt-acl-import-template.sql
 ```
 
