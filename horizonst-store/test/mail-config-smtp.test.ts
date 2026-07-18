@@ -10,16 +10,16 @@ const order = { id: orderId, order_number: 'ORD-Q-1' };
 
 const mailConfig: StoreMailConfig = {
   enabled: true,
-  host: 'mail.horizonst.com.es',
+  host: 'mail.horizonst.es',
   port: 465,
   secure: true,
-  user: 'smtp@horizonst.com.es',
+  user: 'smtp@horizonst.es',
   password: 'valid-password',
-  from: 'no_reply@horizonst.com.es',
-  ehloDomain: 'horizonst.com.es',
+  from: 'no_reply@horizonst.es',
+  ehloDomain: 'horizonst.es',
   tlsRejectUnauthorized: true,
-  commercialTo: 'comercial@horizonst.com.es',
-  appccGuideUrl: 'https://horizonst.com.es/guia-appcc.pdf'
+  commercialTo: 'comercial@horizonst.es',
+  appccGuideUrl: 'https://horizonst.es/guia-appcc.pdf'
 };
 
 const prereservationInput = {
@@ -67,13 +67,13 @@ const prereservationInput = {
   assert.equal(email.subject, 'Presupuesto disponible: Q-1');
   assert.match(email.text, /está disponible/);
   assert.match(email.text, /descargar el PDF, aceptarlo o rechazarlo/);
-  assert.match(email.text, /https:\/\/tienda\.horizonst\.com\.es\/quotes/);
+  assert.match(email.text, /https:\/\/tienda\.horizonst\.es\/quotes/);
   assert.doesNotMatch(email.text, new RegExp(`/quotes/${quoteId}`));
   assert.match(email.text, new RegExp(automaticMailFooter));
 }
 
 {
-  const verificationUrl = 'https://tienda.horizonst.com.es/verify-email?token=verification-token-for-test';
+  const verificationUrl = 'https://tienda.horizonst.es/verify-email?token=verification-token-for-test';
   const email = buildEmailVerificationEmail({ email: 'ana@example.test', fullName: 'Ana', verificationUrl, expiresInSeconds: 3600 });
   assert.equal(email.to, 'ana@example.test');
   assert.equal(email.subject, 'Verifica tu cuenta de HorizonST');
@@ -85,14 +85,14 @@ const prereservationInput = {
 
 {
   const email = buildQuoteAcceptedCommercialEmail({ quote, order });
-  assert.equal(email.to, 'comercial@horizonst.com.es');
+  assert.equal(email.to, 'comercial@horizonst.es');
   assert.equal(email.subject, 'Presupuesto aceptado: Q-1');
   assert.match(email.text, /Cliente: User Test/);
   assert.match(email.text, /Email: u@example\.com/);
   assert.match(email.text, /Rol: customer/);
   assert.match(email.text, /Presupuesto: Q-1/);
   assert.match(email.text, /Pedido: ORD-Q-1/);
-  assert.match(email.text, new RegExp(`https:\/\/tienda\.horizonst\.com\.es\/admin\/orders\/${orderId}`));
+  assert.match(email.text, new RegExp(`https:\/\/tienda\.horizonst\.es\/admin\/orders\/${orderId}`));
   assert.match(email.text, new RegExp(automaticMailFooter));
 }
 
@@ -101,21 +101,21 @@ const prereservationInput = {
   assert.equal(email.subject, 'Pedido confirmado: ORD-Q-1');
   assert.match(email.text, /presupuesto Q-1/);
   assert.match(email.text, /pedido ORD-Q-1/);
-  assert.match(email.text, /https:\/\/tienda\.horizonst\.com\.es\/orders/);
+  assert.match(email.text, /https:\/\/tienda\.horizonst\.es\/orders/);
   assert.match(email.text, /contactará contigo/);
   assert.match(email.text, new RegExp(automaticMailFooter));
 }
 
 {
   let delivered: { to: string } | undefined;
-  const guideUrl = 'https://horizonst.com.es/recursos/guia-appcc-2026.pdf';
+  const guideUrl = 'https://horizonst.es/recursos/guia-appcc-2026.pdf';
   const content = buildAppccGuideEmail({ email: 'ana@example.test' }, guideUrl);
   assert.equal(content.to, 'ana@example.test');
   assert.match(content.text, new RegExp(guideUrl));
   assert.match(content.html, new RegExp(guideUrl));
   assert.match(content.html, /Abrir la guía/);
-  assert.match(content.html, /https:\/\/horizonst\.com\.es\/planes/);
-  assert.match(content.html, /https:\/\/horizonst\.com\.es\/privacidad/);
+  assert.match(content.html, /https:\/\/horizonst\.es\/planes/);
+  assert.match(content.html, /https:\/\/horizonst\.es\/privacidad/);
   assert.match(content.html, /comercial@horizonst\.es/);
   assert.doesNotMatch(content.html, /<script|stylesheet/i);
   await sendAppccGuideEmail({ email: 'ana@example.test' }, async (mail) => { delivered = mail; }, guideUrl);
@@ -124,12 +124,12 @@ const prereservationInput = {
 
 for (const invalid of [
   { user: '', password: 'valid-password' },
-  { user: 'smtp@horizonst.com.es', password: '' },
+  { user: 'smtp@horizonst.es', password: '' },
   { user: 'store-smtp-user@example.com', password: 'valid-password' },
   { user: 'smtp@example.com', password: 'valid-password' },
   { user: 'smtp@example.invalid', password: 'valid-password' },
-  { user: 'smtp@horizonst.com.es', password: 'change-me' },
-  { user: 'smtp@horizonst.com.es', password: 'change_me' }
+  { user: 'smtp@horizonst.es', password: 'change-me' },
+  { user: 'smtp@horizonst.es', password: 'change_me' }
 ]) {
   assert.throws(() => validateStoreMailConfig({ ...mailConfig, ...invalid }, 'production'), /Store mail credentials/);
 }
@@ -161,7 +161,7 @@ class FakeSocket extends EventEmitter {
 
 {
   const socket = new FakeSocket([
-    '250-mail.horizonst.com.es\r\n250 AUTH LOGIN\r\n',
+    '250-mail.horizonst.es\r\n250 AUTH LOGIN\r\n',
     '334 VXNlcm5hbWU6\r\n',
     '334 UGFzc3dvcmQ6\r\n',
     '235 authenticated\r\n',
@@ -173,7 +173,7 @@ class FakeSocket extends EventEmitter {
   const client = new SmtpClient(mailConfig, () => ({ socket: socket as any, readyEvent: 'secureConnect' }));
   const connectPromise = client.connect();
   socket.emit('secureConnect');
-  setTimeout(() => socket.emit('data', Buffer.from('220-mail.horizonst.com.es\r\n220 ready\r\n')), 0);
+  setTimeout(() => socket.emit('data', Buffer.from('220-mail.horizonst.es\r\n220 ready\r\n')), 0);
   await connectPromise;
   await client.sendMail('u@example.com', 'Subject', '.line', '<strong>HTML</strong>');
   await client.close();
@@ -201,4 +201,4 @@ class FakeSocket extends EventEmitter {
   assert.equal(socket.destroyed, true);
 }
 
-assert.equal(sanitizeMailError(new Error('smtp@horizonst.com.es failed secret-password'), { user: 'smtp@horizonst.com.es', password: 'secret-password' }), '[redacted] failed [redacted]');
+assert.equal(sanitizeMailError(new Error('smtp@horizonst.es failed secret-password'), { user: 'smtp@horizonst.es', password: 'secret-password' }), '[redacted] failed [redacted]');
