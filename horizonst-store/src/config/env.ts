@@ -53,15 +53,15 @@ if ((process.env.NODE_ENV ?? 'development') === 'production' && (!jwtSecret || j
 
 const mail: StoreMailConfig = {
   enabled: booleanFromEnv(process.env.STORE_MAIL_ENABLED, false),
-  host: process.env.STORE_MAIL_HOST ?? 'mail.horizonst.com.es',
+  host: process.env.STORE_MAIL_HOST ?? 'mail.horizonst.es',
   port: numberFromEnv(process.env.STORE_MAIL_PORT, 465),
   secure: booleanFromEnv(process.env.STORE_MAIL_SECURE, true),
   user: process.env.STORE_MAIL_USER ?? '',
   password: process.env.STORE_MAIL_PASSWORD ?? '',
-  from: process.env.STORE_MAIL_FROM ?? 'no_reply@horizonst.com.es',
-  ehloDomain: process.env.STORE_MAIL_EHLO_DOMAIN ?? 'horizonst.com.es',
+  from: process.env.STORE_MAIL_FROM ?? 'no_reply@horizonst.es',
+  ehloDomain: process.env.STORE_MAIL_EHLO_DOMAIN ?? 'horizonst.es',
   tlsRejectUnauthorized: booleanFromEnv(process.env.STORE_MAIL_TLS_REJECT_UNAUTHORIZED, true),
-  commercialTo: process.env.STORE_MAIL_COMMERCIAL_TO ?? 'comercial@horizonst.com.es',
+  commercialTo: process.env.STORE_MAIL_COMMERCIAL_TO ?? 'comercial@horizonst.es',
   appccGuideUrl: process.env.STORE_APPCC_GUIDE_URL ?? ''
 };
 
@@ -78,7 +78,7 @@ export const env = {
   },
   documentsPath: process.env.STORE_DOCUMENTS_PATH ?? '/opt/horizonst/store-data/documents',
   corsOrigin: process.env.STORE_CORS_ORIGIN ?? 'http://127.0.0.1:4020',
-  publicBaseUrl: process.env.STORE_PUBLIC_BASE_URL ?? 'https://tienda.horizonst.com.es',
+  publicBaseUrl: process.env.STORE_PUBLIC_BASE_URL ?? 'https://tienda.horizonst.es',
   auth: {
     jwtSecret,
     accessTokenTtl: process.env.STORE_ACCESS_TOKEN_TTL ?? '15m',

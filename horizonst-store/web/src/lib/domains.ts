@@ -1,9 +1,9 @@
 export const isPublicMarketingHost = (hostname: string) => {
   const host = hostname.toLowerCase();
-  return host === 'horizonst.com.es' || host === 'www.horizonst.com.es';
+  return host === 'horizonst.es' || host === 'www.horizonst.es';
 };
 
-export const customerAccessUrl = 'https://tienda.horizonst.com.es';
+export const customerAccessUrl = 'https://tienda.horizonst.es';
 
 export type PublicMarketingPage = 'home' | 'plans' | 'info-faqs' | 'prereservation' | 'legal-notice' | 'privacy' | 'not-found';
 
