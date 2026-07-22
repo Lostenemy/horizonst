@@ -124,8 +124,8 @@ HorizonST ayuda a supervisar la presencia de trabajadores en cámaras congelador
 ### Conoce HorizonST
 Consulta los planes, accede a la tienda o habla con el equipo comercial.
 
-- [horizonst.com.es/planes](https://horizonst.com.es/planes)
-- [tienda.horizonst.com.es](https://tienda.horizonst.com.es)
+- [horizonst.es/planes](https://horizonst.es/planes)
+- [tienda.horizonst.es](https://tienda.horizonst.es)
 - [comercial@horizonst.es](mailto:comercial@horizonst.es)
 
 <!-- page: sources -->
