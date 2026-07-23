@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { buildPublicPlanCards, hardwarePacks, PublicPlanCards, publicPlanPrice } from '../web/src/pages/PublicLanding.js';
+import { buildPublicPlanCards, campaignComicPanels, hardwarePacks, PublicPlanCards, publicPlanPrice } from '../web/src/pages/PublicLanding.js';
 import type { SaasPlan } from '../web/src/lib/types.js';
 import { customerAccessUrl, isPublicMarketingHost, publicMarketingPage } from '../web/src/lib/domains.js';
 
@@ -55,6 +55,19 @@ assert.match(app, /<PublicPrereservation code=/);
 assert.match(app, /Página no encontrada/);
 const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', import.meta.url), 'utf-8');
 const horneoLogo = await readFile(new URL('../web/public/images/casos-exito/horneo.png', import.meta.url));
+assert.equal(campaignComicPanels.length, 13, 'the complete campaign is presented on the public landing');
+assert.ok(campaignComicPanels.every((panel) => panel.alt.length > 20), 'every comic panel has useful alternative text');
+assert.ok(campaignComicPanels.every((panel) => panel.width > 0 && panel.height > 0), 'comic dimensions are explicit to prevent layout shifts');
+for (const panel of campaignComicPanels) {
+  const asset = await readFile(new URL(`../web/public${panel.src}`, import.meta.url));
+  assert.ok(asset.length > 0, `${panel.src} is stored locally`);
+  assert.equal(asset.subarray(0, 4).toString('hex'), '52494646', `${panel.src} is an optimized WebP asset`);
+}
+assert.match(landing, /id="campaign-comic-title"/);
+assert.match(landing, /Una jornada en frío, viñeta a viñeta/);
+assert.match(landing, /<CampaignComic \/>/, 'the comic is rendered only by the public home component');
+assert.match(landing, /loading="lazy" decoding="async"/, 'comic panels are loaded without blocking initial rendering');
+assert.match(landing, /href="\/info-faqs">Descubrir cómo funciona/);
 assert.ok(horneoLogo.length > 0, 'the Horneo logo is stored locally');
 assert.equal(horneoLogo.subarray(1, 4).toString('ascii'), 'PNG', 'the local success-case asset is a PNG');
 assert.match(landing, /Horneo ya utiliza HorizonST en una cámara frigorífica de aproximadamente 400 m²/);
