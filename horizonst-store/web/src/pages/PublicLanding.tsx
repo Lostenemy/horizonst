@@ -23,7 +23,7 @@ export const buildPublicPlanCards = (plans: SaasPlan[]) => {
     const plan = plansByCode.get(code);
     return plan ? [{
       code,
-      name: `Plan ${plan.name}`,
+      name: plan.name,
       price: canAutoPriceSaasPlan(plan) ? publicPlanPrice(plan.annual_price_cents) : 'Contactar',
       description: plan.description ?? publicPlanPresentation[code].description
     }] : [];
@@ -37,13 +37,13 @@ export function PublicPlanCards({ plans, loading, error, campaign, onPrereserve 
   const cards = buildPublicPlanCards(plans);
   if (cards.length === 0) return <p className="lp-note">No hay planes disponibles en este momento. Solicita presupuesto para recibir orientación.</p>;
 
-  return <><div className="lp-grid three">{cards.map((card) => <article className="lp-card" key={card.code}><h2>{card.name}</h2><p className="lp-price">{card.price}</p><p>{card.description}</p>{onPrereserve && campaign && <button type="button" disabled={!campaign.active} onClick={(event) => onPrereserve(card.code, event.currentTarget)}>{campaign.active ? 'Prerreservar con 5 % de descuento' : 'Campaña finalizada'}</button>}</article>)}</div>{cards.length < publicPlanCodes.length && <p className="lp-note">Algunas opciones no están disponibles en este momento. Contacta con nosotros para recibir orientación.</p>}</>;
+  return <><div className="lp-grid three">{cards.map((card) => <article className="lp-card lp-plan-card" key={card.code}><h2>{card.name}</h2><p className="lp-price">{card.price}</p><p>{card.description}</p>{onPrereserve && campaign && <button type="button" disabled={!campaign.active} onClick={(event) => onPrereserve(card.code, event.currentTarget)}>{campaign.active ? 'Prerreservar con 5 % de descuento' : 'Campaña finalizada'}</button>}</article>)}</div>{cards.length < publicPlanCodes.length && <p className="lp-note">Algunas opciones no están disponibles en este momento. Contacta con nosotros para recibir orientación.</p>}</>;
 }
 
 export const hardwarePacks = [
-  { name: 'Pack Starter', coverageSquareMeters: 500, items: ['5 puntos de comunicación inalámbrica', '5 antenas y accesorios de instalación', '1 inyector de alimentación PoE', '10 dispositivos personales inalámbricos con alarma'] },
-  { name: 'Pack Professional', coverageSquareMeters: 1000, items: ['10 puntos de comunicación inalámbrica', '10 antenas y accesorios de instalación', '2 inyectores de alimentación PoE', '20 dispositivos personales inalámbricos con alarma'] },
-  { name: 'Pack Enterprise', coverageSquareMeters: 2000, items: ['20 puntos de comunicación inalámbrica', '20 antenas y accesorios de instalación', '4 inyectores de alimentación PoE', '40 dispositivos personales inalámbricos con alarma'] }
+  { name: 'Starter', coverageSquareMeters: 500, items: ['5 puntos de comunicación inalámbrica', '5 antenas y accesorios de instalación', '1 inyector de alimentación PoE', '10 dispositivos personales inalámbricos con alarma'] },
+  { name: 'Professional', coverageSquareMeters: 1000, items: ['10 puntos de comunicación inalámbrica', '10 antenas y accesorios de instalación', '2 inyectores de alimentación PoE', '20 dispositivos personales inalámbricos con alarma'] },
+  { name: 'Enterprise', coverageSquareMeters: 2000, items: ['20 puntos de comunicación inalámbrica', '20 antenas y accesorios de instalación', '4 inyectores de alimentación PoE', '40 dispositivos personales inalámbricos con alarma'] }
 ];
 
 export const faqItems = [
@@ -191,7 +191,7 @@ export function PublicPlans() {
   }, []);
 
   const openPrereservation = (code: PrereservationCode, trigger: HTMLButtonElement) => { setModalTrigger(trigger); setSelectedCode(code); };
-  return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1>{campaign && <p>Oferta de prerreserva disponible hasta el {prereservationEndLabel(campaign.endAt)}.</p>}<PublicPlanCards plans={plans} loading={loading} error={error} campaign={campaign} onPrereserve={openPrereservation} /><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card" key={pack.name}><h2>{pack.name}</h2><p><strong>{coverageLabel(pack.coverageSquareMeters)}</strong></p><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section>{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={() => setSelectedCode(null)} />}<PublicFooter /></main>;
+  return <main className="public-landing"><PublicNav /><section className="lp-section"><p className="eyebrow">Planes</p><h1>Planes de servicios Web</h1>{campaign && <p>Oferta de prerreserva disponible hasta el {prereservationEndLabel(campaign.endAt)}.</p>}<PublicPlanCards plans={plans} loading={loading} error={error} campaign={campaign} onPrereserve={openPrereservation} /><h2 className="lp-subheading">Planes de hardware</h2><div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card lp-plan-card" key={pack.name}><h2>{pack.name}</h2><p><strong>{coverageLabel(pack.coverageSquareMeters)}</strong></p><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>El precio y las condiciones comerciales están disponibles en la zona registrada.</p><a className="btn" href={customerAccessUrl}>Acceso clientes</a></article>)}</div></section>{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={() => setSelectedCode(null)} />}<PublicFooter /></main>;
 }
 
 export function PublicInfoFaqs() { return <main className="public-landing"><PublicNav /><section className="lp-info-hero"><p className="eyebrow">Información y preguntas frecuentes</p><h1>Todo lo que necesitas saber sobre HorizonST</h1><p>Consulta cómo funciona la solución, qué problemas ayuda a resolver y las respuestas a las dudas más habituales.</p></section>

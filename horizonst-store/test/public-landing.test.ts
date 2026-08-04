@@ -21,6 +21,7 @@ assert.equal(publicMarketingPage('/desconocida'), 'not-found');
 assert.equal(hardwarePacks.length, 3);
 assert.ok(hardwarePacks.every((pack) => pack.items.length === 4));
 assert.deepEqual(hardwarePacks.map((pack) => pack.coverageSquareMeters), [500, 1000, 2000]);
+assert.deepEqual(hardwarePacks.map((pack) => pack.name), ['Starter', 'Professional', 'Enterprise'], 'public hardware cards omit the redundant Pack prefix');
 
 const plan = (code: string, price: number | null, overrides: Partial<SaasPlan> = {}): SaasPlan => ({
   id: `${code}-id`, code, name: code[0].toUpperCase() + code.slice(1), description: null,
@@ -34,6 +35,7 @@ const changedCards = buildPublicPlanCards([plan('starter', 61500)]);
 assert.match(originalCards[0].price, /580,00/);
 assert.match(changedCards[0].price, /615,00/, 'a changed API price changes the value rendered by the landing card');
 assert.doesNotMatch(changedCards[0].price, /580,00/);
+assert.deepEqual(buildPublicPlanCards([plan('starter', 1), plan('professional', 2), plan('enterprise', 3)]).map((card) => card.name), ['Starter', 'Professional', 'Enterprise'], 'public service cards omit the redundant Plan prefix');
 assert.equal(buildPublicPlanCards([plan('enterprise', null)])[0].price, 'Contactar', 'plans without an automatic price show contact text');
 assert.match(buildPublicPlanCards([plan('enterprise', 120000, { is_enterprise: false })])[0].price, /1\.?200,00/, 'Enterprise renders its current database price when automatic pricing is enabled');
 assert.deepEqual(buildPublicPlanCards([plan('starter', 99900, { is_active: false })]), [], 'inactive plans are not rendered');
@@ -123,6 +125,7 @@ const css = await readFile(new URL('../web/src/styles.css', import.meta.url), 'u
 assert.match(css, /\.lp-nav \.secondary\{background:#fff;color:#08233f/);
 assert.match(css, /\.lp-nav \.secondary:focus-visible/);
 assert.match(css, /\.lp-section h2\{font-size:clamp\(1\.75rem,3\.3vw,2\.75rem\)/);
+assert.match(css, /\.lp-plan-card>button,\.lp-plan-card>\.btn\{align-self:flex-start;margin-top:auto\}/, 'plan card actions align at the bottom without fixed heights');
 assert.doesNotMatch(css, /counter-reset:comic-panel|counter\(comic-panel\)|\.lp-comic/, 'the numbered gallery styles are removed');
 assert.match(css, /\.lp-final-cta \.actions\{justify-content:center\}/, 'the information page final actions are centered without changing global actions');
 assert.doesNotMatch(css, /\.lp-hero-visual\{[^}]*margin-right:\s*-/, 'the hero visual no longer escapes its grid with a negative right margin');
