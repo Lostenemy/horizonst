@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { buildPublicPlanCards, hardwarePacks, PublicPlanCards, publicPlanPrice } from '../web/src/pages/PublicLanding.js';
+import { buildPublicPlanCards, hardwarePacks, landingArtwork, PublicPlanCards, publicPlanPrice } from '../web/src/pages/PublicLanding.js';
 import type { SaasPlan } from '../web/src/lib/types.js';
 import { customerAccessUrl, isPublicMarketingHost, publicMarketingPage } from '../web/src/lib/domains.js';
 
@@ -55,6 +55,37 @@ assert.match(app, /<PublicPrereservation code=/);
 assert.match(app, /Página no encontrada/);
 const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', import.meta.url), 'utf-8');
 const horneoLogo = await readFile(new URL('../web/public/images/casos-exito/horneo.png', import.meta.url));
+const selectedArtwork = [landingArtwork.hero, landingArtwork.intro, landingArtwork.alert, landingArtwork.response, landingArtwork.review, ...landingArtwork.sectors, landingArtwork.guide, landingArtwork.plans, landingArtwork.closing];
+assert.equal(selectedArtwork.length, 10, 'the landing selects artwork by commercial purpose instead of rendering the complete campaign');
+assert.equal(new Set(selectedArtwork.map((artwork) => artwork.src)).size, selectedArtwork.length, 'selected artwork is never repeated');
+assert.ok(selectedArtwork.every((artwork) => artwork.alt.length > 20), 'informative artwork has useful alternative text');
+assert.ok(selectedArtwork.every((artwork) => artwork.width > 0 && artwork.height > 0), 'artwork dimensions are explicit to prevent layout shifts');
+for (const artwork of selectedArtwork) {
+  for (const src of [artwork.src, artwork.mobileSrc]) {
+    const asset = await readFile(new URL(`../web/public${src}`, import.meta.url));
+    assert.ok(asset.length > 0, `${src} is stored locally`);
+    assert.equal(asset.subarray(0, 4).toString('hex'), '52494646', `${src} is an optimized WebP asset`);
+  }
+}
+assert.match(landingArtwork.hero.src, /05-entering-freezer/);
+assert.match(landingArtwork.intro.src, /06-buddy-check/);
+assert.match(landingArtwork.alert.src, /19-mobile-alert/);
+assert.match(landingArtwork.guide.src, /14-team-onboarding/);
+assert.match(landingArtwork.plans.src, /18-charging-fleet/);
+assert.match(landingArtwork.closing.src, /20-worker-portrait/);
+assert.doesNotMatch(landing, /campaignComicPanels|CampaignComic|campaign-comic-title|Una jornada en frío, viñeta a viñeta|lp-comic-sequence/, 'the rejected 13-panel gallery is removed');
+assert.match(landing, /landingArtwork\.hero} priority/, 'the hero artwork is the only prioritized campaign image');
+assert.match(landing, /fetchPriority=\{priority \? 'high' : undefined\}/);
+assert.match(landing, /loading=\{priority \? undefined : 'lazy'\}/);
+assert.match(landing, /id="guia"[^>]+aria-labelledby="guide-conversion-title"/);
+assert.match(landing, /landingArtwork\.guide/);
+assert.match(landing, /id="plans-art-title"/);
+assert.match(landing, /landingArtwork\.plans/);
+assert.match(landing, /id="emotional-close-title"/);
+assert.match(landing, /landingArtwork\.closing/);
+assert.match(landing, /href="#guia">Recibir la guía gratuita/);
+assert.match(landing, /href="\/info-faqs">Descubrir cómo funciona/);
+assert.match(landing, /href="\/planes">Ver planes/);
 assert.ok(horneoLogo.length > 0, 'the Horneo logo is stored locally');
 assert.equal(horneoLogo.subarray(1, 4).toString('ascii'), 'PNG', 'the local success-case asset is a PNG');
 assert.match(landing, /Horneo ya utiliza HorizonST en una cámara frigorífica de aproximadamente 400 m²/);
@@ -92,6 +123,14 @@ const css = await readFile(new URL('../web/src/styles.css', import.meta.url), 'u
 assert.match(css, /\.lp-nav \.secondary\{background:#fff;color:#08233f/);
 assert.match(css, /\.lp-nav \.secondary:focus-visible/);
 assert.match(css, /\.lp-section h2\{font-size:clamp\(1\.75rem,3\.3vw,2\.75rem\)/);
+assert.doesNotMatch(css, /counter-reset:comic-panel|counter\(comic-panel\)|\.lp-comic/, 'the numbered gallery styles are removed');
+assert.match(css, /\.lp-final-cta \.actions\{justify-content:center\}/, 'the information page final actions are centered without changing global actions');
+assert.doesNotMatch(css, /\.lp-hero-visual\{[^}]*margin-right:\s*-/, 'the hero visual no longer escapes its grid with a negative right margin');
+assert.match(css, /\.lp-hero-visual\{[^}]*min-width:0;[^}]*width:100%;max-width:100%/, 'the hero visual stays within the available grid track');
+assert.match(css, /@media\(max-width:1024px\)/);
+assert.match(css, /@media\(max-width:860px\)/);
+assert.match(css, /@media\(max-width:640px\)/);
+assert.match(css, /prefers-reduced-motion:reduce/);
 const prereservationPage = await readFile(new URL('../web/src/pages/PublicPrereservation.tsx', import.meta.url), 'utf-8');
 assert.match(prereservationPage, /sessionStorage\.getItem\(prereservationSessionKey\(code\)\)/);
 assert.doesNotMatch(prereservationPage, /localStorage|new URLSearchParams\([^)]*email/);
@@ -99,6 +138,7 @@ assert.match(prereservationPage, /!offer\.available/);
 assert.match(prereservationPage, /No es una compra y no se realizará ningún cargo/);
 assert.match(prereservationPage, /coverageLabel\(offer\.hardware!\.coverageSquareMeters\)/, 'the prereservation shows current pack coverage');
 const catalogPage = await readFile(new URL('../web/src/pages/Catalog.tsx', import.meta.url), 'utf8');
+assert.doesNotMatch(catalogPage, /images\/campaign-comic/, 'campaign compositions remain outside the private storefront');
 assert.match(catalogPage, /coverageLabel\(pack\.coverage_square_meters\)/, 'the private pack catalog renders coverage');
 assert.doesNotMatch(catalogPage, /\/api\/catalog\/products|item_type: 'product'/, 'the private storefront has no individual-product API or purchase action');
 const catalogRouter = await readFile(new URL('../src/modules/catalog/catalog.routes.ts', import.meta.url), 'utf8');
