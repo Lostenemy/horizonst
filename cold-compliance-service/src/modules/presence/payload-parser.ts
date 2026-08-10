@@ -38,6 +38,18 @@ function toItems(payload: any): any[] {
   return [payload];
 }
 
+function numericValue(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isManualEmergencyItem(item: any): boolean {
+  const typeCode = numericValue(item?.type_code ?? item?.typeCode);
+  const typeText = String(item?.type ?? '').toLowerCase();
+  const alarmStatus = numericValue(item?.alarm_status ?? item?.alarmStatus ?? item?.data?.alarm_status);
+  return (typeText === 'bxp-button' || typeCode === 7) && alarmStatus !== null && alarmStatus > 0;
+}
+
 function isGatewaySelfDescription(item: any): boolean {
   if (!item || typeof item !== 'object') return false;
   const hasGatewayDescriptor = Boolean(
@@ -116,6 +128,7 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer, receivedA
 
   list.forEach((item: any, idx: number) => {
     if (isGatewaySelfDescription(item)) return;
+    if (isManualEmergencyItem(item)) return;
 
     const timestamp = receivedAt.toISOString();
     const payloadTimestamp = item.timestamp ?? item.ts ?? item.created_at;
@@ -139,4 +152,37 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer, receivedA
   });
 
   return events;
+}
+
+export interface ParsedManualEmergencyEvent {
+  gatewayMac: string;
+  tagUid: string;
+  alarmStatus: number;
+  triggerCount: number | null;
+  receivedAt: string;
+  rawPayload: Record<string, unknown>;
+}
+
+export function parseManualEmergencyPayload(topic: string, payloadRaw: Buffer, receivedAt: Date = new Date()): ParsedManualEmergencyEvent[] {
+  const payload = JSON.parse(payloadRaw.toString('utf8'));
+  if (numericValue(payload?.msg_id) !== 3070) return [];
+
+  const [, gatewayMacRaw] = topic.split('/');
+  const gatewayMac = normalizeMac(gatewayMacRaw) ?? normalizeMac(payload?.device_info?.mac) ?? String(gatewayMacRaw ?? '').toLowerCase();
+
+  return toItems(payload).flatMap((item: any) => {
+    if (!isManualEmergencyItem(item)) return [];
+    const tagUid = pickTagIdentifier(item, gatewayMac);
+    const alarmStatus = numericValue(item?.alarm_status ?? item?.alarmStatus ?? item?.data?.alarm_status);
+    if (!tagUid || alarmStatus === null) return [];
+
+    return [{
+      gatewayMac,
+      tagUid,
+      alarmStatus,
+      triggerCount: numericValue(item?.trigger_count ?? item?.triggerCount ?? item?.data?.trigger_count),
+      receivedAt: receivedAt.toISOString(),
+      rawPayload: item as Record<string, unknown>
+    }];
+  });
 }

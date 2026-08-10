@@ -2,6 +2,10 @@ import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
 import { executeAlarmSequence } from '../tag-control/application/tag-physical-alarm.service';
 
+interface QueryClient {
+  query: typeof db.query;
+}
+
 interface CreatedAlert {
   id: string;
   worker_id: string | null;
@@ -18,8 +22,11 @@ export async function createAlert(params: {
   alertType: string;
   message: string;
   metadata?: Record<string, unknown>;
+  dispatchPhysicalAlarm?: boolean;
+  queryClient?: QueryClient;
 }): Promise<CreatedAlert> {
-  const inserted = await db.query<CreatedAlert>(
+  const queryClient = params.queryClient ?? db;
+  const inserted = await queryClient.query<CreatedAlert>(
     `INSERT INTO alerts(worker_id, tag_id, cold_room_id, severity, alert_type, message, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, worker_id, tag_id, severity, alert_type`,
@@ -35,7 +42,7 @@ export async function createAlert(params: {
   );
 
   const alert = inserted.rows[0];
-  setImmediate(() => {
+  if (params.dispatchPhysicalAlarm !== false) setImmediate(() => {
     logger.info({
       alertId: alert.id,
       alertType: alert.alert_type,

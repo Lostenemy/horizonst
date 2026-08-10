@@ -44,10 +44,23 @@ async function loadOperationalSnapshot() {
        ORDER BY pos.grace_until ASC`
     ),
     db.query(
-      `SELECT id, worker_id, tag_id, severity, alert_type, message, created_at
-       FROM alerts
-       WHERE acknowledged_at IS NULL
-       ORDER BY created_at DESC
+      `SELECT a.id,
+              a.worker_id,
+              a.tag_id,
+              COALESCE(w.full_name, 'Sin trabajador asignado') AS worker_name,
+              COALESCE(w.dni, '-') AS worker_dni,
+              COALESCE(t.tag_uid, '-') AS tag_uid,
+              COALESCE(cr.name, 'Cámara desconocida') AS cold_room_name,
+              a.severity,
+              a.alert_type,
+              a.message,
+              a.created_at
+       FROM alerts a
+       LEFT JOIN workers w ON w.id = a.worker_id
+       LEFT JOIN tags t ON t.id = a.tag_id
+       LEFT JOIN cold_rooms cr ON cr.id = a.cold_room_id
+       WHERE a.acknowledged_at IS NULL
+       ORDER BY a.created_at DESC
        LIMIT 200`
     )
   ]);

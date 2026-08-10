@@ -183,10 +183,48 @@ function roleLabel(role) {
 function statusLabel(status) { return ({ active: 'Activo', inactive: 'Inactivo' }[status] || status || '-'); }
 function alertTypeLabel(type) {
   return ({
+    manual_emergency: 'Emergencia manual',
     alarm_rule_alarm: 'Alarma por permanencia',
     continuous_limit_exceeded: 'Límite continuo superado',
     alarm_rule_warning: 'Aviso de permanencia'
   }[type] || String(type || '').replaceAll('_', ' '));
+}
+
+function formatTagUid(value) {
+  const compact = String(value || '').replace(/[:-]/g, '').toUpperCase();
+  return /^[0-9A-F]{12}$/.test(compact) ? compact.match(/.{2}/g).join(':') : (value || '-');
+}
+
+function renderManualEmergencyBanner(activeAlerts = []) {
+  const banner = q('manualEmergencyBanner');
+  if (!banner) return;
+  const emergencies = activeAlerts.filter((alert) => alert.alert_type === 'manual_emergency');
+  banner.hidden = emergencies.length === 0;
+  if (!emergencies.length) {
+    banner.innerHTML = '';
+    return;
+  }
+
+  const title = emergencies.length === 1
+    ? '🚨 ALARMA DE EMERGENCIA'
+    : `🚨 ${emergencies.length} ALARMAS DE EMERGENCIA ACTIVAS`;
+  banner.innerHTML = `
+    <div class="manual-emergency-heading">${title}</div>
+    <div class="manual-emergency-list">
+      ${emergencies.map((alert) => `
+        <article class="manual-emergency-item">
+          <div><strong>${esc(alert.worker_name || 'Sin trabajador asignado')}</strong> ha activado el botón de emergencia</div>
+          <div class="manual-emergency-details">
+            <span>${esc(alert.cold_room_name || 'Cámara desconocida')}</span>
+            <span>${esc(formatDateTimeMadrid(alert.created_at))}</span>
+            <span>Tag B5: ${esc(formatTagUid(alert.tag_uid))}</span>
+          </div>
+          ${roleCan('supervisor') ? `<button class="manual-emergency-ack" onclick="archiveAlert('${alert.id}')">Reconocer y archivar</button>` : ''}
+        </article>
+      `).join('')}
+    </div>
+    <div class="manual-emergency-action">ATENDER INMEDIATAMENTE</div>
+  `;
 }
 function severityLabel(severity) { return ({ critical: 'Crítica', warning: 'Advertencia', info: 'Información' }[severity] || severity || '-'); }
 
@@ -750,7 +788,7 @@ async function renderInventory() {
     ${table(['MAC', 'Descripción', 'RSSI mínimo', 'Acciones'], gateways.map((g) => {
       const editing = inlineEdit.gateways.id === g.id;
       const rssiThreshold = g.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD;
-      if (!editing) return [g.gateway_mac, g.description || '', rssiThreshold, roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
+      if (!editing) return [g.gateway_mac, g.description || '', rssiThreshold, roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button onclick="configureEmergencyButton('${g.id}')">Configurar B5</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
       const d = inlineEdit.gateways.draft;
       return [
         `<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`,
@@ -834,6 +872,11 @@ async function applyGatewayRssi(id) {
   if (rssi == null) return;
   await api(`/gateways/${id}/apply-rssi`, { method: 'POST', body: JSON.stringify({ rssi }) });
   toast('Comando RSSI enviado. Pendiente de confirmación por el gateway.');
+}
+async function configureEmergencyButton(id) {
+  if (!confirm('¿Publicar la configuración de doble pulsación B5 en este gateway?')) return;
+  await api(`/gateways/${id}/configure-emergency-button`, { method: 'POST' });
+  toast('Comandos B5 publicados. La confirmación del gateway no está verificada.');
 }
 async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se puede deshacer.')) return; try { await api(`/tags/${id}`, { method: 'DELETE' }); toast('Tag borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
@@ -974,6 +1017,11 @@ async function deleteWorker(id) {
 async function archiveAlert(id) {
   if (!confirm('¿Archivar alarma seleccionada?')) return;
   await api(`/alerts/${id}/archive`, { method: 'POST' });
+  if (lastSnapshot?.activeAlerts) {
+    lastSnapshot.activeAlerts = lastSnapshot.activeAlerts.filter((alert) => alert.id !== id);
+    lastSnapshot.totals.activeAlerts = lastSnapshot.activeAlerts.length;
+    renderManualEmergencyBanner(lastSnapshot.activeAlerts);
+  }
   toast('Alerta archivada');
   renderAlertsCenter();
 }
@@ -1226,6 +1274,7 @@ function startRealtime() {
   realtimeSource.addEventListener('snapshot', (event) => {
     const payload = JSON.parse(event.data);
     lastSnapshot = payload;
+    renderManualEmergencyBanner(payload.activeAlerts || []);
     setSessionText(`· dentro: ${payload.totals.workersInside} · alertas: <a class="header-alert-badge" href="#" onclick="showSection('alertsCenter');return false;">${payload.totals.activeAlerts}</a>`);
     if (!q('dashboard').hidden) renderDashboard(payload);
   });

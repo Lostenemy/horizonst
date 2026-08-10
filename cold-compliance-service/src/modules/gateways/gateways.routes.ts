@@ -101,6 +101,45 @@ gatewaysRouter.post('/:id/apply-rssi', requireRoles(['superadministrador']), asy
   }
 });
 
+gatewaysRouter.post('/:id/configure-emergency-button', requireRoles(['superadministrador']), async (req, res, next) => {
+  try {
+    const gateway = await db.query<{ gateway_mac: string }>('SELECT gateway_mac FROM gateways WHERE id = $1', [req.params.id]);
+    if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
+
+    const gatewayMac = gateway.rows[0].gateway_mac;
+    const topic = gatewayTopic(gatewayMac);
+    const commands = [
+      {
+        msg_id: 1045,
+        device_info: { mac: gatewayMac.toUpperCase() },
+        data: { bxp_button: 1 }
+      },
+      {
+        msg_id: 1053,
+        device_info: { mac: gatewayMac.toUpperCase() },
+        data: {
+          switch_value: 1,
+          single_press: 0,
+          double_press: 1,
+          long_press: 0
+        }
+      }
+    ];
+
+    for (const command of commands) await mqttPublish(topic, command);
+    logger.info({ gatewayId: req.params.id, gatewayMac, topic, msgIds: commands.map((command) => command.msg_id) }, 'emergency button commands published to gateway topic');
+    res.status(202).json({
+      ok: true,
+      status: 'published',
+      message: 'Emergency button commands were published. Gateway acknowledgement is not verified.',
+      topic,
+      commands
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 gatewaysRouter.delete('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
     const gateway = await db.query<{ gateway_mac: string }>('SELECT gateway_mac FROM gateways WHERE id = $1', [req.params.id]);

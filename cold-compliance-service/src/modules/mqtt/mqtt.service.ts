@@ -1,8 +1,9 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
-import { parseGatewayPayload } from '../presence/payload-parser';
+import { parseGatewayPayload, parseManualEmergencyPayload } from '../presence/payload-parser';
 import { ingestPresenceEvent } from '../presence/presence.service';
+import { processManualEmergency } from '../alerts/manual-emergency.service';
 
 type MessageHandler = (topic: string, payload: Buffer) => Promise<void> | void;
 
@@ -76,6 +77,10 @@ export function startMqttConsumer(): void {
         try { asJson = JSON.parse(payload.toString('utf8')); } catch { asJson = null; }
         if (!isGatewayCommandReply(asJson)) {
           const receivedAt = new Date();
+          const manualEmergencies = parseManualEmergencyPayload(topic, payload, receivedAt);
+          for (const emergency of manualEmergencies) {
+            await processManualEmergency(emergency);
+          }
           const events = parseGatewayPayload(topic, payload, receivedAt);
           if (!events.length) {
             logger.debug({ topic }, 'mqtt payload without detectable tag identifiers, skipping');
