@@ -875,8 +875,12 @@ async function applyGatewayRssi(id) {
 }
 async function configureEmergencyButton(id) {
   if (!confirm('¿Publicar la configuración de doble pulsación B5 en este gateway?')) return;
-  await api(`/gateways/${id}/configure-emergency-button`, { method: 'POST' });
-  toast('Comandos B5 publicados. La confirmación del gateway no está verificada.');
+  const response = await api(`/gateways/${id}/configure-emergency-button`, { method: 'POST' });
+  const summary = (response.results || []).map((result) => {
+    const detail = result.resultCode == null ? result.status : `${result.status} (${result.resultCode}${result.resultMsg ? `: ${result.resultMsg}` : ''})`;
+    return `${result.msgId}: ${detail}`;
+  }).join(' · ');
+  toast(response.ok ? `B5 configurado correctamente. ${summary}` : `Configuración B5 incompleta. ${summary}`, response.ok ? 'success' : 'error');
 }
 async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se puede deshacer.')) return; try { await api(`/tags/${id}`, { method: 'DELETE' }); toast('Tag borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }

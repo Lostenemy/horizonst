@@ -5,6 +5,7 @@ import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { logger } from '../../utils/logger';
 import { mqttPublish } from '../mqtt/mqtt.service';
+import { configureEmergencyButton } from './gateway-emergency-config.service';
 
 export const gatewaysRouter = Router();
 gatewaysRouter.use(requireAuth);
@@ -108,32 +109,15 @@ gatewaysRouter.post('/:id/configure-emergency-button', requireRoles(['superadmin
 
     const gatewayMac = gateway.rows[0].gateway_mac;
     const topic = gatewayTopic(gatewayMac);
-    const commands = [
-      {
-        msg_id: 1045,
-        device_info: { mac: gatewayMac.toUpperCase() },
-        data: { bxp_button: 1 }
-      },
-      {
-        msg_id: 1053,
-        device_info: { mac: gatewayMac.toUpperCase() },
-        data: {
-          switch_value: 1,
-          single_press: 0,
-          double_press: 1,
-          long_press: 0
-        }
-      }
-    ];
-
-    for (const command of commands) await mqttPublish(topic, command);
-    logger.info({ gatewayId: req.params.id, gatewayMac, topic, msgIds: commands.map((command) => command.msg_id) }, 'emergency button commands published to gateway topic');
-    res.status(202).json({
-      ok: true,
-      status: 'published',
-      message: 'Emergency button commands were published. Gateway acknowledgement is not verified.',
+    const configuration = await configureEmergencyButton({ gatewayMac, topic });
+    logger[configuration.ok ? 'info' : 'warn']({ gatewayId: req.params.id, gatewayMac, topic, results: configuration.results }, 'emergency button configuration completed');
+    res.status(configuration.ok ? 200 : 207).json({
+      ok: configuration.ok,
+      status: configuration.ok ? 'configured' : 'partial_failure',
+      message: configuration.ok ? 'B5 configurado correctamente.' : 'La configuración B5 no ha sido confirmada por todos los comandos.',
       topic,
-      commands
+      commands: configuration.commands,
+      results: configuration.results
     });
   } catch (error) {
     next(error);

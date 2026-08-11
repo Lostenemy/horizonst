@@ -14,6 +14,10 @@ interface EmergencyContext {
   cold_room_id: string | null;
 }
 
+export function manualEmergencyDeduplicationKey(tagUid: string, triggerCount: number | null): string {
+  return `${tagUid}:${triggerCount ?? 'missing'}`;
+}
+
 async function auditRejected(event: ParsedManualEmergencyEvent, reason: 'unknown_tag' | 'inactive_tag'): Promise<void> {
   await appendAuditLog({
     actorType: 'system',
@@ -43,7 +47,7 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
 
   try {
     await client.query('BEGIN');
-    const deduplicationKey = `${event.tagUid}:${event.triggerCount ?? 'missing'}`;
+    const deduplicationKey = manualEmergencyDeduplicationKey(event.tagUid, event.triggerCount);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [deduplicationKey]);
 
     const contextResult = await client.query<EmergencyContext>(

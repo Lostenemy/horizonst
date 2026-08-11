@@ -44,10 +44,10 @@ function numericValue(value: unknown): number | null {
 }
 
 function isManualEmergencyItem(item: any): boolean {
-  const typeCode = numericValue(item?.type_code ?? item?.typeCode);
-  const typeText = String(item?.type ?? '').toLowerCase();
+  const typeText = String(item?.type ?? '').trim().toLowerCase();
+  const frameType = numericValue(item?.frame_type ?? item?.frameType);
   const alarmStatus = numericValue(item?.alarm_status ?? item?.alarmStatus ?? item?.data?.alarm_status);
-  return (typeText === 'bxp-button' || typeCode === 7) && alarmStatus !== null && alarmStatus > 0;
+  return typeText === 'bxp-button' && frameType === 1 && alarmStatus === 1;
 }
 
 function isGatewaySelfDescription(item: any): boolean {
@@ -128,7 +128,7 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer, receivedA
 
   list.forEach((item: any, idx: number) => {
     if (isGatewaySelfDescription(item)) return;
-    if (isManualEmergencyItem(item)) return;
+    if (numericValue(payload?.msg_id) === 3070 && isManualEmergencyItem(item)) return;
 
     const timestamp = receivedAt.toISOString();
     const payloadTimestamp = item.timestamp ?? item.ts ?? item.created_at;
