@@ -14,13 +14,15 @@ const documentTypes = ['certificado_censal', 'modelo_036', 'modelo_037', 'cif_em
 export const distributorRouter = Router();
 distributorRouter.use(requireAuth, requireRole('distributor'));
 
-distributorRouter.get('/resources/cold-brochure', (_req, res, next) => {
+export const downloadDistributorBrochure = (_req: any, res: any, next: any) => {
   res.download(distributorBrochurePath, distributorBrochureFilename, { headers: { 'Content-Type': 'application/pdf' } }, (error) => error ? next(error) : undefined);
-});
+};
+
+distributorRouter.get('/resources/cold-brochure', downloadDistributorBrochure);
 
 const profileSelect = `
   u.id AS user_id, u.email, u.full_name, u.phone, u.role, u.status AS user_status, u.created_at AS user_created_at, u.updated_at AS user_updated_at,
-  dp.id AS distributor_profile_id, dp.company_name, dp.tax_id, dp.billing_address, dp.city, dp.province, dp.postal_code, dp.country,
+  dp.id AS distributor_profile_id, dp.company_name, dp.tax_id, dp.billing_address, dp.city, dp.region, dp.province, dp.postal_code, dp.country,
   dp.website, dp.contact_person, dp.validation_status, dp.discount_percent, dp.approved_at, dp.approved_by, dp.review_notes,
   dp.created_at AS profile_created_at, dp.updated_at AS profile_updated_at`;
 

@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import express from 'express';
 
 import { distributorBrochureFilename, distributorBrochurePath } from '../src/resources/distributor-brochure.js';
-import { distributorRouter } from '../src/modules/distributor/distributor.routes.js';
+import { distributorRouter, downloadDistributorBrochure } from '../src/modules/distributor/distributor.routes.js';
 import { sendDistributorWelcomeEmail } from '../src/modules/shared/mail.js';
 import type { MailContent } from '../src/modules/shared/mail.js';
 
@@ -36,6 +36,20 @@ try {
   assert.equal(response.status, 401, 'the brochure cannot be downloaded without authentication');
 } finally {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+}
+
+const downloadApp = express();
+downloadApp.get('/brochure', downloadDistributorBrochure);
+const downloadServer = downloadApp.listen(0);
+try {
+  const address = downloadServer.address();
+  assert.ok(address && typeof address === 'object');
+  const response = await fetch(`http://127.0.0.1:${address.port}/brochure`);
+  assert.equal(response.status, 200, 'the brochure handler serves the configured file');
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), brochure);
+} finally {
+  await new Promise<void>((resolve, reject) => downloadServer.close((error) => error ? reject(error) : resolve()));
 }
 
 const profilePage = await readFile(new URL('../web/src/pages/DistributorProfile.tsx', import.meta.url), 'utf8');
