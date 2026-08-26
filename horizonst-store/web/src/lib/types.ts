@@ -159,6 +159,7 @@ export type DistributorProfile = {
   tax_id: string;
   billing_address?: string | null;
   city?: string | null;
+  region?: string | null;
   province?: string | null;
   postal_code?: string | null;
   country?: string | null;
