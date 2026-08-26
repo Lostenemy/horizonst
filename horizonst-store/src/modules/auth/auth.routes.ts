@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth } from './middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
-import { sanitizeMailError, sendEmailVerificationEmail } from '../shared/mail.js';
+import { sanitizeMailError, sendDistributorWelcomeEmail, sendEmailVerificationEmail } from '../shared/mail.js';
 import { env } from '../../config/env.js';
 import { createOpaqueToken, emailVerificationSeconds, expiresAtSql, hashToken, passwordResetSeconds, refreshTokenSeconds, signAccessToken } from './token.js';
 
@@ -62,8 +62,13 @@ const canResendVerification = async (client: any, userId: string) => {
   if (Number(row?.sent_last_hour ?? 0) >= 5) return false;
   return !row?.last_sent_at || Date.now() - new Date(row.last_sent_at).getTime() >= 60_000;
 };
-const deliverVerificationEmail = async (user: { email: string; full_name: string }, token: string) => {
-  try { await sendEmailVerificationEmail({ email: user.email, fullName: user.full_name, verificationUrl: verificationUrl(token), expiresInSeconds: emailVerificationSeconds() }); return true; }
+const deliverVerificationEmail = async (user: { email: string; full_name: string; role?: string }, token: string) => {
+  try {
+    const input = { email: user.email, fullName: user.full_name, verificationUrl: verificationUrl(token), expiresInSeconds: emailVerificationSeconds() };
+    if (user.role === 'distributor') await sendDistributorWelcomeEmail(input);
+    else await sendEmailVerificationEmail(input);
+    return true;
+  }
   catch (error) { console.error('Verification email delivery failed', sanitizeMailError(error)); return false; }
 };
 
@@ -116,7 +121,8 @@ authRouter.post('/register-distributor', async (req, res, next) => {
     await writeAuditLog({ actorUserId: rows[0].id, action: 'distributor_application_created', entityType: 'distributor_profile', entityId: profile.rows[0].id }, client);
     const verificationToken = await createVerificationToken(client, rows[0].id, req.header('user-agent') ?? null, req.ip);
     await client.query('COMMIT');
-    res.status(201).json({ user: rows[0], message: 'Distributor account created pending email verification and validation.', verificationToken: process.env.NODE_ENV === 'production' ? undefined : verificationToken });
+    const welcomeEmailSent = await deliverVerificationEmail(rows[0], verificationToken);
+    res.status(201).json({ user: rows[0], message: 'Distributor account created pending email verification and validation.', welcomeEmailSent, verificationToken: process.env.NODE_ENV === 'production' ? undefined : verificationToken });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 
@@ -153,7 +159,7 @@ authRouter.post('/resend-verification', async (req, res, next) => {
   try {
     const input = z.object({ email: z.string().trim().email().max(320) }).strict().parse(req.body);
     await client.query('BEGIN');
-    const { rows } = await client.query("SELECT id, email, full_name FROM store.users WHERE email = $1 AND role = 'customer' AND status = 'pending_email_verification' FOR UPDATE", [input.email.toLowerCase()]);
+    const { rows } = await client.query("SELECT id, email, full_name, role FROM store.users WHERE email = $1 AND role IN ('customer', 'distributor') AND status = 'pending_email_verification' FOR UPDATE", [input.email.toLowerCase()]);
     const user = rows[0];
     if (!user) { await client.query('ROLLBACK'); res.json({ message: RESEND_MESSAGE }); return; }
     if (await canResendVerification(client, user.id)) {

@@ -7,11 +7,16 @@ import { env } from '../../config/env.js';
 import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
+import { distributorBrochureFilename, distributorBrochurePath } from '../../resources/distributor-brochure.js';
 
 const documentTypes = ['certificado_censal', 'modelo_036', 'modelo_037', 'cif_empresa', 'certificado_autonomo', 'escrituras', 'otro'] as const;
 
 export const distributorRouter = Router();
 distributorRouter.use(requireAuth, requireRole('distributor'));
+
+distributorRouter.get('/resources/cold-brochure', (_req, res, next) => {
+  res.download(distributorBrochurePath, distributorBrochureFilename, { headers: { 'Content-Type': 'application/pdf' } }, (error) => error ? next(error) : undefined);
+});
 
 const profileSelect = `
   u.id AS user_id, u.email, u.full_name, u.phone, u.role, u.status AS user_status, u.created_at AS user_created_at, u.updated_at AS user_updated_at,

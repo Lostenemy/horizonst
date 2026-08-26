@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react';
 import ErrorMessage from '../components/ErrorMessage';
 import { postJson } from '../lib/api';
 
-type RegisterDistributorResponse = { verificationToken?: string };
+type RegisterDistributorResponse = { verificationToken?: string; welcomeEmailSent?: boolean };
 
 const fields = [
   'fullName',
@@ -33,7 +33,7 @@ export default function RegisterDistributor() {
         Object.fromEntries(new FormData(event.currentTarget))
       );
       setMessage(
-        `Cuenta distribuidor pendiente de verificación y validación.${data.verificationToken ? ` Token dev: ${data.verificationToken}` : ''}`
+        `${data.welcomeEmailSent ? 'Te hemos enviado el correo de bienvenida con el dossier adjunto.' : 'Cuenta creada. Si no recibes el correo, solicita un reenvío desde el acceso.'} La cuenta queda pendiente de verificación y validación.${data.verificationToken ? ` Token dev: ${data.verificationToken}` : ''}`
       );
       setError('');
       event.currentTarget.reset();

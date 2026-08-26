@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { connect as netConnect, Socket } from 'node:net';
 import { connect as tlsConnect, TLSSocket } from 'node:tls';
 import { env } from '../../config/env.js';
 import type { StoreMailConfig } from '../../config/env.js';
+import { distributorBrochureFilename, distributorBrochurePath } from '../../resources/distributor-brochure.js';
 
 type SmtpResponse = { code: number; message: string };
 type SmtpSocket = Socket | TLSSocket;
 type SmtpConnector = (config: StoreMailConfig) => { socket: SmtpSocket; readyEvent: string };
 
-export type MailContent = { to: string; subject: string; text: string; html: string };
+export type MailAttachment = { filename: string; contentType: string; content: Uint8Array };
+export type MailContent = { to: string; subject: string; text: string; html: string; attachments?: MailAttachment[] };
 export type QuoteEmailInput = {
   quote: {
     id: string;
@@ -29,6 +32,7 @@ export type OrderConfirmationEmailInput = QuoteEmailInput & {
 };
 export type AppccGuideEmailInput = { email: string };
 export type EmailVerificationEmailInput = { email: string; fullName: string; verificationUrl: string; expiresInSeconds: number };
+export type DistributorWelcomeEmailInput = EmailVerificationEmailInput;
 export type PrereservationEmailInput = {
   prereservation: { id: string; email: string; code: string; confirmedAt: string | Date };
   offer: {
@@ -83,31 +87,35 @@ export class SmtpClient {
     this.expect(await this.send(Buffer.from(this.config.password).toString('base64')), [235]);
   }
 
-  async sendMail(to: string, subject: string, text: string, html?: string) {
+  async sendMail(to: string, subject: string, text: string, html?: string, attachments: MailAttachment[] = []) {
     this.expect(await this.send(`MAIL FROM:<${this.config.from}>`), [250]);
     this.expect(await this.send(`RCPT TO:<${to}>`), [250, 251]);
     this.expect(await this.send('DATA'), [354]);
-    const plainText = text.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..');
-    const body = html ? [
-      `Message-ID: <${randomUUID()}@${this.config.ehloDomain}>`, `Date: ${new Date().toUTCString()}`, `From: ${this.config.from}`, `To: ${to}`, `Subject: ${subject}`, 'MIME-Version: 1.0', `Content-Type: multipart/alternative; boundary="horizonst-${randomUUID()}"`, '',
-      // The boundary is repeated below from the header to produce a standards-compliant alternative body.
-    ].join('\r\n') : [
+    const plainText = text.replace(/\r?\n/g, '\r\n');
+    const messageHeaders = [
       `Message-ID: <${randomUUID()}@${this.config.ehloDomain}>`,
       `Date: ${new Date().toUTCString()}`,
       `From: ${this.config.from}`,
       `To: ${to}`,
       `Subject: ${subject}`,
-      'MIME-Version: 1.0',
-      'Content-Type: text/plain; charset="utf-8"',
-      'Content-Transfer-Encoding: 8bit',
-      '',
-      plainText
-    ].join('\r\n');
-    if (!html) { await this.write(`${body}\r\n.\r\n`); this.expect(await this.readResponse(), [250]); return; }
-    const boundary = body.match(/boundary="([^"]+)"/)?.[1];
-    if (!boundary) throw new Error('smtp_multipart_boundary_missing');
-    const multipart = `${body}\r\n--${boundary}\r\nContent-Type: text/plain; charset="utf-8"\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${plainText}\r\n--${boundary}\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${html.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..')}\r\n--${boundary}--`;
-    await this.write(`${multipart}\r\n.\r\n`);
+      'MIME-Version: 1.0'
+    ];
+    const alternativeBoundary = `horizonst-alternative-${randomUUID()}`;
+    const alternative = html
+      ? [`Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`, '', `--${alternativeBoundary}`, 'Content-Type: text/plain; charset="utf-8"', 'Content-Transfer-Encoding: 8bit', '', plainText, `--${alternativeBoundary}`, 'Content-Type: text/html; charset="utf-8"', 'Content-Transfer-Encoding: 8bit', '', html.replace(/\r?\n/g, '\r\n'), `--${alternativeBoundary}--`].join('\r\n')
+      : ['Content-Type: text/plain; charset="utf-8"', 'Content-Transfer-Encoding: 8bit', '', plainText].join('\r\n');
+    let message = [...messageHeaders, alternative].join('\r\n');
+    if (attachments.length > 0) {
+      const mixedBoundary = `horizonst-mixed-${randomUUID()}`;
+      const attachmentParts = attachments.map((attachment) => {
+        const filename = attachment.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const encoded = Buffer.from(attachment.content).toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '';
+        return [`--${mixedBoundary}`, `Content-Type: ${attachment.contentType}; name="${filename}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${filename}"`, '', encoded].join('\r\n');
+      });
+      message = [...messageHeaders, `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`, '', `--${mixedBoundary}`, alternative, ...attachmentParts, `--${mixedBoundary}--`].join('\r\n');
+    }
+    const dotStuffedMessage = message.replace(/^\./gm, '..');
+    await this.write(`${dotStuffedMessage}\r\n.\r\n`);
     this.expect(await this.readResponse(), [250]);
   }
 
@@ -170,12 +178,12 @@ export class SmtpClient {
 const textHtml = (text: string) => `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#08233f">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</div>`;
 const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-async function sendMail({ to, subject, text, html }: MailContent) {
+async function sendMail({ to, subject, text, html, attachments }: MailContent) {
   if (!env.mail.enabled) return;
   const client = new SmtpClient();
   try {
     await client.connect();
-    await client.sendMail(to, subject, text, html);
+    await client.sendMail(to, subject, text, html, attachments);
   } finally {
     await client.close();
   }
@@ -268,6 +276,18 @@ export function buildEmailVerificationEmail({ email, fullName, verificationUrl, 
   };
 }
 
+export function buildDistributorWelcomeEmail({ email, fullName, verificationUrl, expiresInSeconds }: DistributorWelcomeEmailInput, brochure: Uint8Array): MailContent {
+  const hours = Math.max(1, Math.ceil(expiresInSeconds / 3600));
+  const safeName = escapeHtml(fullName);
+  return {
+    to: email,
+    subject: 'Bienvenido a HorizonST: verifica tu cuenta de distribuidor',
+    text: [`Hola ${fullName},`, '', 'Bienvenido al portal de distribuidores de HorizonST.', 'Hemos recibido tu solicitud de alta. Verifica tu dirección de correo para activar la cuenta:', verificationUrl, '', `El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}.`, `Adjuntamos ${distributorBrochureFilename}, que también podrás descargar desde tu portal.`, '', AUTO_FOOTER].join('\n'),
+    html: `<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px"><tr><td style="padding:28px;background:#08233f;color:#fff;font-size:22px;font-weight:bold">HorizonST · Distribuidores</td></tr><tr><td style="padding:32px"><h1 style="margin:0 0 16px;font-size:26px">Bienvenido a HorizonST</h1><p>Hola ${safeName},</p><p>Hemos recibido tu solicitud de alta como distribuidor. Verifica tu dirección de correo para activar la cuenta.</p><p style="margin:28px 0"><a href="${verificationUrl}" style="display:inline-block;padding:14px 22px;background:#008d99;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">Verificar mi cuenta</a></p><p>El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}.</p><p>Adjuntamos <strong>${distributorBrochureFilename}</strong>, que también podrás descargar desde tu portal de distribuidor.</p><p style="word-break:break-all;color:#536471">${verificationUrl}</p></td></tr><tr><td style="padding:18px 32px;background:#f5f8f9;color:#536471;font-size:12px">${AUTO_FOOTER}</td></tr></table></td></tr></table></body></html>`,
+    attachments: [{ filename: distributorBrochureFilename, contentType: 'application/pdf', content: brochure }]
+  };
+}
+
 export function buildPrereservationConfirmationEmail({ prereservation, offer }: PrereservationEmailInput): MailContent {
   const coverage = offer.hardware.coverageSquareMeters && offer.hardware.coverageSquareMeters > 0
     ? `Cobertura aproximada: hasta ${new Intl.NumberFormat('es-ES').format(offer.hardware.coverageSquareMeters)} m²`
@@ -340,6 +360,11 @@ export async function sendAppccGuideEmail(input: AppccGuideEmailInput, deliver: 
 
 export async function sendEmailVerificationEmail(input: EmailVerificationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
   await deliver(buildEmailVerificationEmail(input));
+}
+
+export async function sendDistributorWelcomeEmail(input: DistributorWelcomeEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
+  const brochure = await readFile(distributorBrochurePath);
+  await deliver(buildDistributorWelcomeEmail(input, brochure));
 }
 
 export async function sendPrereservationConfirmationEmail(input: PrereservationEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
