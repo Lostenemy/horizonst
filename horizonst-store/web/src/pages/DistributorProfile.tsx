@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ErrorMessage from '../components/ErrorMessage';
 import Loading from '../components/Loading';
-import { api, patchJson } from '../lib/api';
+import { api, downloadFile, patchJson } from '../lib/api';
 import { formDataObject } from '../lib/form';
 import type { DistributorProfile as DistributorProfileModel } from '../lib/types';
 
@@ -32,10 +32,16 @@ export default function DistributorProfile() {
     finally { setSubmitting(false); }
   }
 
+  async function downloadBrochure() {
+    setError('');
+    try { await downloadFile('/api/distributor/resources/cold-brochure', 'HorizonST_Frio.pdf'); }
+    catch (err) { setError(err instanceof Error ? err.message : 'No se pudo descargar el documento'); }
+  }
+
   return (
     <section className="panel">
       <h1>Portal distribuidor</h1>
-      <div className="actions"><Link className="btn" to="/distributor/documents">Documentos</Link><Link className="btn secondary" to="/catalog">Catálogo</Link><Link className="btn secondary" to="/saas-plans">Planes web</Link><Link className="btn secondary" to="/cart">Carrito</Link></div>
+      <div className="actions"><button className="btn" type="button" onClick={downloadBrochure}>Descargar dossier de frío</button><Link className="btn secondary" to="/distributor/documents">Documentos</Link><Link className="btn secondary" to="/catalog">Catálogo</Link><Link className="btn secondary" to="/saas-plans">Planes web</Link><Link className="btn secondary" to="/cart">Carrito</Link></div>
       <ErrorMessage message={error} />
       {loading ? <Loading /> : profile && (
         <>
