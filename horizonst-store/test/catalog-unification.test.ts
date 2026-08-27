@@ -19,7 +19,8 @@ assert.doesNotMatch(layout, /to="\/saas-plans"/, 'independent web plans navigati
 assert.match(layout, /Documentación HorizonST/); assert.match(layout, /Mis documentos/); assert.match(layout, />Perfil</);
 assert.match(migration, /WHEN 'starter' THEN 10/);
 assert.match(migration, /WHEN 'enterprise' THEN 40/); assert.match(migration, /WHEN 'enterprise' THEN 20/);
-assert.match(catalog, /\+\{enterpriseExtraTags\} tags · \+\{enterpriseExtraGateways\} gateways respecto a Professional/, 'Enterprise shows the truthful +20/+10 delta from database capacities');
+assert.match(catalog, /\+\{enterpriseExtraTags\} tags · \+\{enterpriseExtraGateways\} gateways/, 'Enterprise highlights the truthful +20/+10 delta from database capacities');
+assert.match(catalog, /Capacidad adicional sobre Professional/, 'Enterprise explains that its displayed capacity is additional to Professional');
 assert.match(quotesPage, /downloadFile\(`\/api\/quotes\/\$\{detail\.quote\.id\}\/pdf`/, 'quote PDF uses authenticated blob download');
 assert.doesNotMatch(quotesPage, /href=\{`\/api\/quotes\/.*\/pdf/);
 assert.match(adminQuotePage, /downloadFile\(`\/api\/admin\/quotes\/\$\{id\}\/pdf`/, 'admin PDF uses the same authenticated pattern');
