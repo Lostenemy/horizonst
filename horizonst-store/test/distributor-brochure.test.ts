@@ -14,7 +14,7 @@ assert.ok((await stat(distributorBrochurePath)).size > 100_000, 'the distributor
 assert.match(brochure.subarray(0, 8).toString('ascii'), /^%PDF-1\.[0-9]$/, 'the distributor brochure has a valid PDF signature');
 
 let delivered: MailContent | undefined;
-await sendDistributorWelcomeEmail({ email: 'distribuidor@example.test', fullName: 'Distribuidor', verificationUrl: 'https://tienda.horizonst.es/verify-email?token=test-token', expiresInSeconds: 3600 }, async (mail) => { delivered = mail; });
+await sendDistributorWelcomeEmail({ email: 'distribuidor@example.test', fullName: 'Distribuidor', verificationUrl: 'https://tienda.horizonst.es/verify-email?token=test-token', expiresInSeconds: 3600, countryCode: 'ES' }, async (mail) => { delivered = mail; });
 assert.equal(delivered?.attachments?.[0]?.filename, distributorBrochureFilename);
 assert.deepEqual(delivered?.attachments?.[0]?.content, brochure, 'the welcome email attaches the published brochure bytes');
 

@@ -5,6 +5,7 @@ import { connect as tlsConnect, TLSSocket } from 'node:tls';
 import { env } from '../../config/env.js';
 import type { StoreMailConfig } from '../../config/env.js';
 import { distributorBrochureFilename, distributorBrochurePath } from '../../resources/distributor-brochure.js';
+import { requiredDistributorDocuments } from '../../resources/distributor-required-documents.js';
 
 type SmtpResponse = { code: number; message: string };
 type SmtpSocket = Socket | TLSSocket;
@@ -32,7 +33,7 @@ export type OrderConfirmationEmailInput = QuoteEmailInput & {
 };
 export type AppccGuideEmailInput = { email: string };
 export type EmailVerificationEmailInput = { email: string; fullName: string; verificationUrl: string; expiresInSeconds: number };
-export type DistributorWelcomeEmailInput = EmailVerificationEmailInput;
+export type DistributorWelcomeEmailInput = EmailVerificationEmailInput & { countryCode: string };
 export type PrereservationEmailInput = {
   prereservation: { id: string; email: string; code: string; confirmedAt: string | Date };
   offer: {
@@ -276,14 +277,17 @@ export function buildEmailVerificationEmail({ email, fullName, verificationUrl, 
   };
 }
 
-export function buildDistributorWelcomeEmail({ email, fullName, verificationUrl, expiresInSeconds }: DistributorWelcomeEmailInput, brochure: Uint8Array): MailContent {
+export function buildDistributorWelcomeEmail({ email, fullName, verificationUrl, expiresInSeconds, countryCode }: DistributorWelcomeEmailInput, brochure: Uint8Array): MailContent {
   const hours = Math.max(1, Math.ceil(expiresInSeconds / 3600));
   const safeName = escapeHtml(fullName);
+  const requirements = requiredDistributorDocuments(countryCode);
+  const requirementsText = requirements.map((document) => `- ${document.label}`);
+  const requirementsHtml = requirements.map((document) => `<li style="margin-bottom:8px">${escapeHtml(document.label)}</li>`).join('');
   return {
     to: email,
     subject: 'Bienvenido a HorizonST: verifica tu cuenta de distribuidor',
-    text: [`Hola ${fullName},`, '', 'Bienvenido al portal de distribuidores de HorizonST.', 'Hemos recibido tu solicitud de alta. Verifica tu dirección de correo para activar la cuenta:', verificationUrl, '', `El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}.`, `Adjuntamos ${distributorBrochureFilename}, que también podrás descargar desde tu portal.`, '', AUTO_FOOTER].join('\n'),
-    html: `<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px"><tr><td style="padding:28px;background:#08233f;color:#fff;font-size:22px;font-weight:bold">HorizonST · Distribuidores</td></tr><tr><td style="padding:32px"><h1 style="margin:0 0 16px;font-size:26px">Bienvenido a HorizonST</h1><p>Hola ${safeName},</p><p>Hemos recibido tu solicitud de alta como distribuidor. Verifica tu dirección de correo para activar la cuenta.</p><p style="margin:28px 0"><a href="${verificationUrl}" style="display:inline-block;padding:14px 22px;background:#008d99;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">Verificar mi cuenta</a></p><p>El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}.</p><p>Adjuntamos <strong>${distributorBrochureFilename}</strong>, que también podrás descargar desde tu portal de distribuidor.</p><p style="word-break:break-all;color:#536471">${verificationUrl}</p></td></tr><tr><td style="padding:18px 32px;background:#f5f8f9;color:#536471;font-size:12px">${AUTO_FOOTER}</td></tr></table></td></tr></table></body></html>`,
+    text: [`Hola ${fullName},`, '', 'Bienvenido al portal de distribuidores de HorizonST.', 'Hemos recibido tu solicitud de alta. Verifica tu dirección de correo para activar la cuenta:', verificationUrl, '', `El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}.`, '', 'Tu cuenta quedará pendiente de validación hasta que HorizonST revise la documentación necesaria:', ...requirementsText, '', 'Podrás subir esta documentación desde: Portal distribuidor > Mis documentos.', '', `Adjuntamos ${distributorBrochureFilename}, que también podrás descargar desde tu portal.`, '', AUTO_FOOTER].join('\n'),
+    html: `<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px"><tr><td style="padding:28px;background:#08233f;color:#fff;font-size:22px;font-weight:bold">HorizonST · Distribuidores</td></tr><tr><td style="padding:32px"><h1 style="margin:0 0 16px;font-size:26px">Bienvenido a HorizonST</h1><p>Hola ${safeName},</p><p>Hemos recibido tu solicitud de alta como distribuidor. Verifica tu dirección de correo para activar la cuenta.</p><p style="margin:28px 0"><a href="${verificationUrl}" style="display:inline-block;padding:14px 22px;background:#008d99;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">Verificar mi cuenta</a></p><p>El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}.</p><div style="margin:24px 0;padding:20px;background:#eef8f8;border-left:4px solid #008d99"><strong>Documentación necesaria para validar tu cuenta</strong><ul style="padding-left:20px">${requirementsHtml}</ul><p style="margin-bottom:0">Podrás subirla desde <strong>Portal distribuidor &gt; Mis documentos</strong>. Tu cuenta quedará pendiente hasta que HorizonST la revise.</p></div><p>Adjuntamos <strong>${distributorBrochureFilename}</strong>, que también podrás descargar desde tu portal de distribuidor.</p><p style="word-break:break-all;color:#536471">${verificationUrl}</p></td></tr><tr><td style="padding:18px 32px;background:#f5f8f9;color:#536471;font-size:12px">${AUTO_FOOTER}</td></tr></table></td></tr></table></body></html>`,
     attachments: [{ filename: distributorBrochureFilename, contentType: 'application/pdf', content: brochure }]
   };
 }

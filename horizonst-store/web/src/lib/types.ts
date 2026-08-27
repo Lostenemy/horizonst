@@ -173,8 +173,25 @@ export type DistributorProfile = {
 export type DistributorDocument = {
   id: string;
   document_type: string;
-  status: string;
+  file_name: string;
+  file_size_bytes: number;
+  status: 'pending' | 'approved' | 'rejected' | 'replaced';
   created_at: string;
+  reviewed_at: string | null;
+  review_notes: string | null;
+};
+
+export type DistributorDocumentRequirement = {
+  code: string;
+  label: string;
+  description: string;
+  acceptedTypes: string[];
+};
+
+export type DistributorDocumentsResponse = {
+  country: string;
+  requirements: DistributorDocumentRequirement[];
+  documents: DistributorDocument[];
 };
 
 export type DistributorResource = {

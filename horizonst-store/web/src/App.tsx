@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleRoute from './components/RoleRoute';
@@ -34,7 +34,6 @@ import Orders from './pages/Orders';
 import Register from './pages/Register';
 import RegisterDistributor from './pages/RegisterDistributor';
 import ResetPassword from './pages/ResetPassword';
-import SaasPlans from './pages/SaasPlans';
 import VerifyEmail from './pages/VerifyEmail';
 import { isPublicMarketingHost, publicMarketingPage, publicPrereservationCode } from './lib/domains';
 
@@ -63,7 +62,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
           <Route path="/catalog" element={<Catalog />} />
-          <Route path="/saas-plans" element={<SaasPlans />} />
+          <Route path="/saas-plans" element={<Navigate to="/catalog" replace />} />
           <Route path="/cart" element={<Cart />} />
           <Route element={<RoleRoute roles={['customer', 'distributor']} />}>
             <Route path="/quotes" element={<Quotes />} />

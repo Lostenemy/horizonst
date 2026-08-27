@@ -74,7 +74,8 @@ router.get('/quotes/:id/pdf', async (req, res, next) => {
     const items = await pool.query(`SELECT description, quantity, unit_price_cents, line_subtotal_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
     const pdf = await generateQuotePdf({ quote: quote.rows[0], items: items.rows });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${quote.rows[0].quote_number}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${quote.rows[0].quote_number}.pdf"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Length', pdf.length.toString());
     res.send(pdf);
   } catch (error) { next(error); }
