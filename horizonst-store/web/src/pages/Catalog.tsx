@@ -61,8 +61,13 @@ export default function Catalog() {
                   </article>}
                   {plan && <article className="catalog-card web-card">
                     <small>Web {tierLabels[tier]}</small><h3>{plan.name}</h3><p>{plan.description || 'Servicio web HorizonST adaptado a este nivel de operación.'}</p>
-                    <p className="plan-capacity"><strong>{plan.max_tags ?? '—'} tags · {plan.max_gateways ?? '—'} gateways</strong></p>
-                    {enterpriseExtraTags && enterpriseExtraGateways ? <p className="tier-increment">+{enterpriseExtraTags} tags · +{enterpriseExtraGateways} gateways respecto a Professional</p> : <p className="tier-increment" aria-hidden="true">Capacidad incluida en el plan</p>}
+                    {enterpriseExtraTags && enterpriseExtraGateways ? <>
+                      <p className="plan-capacity"><strong>+{enterpriseExtraTags} tags · +{enterpriseExtraGateways} gateways</strong></p>
+                      <p className="tier-increment">Capacidad adicional sobre Professional</p>
+                    </> : <>
+                      <p className="plan-capacity"><strong>{plan.max_tags ?? '—'} tags · {plan.max_gateways ?? '—'} gateways</strong></p>
+                      <p className="tier-increment" aria-hidden="true">Capacidad incluida en el plan</p>
+                    </>}
                     <div className="catalog-card-footer"><strong>{canAutoPriceSaasPlan(plan) ? money(plan.annual_price_cents) : 'Consultar'}</strong><button type="button" disabled={!canAutoPriceSaasPlan(plan) || addingId === plan.id} onClick={() => addToCart('saas_plan', plan.id)}>{addingId === plan.id ? 'Añadiendo…' : 'Añadir plan web'}</button></div>
                   </article>}
                 </div>
