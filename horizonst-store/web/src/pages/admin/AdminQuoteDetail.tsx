@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { patchJson } from '../../lib/api';
+import { downloadFile, patchJson } from '../../lib/api';
 import { money } from '../../lib/money';
 import { AdminShell, AsyncState } from './AdminShell';
 import { apiMessage } from './adminUtils';
@@ -48,7 +48,7 @@ export default function AdminQuoteDetail() {
         <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comentario para historial (opcional)" />
         <div className="actions">
           {adminStatuses.map((status) => <button disabled={busy || quote.status === status} key={status} onClick={() => changeStatus(status)}>{status}</button>)}
-          <a className="button" href={`/api/admin/quotes/${id}/pdf`} target="_blank" rel="noreferrer">PDF</a>
+          <button type="button" onClick={() => downloadFile(`/api/admin/quotes/${id}/pdf`, `${data.quote.quote_number}.pdf`).catch((downloadError) => setFeedback(apiMessage(downloadError)))}>PDF</button>
         </div>
         {feedback && <p className={feedback === 'Estado actualizado' ? 'success' : 'error'}>{feedback}</p>}
 

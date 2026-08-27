@@ -1,4 +1,4 @@
-import type { Product, SaasPlan, Quote, CartItem, DistributorResource } from '../../lib/types';
+import type { Product, SaasPlan, Quote, CartItem, DistributorResource, DistributorDocumentRequirement } from '../../lib/types';
 
 export type AuditPayload = string | number | boolean | null | AuditPayload[] | { [key: string]: AuditPayload };
 
@@ -84,6 +84,7 @@ export type AdminDistributorDocument = {
 
 export type DistributorDetailResponse = {
   distributor: AdminDistributor;
+  requirements: DistributorDocumentRequirement[];
   documents: AdminDistributorDocument[];
 };
 
