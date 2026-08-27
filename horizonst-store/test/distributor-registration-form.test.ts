@@ -82,6 +82,23 @@ assert.match(formSource, /aria-describedby/, 'field hints and errors are associa
 assert.match(formSource, /distributorFieldErrorsFromApi\(caught\.details\)/, 'backend field errors are rendered through the field-error state');
 assert.match(formSource, /const form = event\.currentTarget;/, 'the form reference is retained before asynchronous registration');
 assert.match(formSource, /form\.reset\(\)/, 'successful registration resets the retained form safely');
+for (const section of ['Datos de contacto', 'Datos de empresa', 'Ubicación fiscal']) assert.match(formSource, new RegExp(`<legend>${section}</legend>`), `form groups fields under ${section}`);
+assert.match(formSource, /className="registration-actions"><button/, 'submit action closes the form outside the field grids');
+assert.doesNotMatch(formSource, /label="Correo electrónico"[^>]+hint=/, 'email example is not duplicated as placeholder and helper');
+assert.doesNotMatch(formSource, /label="Teléfono"[^>]+hint=/, 'phone example is not duplicated as placeholder and helper');
+assert.doesNotMatch(formSource, /label="Código postal"[^>]+hint=/, 'postal-code example is not duplicated as placeholder and helper');
+
+const styles = await readFile(new URL('../web/src/styles.css', import.meta.url), 'utf8');
+assert.match(styles, /\.distributor-registration-container\{[^}]*max-width:1400px/, 'registration route receives a wider dedicated container');
+assert.match(styles, /\.registration-fields\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/, 'desktop layout uses at most three columns');
+assert.match(styles, /@media\(max-width:1199px\)\{\.registration-fields\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/, 'tablet layout uses two columns');
+assert.match(styles, /@media\(max-width:767px\)[\s\S]*?\.registration-fields\{grid-template-columns:1fr/, 'mobile layout uses one column');
+assert.match(styles, /\.form-field>label\{display:flex/, 'label text and required marker remain on the same line');
+assert.match(styles, /\.form-field input,\.form-field select\{width:100%;height:52px/, 'controls remain uniform and cannot overflow their columns');
+assert.match(styles, /\.registration-actions button\{width:min\(100%,260px\)/, 'desktop submit action has a deliberate width');
+
+const layout = await readFile(new URL('../web/src/components/Layout.tsx', import.meta.url), 'utf8');
+assert.match(layout, /location\.pathname === '\/register-distributor'/, 'only the distributor-registration route widens the shared container');
 
 const dockerfile = await readFile(new URL('../Dockerfile', import.meta.url), 'utf8');
 assert.match(dockerfile, /COPY resources \.\/resources/, 'the Docker image still includes the distributor brochure');

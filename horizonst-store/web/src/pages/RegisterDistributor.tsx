@@ -50,25 +50,42 @@ export default function RegisterDistributor() {
 
   return (
     <section className="panel distributor-registration">
-      <h1>Registro de distribuidor</h1>
-      <p className="muted">Los campos marcados con <span aria-hidden="true">*</span> son obligatorios.</p>
+      <header className="registration-header">
+        <h1>Solicitud de alta como distribuidor</h1>
+        <p className="muted">Los campos marcados con <span aria-hidden="true">*</span> son obligatorios.</p>
+      </header>
       <ErrorMessage message={error} />
-      <form className="grid" onSubmit={submit} noValidate>
-        <FormField name="fullName" label="Nombre y apellidos" required error={fieldErrors.fullName}><input {...validationProps('fullName')} type="text" autoComplete="name" maxLength={200} required /></FormField>
-        <FormField name="email" label="Correo electrónico" required hint="Ejemplo: nombre@empresa.es" error={fieldErrors.email}><input {...validationProps('email', true)} type="email" autoComplete="email" maxLength={320} placeholder="nombre@empresa.es" required /></FormField>
-        <FormField name="phone" label="Teléfono" required hint="Ejemplo: +34 612 345 678" error={fieldErrors.phone}><input {...validationProps('phone', true)} type="tel" autoComplete="tel" maxLength={50} placeholder="+34 612 345 678" required /></FormField>
-        <FormField name="password" label="Contraseña" required hint="Mínimo 10 caracteres." error={fieldErrors.password}><input {...validationProps('password', true)} type="password" autoComplete="new-password" minLength={10} maxLength={200} required /></FormField>
-        <FormField name="company_name" label="Razón social" required error={fieldErrors.company_name}><input {...validationProps('company_name')} type="text" autoComplete="organization" maxLength={200} required /></FormField>
-        <FormField name="tax_id" label="CIF / NIF / NIE" required hint="Ejemplo: B12345678" error={fieldErrors.tax_id}><input {...validationProps('tax_id', true)} type="text" autoCapitalize="characters" maxLength={80} placeholder="B12345678" required /></FormField>
-        <FormField name="billing_address" label="Dirección fiscal" required error={fieldErrors.billing_address}><input {...validationProps('billing_address')} type="text" autoComplete="street-address" maxLength={500} required /></FormField>
-        <FormField name="city" label="Localidad" required error={fieldErrors.city}><input {...validationProps('city')} type="text" autoComplete="address-level2" maxLength={120} required /></FormField>
-        <FormField name="country" label="País" required error={fieldErrors.country}><select {...validationProps('country')} value={location.country} autoComplete="country" required onChange={(event) => changeCountry(event.target.value)}><option value="">Selecciona un país</option>{distributorCountries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select></FormField>
-        <FormField name="region" label="Región / Comunidad Autónoma" required error={fieldErrors.region}><select {...validationProps('region')} value={location.region} autoComplete="address-level1" required disabled={!location.country} onChange={(event) => changeRegion(event.target.value)}><option value="">Selecciona una comunidad autónoma</option>{regions.map((region) => <option key={region.code} value={region.name}>{region.name}</option>)}</select></FormField>
-        <FormField name="province" label="Provincia" required error={fieldErrors.province}><select {...validationProps('province')} value={location.province} required disabled={!location.region} onChange={(event) => { setLocation((current) => ({ ...current, province: event.target.value })); setFieldErrors((current) => ({ ...current, province: undefined })); }}><option value="">Selecciona una provincia</option>{provinces.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}</select></FormField>
-        <FormField name="postal_code" label="Código postal" required hint="Ejemplo: 30001" error={fieldErrors.postal_code}><input {...validationProps('postal_code', true)} type="text" inputMode="numeric" autoComplete="postal-code" maxLength={5} placeholder="30001" required /></FormField>
-        <FormField name="website" label="Sitio web" hint="Opcional. Ejemplo: https://empresa.es" error={fieldErrors.website}><input {...validationProps('website', true)} type="url" autoComplete="url" maxLength={300} placeholder="https://empresa.es" /></FormField>
-        <FormField name="contact_person" label="Persona de contacto" hint="Opcional, si es distinta de la persona solicitante." error={fieldErrors.contact_person}><input {...validationProps('contact_person', true)} type="text" maxLength={200} /></FormField>
-        <button type="submit" disabled={submitting}>{submitting ? 'Enviando solicitud…' : 'Solicitar alta'}</button>
+      <form className="distributor-registration-form" onSubmit={submit} noValidate>
+        <fieldset className="registration-section">
+          <legend>Datos de contacto</legend>
+          <div className="registration-fields">
+            <FormField name="fullName" label="Nombre y apellidos" required error={fieldErrors.fullName}><input {...validationProps('fullName')} type="text" autoComplete="name" maxLength={200} required /></FormField>
+            <FormField name="email" label="Correo electrónico" required error={fieldErrors.email}><input {...validationProps('email')} type="email" autoComplete="email" maxLength={320} placeholder="nombre@empresa.es" required /></FormField>
+            <FormField name="phone" label="Teléfono" required error={fieldErrors.phone}><input {...validationProps('phone')} type="tel" autoComplete="tel" maxLength={50} placeholder="+34 612 345 678" required /></FormField>
+            <FormField name="password" label="Contraseña" required hint="Mínimo 10 caracteres." error={fieldErrors.password}><input {...validationProps('password', true)} type="password" autoComplete="new-password" minLength={10} maxLength={200} required /></FormField>
+            <FormField name="contact_person" label="Persona de contacto" error={fieldErrors.contact_person}><input {...validationProps('contact_person')} type="text" maxLength={200} /></FormField>
+            <FormField name="website" label="Sitio web" hint="Opcional. Ejemplo: https://empresa.es" error={fieldErrors.website}><input {...validationProps('website', true)} type="url" autoComplete="url" maxLength={300} placeholder="https://empresa.es" /></FormField>
+          </div>
+        </fieldset>
+        <fieldset className="registration-section">
+          <legend>Datos de empresa</legend>
+          <div className="registration-fields">
+            <FormField name="company_name" label="Razón social" required error={fieldErrors.company_name}><input {...validationProps('company_name')} type="text" autoComplete="organization" maxLength={200} required /></FormField>
+            <FormField name="tax_id" label="CIF / NIF / NIE" required hint="Ejemplo: B12345678" error={fieldErrors.tax_id}><input {...validationProps('tax_id', true)} type="text" autoCapitalize="characters" maxLength={80} placeholder="B12345678" required /></FormField>
+            <FormField name="billing_address" label="Dirección fiscal" required error={fieldErrors.billing_address}><input {...validationProps('billing_address')} type="text" autoComplete="street-address" maxLength={500} required /></FormField>
+          </div>
+        </fieldset>
+        <fieldset className="registration-section">
+          <legend>Ubicación fiscal</legend>
+          <div className="registration-fields">
+            <FormField name="country" label="País" required error={fieldErrors.country}><select {...validationProps('country')} value={location.country} autoComplete="country" required onChange={(event) => changeCountry(event.target.value)}><option value="">Selecciona un país</option>{distributorCountries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select></FormField>
+            <FormField name="region" label="Región / Comunidad Autónoma" required error={fieldErrors.region}><select {...validationProps('region')} value={location.region} autoComplete="address-level1" required disabled={!location.country} onChange={(event) => changeRegion(event.target.value)}><option value="">Selecciona una comunidad autónoma</option>{regions.map((region) => <option key={region.code} value={region.name}>{region.name}</option>)}</select></FormField>
+            <FormField name="province" label="Provincia" required error={fieldErrors.province}><select {...validationProps('province')} value={location.province} required disabled={!location.region} onChange={(event) => { setLocation((current) => ({ ...current, province: event.target.value })); setFieldErrors((current) => ({ ...current, province: undefined })); }}><option value="">Selecciona una provincia</option>{provinces.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}</select></FormField>
+            <FormField name="city" label="Localidad" required error={fieldErrors.city}><input {...validationProps('city')} type="text" autoComplete="address-level2" maxLength={120} required /></FormField>
+            <FormField name="postal_code" label="Código postal" required error={fieldErrors.postal_code}><input {...validationProps('postal_code')} type="text" inputMode="numeric" autoComplete="postal-code" maxLength={5} placeholder="30001" required /></FormField>
+          </div>
+        </fieldset>
+        <div className="registration-actions"><button type="submit" disabled={submitting}>{submitting ? 'Enviando solicitud…' : 'Solicitar alta'}</button></div>
       </form>
       {message && <p className="success" role="status">{message}</p>}
     </section>
