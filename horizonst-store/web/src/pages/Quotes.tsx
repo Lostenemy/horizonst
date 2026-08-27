@@ -66,12 +66,12 @@ export default function Quotes() {
     if (!detail) return;
     try {
       setError(null);
-      await downloadFile(`/api/quotes/${detail.quote.id}/pdf`, `${detail.quote.quote_number}.pdf`);
+      await downloadFile(`/api/quotes/${detail.quote.id}/pdf`, `PRESUPUESTO-${detail.quote.quote_number}.pdf`);
     } catch (err) { setError(errorMessage(err)); }
   };
 
   return (
-    <section className="panel quotes-page">
+    <section className="panel quotes-page commercial-documents-page">
       <h1>Mis presupuestos</h1>
       {error && <p className="error">{error}</p>}
       {loading ? <p>Cargando presupuestos…</p> : (
@@ -85,7 +85,7 @@ export default function Quotes() {
                   <tr key={quote.id} className={quote.id === selectedId ? 'selected-row' : ''} onClick={() => setSelectedId(quote.id)}>
                     <td><button type="button" className="link-button" onClick={() => setSelectedId(quote.id)}>{quote.quote_number}</button></td>
                     <td>{new Date(quote.created_at).toLocaleDateString('es-ES')}</td>
-                    <td>{statusLabels[quote.status]}</td>
+                    <td><span className={`commercial-status ${quote.status}`}>{statusLabels[quote.status]}</span></td>
                     <td>{money(quote.total_cents)}</td>
                   </tr>
                 ))}</tbody>
@@ -95,11 +95,11 @@ export default function Quotes() {
           <div>
             <h2>Detalle</h2>
             {!detail ? <p>Selecciona un presupuesto.</p> : (
-              <article>
+              <article className="commercial-detail">
                 <p><strong>Número:</strong> {detail.quote.quote_number}</p>
-                <p><strong>Estado:</strong> {statusLabels[detail.quote.status]}</p>
+                <p><strong>Estado:</strong> <span className={`commercial-status ${detail.quote.status}`}>{statusLabels[detail.quote.status]}</span></p>
                 <p><strong>Total:</strong> {money(detail.quote.total_cents)}</p>
-                <p><button type="button" onClick={downloadQuote}>Descargar PDF</button></p>
+                <p><button type="button" onClick={downloadQuote}>Descargar presupuesto</button></p>
                 <h3>Líneas</h3>
                 <ul>{detail.items.map((item) => <li key={item.id}>{item.description} · {item.quantity} · {money(item.line_total_cents)}</li>)}</ul>
                 <h3>Historial</h3>

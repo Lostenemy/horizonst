@@ -9,6 +9,7 @@ import type { QuoteStatus } from '../admin/quotes/status.js';
 import { writeAuditLog as defaultWriteAuditLog } from '../shared/audit.js';
 import { createOrderFromAcceptedQuote as defaultCreateOrderFromAcceptedQuote } from '../orders/order.service.js';
 import { commercialMailRecipient, sanitizeMailError, sendOrderConfirmationEmail as defaultSendOrderConfirmationEmail, sendQuoteAcceptedCommercialEmail as defaultSendQuoteAcceptedCommercialEmail } from '../shared/mail.js';
+import { commercialDocumentFilename } from '../shared/commercial-document-pdf.js';
 
 const idSchema = z.string().uuid();
 export const quoteDecisionSchema = z.object({ comment: z.string().trim().max(5000).optional() }).strict();
@@ -35,7 +36,12 @@ const logMailFailure = (event: string, to: string, error: unknown) => {
 };
 
 const publicQuoteColumns = `q.id, q.user_id, q.quote_number, q.status, q.subtotal_cents, q.discount_cents, q.tax_cents, q.total_cents, q.notes, q.created_at, q.updated_at, q.submitted_at, q.accepted_at, q.rejected_at`;
-const quotePdfSelect = `SELECT q.quote_number, q.created_at, q.subtotal_cents, q.tax_cents, q.total_cents, q.notes, u.email, u.full_name, COALESCE(cp.company_name, dp.company_name) AS company_name FROM store.quotes q JOIN store.users u ON u.id = q.user_id LEFT JOIN store.customer_profiles cp ON cp.user_id = u.id LEFT JOIN store.distributor_profiles dp ON dp.user_id = u.id WHERE q.id = $1`;
+const quotePdfSelect = `SELECT q.quote_number, q.created_at, q.subtotal_cents, q.discount_cents, q.tax_cents, q.total_cents, q.notes,
+  u.email, u.full_name, COALESCE(cp.company_name, dp.company_name) AS company_name,
+  COALESCE(cp.tax_id, dp.tax_id) AS customer_tax_id, COALESCE(cp.billing_address, dp.billing_address) AS customer_billing_address,
+  COALESCE(cp.city, dp.city) AS customer_city, COALESCE(cp.province, dp.province) AS customer_province,
+  COALESCE(cp.postal_code, dp.postal_code) AS customer_postal_code, COALESCE(cp.country, dp.country) AS customer_country
+  FROM store.quotes q JOIN store.users u ON u.id = q.user_id LEFT JOIN store.customer_profiles cp ON cp.user_id = u.id LEFT JOIN store.distributor_profiles dp ON dp.user_id = u.id WHERE q.id = $1`;
 
 export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) => {
   const router = Router();
@@ -72,10 +78,10 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
       const id = idSchema.parse(req.params.id);
       const quote = await quotePool.query(`${quotePdfSelect} AND q.user_id = $2`, [id, req.user!.sub]);
       if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
-      const items = await quotePool.query(`SELECT description, quantity, unit_price_cents, line_subtotal_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
+      const items = await quotePool.query(`SELECT description, quantity, unit_price_cents, discount_percent, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
       const pdf = await generateQuotePdf({ quote: quote.rows[0], items: items.rows });
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${quote.rows[0].quote_number}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${commercialDocumentFilename('quote', quote.rows[0].quote_number)}"`);
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('Content-Length', pdf.length.toString());
       res.send(pdf);

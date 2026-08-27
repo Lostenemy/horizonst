@@ -102,14 +102,39 @@ const makeAdminQuoteHarness = (options: { existing?: any; orderError?: Error; ma
 }
 
 {
+  const generated: any[] = [];
+  const pool = { async query(sql: string) {
+    if (sql.includes('FROM store.quotes q JOIN store.users')) return { rows: [{ ...quote(), company_name: 'Cliente SL', notes: null }] };
+    if (sql.includes('FROM store.quote_items')) return { rows: [item] };
+    return { rows: [] };
+  }, connect: async () => { throw new Error('not used'); } };
+  const app = express();
+  app.use('/api/admin', createAdminQuotesRouter({ pool, authMiddleware: (req, _res, next) => { req.user = { sub: adminId, role: 'admin', status: 'active' } as any; next(); }, roleMiddleware: (_req, _res, next) => next(), generateQuotePdf: async (data) => { generated.push(data); return Buffer.from('%PDF-admin-quote'); } } as any));
+  app.use(errorHandler);
+  const pdf = await request(app, `/api/admin/quotes/${quoteId}/pdf`);
+  assert.equal(pdf.status, 200, 'admin can download quote PDF');
+  assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+  assert.match(pdf.headers.get('content-disposition') ?? '', /attachment; filename="PRESUPUESTO-Q-1\.pdf"/);
+  assert.equal(pdf.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(generated[0].quote.quote_number, 'Q-1');
+}
+
+{
   const calls: any[] = [];
+  const generated: any[] = [];
   const pool = { async query(sql: string, params?: unknown[]) { calls.push({ sql, params }); if (sql.includes('ORDER BY o.created_at DESC')) return { rows: [order] }; if (sql.includes('WHERE o.id = $1')) return { rows: [order] }; if (sql.includes('FROM store.order_items')) return { rows: [item] }; return { rows: [] }; } };
-  const app = express(); app.use('/api/admin', createAdminOrdersRouter({ pool, authMiddleware: (req, _res, next) => { req.user = { sub: adminId, role: 'admin', status: 'active' } as any; next(); }, roleMiddleware: (_req, _res, next) => next() })); app.use(errorHandler);
+  const app = express(); app.use('/api/admin', createAdminOrdersRouter({ pool, authMiddleware: (req, _res, next) => { req.user = { sub: adminId, role: 'admin', status: 'active' } as any; next(); }, roleMiddleware: (_req, _res, next) => next(), generateDeliveryNotePdf: async (data) => { generated.push(data); return Buffer.from('%PDF-admin-albaran'); } })); app.use(errorHandler);
   assert.equal((await request(app, '/api/admin/orders?status=pending&email=u@example.com&order_number=ORD&quote_number=Q')).status, 200);
   assert.deepEqual(calls[0].params, ['pending', '%u@example.com%', '%ORD%', '%Q%']);
   const detail = await request(app, `/api/admin/orders/${orderId}`);
   assert.equal(detail.status, 200);
   assert.equal((await json(detail)).order.email, 'u@example.com');
+  const pdf = await request(app, `/api/admin/orders/${orderId}/pdf`);
+  assert.equal(pdf.status, 200, 'admin can download delivery note PDF');
+  assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+  assert.match(pdf.headers.get('content-disposition') ?? '', /attachment; filename="ALBARAN-ORD-Q-1\.pdf"/);
+  assert.equal(pdf.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(generated[0].order.order_number, 'ORD-Q-1');
 }
 
 {
@@ -123,4 +148,5 @@ const makeAdminQuoteHarness = (options: { existing?: any; orderError?: Error; ma
 {
   const app = express(); app.use('/api/admin', createAdminOrdersRouter({ pool: { query: async () => ({ rows: [] }) }, authMiddleware: (req, _res, next) => { req.user = { sub: userId, role: 'customer', status: 'active' } as any; next(); }, roleMiddleware: (_req, res) => res.status(403).json({ error: 'Forbidden' }) })); app.use(errorHandler);
   assert.equal((await request(app, '/api/admin/orders')).status, 403);
+  assert.equal((await request(app, `/api/admin/orders/${orderId}/pdf`)).status, 403);
 }
