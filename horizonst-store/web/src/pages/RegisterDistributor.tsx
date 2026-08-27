@@ -1,7 +1,7 @@
 import { FormEvent, ReactNode, useState } from 'react';
 import ErrorMessage from '../components/ErrorMessage';
 import { ApiError, postJson } from '../lib/api';
-import { changeDistributorCountry, changeDistributorRegion, distributorCountries, distributorFieldErrorsFromApi, distributorFormErrorFromApi, distributorProvinces, distributorRegions, readDistributorRegistration, validateDistributorRegistration, type DistributorFieldErrors, type DistributorLocation, type DistributorRegistrationValues } from '../lib/distributorRegistration';
+import { changeDistributorCountry, changeDistributorRegion, distributorCountries, distributorFieldErrorsFromApi, distributorFormErrorFromApi, distributorGeography, distributorProvinces, distributorRegions, readDistributorRegistration, validateDistributorRegistration, type DistributorFieldErrors, type DistributorLocation, type DistributorRegistrationValues } from '../lib/distributorRegistration';
 
 type RegisterDistributorResponse = { verificationToken?: string; welcomeEmailSent?: boolean };
 
@@ -47,6 +47,7 @@ export default function RegisterDistributor() {
   const changeRegion = (region: string) => { setLocation((current) => changeDistributorRegion(current, region)); setFieldErrors((current) => ({ ...current, region: undefined, province: undefined })); };
   const regions = distributorRegions(location.country);
   const provinces = distributorProvinces(location.country, location.region);
+  const geography = distributorGeography(location.country);
 
   return (
     <section className="panel distributor-registration">
@@ -61,17 +62,17 @@ export default function RegisterDistributor() {
           <div className="registration-fields">
             <FormField name="fullName" label="Nombre y apellidos" required error={fieldErrors.fullName}><input {...validationProps('fullName')} type="text" autoComplete="name" maxLength={200} required /></FormField>
             <FormField name="email" label="Correo electrónico" required error={fieldErrors.email}><input {...validationProps('email')} type="email" autoComplete="email" maxLength={320} placeholder="nombre@empresa.es" required /></FormField>
-            <FormField name="phone" label="Teléfono" required error={fieldErrors.phone}><input {...validationProps('phone')} type="tel" autoComplete="tel" maxLength={50} placeholder="+34 612 345 678" required /></FormField>
+            <FormField name="phone" label="Teléfono" required error={fieldErrors.phone}><input {...validationProps('phone')} type="tel" autoComplete="tel" maxLength={50} placeholder="+44 20 7946 0958" required /></FormField>
             <FormField name="password" label="Contraseña" required hint="Mínimo 10 caracteres." error={fieldErrors.password}><input {...validationProps('password', true)} type="password" autoComplete="new-password" minLength={10} maxLength={200} required /></FormField>
             <FormField name="contact_person" label="Persona de contacto" error={fieldErrors.contact_person}><input {...validationProps('contact_person')} type="text" maxLength={200} /></FormField>
-            <FormField name="website" label="Sitio web" hint="Opcional. Ejemplo: https://empresa.es" error={fieldErrors.website}><input {...validationProps('website', true)} type="url" autoComplete="url" maxLength={300} placeholder="https://empresa.es" /></FormField>
+            <FormField name="website" label="Sitio web" hint="Opcional. Puedes escribir empresa.es o https://empresa.es" error={fieldErrors.website}><input {...validationProps('website', true)} type="text" inputMode="url" autoComplete="url" maxLength={300} placeholder="empresa.es" /></FormField>
           </div>
         </fieldset>
         <fieldset className="registration-section">
           <legend>Datos de empresa</legend>
           <div className="registration-fields">
             <FormField name="company_name" label="Razón social" required error={fieldErrors.company_name}><input {...validationProps('company_name')} type="text" autoComplete="organization" maxLength={200} required /></FormField>
-            <FormField name="tax_id" label="CIF / NIF / NIE" required hint="Ejemplo: B12345678" error={fieldErrors.tax_id}><input {...validationProps('tax_id', true)} type="text" autoCapitalize="characters" maxLength={80} placeholder="B12345678" required /></FormField>
+            <FormField name="tax_id" label="Identificador fiscal / VAT" required hint={`Ejemplo: ${geography?.taxIdExample ?? 'VAT / Tax ID'}`} error={fieldErrors.tax_id}><input {...validationProps('tax_id', true)} type="text" autoCapitalize="characters" maxLength={80} placeholder={geography?.taxIdExample ?? 'VAT / Tax ID'} required /></FormField>
             <FormField name="billing_address" label="Dirección fiscal" required error={fieldErrors.billing_address}><input {...validationProps('billing_address')} type="text" autoComplete="street-address" maxLength={500} required /></FormField>
           </div>
         </fieldset>
@@ -79,10 +80,10 @@ export default function RegisterDistributor() {
           <legend>Ubicación fiscal</legend>
           <div className="registration-fields">
             <FormField name="country" label="País" required error={fieldErrors.country}><select {...validationProps('country')} value={location.country} autoComplete="country" required onChange={(event) => changeCountry(event.target.value)}><option value="">Selecciona un país</option>{distributorCountries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select></FormField>
-            <FormField name="region" label="Región / Comunidad Autónoma" required error={fieldErrors.region}><select {...validationProps('region')} value={location.region} autoComplete="address-level1" required disabled={!location.country} onChange={(event) => changeRegion(event.target.value)}><option value="">Selecciona una comunidad autónoma</option>{regions.map((region) => <option key={region.code} value={region.name}>{region.name}</option>)}</select></FormField>
-            <FormField name="province" label="Provincia" required error={fieldErrors.province}><select {...validationProps('province')} value={location.province} required disabled={!location.region} onChange={(event) => { setLocation((current) => ({ ...current, province: event.target.value })); setFieldErrors((current) => ({ ...current, province: undefined })); }}><option value="">Selecciona una provincia</option>{provinces.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}</select></FormField>
+            {geography && geography.regions.length > 0 && <FormField name="region" label={geography.regionLabel} required={geography.regionRequired} error={fieldErrors.region}><select {...validationProps('region')} value={location.region} autoComplete="address-level1" required={geography.regionRequired} onChange={(event) => changeRegion(event.target.value)}><option value="">Selecciona {geography.regionLabel.toLowerCase()}</option>{regions.map((region) => <option key={region.code} value={region.name}>{region.name}</option>)}</select></FormField>}
+            {geography && provinces.length > 0 && <FormField name="province" label={geography.provinceLabel} required={geography.provinceRequired} error={fieldErrors.province}><select {...validationProps('province')} value={location.province} required={geography.provinceRequired} onChange={(event) => { setLocation((current) => ({ ...current, province: event.target.value })); setFieldErrors((current) => ({ ...current, province: undefined })); }}><option value="">Selecciona {geography.provinceLabel.toLowerCase()}</option>{provinces.map((province) => <option key={province.code} value={province.name}>{province.name}</option>)}</select></FormField>}
             <FormField name="city" label="Localidad" required error={fieldErrors.city}><input {...validationProps('city')} type="text" autoComplete="address-level2" maxLength={120} required /></FormField>
-            <FormField name="postal_code" label="Código postal" required error={fieldErrors.postal_code}><input {...validationProps('postal_code')} type="text" inputMode="numeric" autoComplete="postal-code" maxLength={5} placeholder="30001" required /></FormField>
+            <FormField name="postal_code" label="Código postal" required hint={geography ? `Ejemplo: ${geography.postalCodeExample}` : undefined} error={fieldErrors.postal_code}><input {...validationProps('postal_code', Boolean(geography))} type="text" autoComplete="postal-code" maxLength={20} placeholder={geography?.postalCodeExample ?? 'Código postal'} required /></FormField>
           </div>
         </fieldset>
         <div className="registration-actions"><button type="submit" disabled={submitting}>{submitting ? 'Enviando solicitud…' : 'Solicitar alta'}</button></div>

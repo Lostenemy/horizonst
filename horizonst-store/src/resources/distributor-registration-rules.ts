@@ -1,11 +1,18 @@
 export const distributorRegistrationFields = ['fullName', 'email', 'phone', 'password', 'company_name', 'tax_id', 'billing_address', 'city', 'country', 'region', 'province', 'postal_code', 'website', 'contact_person'] as const;
 export type DistributorRegistrationField = (typeof distributorRegistrationFields)[number];
 
-export const requiredDistributorFields: DistributorRegistrationField[] = ['fullName', 'email', 'phone', 'password', 'company_name', 'tax_id', 'billing_address', 'city', 'country', 'region', 'province', 'postal_code'];
-export const distributorPhonePattern = /^(?:\+34[\s-]?)?[6-9](?:[\s-]?\d){8}$/;
-export const distributorTaxIdPattern = /^(?:[XYZ]\d{7}[A-Z]|\d{8}[A-Z]|[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J])$/i;
-export const spanishPostalCodePattern = /^(?:0[1-9]|[1-4]\d|5[0-2])\d{3}$/;
+export const requiredDistributorFields: DistributorRegistrationField[] = ['fullName', 'email', 'phone', 'password', 'company_name', 'tax_id', 'billing_address', 'city', 'country', 'postal_code'];
+export const distributorPhonePattern = /^\+?[0-9][0-9\s().-]{6,24}[0-9]$/;
 export const distributorEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const isHttpUrl = (value: string) => {
-  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+export const normalizeWebsiteUrl = (value: string): string | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !url.hostname.includes('.') || url.hostname.includes('..')) return undefined;
+    if (url.hostname.split('.').some((label) => !label || !/^[a-z0-9-]+$/i.test(label) || label.startsWith('-') || label.endsWith('-'))) return undefined;
+    return `${url.origin}${url.pathname === '/' ? '' : url.pathname}${url.search}${url.hash}`;
+  } catch { return undefined; }
 };
+export const isHttpUrl = (value: string) => normalizeWebsiteUrl(value) !== undefined;

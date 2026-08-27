@@ -7,18 +7,13 @@ import { env } from '../../config/env.js';
 import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
-import { distributorBrochureFilename, distributorBrochurePath } from '../../resources/distributor-brochure.js';
+import { readMultipartForm } from '../shared/multipart.js';
+import { normalizeWebsiteUrl } from '../../resources/distributor-registration-rules.js';
 
 const documentTypes = ['certificado_censal', 'modelo_036', 'modelo_037', 'cif_empresa', 'certificado_autonomo', 'escrituras', 'otro'] as const;
 
 export const distributorRouter = Router();
 distributorRouter.use(requireAuth, requireRole('distributor'));
-
-export const downloadDistributorBrochure = (_req: any, res: any, next: any) => {
-  res.download(distributorBrochurePath, distributorBrochureFilename, { headers: { 'Content-Type': 'application/pdf' } }, (error) => error ? next(error) : undefined);
-};
-
-distributorRouter.get('/resources/cold-brochure', downloadDistributorBrochure);
 
 const profileSelect = `
   u.id AS user_id, u.email, u.full_name, u.phone, u.role, u.status AS user_status, u.created_at AS user_created_at, u.updated_at AS user_updated_at,
@@ -39,7 +34,7 @@ const updateSchema = z.object({
   province: z.string().max(120).nullable().optional(),
   postal_code: z.string().max(30).nullable().optional(),
   country: z.string().max(2).nullable().optional(),
-  website: z.string().url().max(300).nullable().optional(),
+  website: z.preprocess((value) => typeof value === 'string' ? (value.trim() ? normalizeWebsiteUrl(value) ?? value.trim() : undefined) : value, z.string().max(300).refine((value) => normalizeWebsiteUrl(value) !== undefined, 'Invalid website URL').nullable().optional()),
   contact_person: z.string().max(200).nullable().optional()
 }).strict();
 
@@ -65,34 +60,14 @@ distributorRouter.patch('/profile', async (req, res, next) => {
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 
-const readMultipart = async (req: any, maxBytes: number): Promise<{ documentType: string; file: any; filename: string; mimeType: string }> => new Promise((resolve, reject) => {
-  const contentType = req.headers['content-type'] ?? '';
-  const match = /boundary=(?:(?:"([^"]+)")|([^;]+))/i.exec(contentType);
-  if (!match) { reject(Object.assign(new Error('Multipart boundary missing'), { status: 400 })); return; }
-  const chunks: any[] = []; let size = 0;
-  req.on('data', (chunk: any) => { size += chunk.length; if (size > maxBytes + 1024 * 1024) { req.destroy(); reject(Object.assign(new Error('File too large'), { status: 413 })); } else chunks.push(chunk); });
-  req.on('end', () => {
-    const body = Buffer.concat(chunks); const boundary = Buffer.from(`--${match[1] ?? match[2]}`);
-    const parts = body.toString('binary').split(boundary.toString('binary'));
-    let documentType = ''; let file: any; let filename = ''; let mimeType = '';
-    for (const part of parts) {
-      const sep = part.indexOf('\r\n\r\n'); if (sep < 0) continue;
-      const headers = part.slice(0, sep); let content: any = Buffer.from(part.slice(sep + 4).replace(/\r\n--$/, '').replace(/\r\n$/, ''), 'binary');
-      const name = /name="([^"]+)"/i.exec(headers)?.[1];
-      if (name === 'documentType') documentType = content.toString('utf8').trim();
-      if (name === 'file') { filename = path.basename(/filename="([^"]*)"/i.exec(headers)?.[1] ?? 'document.pdf').replace(/[^a-zA-Z0-9._-]/g, '_'); mimeType = /content-type:\s*([^\r\n]+)/i.exec(headers)?.[1]?.trim() ?? ''; file = content; }
-    }
-    if (!file) reject(Object.assign(new Error('File is required'), { status: 400 })); else resolve({ documentType, file, filename, mimeType });
-  });
-  req.on('error', reject);
-});
-
 distributorRouter.post('/documents', async (req, res, next) => {
   const client = await pool.connect();
   try {
     const setting = await pool.query(`SELECT value->>'value' AS value FROM store.settings WHERE key = 'document_max_size_bytes'`);
     const maxBytes = Number(setting.rows[0]?.value ?? 10485760);
-    const upload = await readMultipart(req, maxBytes);
+    const multipart = await readMultipartForm(req, maxBytes);
+    if (!multipart.file) { res.status(400).json({ error: 'File is required' }); return; }
+    const upload = { documentType: multipart.fields.documentType ?? '', file: multipart.file.buffer, filename: multipart.file.originalFilename, mimeType: multipart.file.mimeType };
     if (!documentTypes.includes(upload.documentType as any)) { res.status(400).json({ error: 'Invalid document type' }); return; }
     if (upload.mimeType !== 'application/pdf' || upload.file.subarray(0, 4).toString() !== '%PDF') { res.status(400).json({ error: 'Only PDF files are allowed' }); return; }
     if (upload.file.length > maxBytes) { res.status(413).json({ error: 'File too large' }); return; }

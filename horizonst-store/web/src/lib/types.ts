@@ -176,3 +176,16 @@ export type DistributorDocument = {
   status: string;
   created_at: string;
 };
+
+export type DistributorResource = {
+  id: string;
+  title: string;
+  description: string | null;
+  original_filename: string;
+  mime_type: string;
+  file_size_bytes: number;
+  visibility: 'global' | 'targeted';
+  category: 'commercial' | 'technical' | 'pricing' | 'legal' | 'training' | 'other';
+  published_at: string;
+  created_at: string;
+};
