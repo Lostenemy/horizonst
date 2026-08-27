@@ -10,6 +10,7 @@ import AdminPrereservations from './pages/admin/AdminPrereservations';
 import AdminPrereservationDetail from './pages/admin/AdminPrereservationDetail';
 import AdminDistributorDetail from './pages/admin/AdminDistributorDetail';
 import AdminDistributors from './pages/admin/AdminDistributors';
+import AdminDistributorResources from './pages/admin/AdminDistributorResources';
 import AdminProducts from './pages/admin/AdminProducts';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import AdminOrders from './pages/admin/AdminOrders';
@@ -21,6 +22,7 @@ import Catalog from './pages/Catalog';
 import Dashboard from './pages/Dashboard';
 import DistributorDocuments from './pages/DistributorDocuments';
 import DistributorProfile from './pages/DistributorProfile';
+import DistributorResources from './pages/DistributorResources';
 import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -72,11 +74,13 @@ export default function App() {
             <Route path="/distributor" element={<DistributorProfile />} />
             <Route path="/distributor/profile" element={<DistributorProfile />} />
             <Route path="/distributor/documents" element={<DistributorDocuments />} />
+            <Route path="/distributor/resources" element={<DistributorResources />} />
           </Route>
 
           <Route element={<RoleRoute roles={['admin']} />}>
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/distributors" element={<AdminDistributors />} />
+            <Route path="/admin/distributor-resources" element={<AdminDistributorResources />} />
             <Route path="/admin/customers" element={<AdminCustomers />} />
             <Route path="/admin/prereservations" element={<AdminPrereservations />} />
             <Route path="/admin/prereservations/:id" element={<AdminPrereservationDetail />} />

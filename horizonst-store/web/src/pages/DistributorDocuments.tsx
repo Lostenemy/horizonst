@@ -18,10 +18,10 @@ export default function DistributorDocuments() {
 
   return (
     <section className="panel">
-      <h1>Documentación</h1>
-      <p>Documentos existentes de homologación. La subida PDF completa permanece disponible por API y queda pendiente en UI.</p>
+      <h1>Mis documentos</h1>
+      <p>Documentación de homologación que has entregado a HorizonST.</p>
       <ErrorMessage message={error} />
-      {loading ? <Loading /> : documents.length === 0 ? <p className="empty">Sin documentos.</p> : documents.map((document) => (
+      {loading ? <Loading /> : documents.length === 0 ? <p className="empty">Todavía no has entregado documentos.</p> : documents.map((document) => (
         <div className="line" key={document.id}><span>{document.document_type}</span><b>{document.status}</b><small>{new Date(document.created_at).toLocaleDateString('es-ES')}</small></div>
       ))}
     </section>

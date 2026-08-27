@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 const links = [
   ['/admin', 'Dashboard'],
   ['/admin/distributors', 'Distribuidores'],
+  ['/admin/distributor-resources', 'Documentación distribuidores'],
   ['/admin/customers', 'Clientes'],
   ['/admin/prereservations', 'Prerreservas'],
   ['/admin/quotes', 'Presupuestos'],
