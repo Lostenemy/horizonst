@@ -1,10 +1,11 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { useAuth } from './AuthProvider';
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout, user } = useAuth();
 
   const handleLogout = async () => {
@@ -49,7 +50,7 @@ export default function Layout() {
           )}
         </nav>
       </header>
-      <main className="container"><Outlet /></main>
+      <main className={`container${location.pathname === '/register-distributor' ? ' distributor-registration-container' : ''}`}><Outlet /></main>
       <footer>HorizonST · Soluciones B2B de trazabilidad, frío y RFID</footer>
     </>
   );
