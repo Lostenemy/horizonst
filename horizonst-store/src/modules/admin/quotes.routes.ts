@@ -9,6 +9,7 @@ import { quotePdfSelectForAdmin } from '../quotes/quotes.routes.js';
 import { canTransitionQuoteStatus, quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
 import { createOrderFromAcceptedQuote as defaultCreateOrderFromAcceptedQuote } from '../orders/order.service.js';
 import { sanitizeMailError, sendOrderConfirmationEmail as defaultSendOrderConfirmationEmail, sendQuoteAvailableEmail as defaultSendQuoteAvailableEmail } from '../shared/mail.js';
+import { commercialDocumentFilename } from '../shared/commercial-document-pdf.js';
 
 type QueryResult = { rows: any[] };
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
@@ -71,10 +72,10 @@ router.get('/quotes/:id/pdf', async (req, res, next) => {
     const id = idSchema.parse(req.params.id);
     const quote = await pool.query(quotePdfSelectForAdmin, [id]);
     if (!quote.rows[0]) { res.status(404).json({ error: 'Quote not found' }); return; }
-    const items = await pool.query(`SELECT description, quantity, unit_price_cents, line_subtotal_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
+    const items = await pool.query(`SELECT description, quantity, unit_price_cents, discount_percent, line_subtotal_cents, line_discount_cents, line_tax_cents, line_total_cents FROM store.quote_items WHERE quote_id = $1 ORDER BY description ASC`, [id]);
     const pdf = await generateQuotePdf({ quote: quote.rows[0], items: items.rows });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${quote.rows[0].quote_number}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${commercialDocumentFilename('quote', quote.rows[0].quote_number)}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Length', pdf.length.toString());
     res.send(pdf);

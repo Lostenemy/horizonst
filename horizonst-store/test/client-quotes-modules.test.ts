@@ -225,7 +225,7 @@ for (const body of [{ comment: 42 }, { comment: 'ok', extra: true }]) {
   const response = await request(app, `/api/quotes/${quoteId}/pdf`);
   assert.equal(response.status, 200, 'owner can download quote PDF');
   assert.equal(response.headers.get('content-type'), 'application/pdf');
-  assert.match(response.headers.get('content-disposition') ?? '', /^attachment;/);
+  assert.match(response.headers.get('content-disposition') ?? '', /attachment; filename="PRESUPUESTO-Q-OWN\.pdf"/);
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   assert.deepEqual(calls[0].params, [quoteId, userId], 'PDF ownership is enforced in SQL');
 }

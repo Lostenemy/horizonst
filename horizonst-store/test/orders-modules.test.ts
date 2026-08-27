@@ -26,9 +26,10 @@ const item = { id: itemId, order_id: orderId, source_quote_item_id: '66666666-66
 
 {
   const calls: any[] = [];
+  const generated: any[] = [];
   const pool = { async query(sql: string, params?: unknown[]) { calls.push({ sql, params }); if (sql.includes('ORDER BY o.created_at DESC')) return { rows: [order] }; if (sql.includes('WHERE o.id = $1 AND o.user_id = $2')) return { rows: [order] }; if (sql.includes('FROM store.order_items')) return { rows: [item] }; return { rows: [] }; } };
   const app = express();
-  app.use('/api/orders', createOrdersRouter({ pool, authMiddleware: (req, _res, next) => { req.user = { sub: userId, role: 'customer', status: 'active' } as any; next(); }, roleMiddleware: (_req, _res, next) => next() }));
+  app.use('/api/orders', createOrdersRouter({ pool, authMiddleware: (req, _res, next) => { req.user = { sub: userId, role: 'customer', status: 'active' } as any; next(); }, roleMiddleware: (_req, _res, next) => next(), generateDeliveryNotePdf: async (data) => { generated.push(data); return Buffer.from('%PDF-albaran'); } }));
   app.use((error: any, _req: any, res: any, _next: any) => { if (error instanceof ZodError) { res.status(400).json({ error: 'Validation error' }); return; } res.status(500).json({ error: 'Internal server error' }); });
   const list = await request(app, '/api/orders');
   assert.equal(list.status, 200);
@@ -42,6 +43,14 @@ const item = { id: itemId, order_id: orderId, source_quote_item_id: '66666666-66
   assert.equal(body.order.customer_notes, 'nota');
   assert.equal(body.order.internal_notes, undefined, 'customer detail must not expose internal fields');
   assert.ok(calls.some((call) => JSON.stringify(call.params) === JSON.stringify([orderId, userId])), 'detail is scoped to owner');
+  const pdf = await request(app, `/api/orders/${orderId}/pdf`);
+  assert.equal(pdf.status, 200, 'owner can download delivery note PDF');
+  assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+  assert.match(pdf.headers.get('content-disposition') ?? '', /attachment; filename="ALBARAN-ORD-Q-1\.pdf"/);
+  assert.equal(pdf.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(generated[0].order.quote_number, 'Q-1', 'delivery note receives source quote reference');
+  assert.equal(generated[0].items[0].description, 'Sensor', 'delivery note uses persisted order items');
+  assert.ok(calls.some((call) => JSON.stringify(call.params) === JSON.stringify([orderId, userId]) && call.sql.includes('COALESCE(cp.company_name, dp.company_name)')), 'PDF query is owner-scoped and loads customer data');
 }
 
 {
@@ -59,6 +68,7 @@ const item = { id: itemId, order_id: orderId, source_quote_item_id: '66666666-66
   app.use('/api/orders', createOrdersRouter({ pool, authMiddleware: (req, _res, next) => { req.user = { sub: otherUserId, role: 'customer', status: 'active' } as any; next(); }, roleMiddleware: (_req, _res, next) => next() }));
   app.use((error: any, _req: any, res: any, _next: any) => { if (error instanceof ZodError) { res.status(400).json({ error: 'Validation error' }); return; } res.status(500).json({ error: 'Internal server error' }); });
   assert.equal((await request(app, `/api/orders/${orderId}`)).status, 404, 'foreign order returns 404');
+  assert.equal((await request(app, `/api/orders/${orderId}/pdf`)).status, 404, 'foreign delivery note returns 404');
   assert.equal((await request(app, '/api/orders/not-a-uuid')).status, 400, 'invalid UUID returns 400');
 }
 

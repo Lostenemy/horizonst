@@ -25,7 +25,7 @@ export default function AdminOrders() {
       <AsyncState loading={loading} error={error} empty={data?.orders.length === 0} />
       {data?.orders.map((order) => <article className="summary" key={order.id}>
         <b>{order.order_number}</b>
-        <span>{order.quote_number} · {order.full_name} · {order.email} · {order.status} · {new Date(order.created_at).toLocaleDateString('es-ES')} · {money(order.total_cents)}</span>
+        <span>{order.quote_number} · {order.full_name} · {order.email} · <span className={`commercial-status ${order.status}`}>{order.status}</span> · {new Date(order.created_at).toLocaleDateString('es-ES')} · {money(order.total_cents)}</span>
         <Link to={`/admin/orders/${order.id}`}>Ver detalle</Link>
       </article>)}
     </AdminShell>

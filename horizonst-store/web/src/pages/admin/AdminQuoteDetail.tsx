@@ -48,7 +48,7 @@ export default function AdminQuoteDetail() {
         <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comentario para historial (opcional)" />
         <div className="actions">
           {adminStatuses.map((status) => <button disabled={busy || quote.status === status} key={status} onClick={() => changeStatus(status)}>{status}</button>)}
-          <button type="button" onClick={() => downloadFile(`/api/admin/quotes/${id}/pdf`, `${data.quote.quote_number}.pdf`).catch((downloadError) => setFeedback(apiMessage(downloadError)))}>PDF</button>
+          <button type="button" onClick={() => downloadFile(`/api/admin/quotes/${id}/pdf`, `PRESUPUESTO-${data.quote.quote_number}.pdf`).catch((downloadError) => setFeedback(apiMessage(downloadError)))}>Descargar presupuesto</button>
         </div>
         {feedback && <p className={feedback === 'Estado actualizado' ? 'success' : 'error'}>{feedback}</p>}
 

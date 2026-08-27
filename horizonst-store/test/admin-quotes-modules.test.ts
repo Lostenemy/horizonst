@@ -42,7 +42,8 @@ const data = {
 };
 
 const lines = buildQuotePdfLines(data);
-assert.ok(lines.includes('Presupuesto nº: Q-2026-0001'));
+assert.ok(lines.includes('PRESUPUESTO'));
+assert.ok(lines.includes('Número de presupuesto: Q-2026-0001'));
 assert.ok(lines.some((line) => line.includes('José María')));
 assert.ok(lines.some((line) => line.includes('Málaga')));
 
