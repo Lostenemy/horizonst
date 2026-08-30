@@ -35,7 +35,7 @@ export default function DistributorProfile() {
   return (
     <section className="panel">
       <h1>Portal distribuidor</h1>
-      <div className="actions"><Link className="btn" to="/distributor/documents">Documentos</Link><Link className="btn secondary" to="/catalog">Catálogo</Link><Link className="btn secondary" to="/saas-plans">Planes web</Link><Link className="btn secondary" to="/cart">Carrito</Link></div>
+      <div className="actions"><Link className="btn" to="/distributor/resources">Documentación HorizonST</Link><Link className="btn secondary" to="/distributor/documents">Mis documentos</Link><Link className="btn secondary" to="/catalog">Catálogo</Link><Link className="btn secondary" to="/saas-plans">Planes web</Link><Link className="btn secondary" to="/cart">Carrito</Link></div>
       <ErrorMessage message={error} />
       {loading ? <Loading /> : profile && (
         <>

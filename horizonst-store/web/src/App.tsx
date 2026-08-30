@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleRoute from './components/RoleRoute';
@@ -10,6 +10,7 @@ import AdminPrereservations from './pages/admin/AdminPrereservations';
 import AdminPrereservationDetail from './pages/admin/AdminPrereservationDetail';
 import AdminDistributorDetail from './pages/admin/AdminDistributorDetail';
 import AdminDistributors from './pages/admin/AdminDistributors';
+import AdminDistributorResources from './pages/admin/AdminDistributorResources';
 import AdminProducts from './pages/admin/AdminProducts';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import AdminOrders from './pages/admin/AdminOrders';
@@ -21,6 +22,7 @@ import Catalog from './pages/Catalog';
 import Dashboard from './pages/Dashboard';
 import DistributorDocuments from './pages/DistributorDocuments';
 import DistributorProfile from './pages/DistributorProfile';
+import DistributorResources from './pages/DistributorResources';
 import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -32,7 +34,6 @@ import Orders from './pages/Orders';
 import Register from './pages/Register';
 import RegisterDistributor from './pages/RegisterDistributor';
 import ResetPassword from './pages/ResetPassword';
-import SaasPlans from './pages/SaasPlans';
 import VerifyEmail from './pages/VerifyEmail';
 import { isPublicMarketingHost, publicMarketingPage, publicPrereservationCode } from './lib/domains';
 
@@ -61,7 +62,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
           <Route path="/catalog" element={<Catalog />} />
-          <Route path="/saas-plans" element={<SaasPlans />} />
+          <Route path="/saas-plans" element={<Navigate to="/catalog" replace />} />
           <Route path="/cart" element={<Cart />} />
           <Route element={<RoleRoute roles={['customer', 'distributor']} />}>
             <Route path="/quotes" element={<Quotes />} />
@@ -72,11 +73,13 @@ export default function App() {
             <Route path="/distributor" element={<DistributorProfile />} />
             <Route path="/distributor/profile" element={<DistributorProfile />} />
             <Route path="/distributor/documents" element={<DistributorDocuments />} />
+            <Route path="/distributor/resources" element={<DistributorResources />} />
           </Route>
 
           <Route element={<RoleRoute roles={['admin']} />}>
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/distributors" element={<AdminDistributors />} />
+            <Route path="/admin/distributor-resources" element={<AdminDistributorResources />} />
             <Route path="/admin/customers" element={<AdminCustomers />} />
             <Route path="/admin/prereservations" element={<AdminPrereservations />} />
             <Route path="/admin/prereservations/:id" element={<AdminPrereservationDetail />} />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, api } from '../lib/api';
+import { ApiError, api, downloadFile } from '../lib/api';
 import { money } from '../lib/money';
 import type { Order, OrderDetailResponse, OrdersResponse } from '../lib/types';
 
@@ -26,8 +26,16 @@ export default function Orders() {
     api<OrderDetailResponse>(`/api/orders/${selectedId}`).then(setDetail).catch((err) => setError(message(err)));
   }, [selectedId]);
 
+  const downloadDeliveryNote = async () => {
+    if (!detail) return;
+    try {
+      setError(null);
+      await downloadFile(`/api/orders/${detail.order.id}/pdf`, `ALBARAN-${detail.order.order_number}.pdf`);
+    } catch (err) { setError(message(err)); }
+  };
+
   return (
-    <section className="panel">
+    <section className="panel orders-page commercial-documents-page">
       <h1>Mis pedidos</h1>
       {error && <p className="error">{error}</p>}
       {loading ? <p>Cargando pedidos…</p> : (
@@ -35,27 +43,28 @@ export default function Orders() {
           <div>
             <h2>Listado</h2>
             {orders.length === 0 ? <p>No tienes pedidos todavía.</p> : (
-              <table>
+              <div className="table-wrap"><table>
                 <thead><tr><th>Pedido</th><th>Presupuesto</th><th>Estado</th><th>Total</th></tr></thead>
                 <tbody>{orders.map((order) => (
                   <tr key={order.id} className={order.id === selectedId ? 'selected-row' : ''} onClick={() => setSelectedId(order.id)}>
                     <td><button type="button" className="link-button" onClick={() => setSelectedId(order.id)}>{order.order_number}</button></td>
                     <td>{order.quote_number}</td>
-                    <td>{statusLabels[order.status]}</td>
+                    <td><span className={`commercial-status ${order.status}`}>{statusLabels[order.status]}</span></td>
                     <td>{money(order.total_cents)}</td>
                   </tr>
                 ))}</tbody>
-              </table>
+              </table></div>
             )}
           </div>
           <div>
             <h2>Detalle</h2>
-            {!detail ? <p>Selecciona un pedido.</p> : <article>
+            {!detail ? <p>Selecciona un pedido.</p> : <article className="commercial-detail">
               <p><strong>Pedido:</strong> {detail.order.order_number}</p>
               <p><strong>Presupuesto:</strong> {detail.order.quote_number}</p>
-              <p><strong>Estado:</strong> {statusLabels[detail.order.status]}</p>
+              <p><strong>Estado:</strong> <span className={`commercial-status ${detail.order.status}`}>{statusLabels[detail.order.status]}</span></p>
               <p><strong>Fecha:</strong> {new Date(detail.order.created_at).toLocaleDateString('es-ES')}</p>
               {detail.order.customer_notes && <p><strong>Notas:</strong> {detail.order.customer_notes}</p>}
+              <p><button type="button" onClick={downloadDeliveryNote}>Descargar albarán</button></p>
               <dl className="totals"><div><dt>Subtotal</dt><dd>{money(detail.order.subtotal_cents)}</dd></div><div><dt>Descuento</dt><dd>{money(detail.order.discount_cents)}</dd></div><div><dt>IVA</dt><dd>{money(detail.order.tax_cents)}</dd></div><div className="grand"><dt>Total</dt><dd>{money(detail.order.total_cents)}</dd></div></dl>
               <h3>Líneas</h3>
               {detail.items.length === 0 ? <p>Pedido sin líneas copiadas del presupuesto original.</p> : <ul>{detail.items.map((item) => <li key={item.id}>{item.description} · {item.quantity} · {money(item.line_total_cents)}</li>)}</ul>}
