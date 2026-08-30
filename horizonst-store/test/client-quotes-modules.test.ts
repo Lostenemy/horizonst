@@ -211,6 +211,31 @@ for (const body of [{ comment: 42 }, { comment: 'ok', extra: true }]) {
     connect: async () => { throw new Error('not used'); },
     async query(sql: string, params?: unknown[]) {
       calls.push({ sql, params });
+      if (sql.includes('FROM store.quotes q JOIN store.users')) return { rows: [{ quote_number: 'Q-OWN', created_at: now, subtotal_cents: 1000, tax_cents: 210, total_cents: 1210, notes: null, email: 'owner@example.test', full_name: 'Owner', company_name: 'Owner Ltd' }] };
+      return { rows: [{ description: 'Plan', quantity: 1, unit_price_cents: 1000, line_subtotal_cents: 1000, line_tax_cents: 210, line_total_cents: 1210 }] };
+    }
+  };
+  const app = express();
+  app.use('/api/quotes', createQuotesRouter({
+    pool: pool as any,
+    authMiddleware: (req, _res, next) => { req.user = { sub: userId, role: 'distributor', status: 'active' } as any; next(); },
+    roleMiddleware: (_req, _res, next) => next(),
+    generateQuotePdf: async () => Buffer.from('%PDF-owned')
+  }));
+  const response = await request(app, `/api/quotes/${quoteId}/pdf`);
+  assert.equal(response.status, 200, 'owner can download quote PDF');
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.match(response.headers.get('content-disposition') ?? '', /attachment; filename="PRESUPUESTO-Q-OWN\.pdf"/);
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.deepEqual(calls[0].params, [quoteId, userId], 'PDF ownership is enforced in SQL');
+}
+
+{
+  const calls: QueryCall[] = [];
+  const pool = {
+    connect: async () => { throw new Error('not used'); },
+    async query(sql: string, params?: unknown[]) {
+      calls.push({ sql, params });
       if (sql.includes('FROM store.quotes q') && sql.includes('ORDER BY q.created_at DESC')) return { rows: [publicBaseQuote(), { ...publicBaseQuote(), id: otherUserId }] };
       if (sql.includes('WHERE q.id = $1 AND q.user_id = $2')) return { rows: [publicBaseQuote()] };
       if (sql.includes('FROM store.quote_items')) return { rows: [] };

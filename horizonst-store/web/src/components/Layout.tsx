@@ -1,11 +1,13 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { useAuth } from './AuthProvider';
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout, user } = useAuth();
+  const isCommercialDocumentsPage = location.pathname === '/orders' || location.pathname === '/quotes';
 
   const handleLogout = async () => {
     try {
@@ -31,12 +33,11 @@ export default function Layout() {
           {user ? (
             <>
               <NavLink to="/catalog">Catálogo</NavLink>
-              <NavLink to="/saas-plans">Planes web</NavLink>
-              <NavLink to="/dashboard">Dashboard</NavLink>
+              {user.role !== 'distributor' && <NavLink to="/dashboard">Dashboard</NavLink>}
               <NavLink to="/cart">Carrito</NavLink>
               <NavLink to="/quotes">Presupuestos</NavLink>
               {(user.role === 'customer' || user.role === 'distributor') && <NavLink to="/orders">Pedidos</NavLink>}
-              {user.role === 'distributor' && <NavLink to="/distributor">Distribuidor</NavLink>}
+              {user.role === 'distributor' && <><NavLink to="/distributor/resources">Documentación HorizonST</NavLink><NavLink to="/distributor/documents">Mis documentos</NavLink><NavLink to="/distributor/profile">Perfil</NavLink></>}
               {user.role === 'admin' && <NavLink to="/admin">Admin</NavLink>}
               <button type="button" className="link-button" onClick={handleLogout}>Salir</button>
             </>
@@ -49,7 +50,7 @@ export default function Layout() {
           )}
         </nav>
       </header>
-      <main className="container"><Outlet /></main>
+      <main className={`container${location.pathname === '/register-distributor' ? ' distributor-registration-container' : ''}${isCommercialDocumentsPage ? ' commercial-wide-container' : ''}`}><Outlet /></main>
       <footer>HorizonST · Soluciones B2B de trazabilidad, frío y RFID</footer>
     </>
   );

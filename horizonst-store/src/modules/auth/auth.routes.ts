@@ -5,9 +5,10 @@ import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth } from './middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
-import { sanitizeMailError, sendEmailVerificationEmail } from '../shared/mail.js';
+import { sanitizeMailError, sendDistributorWelcomeEmail, sendEmailVerificationEmail } from '../shared/mail.js';
 import { env } from '../../config/env.js';
 import { createOpaqueToken, emailVerificationSeconds, expiresAtSql, hashToken, passwordResetSeconds, refreshTokenSeconds, signAccessToken } from './token.js';
+import { registerDistributorSchema } from './distributor-registration.js';
 
 const scrypt = promisify(scryptCallback);
 const HASH_PREFIX = 'scrypt';
@@ -62,8 +63,13 @@ const canResendVerification = async (client: any, userId: string) => {
   if (Number(row?.sent_last_hour ?? 0) >= 5) return false;
   return !row?.last_sent_at || Date.now() - new Date(row.last_sent_at).getTime() >= 60_000;
 };
-const deliverVerificationEmail = async (user: { email: string; full_name: string }, token: string) => {
-  try { await sendEmailVerificationEmail({ email: user.email, fullName: user.full_name, verificationUrl: verificationUrl(token), expiresInSeconds: emailVerificationSeconds() }); return true; }
+const deliverVerificationEmail = async (user: { email: string; full_name: string; role?: string; country?: string | null }, token: string) => {
+  try {
+    const input = { email: user.email, fullName: user.full_name, verificationUrl: verificationUrl(token), expiresInSeconds: emailVerificationSeconds() };
+    if (user.role === 'distributor') await sendDistributorWelcomeEmail({ ...input, countryCode: user.country ?? '' });
+    else await sendEmailVerificationEmail(input);
+    return true;
+  }
   catch (error) { console.error('Verification email delivery failed', sanitizeMailError(error)); return false; }
 };
 
@@ -88,37 +94,41 @@ authRouter.post('/register', async (req, res, next) => {
 });
 
 
-const registerDistributorSchema = registerSchema.extend({
-  company_name: z.string().min(1).max(200),
-  tax_id: z.string().min(1).max(80),
-  billing_address: z.string().max(500).optional(),
-  city: z.string().max(120).optional(),
-  province: z.string().max(120).optional(),
-  postal_code: z.string().max(30).optional(),
-  country: z.string().max(2).optional(),
-  website: z.string().url().max(300).optional(),
-  contact_person: z.string().max(200).optional()
-});
+export type DistributorRegistrationDependencies = {
+  connect?: () => Promise<any>;
+  hash?: (password: string) => Promise<string>;
+  createToken?: (client: any, userId: string, userAgent: string | null, ip: string | undefined) => Promise<string>;
+  audit?: typeof writeAuditLog;
+  deliverWelcome?: (user: { email: string; full_name: string; role?: string; country?: string | null }, token: string) => Promise<boolean>;
+  production?: boolean;
+};
 
-authRouter.post('/register-distributor', async (req, res, next) => {
-  const client = await pool.connect();
+export const createDistributorRegistrationHandler = (dependencies: DistributorRegistrationDependencies = {}) => async (req: any, res: any, next: any) => {
+  let client: any;
+  let transactionOpen = false;
   try {
     const input = registerDistributorSchema.parse(req.body);
-    const passwordHash = await hashPassword(input.password);
+    const passwordHash = await (dependencies.hash ?? hashPassword)(input.password);
+    client = await (dependencies.connect ?? (() => pool.connect()))();
     await client.query('BEGIN');
+    transactionOpen = true;
     const { rows } = await client.query(
       `INSERT INTO store.users (email, password_hash, full_name, phone, role, status) VALUES ($1, $2, $3, $4, 'distributor', 'pending_email_verification') RETURNING ${safeUserFields}`,
       [input.email.toLowerCase(), passwordHash, input.fullName, input.phone ?? null]
     );
-    const profile = await client.query(`INSERT INTO store.distributor_profiles (user_id, company_name, tax_id, billing_address, city, province, postal_code, country, website, contact_person, validation_status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'ES'),$9,$10,'pending') RETURNING id`,
-      [rows[0].id, input.company_name, input.tax_id, input.billing_address ?? null, input.city ?? null, input.province ?? null, input.postal_code ?? null, input.country ?? null, input.website ?? null, input.contact_person ?? null]);
-    await writeAuditLog({ actorUserId: rows[0].id, action: 'distributor_application_created', entityType: 'distributor_profile', entityId: profile.rows[0].id }, client);
-    const verificationToken = await createVerificationToken(client, rows[0].id, req.header('user-agent') ?? null, req.ip);
+    const profile = await client.query(`INSERT INTO store.distributor_profiles (user_id, company_name, tax_id, billing_address, city, region, province, postal_code, country, website, contact_person, validation_status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending') RETURNING id`,
+      [rows[0].id, input.company_name, input.tax_id, input.billing_address, input.city, input.region, input.province, input.postal_code, input.country, input.website ?? null, input.contact_person ?? null]);
+    await (dependencies.audit ?? writeAuditLog)({ actorUserId: rows[0].id, action: 'distributor_application_created', entityType: 'distributor_profile', entityId: profile.rows[0].id }, client);
+    const verificationToken = await (dependencies.createToken ?? createVerificationToken)(client, rows[0].id, req.header('user-agent') ?? null, req.ip);
     await client.query('COMMIT');
-    res.status(201).json({ user: rows[0], message: 'Distributor account created pending email verification and validation.', verificationToken: process.env.NODE_ENV === 'production' ? undefined : verificationToken });
-  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
-});
+    transactionOpen = false;
+    const welcomeEmailSent = await (dependencies.deliverWelcome ?? deliverVerificationEmail)({ ...rows[0], country: input.country }, verificationToken);
+    res.status(201).json({ user: rows[0], message: 'Distributor account created pending email verification and validation.', welcomeEmailSent, verificationToken: (dependencies.production ?? process.env.NODE_ENV === 'production') ? undefined : verificationToken });
+  } catch (error) { if (transactionOpen) await client.query('ROLLBACK'); next(error); } finally { client?.release(); }
+};
+
+authRouter.post('/register-distributor', createDistributorRegistrationHandler());
 
 
 authRouter.post('/verify-email', async (req, res, next) => {
@@ -153,7 +163,9 @@ authRouter.post('/resend-verification', async (req, res, next) => {
   try {
     const input = z.object({ email: z.string().trim().email().max(320) }).strict().parse(req.body);
     await client.query('BEGIN');
-    const { rows } = await client.query("SELECT id, email, full_name FROM store.users WHERE email = $1 AND role = 'customer' AND status = 'pending_email_verification' FOR UPDATE", [input.email.toLowerCase()]);
+    const { rows } = await client.query(`SELECT u.id, u.email, u.full_name, u.role, dp.country
+      FROM store.users u LEFT JOIN store.distributor_profiles dp ON dp.user_id = u.id
+      WHERE u.email = $1 AND u.role IN ('customer', 'distributor') AND u.status = 'pending_email_verification' FOR UPDATE OF u`, [input.email.toLowerCase()]);
     const user = rows[0];
     if (!user) { await client.query('ROLLBACK'); res.json({ message: RESEND_MESSAGE }); return; }
     if (await canResendVerification(client, user.id)) {

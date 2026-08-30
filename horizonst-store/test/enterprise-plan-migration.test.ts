@@ -7,7 +7,7 @@ const migration011 = await readFile(new URL('../migrations/011_restore_enterpris
 const migration012 = await readFile(new URL('../migrations/012_restore_current_commercial_pricing.sql', import.meta.url), 'utf-8');
 const packMigration = await readFile(new URL('../migrations/007_hardware_packs.sql', import.meta.url), 'utf-8');
 
-assert.equal(migrationFiles.at(-1), '012_restore_current_commercial_pricing.sql', 'current pricing correction is the next migration');
+assert.ok(migrationFiles.indexOf('012_restore_current_commercial_pricing.sql') < migrationFiles.indexOf('013_distributor_region.sql'), 'current pricing correction remains ordered before later migrations');
 assert.match(migration011, /annual_price_cents = NULL/);
 assert.match(migration011, /is_enterprise = true/, 'published migration 011 remains unchanged');
 assert.match(migration012, /\('starter', 60000\)/);

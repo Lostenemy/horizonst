@@ -51,6 +51,14 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+async function requestBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  if (auth.accessToken) headers.set('Authorization', `Bearer ${auth.accessToken}`);
+  const response = await fetch(path, { headers });
+  if (!response.ok) throw new ApiError((await readJson(response)).error ?? 'Error de API', response.status);
+  return response.blob();
+}
+
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   try {
     return await request<T>(path, options);
@@ -68,3 +76,17 @@ export const postJson = <T>(path: string, body: unknown) =>
 
 export const patchJson = <T>(path: string, body: unknown) =>
   api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+
+export async function downloadFile(path: string, filename: string) {
+  let blob: Blob;
+  try { blob = await requestBlob(path); }
+  catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401 || !(await refreshAccessToken())) throw error;
+    blob = await requestBlob(path);
+  }
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = filename;
+  document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}

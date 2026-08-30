@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { validateStoreMailConfig, type StoreMailConfig } from '../src/config/env.js';
-import { automaticMailFooter, buildAppccGuideEmail, buildEmailVerificationEmail, buildOrderConfirmationEmail, buildPrereservationCommercialEmail, buildPrereservationConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
+import { automaticMailFooter, buildAppccGuideEmail, buildDistributorWelcomeEmail, buildEmailVerificationEmail, buildOrderConfirmationEmail, buildPrereservationCommercialEmail, buildPrereservationConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
 
 const quoteId = '11111111-1111-4111-8111-111111111111';
 const orderId = '44444444-4444-4444-8444-444444444444';
@@ -81,6 +81,20 @@ const prereservationInput = {
   assert.ok(email.html.includes(verificationUrl));
   assert.match(email.html, /Verificar mi cuenta/);
   assert.doesNotMatch(email.html, /<script|stylesheet/i);
+}
+
+{
+  const verificationUrl = 'https://tienda.horizonst.es/verify-email?token=distributor-verification-token';
+  const brochure = Buffer.from('%PDF-1.7 distributor brochure');
+  const email = buildDistributorWelcomeEmail({ email: 'distribuidor@example.test', fullName: 'Distribuidor', verificationUrl, expiresInSeconds: 7200 }, brochure);
+  assert.equal(email.subject, 'Bienvenido a HorizonST: verifica tu cuenta de distribuidor');
+  assert.match(email.text, /Bienvenido al portal de distribuidores/);
+  assert.match(email.text, /HorizonST_Frio\.pdf/);
+  assert.ok(email.html.includes(verificationUrl));
+  assert.equal(email.attachments?.length, 1);
+  assert.equal(email.attachments?.[0]?.filename, 'HorizonST_Frio.pdf');
+  assert.equal(email.attachments?.[0]?.contentType, 'application/pdf');
+  assert.deepEqual(email.attachments?.[0]?.content, brochure);
 }
 
 {
@@ -175,10 +189,13 @@ class FakeSocket extends EventEmitter {
   socket.emit('secureConnect');
   setTimeout(() => socket.emit('data', Buffer.from('220-mail.horizonst.es\r\n220 ready\r\n')), 0);
   await connectPromise;
-  await client.sendMail('u@example.com', 'Subject', '.line', '<strong>HTML</strong>');
+  await client.sendMail('u@example.com', 'Subject', '.line', '<strong>HTML</strong>', [{ filename: 'HorizonST_Frio.pdf', contentType: 'application/pdf', content: Buffer.from('%PDF-test') }]);
   await client.close();
   assert.ok(socket.writes.some((write) => write.includes('\r\n..line\r\n--')), 'DATA applies dot-stuffing');
   assert.ok(socket.writes.some((write) => write.includes('multipart/alternative')), 'DATA includes HTML alternative');
+  assert.ok(socket.writes.some((write) => write.includes('multipart/mixed')), 'DATA wraps messages with attachments in a mixed multipart');
+  assert.ok(socket.writes.some((write) => write.includes('filename="HorizonST_Frio.pdf"')), 'DATA identifies the attached brochure');
+  assert.ok(socket.writes.some((write) => write.includes(Buffer.from('%PDF-test').toString('base64'))), 'DATA includes the base64 attachment');
   assert.equal(socket.ended, true);
   assert.equal(socket.destroyed, true);
 }

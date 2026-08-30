@@ -32,6 +32,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/web/dist ./web/dist
 COPY migrations ./migrations
+COPY resources ./resources
 EXPOSE 4020
 HEALTHCHECK --interval=20s --timeout=4s --retries=5 CMD wget -qO- http://127.0.0.1:4020/health || exit 1
 CMD ["node","dist/server.js"]
