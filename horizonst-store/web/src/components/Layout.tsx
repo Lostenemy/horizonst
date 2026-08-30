@@ -7,6 +7,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuth();
+  const isCommercialDocumentsPage = location.pathname === '/orders' || location.pathname === '/quotes';
 
   const handleLogout = async () => {
     try {
@@ -49,7 +50,7 @@ export default function Layout() {
           )}
         </nav>
       </header>
-      <main className={`container${location.pathname === '/register-distributor' ? ' distributor-registration-container' : ''}`}><Outlet /></main>
+      <main className={`container${location.pathname === '/register-distributor' ? ' distributor-registration-container' : ''}${isCommercialDocumentsPage ? ' commercial-wide-container' : ''}`}><Outlet /></main>
       <footer>HorizonST · Soluciones B2B de trazabilidad, frío y RFID</footer>
     </>
   );
