@@ -201,6 +201,7 @@ export async function executeConnectedTagCommandSequence(params: {
     logger.info({ ...params.context, tagId: params.tagId, gatewayMac: candidate.gatewayMac }, 'mark tag as BLE-active');
 
     let disconnectAck = false;
+    let disconnectError: string | undefined;
     try {
       await params.runActions(candidate);
       return { status: 'success', selectedGatewayMac: candidate.gatewayMac, connectFailures };
@@ -213,13 +214,12 @@ export async function executeConnectedTagCommandSequence(params: {
         disconnectAck = true;
         logger.info({ ...params.context, gatewayMac: candidate.gatewayMac, tagUid: params.tagUid }, 'disconnect success');
       } catch (error) {
-        logger.error({ ...params.context, error, tagId: params.tagId, gatewayMac: candidate.gatewayMac }, 'disconnect failed, BLE session remains active');
+        disconnectError = String((error as any)?.message ?? error);
+        logger.error({ ...params.context, error, tagId: params.tagId, gatewayMac: candidate.gatewayMac }, 'disconnect failed; closing internal BLE lease without physical confirmation');
       }
 
-      if (disconnectAck) {
-        await deps.markDisconnected({ tagId: params.tagId });
-        logger.info({ ...params.context, tagId: params.tagId, gatewayMac: candidate.gatewayMac }, 'mark tag as BLE-disconnected');
-      }
+      await deps.markDisconnected({ tagId: params.tagId, confirmed: disconnectAck, error: disconnectError });
+      logger.info({ ...params.context, tagId: params.tagId, gatewayMac: candidate.gatewayMac, disconnectAck }, 'closed internal BLE session');
 
       logger.info({ ...params.context, disconnectAck, selectedGatewayMac: candidate.gatewayMac }, 'connected tag command sequence finished');
     }

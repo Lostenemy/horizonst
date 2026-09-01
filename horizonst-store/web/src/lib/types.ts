@@ -159,6 +159,7 @@ export type DistributorProfile = {
   tax_id: string;
   billing_address?: string | null;
   city?: string | null;
+  region?: string | null;
   province?: string | null;
   postal_code?: string | null;
   country?: string | null;
@@ -172,6 +173,36 @@ export type DistributorProfile = {
 export type DistributorDocument = {
   id: string;
   document_type: string;
-  status: string;
+  file_name: string;
+  file_size_bytes: number;
+  status: 'pending' | 'approved' | 'rejected' | 'replaced';
+  created_at: string;
+  reviewed_at: string | null;
+  review_notes: string | null;
+};
+
+export type DistributorDocumentRequirement = {
+  code: string;
+  label: string;
+  description: string;
+  acceptedTypes: string[];
+};
+
+export type DistributorDocumentsResponse = {
+  country: string;
+  requirements: DistributorDocumentRequirement[];
+  documents: DistributorDocument[];
+};
+
+export type DistributorResource = {
+  id: string;
+  title: string;
+  description: string | null;
+  original_filename: string;
+  mime_type: string;
+  file_size_bytes: number;
+  visibility: 'global' | 'targeted';
+  category: 'commercial' | 'technical' | 'pricing' | 'legal' | 'training' | 'other';
+  published_at: string;
   created_at: string;
 };

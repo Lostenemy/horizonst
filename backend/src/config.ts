@@ -84,6 +84,11 @@ interface AppConfig {
   emqx: EmqxManagementConfig;
   mail: MailConfig;
   rfidAccess: RfidAccessConfig;
+  maintenance: {
+    mqttRawRetentionHours: number;
+    intervalMs: number;
+    batchSize: number;
+  };
 }
 
 interface EmqxManagementConfig {
@@ -179,6 +184,11 @@ export const config: AppConfig = {
       2000,
       parseNumber(process.env.MQTT_RECONNECT_MAX_PERIOD, 30000)
     )
+  },
+  maintenance: {
+    mqttRawRetentionHours: Math.max(1, parseNumber(process.env.MQTT_RAW_RETENTION_HOURS, 48)),
+    intervalMs: Math.max(60000, parseNumber(process.env.MQTT_MAINTENANCE_INTERVAL_MS, 60000)),
+    batchSize: Math.max(100, parseNumber(process.env.MQTT_MAINTENANCE_BATCH_SIZE, 10000))
   },
   emqx: {
     host: process.env.EMQX_MGMT_HOST || process.env.MQTT_HOST || 'vernemq',

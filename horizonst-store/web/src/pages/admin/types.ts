@@ -1,4 +1,4 @@
-import type { Product, SaasPlan, Quote, CartItem } from '../../lib/types';
+import type { Product, SaasPlan, Quote, CartItem, DistributorResource, DistributorDocumentRequirement } from '../../lib/types';
 
 export type AuditPayload = string | number | boolean | null | AuditPayload[] | { [key: string]: AuditPayload };
 
@@ -84,6 +84,7 @@ export type AdminDistributorDocument = {
 
 export type DistributorDetailResponse = {
   distributor: AdminDistributor;
+  requirements: DistributorDocumentRequirement[];
   documents: AdminDistributorDocument[];
 };
 
@@ -136,5 +137,9 @@ export type AdminCustomer = {
   verification_pending: boolean;
 };
 export type AdminCustomersResponse = { customers: AdminCustomer[] };
+export type DistributorResourceTarget = { id: string; email: string; full_name: string; company_name: string };
+export type AdminDistributorResource = DistributorResource & { active: boolean; updated_at: string; distributors: DistributorResourceTarget[] };
+export type AdminDistributorResourcesResponse = { resources: AdminDistributorResource[] };
+export type DistributorResourceTargetsResponse = { distributors: DistributorResourceTarget[] };
 export type AuditResponse = { events: AuditEvent[] };
 export type QuotesResponse = { quotes: AdminQuoteListItem[] };

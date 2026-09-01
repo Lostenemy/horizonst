@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { patchJson } from '../../lib/api';
+import { downloadFile, patchJson } from '../../lib/api';
 import { AdminShell, AsyncState } from './AdminShell';
 import { apiMessage } from './adminUtils';
 import { useAdminLoad } from './useAdminLoad';
@@ -44,6 +44,7 @@ export default function AdminDistributorDetail() {
   };
 
   const distributor = data?.distributor;
+  const documentLabel = (documentType: string) => data?.requirements.find((requirement) => requirement.acceptedTypes.includes(documentType))?.label ?? documentType;
 
   return (
     <AdminShell title="Detalle distribuidor">
@@ -60,14 +61,19 @@ export default function AdminDistributorDetail() {
         </div>
         {feedback && <p className={feedback === 'Estado actualizado' ? 'success' : 'error'}>{feedback}</p>}
 
-        <h2>Documentos</h2>
+        <h2>Documentos requeridos</h2>
+        <ul>{data.requirements.map((requirement) => {
+          const document = data.documents.find((item) => requirement.acceptedTypes.includes(item.document_type) && item.status !== 'replaced');
+          return <li key={requirement.code}>{requirement.label}: <strong>{document?.status ?? 'pendiente de subir'}</strong></li>;
+        })}</ul>
         {data.documents.length === 0 && <div className="empty">Sin documentos.</div>}
         {data.documents.map((document) => (
           <article className="summary" key={document.id}>
-            <b>{document.document_type}</b>
+            <b>{documentLabel(document.document_type)}</b>
             <span>{document.file_name} · {document.status}</span>
+            {document.review_notes && <span>{document.review_notes}</span>}
             <div className="actions">
-              <a className="btn" href={`/api/admin/distributor-documents/${document.id}/download`}>Descargar</a>
+              <button type="button" onClick={() => downloadFile(`/api/admin/distributor-documents/${document.id}/download`, document.file_name).catch((downloadError) => setFeedback(apiMessage(downloadError)))}>Descargar</button>
               <button disabled={!!busy} onClick={() => changeDocumentStatus(document.id, 'approved')}>Aprobar</button>
               <button disabled={!!busy} onClick={() => changeDocumentStatus(document.id, 'rejected')}>Rechazar</button>
             </div>

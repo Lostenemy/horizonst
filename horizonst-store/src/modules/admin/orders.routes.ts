@@ -4,11 +4,14 @@ import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { orderItemColumns, orderStatuses, publicOrderColumns } from '../orders/order.service.js';
+import { generateDeliveryNotePdf as defaultGenerateDeliveryNotePdf } from '../orders/pdf.js';
+import { orderPdfSelectForAdmin } from '../orders/orders.routes.js';
+import { commercialDocumentFilename } from '../shared/commercial-document-pdf.js';
 
 type QueryResult = { rows: any[] };
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
 
-export type AdminOrdersRouterDependencies = { pool?: Queryable; authMiddleware?: RequestHandler; roleMiddleware?: RequestHandler };
+export type AdminOrdersRouterDependencies = { pool?: Queryable; authMiddleware?: RequestHandler; roleMiddleware?: RequestHandler; generateDeliveryNotePdf?: typeof defaultGenerateDeliveryNotePdf };
 
 const idSchema = z.string().uuid();
 const filtersSchema = z.object({
@@ -21,6 +24,7 @@ const filtersSchema = z.object({
 export const createAdminOrdersRouter = (dependencies: AdminOrdersRouterDependencies = {}) => {
 const router = Router();
 const pool = dependencies.pool ?? defaultPool;
+const generateDeliveryNotePdf = dependencies.generateDeliveryNotePdf ?? defaultGenerateDeliveryNotePdf;
 router.use(dependencies.authMiddleware ?? requireAuth, dependencies.roleMiddleware ?? requireRole('admin'));
 
 router.get('/orders', async (req, res, next) => {
@@ -43,6 +47,21 @@ router.get('/orders/:id', async (req, res, next) => {
     if (!order.rows[0]) { res.status(404).json({ error: 'Order not found' }); return; }
     const items = await pool.query(`SELECT ${orderItemColumns} FROM store.order_items WHERE order_id = $1 ORDER BY description ASC`, [id]);
     res.json({ order: order.rows[0], items: items.rows });
+  } catch (error) { next(error); }
+});
+
+router.get('/orders/:id/pdf', async (req, res, next) => {
+  try {
+    const id = idSchema.parse(req.params.id);
+    const order = await pool.query(orderPdfSelectForAdmin, [id]);
+    if (!order.rows[0]) { res.status(404).json({ error: 'Order not found' }); return; }
+    const items = await pool.query(`SELECT ${orderItemColumns} FROM store.order_items WHERE order_id = $1 ORDER BY description ASC`, [id]);
+    const pdf = await generateDeliveryNotePdf({ order: order.rows[0], items: items.rows });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${commercialDocumentFilename('delivery_note', order.rows[0].order_number)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Length', pdf.length.toString());
+    res.send(pdf);
   } catch (error) { next(error); }
 });
 

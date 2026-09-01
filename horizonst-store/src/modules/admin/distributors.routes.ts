@@ -5,6 +5,8 @@ import { env } from '../../config/env.js';
 import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
+import { missingApprovedDistributorDocuments, requiredDistributorDocuments } from '../../resources/distributor-required-documents.js';
+import { safeDownloadFilename } from '../shared/multipart.js';
 
 export const adminDistributorsRouter = Router();
 adminDistributorsRouter.use(requireAuth, requireRole('admin'));
@@ -14,6 +16,8 @@ const documentStatusValues = ['pending', 'approved', 'rejected', 'replaced'] as 
 const idSchema = z.string().uuid();
 
 export const hasBlockingActiveDistributorDocuments = (summary: { blocking_documents?: number | string | null }): boolean => Number(summary.blocking_documents ?? 0) > 0;
+export const canApproveDistributorDocuments = (country: string | null | undefined, documents: Array<{ document_type: string; status: string }>) =>
+  missingApprovedDistributorDocuments(country, documents).length === 0;
 
 adminDistributorsRouter.get('/distributors', async (req, res, next) => {
   try {
@@ -36,7 +40,7 @@ adminDistributorsRouter.get('/distributors/:id', async (req, res, next) => {
     const { rows } = await pool.query(`SELECT dp.*, u.email, u.full_name, u.phone, u.role, u.status AS user_status FROM store.distributor_profiles dp JOIN store.users u ON u.id = dp.user_id WHERE dp.id = $1`, [id]);
     if (!rows[0]) { res.status(404).json({ error: 'Distributor not found' }); return; }
     const docs = await pool.query(`SELECT id, document_type, file_name, mime_type, file_size_bytes, status, created_at, reviewed_at, reviewed_by, review_notes FROM store.distributor_documents WHERE distributor_profile_id = $1 ORDER BY created_at DESC`, [id]);
-    res.json({ distributor: rows[0], documents: docs.rows });
+    res.json({ distributor: rows[0], requirements: requiredDistributorDocuments(rows[0].country), documents: docs.rows });
   } catch (error) { next(error); }
 });
 
@@ -49,25 +53,19 @@ adminDistributorsRouter.patch('/distributors/:id/status', async (req, res, next)
       res.status(400).json({ error: 'review_notes is required for rejected and needs_more_info statuses' }); return;
     }
     await client.query('BEGIN');
-    const existingDistributor = await client.query('SELECT id FROM store.distributor_profiles WHERE id = $1', [id]);
+    const existingDistributor = await client.query(`SELECT dp.id, dp.country, u.status AS user_status
+      FROM store.distributor_profiles dp JOIN store.users u ON u.id = dp.user_id WHERE dp.id = $1`, [id]);
     if (!existingDistributor.rows[0]) { res.status(404).json({ error: 'Distributor not found' }); await client.query('ROLLBACK'); return; }
     if (input.validation_status === 'approved') {
-      const docs = await client.query(`SELECT
-        COUNT(*)::int AS total_documents,
-        COUNT(*) FILTER (WHERE status <> 'replaced')::int AS active_documents,
-        COUNT(*) FILTER (WHERE status <> 'replaced' AND status <> 'approved')::int AS blocking_documents
-        FROM store.distributor_documents WHERE distributor_profile_id = $1`, [id]);
-      const summary = docs.rows[0];
-      if (!summary || summary.total_documents < 1 || summary.active_documents < 1) {
-        await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot approve distributor without non-replaced documentation' }); return;
-      }
-      if (hasBlockingActiveDistributorDocuments(summary)) {
-        await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot approve distributor while active documents are not approved' }); return;
-      }
+      if (existingDistributor.rows[0].user_status !== 'active') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot approve distributor before email verification' }); return; }
+      const docs = await client.query(`SELECT document_type, status FROM store.distributor_documents
+        WHERE distributor_profile_id = $1 AND status <> 'replaced'`, [id]);
+      const missing = missingApprovedDistributorDocuments(existingDistributor.rows[0].country, docs.rows);
+      if (missing.length > 0) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Cannot approve distributor while required documents are missing or not approved', missing_documents: missing.map((document) => document.code) }); return; }
     }
     const { rows } = await client.query(`UPDATE store.distributor_profiles SET validation_status = $2, review_notes = COALESCE($3, review_notes),
-      approved_at = CASE WHEN $2 = 'approved' THEN now() ELSE approved_at END,
-      approved_by = CASE WHEN $2 = 'approved' THEN $4 ELSE approved_by END,
+      approved_at = CASE WHEN $2 = 'approved' THEN now() ELSE NULL END,
+      approved_by = CASE WHEN $2 = 'approved' THEN $4 ELSE NULL END,
       reviewed_at = now(), reviewed_by = $4, updated_at = now()
       WHERE id = $1 RETURNING *`, [id, input.validation_status, input.review_notes ?? null, req.user!.sub]);
     await writeAuditLog({ actorUserId: req.user!.sub, action: 'distributor_validation_status_changed', entityType: 'distributor_profile', entityId: id, payload: { validation_status: input.validation_status, review_notes: input.review_notes ?? null } }, client);
@@ -101,6 +99,11 @@ adminDistributorsRouter.patch('/distributor-documents/:id/status', async (req, r
       review_notes = COALESCE($4, review_notes) WHERE id = $1 RETURNING id, distributor_profile_id, document_type, status, created_at, reviewed_at, reviewed_by, review_notes`,
       [id, input.status, req.user!.sub, input.review_notes ?? null]);
     if (!rows[0]) { res.status(404).json({ error: 'Document not found' }); await client.query('ROLLBACK'); return; }
+    if (input.status !== 'approved') {
+      await client.query(`UPDATE store.distributor_profiles SET validation_status = CASE WHEN $2 = 'rejected' THEN 'needs_more_info' ELSE 'pending' END,
+        approved_at = NULL, approved_by = NULL, reviewed_at = now(), reviewed_by = $3, updated_at = now()
+        WHERE id = $1 AND validation_status = 'approved'`, [rows[0].distributor_profile_id, input.status, req.user!.sub]);
+    }
     const action = input.status === 'approved' ? 'distributor_document_approved' : input.status === 'rejected' ? 'distributor_document_rejected' : input.status === 'replaced' ? 'distributor_document_replaced' : 'distributor_document_status_changed';
     await writeAuditLog({ actorUserId: req.user!.sub, action, entityType: 'distributor_document', entityId: id, payload: { status: input.status, review_notes: input.review_notes ?? null } }, client);
     await client.query('COMMIT'); res.json({ document: rows[0] });
@@ -113,8 +116,8 @@ adminDistributorsRouter.get('/distributor-documents/:id/download', async (req, r
     const { rows } = await pool.query('SELECT id, file_path, file_name FROM store.distributor_documents WHERE id = $1', [id]);
     if (!rows[0]) { res.status(404).json({ error: 'Document not found' }); return; }
     const base = path.resolve(env.documentsPath); const filePath = path.resolve(rows[0].file_path);
-    if (!filePath.startsWith(base + path.sep) && filePath !== base) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (!filePath.startsWith(base + path.sep)) { res.status(404).json({ error: 'Document not found' }); return; }
     await writeAuditLog({ actorUserId: req.user!.sub, action: 'admin_distributor_document_downloaded', entityType: 'distributor_document', entityId: id });
-    res.download(filePath, rows[0].file_name, { headers: { 'Content-Type': 'application/pdf' } });
+    res.download(filePath, safeDownloadFilename(rows[0].file_name), { headers: { 'Content-Type': 'application/pdf', 'X-Content-Type-Options': 'nosniff' } }, (error) => error ? next(error) : undefined);
   } catch (error) { next(error); }
 });
