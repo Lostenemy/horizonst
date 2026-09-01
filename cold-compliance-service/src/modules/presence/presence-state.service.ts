@@ -51,6 +51,14 @@ async function resolveOperationalGraceMinutes(): Promise<number> {
   return Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : Math.max(1, Number(env.OPERATIONAL_GRACE_MINUTES));
 }
 
+function dispatchPhysicalAlarm(params: Parameters<typeof triggerPhysicalAlarmSequence>[0], logMessage: string): void {
+  setImmediate(() => {
+    triggerPhysicalAlarmSequence(params).catch((error) => {
+      logger.warn({ error, tagId: params.tagId, alertId: params.alertId }, logMessage);
+    });
+  });
+}
+
 export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string): Promise<{ isGraceReentry: boolean }> {
   const current = await db.query<PresenceOperationalState>(
     `SELECT * FROM presence_operational_state WHERE tag_id = $1`,
@@ -87,15 +95,13 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
       [tag.id, tag.worker_id, tag.cold_room_id, eventTs]
     );
 
-    await triggerPhysicalAlarmSequence({
+    dispatchPhysicalAlarm({
       alertId: `grace-reentry:${tag.id}:${Date.parse(eventTs) || Date.now()}`,
       workerId: tag.worker_id ?? undefined,
       tagId: tag.id,
       severity: 'critical',
       alertType: 'alarm_rule_alarm'
-    }).catch((error) => {
-      logger.warn({ error, tagId: tag.id }, 'failed to run immediate physical alarm for grace reentry');
-    });
+    }, 'failed to run immediate physical alarm for grace reentry');
 
     return { isGraceReentry: true };
   }
@@ -204,15 +210,13 @@ export async function sendGraceReentryReminders(): Promise<void> {
   );
 
   for (const row of due.rows) {
-    await triggerPhysicalAlarmSequence({
+    dispatchPhysicalAlarm({
       alertId: `reentry-reminder:${row.tag_id}:${Math.floor(Date.now() / cadenceMs)}`,
       workerId: row.worker_id ?? undefined,
       tagId: row.tag_id,
       severity: 'critical',
       alertType: 'alarm_rule_alarm'
-    }).catch((error) => {
-      logger.warn({ error, tagId: row.tag_id }, 'failed to run physical reminder alarm sequence');
-    });
+    }, 'failed to run physical reminder alarm sequence');
 
   }
 }

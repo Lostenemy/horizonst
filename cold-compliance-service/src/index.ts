@@ -7,6 +7,7 @@ import { startGatewayReplyListener } from './modules/tag-control/infrastructure/
 import { startComplianceRuleLoop, startPresenceTimeoutLoop } from './modules/compliance/compliance.service';
 import { startPresenceGraceLoop } from './modules/presence/presence-state.service';
 import { logger } from './utils/logger';
+import { startPresenceMaintenanceLoop } from './modules/maintenance/maintenance.service';
 
 async function bootstrap() {
   await runMigrations();
@@ -16,6 +17,7 @@ async function bootstrap() {
   startComplianceRuleLoop();
   startPresenceTimeoutLoop();
   startPresenceGraceLoop();
+  startPresenceMaintenanceLoop();
 
   const app = buildApp();
   app.listen(env.PORT, () => {
