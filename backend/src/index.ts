@@ -7,6 +7,7 @@ import { pool } from './db/pool';
 import { runMigrations } from './db/migrations';
 import { ensureEmqxMessageAudit } from './services/emqxAudit';
 import { verifyMailConnection } from './services/mail';
+import { startMqttStorageMaintenance } from './services/storageMaintenance';
 
 const server = http.createServer(app);
 
@@ -36,6 +37,7 @@ const start = async () => {
     }
     await initMqtt();
     startAlarmMonitor();
+    startMqttStorageMaintenance();
     server.listen(config.port, config.host, () => {
       console.log(`Server running on http://${config.host}:${config.port}`);
     });

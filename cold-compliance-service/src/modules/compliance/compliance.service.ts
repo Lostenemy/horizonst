@@ -5,6 +5,7 @@ import { openIncident } from '../incidents/incidents.service';
 import { ParsedPresenceEvent } from '../presence/types';
 import { logger } from '../../utils/logger';
 import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
+import { shouldClosePresenceSession } from './presence-timeout-policy';
 const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
 export function isValidSessionStart(startedAt: string): boolean {
   const startedAtMs = Date.parse(startedAt);
@@ -126,16 +127,10 @@ async function upsertOpenSession(tag: any, event: ParsedPresenceEvent): Promise<
     logger.error({ tagId: tag.id, eventId: event.eventId, startedAt: event.timestamp }, 'rejected session creation due to invalid started_at');
     return;
   }
-  const active = await db.query(
-    `SELECT id FROM cold_room_sessions WHERE tag_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
-    [tag.id]
-  );
-  if (active.rowCount) return;
-
   await db.query(
     `INSERT INTO cold_room_sessions(worker_id, tag_id, cold_room_id, started_at, source_event_id)
      VALUES($1, $2, $3, $4, $5)
-     ON CONFLICT (source_event_id) DO NOTHING`,
+     ON CONFLICT DO NOTHING`,
     [tag.worker_id, tag.id, tag.cold_room_id, event.timestamp, event.eventId]
   );
 }
@@ -223,7 +218,7 @@ async function finalizeSession(
 
 async function closeStaleSessions(): Promise<void> {
   const timeoutMs = Math.max(1000, Number(env.PRESENCE_EXIT_TIMEOUT_MS));
-  const activeSessions = await db.query<SessionContext & { last_seen_at: string; tag_uid: string; ble_active: boolean | null; ble_disconnected_at: string | null }>(
+  const activeSessions = await db.query<SessionContext & { last_seen_at: string; tag_uid: string }>(
     `SELECT s.id,
             s.started_at,
             COALESCE(s.worker_id, wta.worker_id) AS worker_id,
@@ -233,41 +228,29 @@ async function closeStaleSessions(): Promise<void> {
             COALESCE(cr.max_continuous_minutes, $1) AS max_continuous_minutes,
             COALESCE(cr.pre_alert_minutes, $2) AS pre_alert_minutes,
             COALESCE(cr.max_daily_minutes, $3) AS max_daily_minutes,
-            COALESCE(MAX(pe.event_ts), s.started_at) AS last_seen_at,
-            bs.is_active AS ble_active,
-            bs.disconnected_at AS ble_disconnected_at
+            COALESCE(MAX(ps.last_presence_at), s.started_at) AS last_seen_at
      FROM cold_room_sessions s
      JOIN tags t ON t.id = s.tag_id
      LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
      LEFT JOIN cold_rooms cr ON cr.id = s.cold_room_id
-     LEFT JOIN ble_alarm_sessions bs ON bs.tag_id = s.tag_id
-     LEFT JOIN presence_events pe
-       ON regexp_replace(lower(pe.tag_uid), '[-:]', '', 'g') = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')
-      AND pe.event_ts >= s.started_at
-      AND pe.event_type IN ('enter', 'heartbeat', 'movement')
+     LEFT JOIN tag_gateway_presence_state ps
+       ON ps.tag_uid = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')
+      AND ps.last_presence_at >= s.started_at
+      AND (s.cold_room_id IS NULL OR EXISTS (
+        SELECT 1 FROM gateways seen_gateway
+        WHERE regexp_replace(lower(seen_gateway.gateway_mac), '[-:]', '', 'g') = ps.gateway_mac
+          AND seen_gateway.cold_room_id = s.cold_room_id
+      ))
      WHERE s.ended_at IS NULL
      GROUP BY s.id, s.started_at, COALESCE(s.worker_id, wta.worker_id), s.cold_room_id,
-              s.tag_id, t.tag_uid, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes,
-              bs.is_active, bs.disconnected_at`,
+              s.tag_id, t.tag_uid, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes`,
     [env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES]
   );
 
   const nowMs = Date.now();
 
   for (const session of activeSessions.rows) {
-    if (session.ble_active) {
-      logger.info({ sessionId: session.id, tagId: session.tag_id }, 'presence timeout skipped due to active BLE session');
-      continue;
-    }
-
     let referenceTs = Date.parse(session.last_seen_at);
-    if (session.ble_disconnected_at) {
-      const bleDisconnectedMs = Date.parse(session.ble_disconnected_at);
-      if (Number.isFinite(bleDisconnectedMs) && bleDisconnectedMs > referenceTs) {
-        referenceTs = bleDisconnectedMs;
-        logger.info({ sessionId: session.id, tagId: session.tag_id, bleDisconnectedAt: session.ble_disconnected_at }, 'presence timeout started from BLE disconnect timestamp');
-      }
-    }
 
     if (!Number.isFinite(referenceTs)) {
       referenceTs = Date.parse(session.started_at);
@@ -281,10 +264,10 @@ async function closeStaleSessions(): Promise<void> {
       elapsedMs,
       timeoutMs,
       lastSeenAt: session.last_seen_at,
-      bleDisconnectedAt: session.ble_disconnected_at
+      source: 'tag_gateway_presence_state'
     }, 'presence timeout evaluation');
 
-    if (elapsedMs <= timeoutMs) continue;
+    if (!shouldClosePresenceSession({ nowMs, lastPresenceAtMs: referenceTs, timeoutMs })) continue;
 
     const closedAt = new Date(referenceTs + timeoutMs).toISOString();
     const closed = await finalizeSession(session, closedAt, null, 'timeout');
@@ -302,6 +285,8 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
             wta.unassigned_at,
             cr.id as cold_room_id,
             cr.name as cold_room_name,
+            g.id as gateway_id,
+            g.rssi_threshold,
             coalesce(cr.max_continuous_minutes, $2) as max_continuous_minutes,
             coalesce(cr.pre_alert_minutes, $3) as pre_alert_minutes,
             coalesce(cr.required_break_minutes, $4) as required_break_minutes,
@@ -311,22 +296,52 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
      LEFT JOIN gateways g ON regexp_replace(lower(g.gateway_mac), '[-:]', '', 'g') = $1
      LEFT JOIN cold_rooms cr ON cr.id = g.cold_room_id
      WHERE regexp_replace(lower(t.tag_uid), '[-:]', '', 'g') = $6`,
-    [event.gatewayMac, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.REQUIRED_BREAK_MINUTES, env.MAX_DAILY_MINUTES, event.tagId]
+    [event.gatewayMac.replace(/[:-]/g, '').toLowerCase(), env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.REQUIRED_BREAK_MINUTES, env.MAX_DAILY_MINUTES, event.tagId.replace(/[:-]/g, '').toLowerCase()]
   );
 
   if (!tagRes.rowCount) return;
   const tag = tagRes.rows[0];
 
+  if (typeof event.battery === 'number' && event.battery <= env.BATTERY_ALERT_THRESHOLD) {
+    await createAlert({
+      workerId: tag.worker_id,
+      tagId: tag.id,
+      coldRoomId: tag.cold_room_id,
+      severity: 'warning',
+      alertType: 'low_battery',
+      message: `Batería baja de tag ${event.battery}%`,
+      metadata: { battery: event.battery }
+    });
+  }
+
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
+    if (!tag.gateway_id || !tag.cold_room_id) {
+      logger.debug({ gatewayMac: event.gatewayMac, tagId: tag.id }, 'presence event ignored: gateway is not assigned to a cold room');
+      return;
+    }
+
+    const activeSession = await db.query(
+      `SELECT 1 FROM cold_room_sessions WHERE tag_id = $1 AND ended_at IS NULL LIMIT 1`,
+      [tag.id]
+    );
+    const baseThreshold = Number(tag.rssi_threshold ?? -127);
+    const requiredRssi = activeSession.rowCount
+      ? baseThreshold
+      : Math.min(0, baseThreshold + Math.max(0, env.PRESENCE_RSSI_ENTRY_MARGIN_DB));
+    if (typeof event.rssi === 'number' && event.rssi < requiredRssi) {
+      logger.debug({ tagId: tag.id, gatewayMac: event.gatewayMac, rssi: event.rssi, requiredRssi, opening: !activeSession.rowCount }, 'presence event ignored below RSSI threshold');
+      return;
+    }
+
+    await db.query(
+      `UPDATE tag_gateway_presence_state
+       SET last_presence_at = GREATEST(COALESCE(last_presence_at, '-infinity'::timestamptz), $3::timestamptz),
+           updated_at = NOW()
+       WHERE tag_uid = $1 AND gateway_mac = $2`,
+      [event.tagId.replace(/[:-]/g, '').toLowerCase(), event.gatewayMac.replace(/[:-]/g, '').toLowerCase(), event.timestamp]
+    );
+
     if (event.eventType === 'enter' || event.eventType === 'heartbeat') {
-      const activeSession = await db.query(
-        `SELECT 1
-         FROM cold_room_sessions
-         WHERE tag_id = $1
-           AND ended_at IS NULL
-         LIMIT 1`,
-        [tag.id]
-      );
       if (!activeSession.rowCount) {
         await markPresenceEnter(tag, event.timestamp);
       }
@@ -392,17 +407,6 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
     await finalizeSession(activeSessionRes.rows[0], event.timestamp, event.eventId, 'event');
   }
 
-  if (typeof event.battery === 'number' && event.battery <= env.BATTERY_ALERT_THRESHOLD) {
-    await createAlert({
-      workerId: tag.worker_id,
-      tagId: tag.id,
-      coldRoomId: tag.cold_room_id,
-      severity: 'warning',
-      alertType: 'low_battery',
-      message: `Batería baja de tag ${event.battery}%`,
-      metadata: { battery: event.battery }
-    });
-  }
 }
 
 export function startComplianceRuleLoop(): void {
@@ -412,8 +416,7 @@ export function startComplianceRuleLoop(): void {
        FROM cold_room_sessions s
        JOIN tags t ON t.id = s.tag_id
        LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
-       LEFT JOIN presence_events pe ON pe.tag_uid = t.tag_uid
-       LEFT JOIN gateways g ON g.gateway_mac = pe.gateway_mac
+       LEFT JOIN gateways g ON g.cold_room_id = s.cold_room_id
        WHERE s.ended_at IS NULL`
     )
       .then((result) => Promise.all(result.rows.map((tag) => evaluateOperationalAlarmRules(tag))))

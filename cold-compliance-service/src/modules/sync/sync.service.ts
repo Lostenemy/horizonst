@@ -7,6 +7,11 @@ interface PendingSyncRow {
 }
 
 export function startSyncLoop(): void {
+  if (!env.SYNC_QUEUE_ENABLED) {
+    logger.info('sync queue disabled: presence events will not be duplicated');
+    return;
+  }
+
   setInterval(async () => {
     try {
       const pending = await db.query<PendingSyncRow>(

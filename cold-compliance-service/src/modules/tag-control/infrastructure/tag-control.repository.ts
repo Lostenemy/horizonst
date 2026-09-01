@@ -79,21 +79,19 @@ export async function resolveTagTargets(params: {
            AND ($3::text IS NULL OR t.tag_uid = $3)
          LIMIT 1
        ), recent_presence AS (
-         SELECT DISTINCT ON (pe.gateway_mac)
-                pe.gateway_mac,
-                pe.event_ts AS last_seen_at,
-                pe.rssi
-         FROM presence_events pe
-         JOIN target t ON t.tag_uid = pe.tag_uid
-         WHERE pe.event_ts >= NOW() - ($4::text)::interval
-         ORDER BY pe.gateway_mac, pe.event_ts DESC, pe.rssi DESC NULLS LAST
+         SELECT ps.gateway_mac,
+                ps.last_seen_at,
+                ps.last_rssi AS rssi
+         FROM tag_gateway_presence_state ps
+         JOIN target t ON regexp_replace(lower(t.tag_uid), '[-:]', '', 'g') = ps.tag_uid
+         WHERE ps.last_seen_at >= NOW() - ($4::text)::interval
        )
        SELECT t.tag_id, t.tag_uid, t.worker_id, t.full_name,
               g.id as gateway_id, g.gateway_mac, rp.last_seen_at, rp.rssi,
               (t.active_cold_room_id IS NOT NULL AND g.cold_room_id = t.active_cold_room_id) AS same_cold_room
        FROM target t
        JOIN recent_presence rp ON true
-       JOIN gateways g ON g.gateway_mac = rp.gateway_mac
+       JOIN gateways g ON regexp_replace(lower(g.gateway_mac), '[-:]', '', 'g') = rp.gateway_mac
        ORDER BY
          CASE WHEN $6::text IN ('hybrid', 'camera_assigned') AND t.active_cold_room_id IS NOT NULL AND g.cold_room_id = t.active_cold_room_id THEN 0 ELSE 1 END,
          rp.last_seen_at DESC,
