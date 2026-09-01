@@ -6,6 +6,7 @@ import { ParsedPresenceEvent } from '../presence/types';
 import { logger } from '../../utils/logger';
 import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
 import { shouldClosePresenceSession } from './presence-timeout-policy';
+import { evaluatePresenceSignal } from './presence-signal-policy';
 const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
 export function isValidSessionStart(startedAt: string): boolean {
   const startedAtMs = Date.parse(startedAt);
@@ -315,21 +316,20 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
   }
 
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
-    if (!tag.gateway_id || !tag.cold_room_id) {
-      logger.debug({ gatewayMac: event.gatewayMac, tagId: tag.id }, 'presence event ignored: gateway is not assigned to a cold room');
-      return;
-    }
-
     const activeSession = await db.query(
       `SELECT 1 FROM cold_room_sessions WHERE tag_id = $1 AND ended_at IS NULL LIMIT 1`,
       [tag.id]
     );
-    const baseThreshold = Number(tag.rssi_threshold ?? -127);
-    const requiredRssi = activeSession.rowCount
-      ? baseThreshold
-      : Math.min(0, baseThreshold + Math.max(0, env.PRESENCE_RSSI_ENTRY_MARGIN_DB));
-    if (typeof event.rssi === 'number' && event.rssi < requiredRssi) {
-      logger.debug({ tagId: tag.id, gatewayMac: event.gatewayMac, rssi: event.rssi, requiredRssi, opening: !activeSession.rowCount }, 'presence event ignored below RSSI threshold');
+    const signal = evaluatePresenceSignal({
+      gatewayRegistered: Boolean(tag.gateway_id),
+      coldRoomId: tag.cold_room_id ?? null,
+      hasOpenSession: Boolean(activeSession.rowCount),
+      rssi: event.rssi,
+      rssiThreshold: Number(tag.rssi_threshold ?? -127),
+      entryMarginDb: env.PRESENCE_RSSI_ENTRY_MARGIN_DB
+    });
+    if (!signal.accepted) {
+      logger.debug({ tagId: tag.id, gatewayMac: event.gatewayMac, rssi: event.rssi, requiredRssi: signal.requiredRssi, opening: !activeSession.rowCount, reason: signal.reason }, 'presence event ignored by signal policy');
       return;
     }
 
