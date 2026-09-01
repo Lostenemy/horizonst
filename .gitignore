@@ -3,3 +3,4 @@ mailserver/ssl/*
 mailserver/config/ssl/*
 !mailserver/config/ssl/.gitkeep
 .env
+node_modules/
