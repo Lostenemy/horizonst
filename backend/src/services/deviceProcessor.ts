@@ -5,11 +5,13 @@ import { ProcessedDeviceRecord } from '../types';
 interface GatewayRow {
   id: number;
   place_id: number | null;
+  company_id: string | null;
 }
 
 interface DeviceRow {
   id: number;
   owner_id: number | null;
+  company_id: string | null;
 }
 
 interface DeviceRecordRow {
@@ -28,7 +30,7 @@ export const handleDeviceRecord = async (record: ProcessedDeviceRecord): Promise
 
     const gatewayMac = record.gatewayMac.toUpperCase();
     const gatewayResult = await client.query<GatewayRow>(
-      `SELECT g.id, gp.place_id
+      `SELECT g.id, g.company_id, gp.place_id
        FROM gateways g
        LEFT JOIN LATERAL (
          SELECT place_id
@@ -48,12 +50,20 @@ export const handleDeviceRecord = async (record: ProcessedDeviceRecord): Promise
     }
 
     const deviceResult = await client.query<DeviceRow>(
-      `SELECT id, owner_id FROM devices WHERE ble_mac = $1 AND active = true LIMIT 1`,
+      `SELECT id, owner_id, company_id FROM devices WHERE ble_mac = $1 AND active = true LIMIT 1`,
       [record.bleMac.toUpperCase()]
     );
     const device = deviceResult.rows[0];
     if (!device) {
       await client.query('ROLLBACK');
+      return;
+    }
+    if (gateway.company_id && device.company_id && gateway.company_id !== device.company_id) {
+      await client.query('ROLLBACK');
+      console.warn('Discarded cross-company device observation', {
+        gatewayId: gateway.id,
+        deviceId: device.id
+      });
       return;
     }
 

@@ -41,14 +41,19 @@ export const initAuthPage = () => {
   }
 
   if (document.body) {
-    if (user.role === 'ADMIN') {
+    if (user.role === 'ADMIN' || user.role === 'hardware_superadmin') {
       document.body.classList.add('is-admin');
     } else {
       document.body.classList.remove('is-admin');
     }
   }
 
-  return { user, isAdmin: user.role === 'ADMIN' };
+  return {
+    user,
+    isAdmin: user.role === 'ADMIN' || user.role === 'hardware_superadmin',
+    isHardwareTechnician: user.role === 'hardware_technician',
+    isHardwareReadonly: user.role === 'hardware_readonly'
+  };
 };
 
 const createOverlay = () => {

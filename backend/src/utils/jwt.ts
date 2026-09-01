@@ -1,8 +1,6 @@
-import 'dotenv/config';
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { JwtPayload } from '../types';
-
-const { JWT_SECRET = 'change_me', JWT_EXPIRES_IN = '8h' } = process.env;
+import { config } from '../config';
 
 type Expires = NonNullable<SignOptions['expiresIn']>;
 
@@ -14,8 +12,8 @@ function normalizeExpires(value: unknown): Expires {
   return normalized as Expires;
 }
 
-const secret: Secret = JWT_SECRET;
-const expiresIn = normalizeExpires(JWT_EXPIRES_IN);
+const secret: Secret = config.jwtSecret;
+const expiresIn = normalizeExpires(config.jwtExpiresIn);
 
 const isJwtPayload = (value: unknown): value is JwtPayload => {
   if (typeof value !== 'object' || value === null) {
@@ -24,7 +22,13 @@ const isJwtPayload = (value: unknown): value is JwtPayload => {
   const candidate = value as Partial<JwtPayload> & { userId?: unknown; role?: unknown };
   return (
     typeof candidate.userId === 'number' &&
-    (candidate.role === 'ADMIN' || candidate.role === 'USER')
+    (
+      candidate.role === 'ADMIN' ||
+      candidate.role === 'USER' ||
+      candidate.role === 'hardware_readonly' ||
+      candidate.role === 'hardware_technician' ||
+      candidate.role === 'hardware_superadmin'
+    )
   );
 };
 

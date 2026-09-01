@@ -79,6 +79,7 @@ interface AppConfig {
   host: string;
   jwtSecret: string;
   jwtExpiresIn: string;
+  corsAllowedOrigins: string[];
   database: DatabaseConfig;
   mqtt: MqttConfig;
   emqx: EmqxManagementConfig;
@@ -151,16 +152,29 @@ const parseQoS = (value: string | undefined, fallback: 0 | 1 | 2): 0 | 1 | 2 => 
   return fallback;
 };
 
+const requiredSecret = (name: string, value: string | undefined, minLength = 1): string => {
+  const normalized = value?.trim();
+  if (!normalized || normalized.length < minLength) {
+    throw new Error(`${name} is required and must contain at least ${minLength} characters`);
+  }
+  return normalized;
+};
+
+const persistenceMode = process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app';
+const mailEnabled = parseBoolean(process.env.MAIL_ENABLED, true);
+const rfidAccessEnabled = parseBoolean(process.env.RFID_ACCESS_ENABLED, true);
+
 export const config: AppConfig = {
   port: parseNumber(process.env.PORT, 3000),
   host: process.env.HOST || '0.0.0.0',
-  jwtSecret: process.env.JWT_SECRET || 'super-secret-horizonst',
+  jwtSecret: requiredSecret('JWT_SECRET', process.env.JWT_SECRET, 32),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
+  corsAllowedOrigins: parseList(process.env.CORS_ALLOWED_ORIGINS),
   database: {
     host: process.env.DB_HOST || 'postgres',
     port: parseNumber(process.env.DB_PORT, 5432),
     user: process.env.DB_USER || 'horizonst',
-    password: process.env.DB_PASSWORD || 'horizonst',
+    password: requiredSecret('DB_PASSWORD', process.env.DB_PASSWORD),
     database: process.env.DB_NAME || 'horizonst'
   },
   mqtt: {
@@ -178,7 +192,7 @@ export const config: AppConfig = {
     clientId:
       process.env.MQTT_CLIENT_ID ||
       `${process.env.MQTT_CLIENT_PREFIX || 'acces_control_server_'}backend`,
-    persistenceMode: process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app',
+    persistenceMode,
     required: parseBoolean(process.env.MQTT_REQUIRED, false),
     reconnectMaxPeriod: Math.max(
       2000,
@@ -194,7 +208,9 @@ export const config: AppConfig = {
     host: process.env.EMQX_MGMT_HOST || process.env.MQTT_HOST || 'vernemq',
     port: parseNumber(process.env.EMQX_MGMT_PORT, 18083),
     username: process.env.EMQX_MGMT_USERNAME || 'admin',
-    password: process.env.EMQX_MGMT_PASSWORD || '20025@BLELoRa',
+    password: persistenceMode === 'emqx'
+      ? requiredSecret('EMQX_MGMT_PASSWORD', process.env.EMQX_MGMT_PASSWORD)
+      : process.env.EMQX_MGMT_PASSWORD?.trim() || '',
     ssl: parseBoolean(process.env.EMQX_MGMT_SSL, false),
     maxRetries: Math.max(1, parseNumber(process.env.EMQX_MGMT_MAX_RETRIES, 10)),
     retryIntervalMs: Math.max(500, parseNumber(process.env.EMQX_MGMT_RETRY_INTERVAL_MS, 3000))
@@ -204,11 +220,13 @@ export const config: AppConfig = {
     const port = parseNumber(process.env.MAIL_PORT, 465);
     const secure = parseBoolean(process.env.MAIL_SECURE, true);
     const user = process.env.MAIL_USER || 'no_reply@horizonst.com.es';
-    const password = process.env.MAIL_PASSWORD || 'No_reply#2024';
+    const password = mailEnabled
+      ? requiredSecret('MAIL_PASSWORD', process.env.MAIL_PASSWORD)
+      : process.env.MAIL_PASSWORD?.trim() || '';
     const from = process.env.MAIL_FROM || user;
     const recipientsFromEnv = parseList(process.env.CONTACT_RECIPIENTS);
     const recipients = recipientsFromEnv.length > 0 ? recipientsFromEnv : [from];
-    const enabled = parseBoolean(process.env.MAIL_ENABLED, true) && Boolean(host) && Boolean(user);
+    const enabled = mailEnabled && Boolean(host) && Boolean(user);
     const ehloDomain = process.env.MAIL_EHLO_DOMAIN || 'horizonst.com.es';
     const tlsRejectUnauthorized = parseBoolean(process.env.MAIL_TLS_REJECT_UNAUTHORIZED, false);
     return {
@@ -225,13 +243,15 @@ export const config: AppConfig = {
     };
   })(),
   rfidAccess: (() => {
-    const enabled = parseBoolean(process.env.RFID_ACCESS_ENABLED, true);
+    const enabled = rfidAccessEnabled;
     const topic = 'devices/RF1';
     const defaultReaderId = process.env.RFID_ACCESS_DEFAULT_READER || 'RF1';
     const api: RfidAccessApiConfig = {
       url: process.env.RFID_ACCESS_API_URL || 'https://ws.e-coordina.com/1.4',
       user: process.env.RFID_ACCESS_API_USER || 'webservice',
-      token: process.env.RFID_ACCESS_API_TOKEN || '',
+      token: enabled
+        ? requiredSecret('RFID_ACCESS_API_TOKEN', process.env.RFID_ACCESS_API_TOKEN)
+        : process.env.RFID_ACCESS_API_TOKEN?.trim() || '',
       brand: process.env.RFID_ACCESS_API_BRAND || 'ecoordina',
       action: process.env.RFID_ACCESS_API_ACTION || 'acceso.permitido_data',
       actionType: process.env.RFID_ACCESS_API_ACTION_TYPE || 'do',

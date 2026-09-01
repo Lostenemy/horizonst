@@ -12,18 +12,30 @@ import alarmRouter from './routes/alarms';
 import messageRouter from './routes/messages';
 import contactRouter from './routes/contact';
 import rfidRouter from './routes/rfid';
+import companyRouter from './routes/companies';
 import { getMqttStatus } from './services/mqttService';
+import { config } from './config';
+import { requestContext, secureHeaders } from './middleware/requestContext';
 
 const app = express();
 
 app.set('trust proxy', 1);
 
-app.use(cors());
+app.use(requestContext);
+app.use(secureHeaders);
+app.use(cors({
+  credentials: false,
+  origin: (origin, callback) => {
+    const allowed = !origin || config.corsAllowedOrigins.includes(origin);
+    callback(null, allowed);
+  }
+}));
 app.use(json({ limit: '10mb' }));
 app.use(urlencoded({ extended: true, limit: '10mb' }));
 
 app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
+app.use('/api/companies', companyRouter);
 app.use('/api/gateways', gatewayRouter);
 app.use('/api/devices', deviceRouter);
 app.use('/api/places', placeRouter);

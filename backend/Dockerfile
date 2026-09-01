@@ -7,6 +7,7 @@ RUN npm ci
 
 COPY src ./src
 COPY public ./public
+COPY migrations ./migrations
 RUN npm run build
 
 # ---------- runtime ----------
@@ -21,6 +22,7 @@ RUN npm ci --omit=dev
 
 COPY --from=build /usr/src/app/dist ./dist
 COPY --from=build /usr/src/app/public ./public
+COPY --from=build /usr/src/app/migrations ./migrations
 
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

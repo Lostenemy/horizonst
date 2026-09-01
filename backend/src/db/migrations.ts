@@ -1,4 +1,7 @@
 import { pool } from './pool';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 const statements: string[] = [
   `CREATE TABLE IF NOT EXISTS category_photos (
@@ -84,9 +87,56 @@ const statements: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_rfid_access_logs_created ON rfid_access_logs(created_at DESC)`
 ];
 
+const runVersionedMigrations = async (): Promise<void> => {
+  const migrationsDir = process.env.APP_MIGRATIONS_DIR || path.resolve(__dirname, '..', '..', 'migrations');
+  const files = (await fs.readdir(migrationsDir))
+    .filter((file) => /^\d+_.*\.sql$/.test(file))
+    .sort();
+
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS app_schema_migrations (
+       name TEXT PRIMARY KEY,
+       checksum TEXT NOT NULL,
+       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`
+  );
+
+  for (const name of files) {
+    const sql = await fs.readFile(path.join(migrationsDir, name), 'utf8');
+    const checksum = crypto.createHash('sha256').update(sql).digest('hex');
+    const existing = await pool.query<{ checksum: string }>(
+      'SELECT checksum FROM app_schema_migrations WHERE name = $1',
+      [name]
+    );
+    if (existing.rows[0]) {
+      if (existing.rows[0].checksum !== checksum) {
+        throw new Error(`Applied migration checksum mismatch: ${name}`);
+      }
+      continue;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query(
+        'INSERT INTO app_schema_migrations(name, checksum) VALUES($1, $2)',
+        [name, checksum]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+};
+
 export const runMigrations = async (): Promise<void> => {
   for (const text of statements) {
     await pool.query(text);
   }
+  await runVersionedMigrations();
 };
 

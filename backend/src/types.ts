@@ -1,4 +1,9 @@
-export type Role = 'ADMIN' | 'USER';
+export type HardwareRole =
+  | 'hardware_readonly'
+  | 'hardware_technician'
+  | 'hardware_superadmin';
+
+export type Role = 'ADMIN' | 'USER' | HardwareRole;
 
 export interface JwtPayload {
   userId: number;

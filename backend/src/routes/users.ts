@@ -1,19 +1,23 @@
 import { Router } from 'express';
-import { authenticate, authorize, AuthenticatedRequest } from '../middleware/auth';
+import { authenticate, AuthenticatedRequest } from '../middleware/auth';
+import { authorizeHardware, isHardwareSuperadmin } from '../middleware/hardwareRbac';
 import { pool } from '../db/pool';
 import { hashPassword } from '../utils/crypto';
 import { Role } from '../types';
+import { appendTechnicalAudit } from '../services/technicalAudit';
 
 const router = Router();
 
 const normalizeRole = (value: unknown): Role | null => {
-  return value === 'ADMIN' || value === 'USER' ? value : null;
+  return value === 'ADMIN' || value === 'USER' ||
+    value === 'hardware_readonly' || value === 'hardware_technician' ||
+    value === 'hardware_superadmin' ? value : null;
 };
 
 const getAdminCount = async (): Promise<number> => {
   const result = await pool.query<{ count: number }>(
-    'SELECT COUNT(*)::int AS count FROM users WHERE role = $1',
-    ['ADMIN']
+    `SELECT COUNT(*)::int AS count FROM users
+     WHERE role IN ('ADMIN', 'hardware_superadmin')`
   );
   return result.rows[0]?.count ?? 0;
 };
@@ -36,7 +40,7 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res) => {
   }
 });
 
-router.get('/', authenticate, authorize(['ADMIN']), async (_req, res) => {
+router.get('/', authenticate, authorizeHardware('superadmin'), async (_req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, email, role, display_name, created_at, updated_at FROM users ORDER BY id`
@@ -48,7 +52,7 @@ router.get('/', authenticate, authorize(['ADMIN']), async (_req, res) => {
   }
 });
 
-router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.post('/', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   const { email, password, name, role } = req.body;
   const normalizedEmail = typeof email === 'string' ? email.trim() : '';
   const normalizedRole = normalizeRole(role);
@@ -73,6 +77,15 @@ router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
       [normalizedEmail, hash, salt, normalizedRole, displayName ? displayName : null]
     );
 
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id,
+      action: 'user.create',
+      entityType: 'user',
+      entityId: result.rows[0].id,
+      requestId: req.requestId,
+      result: 'success',
+      after: result.rows[0]
+    });
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     const pgError = error as PgError;
@@ -84,7 +97,7 @@ router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-router.put('/:id', authenticate, authorize(['ADMIN']), async (req: AuthenticatedRequest, res) => {
+router.put('/:id', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   const userId = Number.parseInt(req.params.id, 10);
   if (!Number.isInteger(userId) || userId <= 0) {
     return res.status(400).json({ message: 'Identificador no válido' });
@@ -115,7 +128,7 @@ router.put('/:id', authenticate, authorize(['ADMIN']), async (req: Authenticated
       return res.status(400).json({ message: 'Rol no válido' });
     }
 
-    if (normalizedRole === 'USER' && existing.role === 'ADMIN') {
+    if (normalizedRole && !isHardwareSuperadmin(normalizedRole) && isHardwareSuperadmin(existing.role)) {
       const adminCount = await getAdminCount();
       if (adminCount <= 1) {
         return res.status(400).json({ message: 'Debe existir al menos un administrador' });
@@ -166,6 +179,16 @@ router.put('/:id', authenticate, authorize(['ADMIN']), async (req: Authenticated
       [...values, userId]
     );
 
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id,
+      action: 'user.update',
+      entityType: 'user',
+      entityId: userId,
+      requestId: req.requestId,
+      result: 'success',
+      before: existing,
+      after: result.rows[0]
+    });
     return res.json(result.rows[0]);
   } catch (error) {
     const pgError = error as PgError;
@@ -177,7 +200,7 @@ router.put('/:id', authenticate, authorize(['ADMIN']), async (req: Authenticated
   }
 });
 
-router.delete('/:id', authenticate, authorize(['ADMIN']), async (req: AuthenticatedRequest, res) => {
+router.delete('/:id', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   const userId = Number.parseInt(req.params.id, 10);
   if (!Number.isInteger(userId) || userId <= 0) {
     return res.status(400).json({ message: 'Identificador no válido' });
@@ -197,7 +220,7 @@ router.delete('/:id', authenticate, authorize(['ADMIN']), async (req: Authentica
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    if (existing.role === 'ADMIN') {
+    if (isHardwareSuperadmin(existing.role)) {
       const adminCount = await getAdminCount();
       if (adminCount <= 1) {
         return res.status(400).json({ message: 'Debe existir al menos un administrador' });

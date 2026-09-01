@@ -78,8 +78,15 @@ const renderUsers = () => {
 
     const roleCell = document.createElement('td');
     const roleTag = document.createElement('span');
-    roleTag.className = `tag ${item.role === 'ADMIN' ? 'tag-admin' : 'tag-user'}`;
-    roleTag.textContent = item.role === 'ADMIN' ? 'Administrador' : 'Usuario';
+    const roleLabels = {
+      ADMIN: 'Administrador legado',
+      USER: 'Usuario legado',
+      hardware_readonly: 'Hardware: lectura',
+      hardware_technician: 'Hardware: técnico',
+      hardware_superadmin: 'Hardware: superadmin'
+    };
+    roleTag.className = `tag ${(item.role === 'ADMIN' || item.role === 'hardware_superadmin') ? 'tag-admin' : 'tag-user'}`;
+    roleTag.textContent = roleLabels[item.role] || item.role;
     roleCell.appendChild(roleTag);
     row.appendChild(roleCell);
 
@@ -141,8 +148,11 @@ const openCreateUserModal = async () => {
         type: 'select',
         required: true,
         options: [
-          { label: 'Usuario', value: 'USER' },
-          { label: 'Administrador', value: 'ADMIN' }
+          { label: 'Usuario legado', value: 'USER' },
+          { label: 'Hardware: lectura', value: 'hardware_readonly' },
+          { label: 'Hardware: técnico', value: 'hardware_technician' },
+          { label: 'Hardware: superadmin', value: 'hardware_superadmin' },
+          { label: 'Administrador legado', value: 'ADMIN' }
         ]
       },
       { name: 'password', label: 'Contraseña', type: 'password', required: true }
@@ -152,7 +162,7 @@ const openCreateUserModal = async () => {
       const email = values.email ? String(values.email).trim() : '';
       const password = values.password ? String(values.password) : '';
       const name = values.name ? String(values.name).trim() : '';
-      const selectedRole = values.role === 'ADMIN' ? 'ADMIN' : 'USER';
+      const selectedRole = String(values.role || 'USER');
 
       if (!email || !password) {
         throw new Error('Email y contraseña son obligatorios');
@@ -183,8 +193,11 @@ const openEditUserModal = async (userToEdit) => {
         type: 'select',
         required: true,
         options: [
-          { label: 'Usuario', value: 'USER' },
-          { label: 'Administrador', value: 'ADMIN' }
+          { label: 'Usuario legado', value: 'USER' },
+          { label: 'Hardware: lectura', value: 'hardware_readonly' },
+          { label: 'Hardware: técnico', value: 'hardware_technician' },
+          { label: 'Hardware: superadmin', value: 'hardware_superadmin' },
+          { label: 'Administrador legado', value: 'ADMIN' }
         ]
       },
       { name: 'password', label: 'Contraseña (dejar en blanco para mantenerla)', type: 'password' }
@@ -197,7 +210,7 @@ const openEditUserModal = async (userToEdit) => {
     onSubmit: async (values) => {
       const email = values.email ? String(values.email).trim() : '';
       const name = values.name ? String(values.name).trim() : '';
-      const selectedRole = values.role === 'ADMIN' ? 'ADMIN' : 'USER';
+      const selectedRole = String(values.role || 'USER');
       const password = values.password ? String(values.password) : undefined;
 
       if (!email) {

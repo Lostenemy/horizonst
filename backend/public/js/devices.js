@@ -1,7 +1,8 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './api.js';
 import { initAuthPage, openFormModal, confirmAction } from './ui.js';
 
-const { user, isAdmin } = initAuthPage();
+const { user, isAdmin, isHardwareTechnician } = initAuthPage();
+const canEditHardware = isAdmin || isHardwareTechnician;
 if (!user) {
   throw new Error('Usuario no autenticado');
 }
@@ -10,12 +11,15 @@ const form = document.getElementById('deviceCreateForm');
 const messageBox = document.getElementById('deviceCreateMessage');
 const ownerSelect = document.getElementById('deviceOwner');
 const categorySelect = document.getElementById('deviceCategory');
+const companySelect = document.getElementById('deviceCompany');
+const deviceTypeSelect = document.getElementById('deviceType');
 const devicesTableBody = document.querySelector('#devicesTable tbody');
 const devicesEmpty = document.getElementById('devicesEmpty');
 
 let devices = [];
 let categories = [];
 let owners = [];
+let companies = [];
 
 const normalizeMac = (value) => {
   if (!value) return '';
@@ -48,11 +52,16 @@ const loadMetadata = async () => {
   );
 
   if (isAdmin && ownerSelect) {
-    owners = await apiGet('/users');
+    [owners, companies] = await Promise.all([apiGet('/users'), apiGet('/companies')]);
     setSelectOptions(
       ownerSelect,
       owners.map((owner) => ({ value: owner.id, label: owner.display_name || owner.email })),
       'Sin propietario'
+    );
+    setSelectOptions(
+      companySelect,
+      companies.map((company) => ({ value: company.id, label: company.name })),
+      'Sin empresa (legacy)'
     );
   }
 };
@@ -87,6 +96,15 @@ const handleEditDevice = async (device) => {
 
   if (isAdmin) {
     fields.push({ name: 'ownerId', label: 'Propietario', type: 'select', options: getOwnerOptions() });
+    fields.push({ name: 'companyId', label: 'Empresa', type: 'select', options: [
+      { value: '', label: 'Sin empresa (legacy)' },
+      ...companies.map((company) => ({ value: company.id, label: company.name }))
+    ] });
+    fields.push({ name: 'deviceType', label: 'Tipo técnico', type: 'select', options: [
+      { value: 'unknown', label: 'Desconocido' }, { value: 'tag', label: 'Tag' },
+      { value: 'b5', label: 'B5' }, { value: 'sensor', label: 'Sensor' },
+      { value: 'beacon', label: 'Beacon' }
+    ] });
   }
 
   await openFormModal({
@@ -97,7 +115,9 @@ const handleEditDevice = async (device) => {
       name: device.name || '',
       description: device.description || '',
       categoryId: device.category_id ?? '',
-      ownerId: device.owner_id ?? ''
+      ownerId: device.owner_id ?? '',
+      companyId: device.company_id ?? '',
+      deviceType: device.device_type || 'unknown'
     },
     onSubmit: async (values) => {
       const payload = {
@@ -108,6 +128,8 @@ const handleEditDevice = async (device) => {
 
       if (isAdmin) {
         payload.ownerId = values.ownerId ? Number(values.ownerId) : null;
+        payload.companyId = values.companyId || null;
+        payload.deviceType = values.deviceType || 'unknown';
       }
 
       await apiPut(`/devices/${device.id}`, payload);
@@ -145,6 +167,8 @@ const renderDevices = () => {
     row.innerHTML = `
       <td>${device.name || 'Sin nombre'}</td>
       <td>${device.ble_mac}</td>
+      <td>${device.company_name || 'Sin empresa (legacy)'}</td>
+      <td>${device.device_type || 'unknown'}</td>
       <td>${device.category_name || 'Sin categoría'}</td>
       <td>${lastGateway}</td>
       <td>${device.last_rssi ?? '—'}</td>
@@ -156,18 +180,22 @@ const renderDevices = () => {
     const actionsContainer = document.createElement('div');
     actionsContainer.className = 'actions';
 
-    const editButton = document.createElement('button');
-    editButton.type = 'button';
-    editButton.textContent = 'Editar';
-    editButton.addEventListener('click', () => handleEditDevice(device));
-    actionsContainer.appendChild(editButton);
+    if (canEditHardware) {
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.textContent = 'Editar';
+      editButton.addEventListener('click', () => handleEditDevice(device));
+      actionsContainer.appendChild(editButton);
+    }
 
-    const deleteButton = document.createElement('button');
-    deleteButton.type = 'button';
-    deleteButton.textContent = 'Eliminar';
-    deleteButton.className = 'secondary';
-    deleteButton.addEventListener('click', () => handleDeleteDevice(device));
-    actionsContainer.appendChild(deleteButton);
+    if (isAdmin) {
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.textContent = 'Desactivar';
+      deleteButton.className = 'secondary';
+      deleteButton.addEventListener('click', () => handleDeleteDevice(device));
+      actionsContainer.appendChild(deleteButton);
+    }
 
     actionsCell.appendChild(actionsContainer);
     devicesTableBody.appendChild(row);
@@ -193,7 +221,9 @@ if (form && isAdmin) {
       bleMac,
       description: form.deviceDescription.value.trim(),
       ownerId: ownerSelect && ownerSelect.value ? Number(ownerSelect.value) : null,
-      categoryId: categorySelect && categorySelect.value ? Number(categorySelect.value) : null
+      categoryId: categorySelect && categorySelect.value ? Number(categorySelect.value) : null,
+      companyId: companySelect && companySelect.value ? companySelect.value : null,
+      deviceType: deviceTypeSelect ? deviceTypeSelect.value : 'unknown'
     };
 
     try {
@@ -216,7 +246,7 @@ const init = async () => {
     await loadMetadata();
     await loadDevices();
   } catch (error) {
-    devicesTableBody.innerHTML = `<tr><td colspan="7">${error.message}</td></tr>`;
+    devicesTableBody.innerHTML = `<tr><td colspan="9">${error.message}</td></tr>`;
   }
 };
 

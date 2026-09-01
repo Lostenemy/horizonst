@@ -7,6 +7,7 @@ export interface AuthenticatedRequest extends Request {
     id: number;
     role: Role;
   };
+  requestId?: string;
 }
 
 export const authenticate = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

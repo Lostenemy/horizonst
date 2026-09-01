@@ -51,6 +51,20 @@
             <label for="deviceCategory">Categoría</label>
             <select id="deviceCategory"></select>
           </div>
+          <div>
+            <label for="deviceCompany">Empresa</label>
+            <select id="deviceCompany"></select>
+          </div>
+          <div>
+            <label for="deviceType">Tipo técnico</label>
+            <select id="deviceType">
+              <option value="unknown">Desconocido</option>
+              <option value="tag">Tag</option>
+              <option value="b5">B5</option>
+              <option value="sensor">Sensor</option>
+              <option value="beacon">Beacon</option>
+            </select>
+          </div>
           <div class="actions">
             <button type="submit">Registrar</button>
           </div>
@@ -65,6 +79,8 @@
               <tr>
                 <th>Nombre</th>
                 <th>MAC</th>
+                <th>Empresa</th>
+                <th>Tipo</th>
                 <th>Categoría</th>
                 <th>Último gateway</th>
                 <th>Último RSSI</th>
