@@ -110,7 +110,6 @@ Se eliminaron defaults inseguros del código para:
 - `DB_PASSWORD`;
 - `EMQX_MGMT_PASSWORD` cuando se usa persistencia EMQX;
 - `MAIL_PASSWORD` cuando el correo está habilitado;
-- `RFID_ACCESS_API_TOKEN` cuando RFID está habilitado.
 
 La configuración falla al cargar si falta un secreto obligatorio. Ningún secreto real fue añadido a código, documentación o tests.
 
@@ -250,10 +249,11 @@ La UI efectiva muestra empresa/tipo y permite al superadmin asignarlos. Las acci
 | `CORS_ALLOWED_ORIGINS` | lista separada por comas; configurar dominio(s) reales |
 | `EMQX_MGMT_PASSWORD` | obligatoria si `MQTT_PERSISTENCE_MODE=emqx` |
 | `MAIL_PASSWORD` | obligatoria si `MAIL_ENABLED=true` |
-| `RFID_ACCESS_API_TOKEN` | obligatoria si `RFID_ACCESS_ENABLED=true` |
 | `APP_MIGRATIONS_DIR` | opcional; ubicación alternativa de migraciones SQL |
 
-Antes de construir/desplegar, el operador debe verificar estas variables en el gestor de secretos. El ejemplo deshabilita correo/RFID y deja valores secretos vacíos; no es una configuración de producción.
+Antes de construir/desplegar, el operador debe verificar estas variables en el gestor de secretos. El ejemplo deshabilita el correo y deja sus valores secretos vacíos; no es una configuración de producción.
+
+La antigua integración externa de control de accesos se ha retirado del código activo, la configuración, MQTT y Compose. Sus tablas históricas pueden seguir existiendo en instalaciones ya desplegadas, pero el bootstrap y la aplicación dejan de crearlas o utilizarlas. No deben eliminarse físicamente sin una migración nueva y una revisión explícita de los datos.
 
 ## 13. Identidad futura de servicio Horneo
 

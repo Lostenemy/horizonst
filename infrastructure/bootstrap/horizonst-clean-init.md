@@ -48,6 +48,5 @@ Validar que no se han importado datos históricos:
 ```sql
 SELECT 'mqtt_messages' AS table_name, count(*) FROM mqtt_messages
 UNION ALL SELECT 'device_records', count(*) FROM device_records
-UNION ALL SELECT 'rfid_access_logs', count(*) FROM rfid_access_logs
 UNION ALL SELECT 'alarms', count(*) FROM alarms;
 ```

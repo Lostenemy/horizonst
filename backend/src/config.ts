@@ -84,7 +84,6 @@ interface AppConfig {
   mqtt: MqttConfig;
   emqx: EmqxManagementConfig;
   mail: MailConfig;
-  rfidAccess: RfidAccessConfig;
   maintenance: {
     mqttRawRetentionHours: number;
     intervalMs: number;
@@ -115,43 +114,6 @@ interface MailConfig {
   tlsRejectUnauthorized: boolean;
 }
 
-interface RfidAccessApiConfig {
-  url: string;
-  user: string;
-  token: string;
-  brand: string;
-  action: string;
-  actionType: string;
-  instance: string;
-  inputFormat: string;
-  outputFormat: string;
-  timeoutMs: number;
-}
-
-interface RfidAccessGpioConfig {
-  topicTemplate: string;
-  greenPin: number;
-  redPin: number;
-  pulseDurationMs: number;
-  qos: 0 | 1 | 2;
-}
-
-interface RfidAccessConfig {
-  enabled: boolean;
-  topic: string;
-  defaultReaderId: string;
-  api: RfidAccessApiConfig;
-  gpio: RfidAccessGpioConfig;
-}
-
-const parseQoS = (value: string | undefined, fallback: 0 | 1 | 2): 0 | 1 | 2 => {
-  const parsed = Number(value);
-  if (parsed === 0 || parsed === 1 || parsed === 2) {
-    return parsed;
-  }
-  return fallback;
-};
-
 const requiredSecret = (name: string, value: string | undefined, minLength = 1): string => {
   const normalized = value?.trim();
   if (!normalized || normalized.length < minLength) {
@@ -162,7 +124,6 @@ const requiredSecret = (name: string, value: string | undefined, minLength = 1):
 
 const persistenceMode = process.env.MQTT_PERSISTENCE_MODE === 'emqx' ? 'emqx' : 'app';
 const mailEnabled = parseBoolean(process.env.MAIL_ENABLED, true);
-const rfidAccessEnabled = parseBoolean(process.env.RFID_ACCESS_ENABLED, true);
 
 export const config: AppConfig = {
   port: parseNumber(process.env.PORT, 3000),
@@ -241,32 +202,5 @@ export const config: AppConfig = {
       ehloDomain,
       tlsRejectUnauthorized
     };
-  })(),
-  rfidAccess: (() => {
-    const enabled = rfidAccessEnabled;
-    const topic = 'devices/RF1';
-    const defaultReaderId = process.env.RFID_ACCESS_DEFAULT_READER || 'RF1';
-    const api: RfidAccessApiConfig = {
-      url: process.env.RFID_ACCESS_API_URL || 'https://ws.e-coordina.com/1.4',
-      user: process.env.RFID_ACCESS_API_USER || 'webservice',
-      token: enabled
-        ? requiredSecret('RFID_ACCESS_API_TOKEN', process.env.RFID_ACCESS_API_TOKEN)
-        : process.env.RFID_ACCESS_API_TOKEN?.trim() || '',
-      brand: process.env.RFID_ACCESS_API_BRAND || 'ecoordina',
-      action: process.env.RFID_ACCESS_API_ACTION || 'acceso.permitido_data',
-      actionType: process.env.RFID_ACCESS_API_ACTION_TYPE || 'do',
-      instance: process.env.RFID_ACCESS_API_INSTANCE || 'elecnor',
-      inputFormat: process.env.RFID_ACCESS_API_IN || 'json',
-      outputFormat: process.env.RFID_ACCESS_API_OUT || 'json',
-      timeoutMs: parseNumber(process.env.RFID_ACCESS_API_TIMEOUT, 7000)
-    };
-    const gpio: RfidAccessGpioConfig = {
-      topicTemplate: process.env.RFID_GPIO_TOPIC_TEMPLATE || 'devices/{reader}/gpio',
-      greenPin: parseNumber(process.env.RFID_GPIO_GREEN_PIN, 6),
-      redPin: parseNumber(process.env.RFID_GPIO_RED_PIN, 7),
-      pulseDurationMs: Math.max(0, parseNumber(process.env.RFID_GPIO_PULSE_MS, 3000)),
-      qos: parseQoS(process.env.RFID_GPIO_QOS, 1)
-    };
-    return { enabled, topic, defaultReaderId, api, gpio };
   })()
 };

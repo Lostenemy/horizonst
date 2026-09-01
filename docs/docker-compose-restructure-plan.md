@@ -2,11 +2,11 @@
 
 ## Alcance y condición crítica
 
-Este documento prepara una migración futura del `docker-compose.yml` raíz hacia una estructura por capas en `infrastructure/docker`, sin ejecutar todavía esa migración.
+Este documento prepara una migración futura del `docker-compose.yml` raíz, ya depurado de servicios retirados, hacia una estructura por capas en `infrastructure/docker`.
 
 Condiciones que deben mantenerse durante esta fase de planificación:
 
-- No modificar `docker-compose.yml` todavía.
+- Partir del `docker-compose.yml` vigente y validar cualquier extracción por capas contra su configuración efectiva.
 - No mover archivos todavía.
 - No cambiar nombres de servicios, redes, volúmenes ni puertos.
 - No cambiar rutas de `build.context`, `env_file`, volúmenes bind ni ficheros de configuración mientras el despliegue actual siga operando desde la raíz.
@@ -23,7 +23,6 @@ Servicios actuales detectados:
 | --- | --- | --- | --- |
 | `portal` | Portal web estático/front público | Ninguna declarada | `127.0.0.1:3080:80` |
 | `app` | API principal backend | `postgres`, `vernemq` | `127.0.0.1:${APP_PORT:-3000}:${APP_PORT:-3000}` |
-| `rfid_access` | Servicio RFID de acceso con web interna | `vernemq`, `postgres` | `127.0.0.1:${HTTP_PORT:-3001}:${HTTP_PORT:-3001}` |
 | `rfid_demo_dashboard` | Dashboard demo RFID | `postgres`, `vernemq` | `127.0.0.1:3200:3200` |
 | `cold_compliance_service` | Servicio de cumplimiento/cadena de frío, control de tags y correo transaccional | `postgres`, `vernemq` | `127.0.0.1:${COLD_COMPLIANCE_PORT:-3100}:${COLD_COMPLIANCE_PORT:-3100}` |
 | `mqtt_ui_api` | API de UI MQTT, observabilidad VerneMQ y laboratorio GATT | `vernemq`, `vernemq_observer` | `127.0.0.1:4010:4010` |
@@ -67,7 +66,6 @@ Servicios propuestos:
 - `vernemq`
 - `portal`
 - `app`
-- `rfid_access`
 - `cold_compliance_service`
 
 Recursos globales propuestos:
@@ -86,7 +84,6 @@ Motivo:
 Precauciones:
 
 - Si el fichero se mueve a `infrastructure/docker`, las rutas relativas cambiarán. Para no romper builds ni binds, en la fase inicial se recomienda usar `docker compose --project-directory <repo-root> -f infrastructure/docker/compose.base.yml ...` o mantener temporalmente rutas relativas al repo root mediante una estrategia validada antes del cambio.
-- No se deben eliminar los `env_file` por servicio en la primera extracción; primero hay que inventariar qué variables se leen desde `backend/.env`, `rfid-access-service/.env`, `cold-compliance-service/.env` y otros ficheros locales.
 
 ### `compose.prod.yml`
 
@@ -96,7 +93,6 @@ Servicios afectados propuestos:
 
 - `portal`
 - `app`
-- `rfid_access`
 - `cold_compliance_service`
 - `postgres`
 - `vernemq`
@@ -273,13 +269,6 @@ Estas variables deben existir en los dos ejemplos, con valores dummy seguros y d
 - `DB_PASSWORD`
 - `DB_NAME`
 - `COLD_COMPLIANCE_DB_NAME`
-- `RFID_DB_HOST`
-- `RFID_DB_PORT`
-- `RFID_DB_USER`
-- `RFID_DB_PASSWORD`
-- `RFID_DB_NAME`
-- `RFID_DB_ADMIN_DB`
-- `RFID_DB_SSL`
 
 #### MQTT compartido
 
@@ -298,19 +287,9 @@ Estas variables deben existir en los dos ejemplos, con valores dummy seguros y d
 #### Puertos internos/publicados actuales
 
 - `APP_PORT`
-- `HTTP_PORT`
 - `COLD_COMPLIANCE_PORT`
 
 Aunque algunos puertos tienen default en Compose, incluirlos en los ejemplos ayuda a detectar colisiones entre prod y stage.
-
-#### RFID access
-
-- `BASE_PATH`
-- `RFID_WEB_ENABLED`
-- `RFID_WEB_SESSION_SECRET`
-- `RFID_WEB_USERNAME`
-- `RFID_WEB_PASSWORD`
-- `RFID_WEB_HISTORY_SIZE`
 
 #### Cold compliance, tags y presencia
 
@@ -493,7 +472,7 @@ Criterio de salida:
 ### Fase 3 — Ensayo en stage
 
 - Desplegar solo en un host o namespace de stage.
-- Validar arranque, healthchecks, migraciones, persistencia, MQTT, RFID, correo transaccional desactivado/sandbox y reverse proxy.
+- Validar arranque, healthchecks, migraciones, persistencia, MQTT, demo opcional, correo transaccional desactivado/sandbox y reverse proxy.
 - Ejecutar pruebas de rollback: detener stack nuevo y volver al Compose raíz sin tocar datos productivos.
 
 Criterio de salida:

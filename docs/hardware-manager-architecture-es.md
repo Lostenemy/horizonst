@@ -34,14 +34,14 @@ Los topics actuales son parte del contrato y no deben cambiar:
 
 | Servicio Docker | Código | Puerto host | Responsabilidad observada | Base de datos |
 |---|---|---:|---|---|
-| `app` | `backend/` + `backend/public/` | `127.0.0.1:3000` | Aplicación general HorizonST: inventario BLE, lugares, usuarios, mensajes MQTT, alarmas y RFID | `horizonst` |
+| `app` | `backend/` + `backend/public/` | `127.0.0.1:3000` | Aplicación general HorizonST: inventario BLE, lugares, usuarios, mensajes MQTT y alarmas | `horizonst` |
 | `cold_compliance_service` | `cold-compliance-service/` | `127.0.0.1:3100` | Horneo: presencia, cámaras, cumplimiento, trabajadores, alertas, informes y, hoy, gestión técnica BLE | `cold_compliance` |
 | `mqtt_ui_api` | `mqtt-ui-api/` | `127.0.0.1:4010` | Estado de VerneMQ, métricas, diagnóstico TLS y laboratorio GATT con correlación de respuesta | Sin base propia |
 | `mqtt_ui` | `mqtt-ui/` | `127.0.0.1:8090` | Interfaz de estado MQTT y laboratorio GATT | — |
 | `vernemq` | `vernemq/` + imagen VerneMQ | puertos definidos por composición | Broker MQTT y autenticación/ACL en PostgreSQL | tabla `vmq_auth_acl` |
 | `postgres` | imagen PostgreSQL | interno | Aloja, al menos, `horizonst` y `cold_compliance` | PostgreSQL |
 
-Existen otros servicios —portal, RFID, tienda, correo y utilidades— que no deben incorporarse al dominio del Hardware Manager.
+Existen otros servicios —portal, tienda, correo y utilidades— que no deben incorporarse al dominio del Hardware Manager.
 
 ### 1.2 Distribución actual de responsabilidades
 
@@ -83,7 +83,6 @@ La administración efectiva incluye:
 - alarmas;
 - categorías;
 - usuarios y grupos;
-- RFID.
 
 Es una base visual aprovechable para listados y formularios, pero mezcla infraestructura hardware con funciones generales/antiguas. No incluye estado online real, firmware, IP, ejecución de comandos, ACK, configuración B5 ni diagnóstico de conectividad.
 
@@ -101,7 +100,6 @@ Todas las rutas siguientes cuelgan de `/api`:
 | Categorías | CRUD y fotografías | Útil como clasificación, no sustituye un `device_type` estable |
 | Mensajes | `GET /messages` | Útil para diagnóstico de lectura |
 | Alarmas | configuración, listado, acknowledge y resolve | Dominio antiguo; no confundir con alertas operativas de Horneo |
-| RFID | tarjetas y logs | Fuera del núcleo inicial del Hardware Manager |
 | Contacto | envío público | Fuera de alcance |
 
 ### 2.4 Persistencia
@@ -115,7 +113,7 @@ Todas las rutas siguientes cuelgan de `/api`:
 - `users`, `user_groups` y `user_group_members`;
 - `device_categories`.
 
-También contiene tablas de fotografías, RFID y alarmas generales. Estas no deben trasladarse automáticamente al nuevo dominio.
+También contiene tablas de fotografías y alarmas generales. Estas no deben trasladarse automáticamente al nuevo dominio.
 
 ### 2.5 MQTT
 
@@ -556,7 +554,7 @@ Criterio de salida: no hay rutas técnicas mutables sin autenticación/autorizac
 ### Fase A — Hardware Manager y empresas
 
 - evolucionar `app` a Hardware Manager sin reescritura masiva;
-- declarar `backend/public` como fuente UI y separar la navegación hardware de RFID/alarmas legacy;
+- declarar `backend/public` como fuente UI y separar la navegación hardware de alarmas legacy;
 - crear `companies` y memberships mediante migraciones aditivas;
 - añadir `company_id` inicialmente nullable a gateways/devices para permitir backfill, y hacerlo obligatorio solo tras validar que no quedan huérfanos;
 - añadir roles, APIs company-scoped, estado técnico y auditoría;

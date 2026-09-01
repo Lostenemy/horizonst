@@ -171,3 +171,25 @@ test('required JWT secret fails closed when absent', () => {
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}${result.stdout}`, /JWT_SECRET is required/);
 });
+
+test('app starts without legacy access configuration or broker subscription', () => {
+  const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
+  const env = { ...process.env };
+  const legacyPrefix = ['RFID', 'ACCESS'].join('_') + '_';
+  for (const name of Object.keys(env)) {
+    if (name.startsWith(legacyPrefix)) delete env[name];
+  }
+  const script = [
+    "const { config } = require('./dist/config.js')",
+    "const { OFFICIAL_TOPICS } = require('./dist/services/mqttService.js')",
+    "const legacyKey = ['rfid', 'Access'].join('')",
+    "const retiredTopic = ['devices', 'RF1'].join('/')",
+    "if (Object.prototype.hasOwnProperty.call(config, legacyKey)) process.exit(2)",
+    "if (OFFICIAL_TOPICS.includes(retiredTopic)) process.exit(3)",
+    "require('./dist/app.js')"
+  ].join(';');
+  const result = spawnSync(process.execPath, ['-e', script], {
+    cwd: process.cwd(), env, encoding: 'utf8'
+  });
+  assert.equal(result.status, 0, `${result.stderr}${result.stdout}`);
+});

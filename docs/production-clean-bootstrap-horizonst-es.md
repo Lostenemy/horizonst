@@ -15,15 +15,14 @@ Este documento define el procedimiento seguro para preparar un servidor nuevo de
 
 | Base | Uso | Bootstrap limpio |
 | --- | --- | --- |
-| `horizonst` | Plataforma principal, usuarios base, inventario BLE/RFID y alarmas | Crear estructura con `db/schema.sql`; seed de admin específico para `horizonst.es`; importar solo usuarios de aplicación aprobados si procede. |
+| `horizonst` | Plataforma principal, usuarios base, inventario BLE y alarmas | Crear estructura con `db/schema.sql`; seed de admin específico para `horizonst.es`; importar solo usuarios de aplicación aprobados si procede. |
 | `cold_compliance` | Servicio de cumplimiento de frío | Aplicar migraciones `001` a `009`; importar solo usuarios técnicos/aplicación aprobados si procede; no importar sesiones ni eventos. |
-| `rfid_access` | Servicio RFID de acceso | Crear estructura según los artefactos vigentes del servicio antes del corte; no importar logs históricos ni datos de demo. |
 | `rfid_demo` | Dashboard demo RFID | Crear únicamente si se mantiene la demo; aplicar solo `rfid-demo-dashboard/migrations/001_rfid_demo_dashboard.sql`; no aplicar seeds demo en producción. |
 
 ## Orden de aplicación recomendado
 
 1. Aprovisionar servidor, DNS, certificados y variables de entorno para `horizonst.es`.
-2. Crear bases vacías: `horizonst`, `cold_compliance`, `rfid_access` y opcionalmente `rfid_demo`.
+2. Crear bases vacías: `horizonst`, `cold_compliance` y opcionalmente `rfid_demo`.
 3. Aplicar esquemas principales:
    - `psql "$HORIZONST_DATABASE_URL" -f db/schema.sql`
    - `psql "$HORIZONST_DATABASE_URL" -f db/mqtt.sql`
@@ -39,8 +38,8 @@ Este documento define el procedimiento seguro para preparar un servidor nuevo de
 No se deben migrar ni copiar al servidor `horizonst.es`:
 
 - Dumps completos de PostgreSQL.
-- Datos de negocio históricos: dispositivos, lugares, categorías, trabajadores, asignaciones, tarjetas RFID reales y entidades operativas no aprobadas explícitamente.
-- Logs, eventos y telemetría: `mqtt_messages`, `device_records`, `rfid_access_logs`, `presence_events`, `cold_room_sessions`, `workday_accumulators`, `alerts`, `incidents`, `incident_notes`, `audit_log`, `sync_queue`, `exported_reports`, `ble_alarm_sessions`, `rfid_demo_read_events`, `rfid_demo_inventory_state` y `rfid_demo_cycle_history`.
+- Datos de negocio históricos: dispositivos, lugares, categorías, trabajadores, asignaciones y entidades operativas no aprobadas explícitamente.
+- Logs, eventos y telemetría: `mqtt_messages`, `device_records`, `presence_events`, `cold_room_sessions`, `workday_accumulators`, `alerts`, `incidents`, `incident_notes`, `audit_log`, `sync_queue`, `exported_reports`, `ble_alarm_sessions`, `rfid_demo_read_events`, `rfid_demo_inventory_state` y `rfid_demo_cycle_history`.
 - Sesiones y tokens: `auth_sessions` y `password_reset_tokens`.
 - Correos antiguos, buzones con contenido, colas de correo o backups de maildir.
 - Seeds de demo: `rfid-demo-dashboard/migrations/seed_demo_tags.sql` y `rfid-demo-dashboard/migrations/seed_demo_activity.sql`.

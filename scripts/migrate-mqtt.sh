@@ -36,7 +36,7 @@ VALUES (
   :'app_username',
   crypt(:'app_password', gen_salt('bf', 10)),
   '[]'::jsonb,
-  '[{"pattern":"devices/MK1","qos":1},{"pattern":"devices/MK2","qos":1},{"pattern":"devices/MK3","qos":1},{"pattern":"devices/MK3/+/send","qos":1},{"pattern":"devices/MK4","qos":1},{"pattern":"devices/RF1","qos":1}]'::jsonb
+  '[{"pattern":"devices/MK1","qos":1},{"pattern":"devices/MK2","qos":1},{"pattern":"devices/MK3","qos":1},{"pattern":"devices/MK3/+/send","qos":1},{"pattern":"devices/MK4","qos":1}]'::jsonb
 )
 ON CONFLICT (mountpoint, client_id)
 DO UPDATE SET

@@ -2,22 +2,19 @@
 
 HorizonST es una plataforma integral para la monitorización de dispositivos BLE capturados por gateways MQTT. El proyecto incluye:
 
-- **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4` y `devices/RF1`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
+- **Servidor Node.js/TypeScript** que decodifica tramas de los canales `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4`, aplica reglas de deduplicación basadas en tiempo y lugar y persiste la información en PostgreSQL.
 - **Portal web HTML5 + JavaScript** accesible a través de `www.horizonst.com.es` con funcionalidades diferenciadas para administradores y usuarios finales.
 - **Infraestructura Docker** compuesta por la aplicación, PostgreSQL, pgAdmin4 y VerneMQ. El proxy inverso Nginx se despliega
   **fuera** de Docker y expone la web en HTTPS junto con pgAdmin.
-- **Microservicio de control de accesos RFID (Elecnor)** con interfaz web propia, autenticación con sesiones HTTP, paneles de tarjetas/trabajadores/cuentas/accesos/seguimiento y persistencia en una base de datos PostgreSQL dedicada creada automáticamente.
 
 ## Estado del repositorio
 
 - `backend/`: API principal BLE/LoRa con el portal web incrustado en `backend/public` tras el build, ingestión MQTT y servicios de alarmas.
 - `frontend/`: código fuente del portal HTML5 que se copia a `backend/public` durante el empaquetado.
-- `rfid-access-service/`: microservicio Node.js independiente para los flujos Elecnor (accesos RFID), con frontend estático en `public/`, API Express en `src/` y persistencia en PostgreSQL.
 - `mqtt-ui/`: interfaz web ligera para observabilidad básica de VerneMQ.
 - `mqtt-ui-api/`: backend API (Express) que autentica usuarios y consume el sidecar interno de observabilidad.
 - `vernemq-observer/`: sidecar interno que ejecuta `vmq-admin` y expone datos en JSON solo dentro de Docker.
 - `db/`: esquema y seed SQL del backend principal.
-- `docker-compose*.yml`: orquestaciones completas (`docker-compose.yml`) y específicas para el microservicio RFID (`docker-compose.rfid-access.yml`).
 - `nginx/` y `mailserver/`: configuraciones de referencia para el proxy inverso externo y el servidor de correo.
 
 ## Requisitos
@@ -42,11 +39,8 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
      MQTT_PASS=defina_un_secreto
      PGADMIN_DEFAULT_EMAIL=admin@horizonst.com.es
      PGADMIN_DEFAULT_PASSWORD=defina_un_secreto
-     RFID_WEB_SESSION_SECRET=defina_un_secreto
-     RFID_WEB_USERNAME=admin
-     RFID_WEB_PASSWORD=defina_un_secreto
      ```
-   - El contenedor de la app consume además `backend/.env`. Incluya la configuración mínima para enlazar con VerneMQ dentro de la red de Docker. `MQTT_USER`/`MQTT_PASS` son para clientes internos (app, rfid_access). Defina además `MQTT_CLIENT_ID` fijo para `horizonst-app` (ej. `acces_control_server_backend`). Para el seed técnico de `vmq_auth_acl` use `MQTT_SEED_CLIENT_ID` + `MQTT_USERNAME`/`MQTT_PASSWORD_HASH`:
+   - El contenedor `app` consume además `backend/.env`. Incluya la configuración mínima para enlazar con VerneMQ dentro de la red Docker y defina un `MQTT_CLIENT_ID` estable para el backend:
      ```env
      MQTT_HOST=vernemq
      MQTT_PORT=1883
@@ -73,7 +67,6 @@ HorizonST es una plataforma integral para la monitorización de dispositivos BLE
    ```
    Esto levantará:
    - `app`: API y portal web (puerto interno 3000).
-   - `rfid_access`: microservicio Node.js que valida lecturas RFID frente a una API externa y gobierna los actuadores MQTT.
    - `postgres`: base de datos PostgreSQL inicializada con `db/schema.sql` y `db/seed.sql`.
    - `pgadmin`: consola de administración disponible en `http://localhost:5050/pgadmin4` (credenciales definidas en `.env`).
    - `vernemq`: broker MQTT expuesto en el puerto `1887` del host (sin TLS).
@@ -183,16 +176,7 @@ El portal de administración debe gestionar `client_id` como identidad MQTT prin
    - `mail`: servidor SMTP/IMAP basado en docker-mailserver expuesto en los puertos `25`, `465`, `587` y `993` del host.
    - `webmail`: interfaz Roundcube ligada a `http://127.0.0.1:8080/` (utilícela detrás de Nginx en producción mediante `/webmail/`).
 
-5. **(Opcional) Lanzar únicamente el microservicio RFID:**
-   Si solo necesita depurar el flujo de validación RFID, puede emplear el `docker-compose.rfid-access.yml` incluido en la raíz
-   del proyecto:
-   ```bash
-   docker compose -f docker-compose.rfid-access.yml up --build -d
-   ```
-   Este archivo genera un contenedor aislado `rfid_access` dentro de su propia red `rfid_access_net`. Ajuste las variables de
-   entorno `MQTT_HOST`, `MQTT_PORT`, `MQTT_USER` y `MQTT_PASS` si desea conectarse a un broker diferente al predeterminado.
-
-6. **Acceder al portal:**
+5. **Acceder al portal:**
    - Durante el desarrollo puede acceder a `http://127.0.0.1:3000/`. En producción debe hacerlo a través de Nginx por `https://horizonst.com.es/`.
    - Inicie sesión con las credenciales de administrador definidas en su configuración de entorno/seed y cámbielas tras el primer inicio de sesión.
 
@@ -235,10 +219,8 @@ mqtt-ui/             # UI propia para VerneMQ (frontend estático)
 mqtt-ui-api/         # Backend API para la UI (Express)
 vernemq-observer/    # Sidecar interno para ejecutar vmq-admin
 nginx/               # Configuración de referencia para el proxy inverso externo
-rfid-access-service/ # Servicio independiente para control de accesos RFID mediante MQTT
 db/                  # Definiciones SQL de esquema y datos iniciales
 docker-compose.yml
-docker-compose.rfid-access.yml
 ```
 
 El portal web se mantiene en `frontend/public` y se copia a `backend/public` durante el empaquetado para que las páginas estáticas acompañen a la API.
@@ -257,14 +239,13 @@ La UI se despliega como un frontend estático (`mqtt-ui`) y un backend API (`mqt
 - `devices/MK2` → Gateway tipo MK2
 - `devices/MK3` → Gateway tipo MK3
 - `devices/MK4` → Gateway tipo MK4
-- `devices/RF1` → Gateway tipo RF
 
 Para GATT (mismo bus MQTT, sin canales legacy):
 
 - Downlink: `devices/MKX/receive` (cloud → gateway)
 - Uplink: `devices/MKX/send` (gateway → cloud)
 
-El tipo de gateway se determina exclusivamente por el topic MQTT (`devices/MKx` / `devices/RF1`).
+El tipo de gateway se determina exclusivamente por los topics MQTT MOKO configurados.
 
 ### Arquitectura
 
@@ -423,8 +404,7 @@ La UI consume estos endpoints y nunca expone credenciales MQTT.
 
 ### Ingesta y procesamiento MQTT
 
-- Suscripción automática a `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4` y `devices/RF1` mediante un cliente MQTT configurado con las credenciales proporcionadas.
-- Monitorización adicional de `devices/RF1` para lecturas RFID procedentes de los lectores Elecnor.
+- Suscripción automática a `devices/MK1`, `devices/MK2`, `devices/MK3`, `devices/MK4` mediante un cliente MQTT configurado con las credenciales proporcionadas.
 - Decodificadores específicos para cada canal, normalizando campos como `BaTtVol`/`BattVoltage`.
 - Validación de gateways y dispositivos registrados antes de persistir lecturas.
 - Reglas de consolidación por lugar: lecturas con menos de 30 s se ignoran, entre 30 s y 5 min actualizan el registro anterior y, superados 5 min, se genera uno nuevo.
@@ -433,7 +413,6 @@ La UI consume estos endpoints y nunca expone credenciales MQTT.
 ### Portal web
 
 - **Administradores** pueden registrar gateways y dispositivos, consultar mensajes MQTT, revisar históricos completos y gestionar alarmas.
-- **Administradores** disponen además de un módulo RFID para asociar IDs de tarjeta con trabajadores (DNI, nombre, apellidos, empresa y código de centro) y revisar el histórico de lecturas.
 - **Usuarios** gestionan lugares, categorías, asignación de dispositivos y fotos, así como reclamación de dispositivos por MAC.
 - Visualizaciones agrupadas por lugar y herramientas para configurar alarmas basadas en tiempo sin señal.
 - El formulario público de contacto envía las solicitudes mediante `POST /api/contact`, almacenando una copia en `notificaciones@horizonst.com.es` y mostrando confirmaciones en la propia página.
@@ -562,41 +541,9 @@ Resultado esperado:
 
 VerneMQ no se expone directamente a Internet. La exposición exterior se hará vía Nginx (TCP stream) y TLS. El listener TLS (8883) se configurará en un paso posterior.
 
-## Servicio de control de accesos RFID
+## Integraciones retiradas
 
-El contenedor `rfid_access` procesa los eventos publicados por los lectores RFID, consulta una API REST externa para validar el acceso y, según la respuesta, envía órdenes al actuador (luces verde/roja y alarma) mediante nuevos topics MQTT.
-
-- **Suscripción y actuadores:** escucha `devices/RF1` por defecto (`RFID_READER_TOPIC`) y publica en `rfid/{mac}/actuators/green`, `rfid/{mac}/actuators/red` y `rfid/{mac}/actuators/alarm` (formato `json` o `text` según `RFID_COMMAND_PAYLOAD_FORMAT`). La antena 1 se interpreta como entrada y la 2 como salida, propagando esa dirección a las decisiones y al histórico. Si el topic no incluye comodines ni la MAC en el payload, se toma el último segmento del topic (por ejemplo `RF1` en `devices/RF1`) como identificador del lector.
-- **Autenticación externa y documentación:** delega la validación en `RFID_AUTH_API_URL` recibiendo `{ dni, cardId, readerMac }`; acepta `accepted: true` o estados `ACCEPTED`/`GRANTED`. Solo en accesos de entrada se comprueba la documentación del usuario; si falta o está pendiente se devuelve `MISSING_DOCUMENTATION` y se deniega el acceso.
-- **Directorio MAC↔DNI:** admite inline JSON (`RFID_MAC_DNI_MAP`), fichero (`RFID_MAC_DNI_FILE`) o directorio remoto (`RFID_MAC_DNI_DIRECTORY_URL`) con refresco (`RFID_MAC_DNI_REFRESH_MS`) y estrategia `eager`/`on-demand` (`RFID_MAC_DNI_LOOKUP_STRATEGY`).
-- **Salud y despliegue:** `GET /health` responde con "{"status":"ok"}" y la interfaz HTTP se sirve en `HTTP_PORT` (3001 por defecto) y `BASE_PATH` (`/elecnor`).
-- **Control GPIO de lectores Keonn:** cuando la API externa devuelve *acceso permitido* se enciende el GPO 1 durante 5 s; con *acceso denegado* se activan los GPO 2 (10 s) y 3 (5 s) de forma concurrente. Las peticiones se envían vía `GET {baseUrl}/devices/{deviceId}/setGPO/{line}/{state}` (modo múltiple) o `GET {baseUrl}/device/setGPO/{line}/{state}` (modo de único dispositivo) y adjuntan la autenticación configurada: Digest MD5 por defecto (`RFID_READER_CONTROLLER_AUTH=digest`) o Basic si se selecciona. Usa `RFID_READER_CONTROLLER_USER`/`RFID_READER_CONTROLLER_PASSWORD` (o rellena usuario/contraseña en la consola de pruebas) para generar la cabecera; si no se requiere autenticación ajusta `RFID_READER_CONTROLLER_AUTH=none`. Configura `RFID_READER_CONTROLLER_BASE_URL`, `RFID_READER_DEVICE_ID` (solo modo múltiple), `RFID_READER_SINGLE_DEVICE_MODE`, `RFID_READER_CONTROLLER_TIMEOUT` y `RFID_READER_CONTROLLER_ENABLED` para activar el control; si falta la URL base, el `device-id` (en modo múltiple) o el flag está en `false`, el módulo queda deshabilitado sin bloquear el resto del flujo. Las pruebas manuales admiten las líneas 1 a 8 además de los escenarios automáticos.
-- **Tipos locales para `digest-fetch`:** como no existe el paquete `@types/digest-fetch` en npm, el servicio incluye una declaración minimalista en `rfid-access-service/src/types/digest-fetch.d.ts` y referencia esta carpeta como `typeRoots` en `tsconfig.json`. No añadas `@types/digest-fetch` al `package.json` para evitar fallos de instalación en producción.
-- **Dependencias del cliente del lector:** `digest-fetch` necesita `node-fetch` en tiempo de ejecución para que las peticiones con autenticación Digest funcionen; se incluye como dependencia de producción junto con el shim de tipos local en `rfid-access-service/src/types/digest-fetch.d.ts` (no existe `@types/digest-fetch` en npm, así que no lo añadas al `package.json`).
-- **Pruebas manuales de GPIO:** los administradores disponen de la pantalla `/elecnor-gpo.html` (link "GPIO" en la barra superior) para lanzar pulsos directos al lector sin pasar por la lógica de accesos. Usa los endpoints protegidos `/api/gpo/status`, `/api/gpo/test/scenario` (escenarios permitido/denegado) y `/api/gpo/test/line` (acciones `on`/`off`/`pulse` por línea, con duración configurable en ms) con selector de líneas 1–8. Si falta la URL base o el `device-id` (cuando el modo múltiple está activo), la pantalla muestra un aviso indicando las variables (`RFID_READER_CONTROLLER_BASE_URL`, `RFID_READER_DEVICE_ID`) o el modo (`RFID_READER_SINGLE_DEVICE_MODE`) que debes ajustar y los endpoints devuelven `GPO_DISABLED` para evitar confusión. Bajo los controles verás la última respuesta JSON combinada del backend y del lector (payloads devueltos por `setGPO`) ocupando todo el ancho del cuerpo para validar rápidamente qué devuelve cada llamada e incluyendo la URL exacta que se envió a `/setGPO` destacada antes del JSON. El panel incluye formularios para URL base, selección de modo de ruta (múltiple o único dispositivo), `deviceId` y usuario/contraseña, además de un selector de tipo de autenticación (Digest/Basic/Sin auth) para replicar exactamente lo que funciona en Postman y evitar 401; dejar usuario y contraseña vacíos borra las credenciales activas.
-- **URL base editable para pruebas:** desde la misma pantalla de GPIO puedes introducir otra IP/URL de lector (por ejemplo `http://88.20.2.60`) sin tocar el fichero `.env`. El cambio se aplica de inmediato a los botones de prueba manual y permanece activo hasta que reinicies el servicio o lo vuelvas a modificar.
-- **Normalización de la URL del lector:** el servicio recorta rutas anexas y conserva únicamente el host y puerto al guardar la URL base, así evitas formar rutas duplicadas si pegas una dirección completa de ejemplo (`http://88.20.2.60/device/setGPO/6/false`). En modo de dispositivo único seguiremos construyendo internamente `/device/setGPO/{line}/{state}` sobre el host proporcionado.
-
-### Base de datos y API del portal Elecnor
-
-- **Persistencia dedicada:** el servicio crea automáticamente la base de datos `RFID_DB_NAME` (por defecto `rfid_access`) en PostgreSQL usando el usuario definido y el catálogo administrador `RFID_DB_ADMIN_DB`. Genera las tablas `app_users`, `workers` y `cards` si no existen y precarga ejemplos de trabajadores/tarjetas cuando están vacías para facilitar las pruebas iniciales.
-- **Autenticación y roles:** al arrancar se asegura un usuario administrador con `RFID_WEB_USERNAME`/`RFID_WEB_PASSWORD` (por defecto `admin/admin`). La API expone `/api/login`, `/api/logout` y `/api/session` con sesiones HTTP, además de CRUD protegidos para usuarios (`/api/auth/users`), trabajadores (`/api/workers`) y tarjetas (`/api/cards`). El microservicio valida que siempre quede al menos un administrador activo.
-- **Pruebas contra la API externa:** los endpoints `/api/ecoordina/defaults` y `/api/ecoordina/test` devuelven o lanzan peticiones reales a la API de e-coordina usando los valores configurados (`ECOORDINA_*`), devolviendo un resumen de la solicitud y la respuesta procesada.
-
-### Interfaz web Elecnor
-
-- **Páginas disponibles:** Tarjetas, Accesos (antes Webservice), Seguimiento y Trabajadores están habilitadas para usuarios estándar; los administradores ven también la gestión de cuentas (usuarios) y controles avanzados. La navegación superior muestra u oculta enlaces según el rol de sesión.
-- **Flujos y accesibilidad:** los formularios incluyen etiquetas asociadas, validación visual, búsquedas con debounce, chips de estado y toasts de éxito/error. Las acciones destructivas piden confirmación y todas las páginas comparten estilos y espaciados homogéneos.
-- **Base path:** el HTML se sirve con `<base href="__BASE_PATH__/">` y scripts auxiliares reescriben enlaces para funcionar bajo el `BASE_PATH` definido en entorno (por defecto `/elecnor`).
-- **Autenticación web:** la pantalla `index.html` solicita las credenciales del microservicio y, tras iniciar sesión, persiste la sesión en cookie HTTP-only. El botón “Desconectar” de la barra superior invalida la sesión y redirige al login respetando el `BASE_PATH`.
-
-### Integración RFID Elecnor
-
-- El backend principal también consume el topic `devices/RF1` para las lecturas procedentes de los lectores Elecnor.
-- Cada tarjeta puede registrarse desde la pestaña **RFID** del portal (solo administradores), indicando DNI, nombre y apellidos, empresa/CIF y código de centro. Solo se envían a `https://ws.e-coordina.com/1.4` (`action=acceso.permitido_data`) los campos de centro, CIF y DNI, encapsulados dentro del bloque `data={"data":{...}}`; el resto de datos quedan como referencia local.
-- Tras cada lectura el sistema consulta la API (`user`/`token` configurables) y registra el resultado en `rfid_access_logs`, mostrando el histórico en la propia interfaz.
-- Dependiendo del campo `acceso` (`1` verde / `0` rojo) se publica un comando MQTT que activa el GPIO 6 o 7 del lector; si la API falla, el intento queda almacenado con el error correspondiente y se fuerza el GPIO rojo.
-- Ajuste las variables `RFID_ACCESS_*` y `RFID_GPIO_*` en `backend/.env` para definir el topic a vigilar, las credenciales del servicio remoto, tiempos de espera y el formato de los comandos enviados al lector.
+La antigua integración externa de control de accesos y su microservicio dedicado ya no forman parte del sistema operativo. Los datos históricos existentes se conservan sin uso hasta que una migración posterior, revisada y autorizada, determine su retirada física.
 
 ## Proxy inverso Nginx externo
 
