@@ -6,6 +6,7 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 import { logger } from '../../utils/logger';
 import { mqttPublish } from '../mqtt/mqtt.service';
 import { configureEmergencyButton } from './gateway-emergency-config.service';
+import { resolveHardwareGateway } from './hardware-manager.client';
 
 export const gatewaysRouter = Router();
 gatewaysRouter.use(requireAuth);
@@ -36,6 +37,27 @@ function gatewayTopic(gatewayMac: string): string {
 gatewaysRouter.get('/', async (_req, res, next) => {
   try {
     res.json((await db.query('SELECT * FROM gateways ORDER BY created_at DESC')).rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+gatewaysRouter.get('/:id/hardware-resolution', async (req, res, next) => {
+  try {
+    const gateway = await db.query<{
+      id: string;
+      gateway_mac: string;
+      hardware_gateway_id: number | null;
+      rssi_threshold: number;
+      cold_room_id: string | null;
+      plant_id: string | null;
+    }>(
+      `SELECT id, gateway_mac, hardware_gateway_id, rssi_threshold, cold_room_id, plant_id
+       FROM gateways WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
+    return res.json(await resolveHardwareGateway(gateway.rows[0]));
   } catch (error) {
     next(error);
   }

@@ -8,8 +8,13 @@ import {
   scopedHardwarePredicate
 } from '../middleware/hardwareRbac';
 import { pool } from '../db/pool';
-import { normalizeMacAddress } from '../utils/mac';
+import { normalizeGatewayMac } from '../utils/mac';
 import { appendTechnicalAudit } from '../services/technicalAudit';
+import {
+  configureB5Gateway,
+  configureGatewayRssi,
+  GatewayCommandBusyError
+} from '../services/gatewayCommands';
 
 const router = Router();
 
@@ -20,7 +25,7 @@ const companyIdValue = (value: unknown): string | null | undefined => {
 };
 
 const gatewaySelect = `SELECT g.id, g.name, g.mac_address, g.description, g.owner_id, g.company_id,
-                              g.active, gp.place_id, p.name AS place_name, c.code AS company_code,
+                              g.rssi_threshold, g.active, gp.place_id, p.name AS place_name, c.code AS company_code,
                               c.name AS company_name, g.created_at, g.updated_at
                        FROM gateways g
                        LEFT JOIN gateway_places gp ON gp.gateway_id = g.id AND gp.active = true
@@ -43,13 +48,17 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
 });
 
 router.get('/by-mac/:mac', authenticate, async (req: AuthenticatedRequest, res) => {
-  const mac = normalizeMacAddress(req.params.mac);
+  const mac = normalizeGatewayMac(req.params.mac);
   if (!mac) return res.status(400).json({ message: 'MAC address is invalid' });
   try {
     const scope = await resolveHardwareAccess(req.user!, 'read');
     const values: unknown[] = [mac];
     const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
-    const result = await pool.query(`${gatewaySelect} WHERE g.mac_address = $1 AND ${predicate}`, values);
+    const result = await pool.query(
+      `${gatewaySelect}
+       WHERE regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g') = $1 AND ${predicate}`,
+      values
+    );
     if (!result.rows[0]) return res.status(404).json({ message: 'Gateway not found' });
     return res.json(result.rows[0]);
   } catch (error) {
@@ -74,13 +83,147 @@ router.get('/:gatewayId', authenticate, async (req: AuthenticatedRequest, res) =
   }
 });
 
+const commandTimeoutMs = (): number => {
+  const parsed = Number(process.env.GATEWAY_COMMAND_TIMEOUT_MS ?? 8000);
+  return Number.isFinite(parsed) ? Math.min(120000, Math.max(100, Math.floor(parsed))) : 8000;
+};
+
+async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number) {
+  const scope = await resolveHardwareAccess(req.user!, 'technician');
+  const values: unknown[] = [gatewayId];
+  const predicate = scopedHardwarePredicate({
+    scope,
+    values,
+    companyColumn: 'g.company_id',
+    ownerColumn: 'g.owner_id'
+  });
+  const result = await pool.query<{
+    id: number;
+    mac_address: string;
+    company_id: string;
+    rssi_threshold: number;
+  }>(
+    `SELECT g.id, g.mac_address, g.company_id, g.rssi_threshold
+     FROM gateways g
+     WHERE g.id = $1 AND g.active = TRUE AND g.company_id IS NOT NULL AND ${predicate}`,
+    values
+  );
+  return result.rows[0] ?? null;
+}
+
+router.get('/:gatewayId/commands', authenticate, async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const scope = await resolveHardwareAccess(req.user!, 'read');
+    const values: unknown[] = [gatewayId];
+    const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
+    const result = await pool.query(
+      `SELECT c.id, c.gateway_id, c.company_id, c.msg_id, c.command_type, c.status,
+              c.actor_type, c.actor_code, c.request_id, c.created_at, c.sent_at, c.ack_at,
+              c.ack_msg_id, c.result_code, c.result_message, c.timeout_ms
+       FROM hardware_gateway_commands c
+       JOIN gateways g ON g.id = c.gateway_id
+       WHERE g.id = $1 AND ${predicate}
+       ORDER BY c.created_at DESC LIMIT 200`,
+      values
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    console.error('Failed to list gateway commands', error);
+    return res.status(500).json({ message: 'Failed to list gateway commands' });
+  }
+});
+
+router.post('/:gatewayId/configure-emergency-button', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const configuration = await configureB5Gateway({
+      gatewayId,
+      companyId: gateway.company_id,
+      gatewayMac: gateway.mac_address,
+      actor: { type: 'user', userId: req.user!.id },
+      requestId: req.requestId,
+      timeoutMs: commandTimeoutMs()
+    });
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id,
+      action: 'gateway.b5.configure',
+      entityType: 'gateway',
+      entityId: gatewayId,
+      companyId: gateway.company_id,
+      requestId: req.requestId,
+      result: configuration.ok ? 'success' : 'failure',
+      after: { results: configuration.results }
+    });
+    return res.status(configuration.ok ? 200 : 207).json({
+      ok: configuration.ok,
+      status: configuration.ok ? 'configured' : 'partial_failure',
+      message: configuration.ok
+        ? 'B5 configurado correctamente.'
+        : 'La configuración B5 no ha sido confirmada por todos los comandos.',
+      topic: `gw/${normalizeGatewayMac(gateway.mac_address)}/subscribe`,
+      commands: configuration.commands,
+      results: configuration.results
+    });
+  } catch (error) {
+    if (error instanceof GatewayCommandBusyError || (error as any)?.code === '23505') {
+      return res.status(409).json({ message: 'Gateway already has an active command sequence' });
+    }
+    console.error('Failed to configure B5 gateway', error);
+    return res.status(500).json({ message: 'Failed to configure B5 gateway' });
+  }
+});
+
+router.post('/:gatewayId/apply-rssi', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  const rssi = req.body?.rssi;
+  if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
+  if (!Number.isInteger(rssi) || rssi < -127 || rssi > 0) {
+    return res.status(400).json({ message: 'RSSI threshold must be an integer between -127 and 0' });
+  }
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const result = await configureGatewayRssi({
+      gatewayId,
+      companyId: gateway.company_id,
+      gatewayMac: gateway.mac_address,
+      rssi,
+      actor: { type: 'user', userId: req.user!.id },
+      requestId: req.requestId,
+      timeoutMs: commandTimeoutMs()
+    });
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id,
+      action: 'gateway.rssi.configure',
+      entityType: 'gateway',
+      entityId: gatewayId,
+      companyId: gateway.company_id,
+      requestId: req.requestId,
+      result: result.status === 'success' ? 'success' : 'failure',
+      after: result
+    });
+    return res.status(result.status === 'success' ? 200 : result.status === 'timeout' ? 504 : 502).json(result);
+  } catch (error) {
+    if (error instanceof GatewayCommandBusyError || (error as any)?.code === '23505') {
+      return res.status(409).json({ message: 'Gateway already has an active command sequence' });
+    }
+    console.error('Failed to configure gateway RSSI', error);
+    return res.status(500).json({ message: 'Failed to configure gateway RSSI' });
+  }
+});
+
 router.post('/', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   const { name, macAddress, description, ownerId } = req.body;
-  const normalizedMac = normalizeMacAddress(macAddress);
+  const normalizedMac = normalizeGatewayMac(macAddress);
   if (!normalizedMac) return res.status(400).json({ message: 'MAC address is invalid' });
   const parsedCompanyId = companyIdValue(req.body?.companyId);
-  if (req.body?.companyId !== undefined && parsedCompanyId === undefined) {
-    return res.status(400).json({ message: 'companyId is invalid' });
+  if (!parsedCompanyId) {
+    return res.status(400).json({ message: 'companyId is required' });
   }
   const ownerValue = ownerId === undefined || ownerId === null || ownerId === '' ? null : Number(ownerId);
   if (ownerValue !== null && !Number.isInteger(ownerValue)) return res.status(400).json({ message: 'ownerId must be a number' });
@@ -100,7 +243,7 @@ router.post('/', authenticate, authorizeHardware('superadmin'), async (req: Auth
        VALUES($1, $2, $3, $4, $5)
        RETURNING id, name, mac_address, description, owner_id, company_id, active, created_at, updated_at`,
       [name ? String(name).trim() || null : null, normalizedMac,
-       description ? String(description).trim() || null : null, ownerValue, parsedCompanyId ?? null]
+       description ? String(description).trim() || null : null, ownerValue, parsedCompanyId]
     );
     const gateway = result.rows[0];
     await appendTechnicalAudit({

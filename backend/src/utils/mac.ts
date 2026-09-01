@@ -15,6 +15,10 @@ export function isValidMacAddress(input: unknown): boolean {
   return normalizeMacAddress(input) !== null;
 }
 
+export function normalizeGatewayMac(input: unknown): string | null {
+  return normalizeMacAddress(input)?.toLowerCase() ?? null;
+}
+
 export function buildMk3ClientId(input: unknown): string | null {
   const normalized = normalizeMacAddress(input);
   if (!normalized) {

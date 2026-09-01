@@ -8,6 +8,10 @@ import { runMigrations } from './db/migrations';
 import { ensureEmqxMessageAudit } from './services/emqxAudit';
 import { verifyMailConnection } from './services/mail';
 import { startMqttStorageMaintenance } from './services/storageMaintenance';
+import {
+  expireStaleGatewayCommands,
+  startGatewayCommandTimeoutSweep
+} from './services/gatewayCommands';
 
 const server = http.createServer(app);
 
@@ -18,6 +22,8 @@ const start = async () => {
     console.log('Connected to PostgreSQL');
     await runMigrations();
     console.log('Database migrations applied');
+    await expireStaleGatewayCommands();
+    startGatewayCommandTimeoutSweep();
     if (config.mail.enabled) {
       try {
         await verifyMailConnection();

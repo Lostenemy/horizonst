@@ -15,7 +15,10 @@ const redact = (value: unknown): unknown => {
 };
 
 export interface TechnicalAuditEntry {
-  actorUserId: number;
+  actorUserId?: number | null;
+  actorType?: 'user' | 'service' | 'system';
+  actorCode?: string | null;
+  actorServiceId?: string | null;
   action: string;
   entityType: string;
   entityId: string | number;
@@ -32,10 +35,14 @@ export const appendTechnicalAudit = async (
 ): Promise<void> => {
   await client.query(
     `INSERT INTO technical_audit_log
-       (actor_user_id, action, entity_type, entity_id, company_id, request_id, result, before_state, after_state)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)`,
+       (actor_user_id, actor_type, actor_code, actor_service_id, action, entity_type, entity_id,
+        company_id, request_id, result, before_state, after_state)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb)`,
     [
-      entry.actorUserId,
+      entry.actorUserId ?? null,
+      entry.actorType ?? 'user',
+      entry.actorCode ?? null,
+      entry.actorServiceId ?? null,
       entry.action,
       entry.entityType,
       String(entry.entityId),

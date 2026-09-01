@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node test/run-tests.cjs",
+    "reconcile:horneo-gateways": "node dist/scripts/reconcileHorneoGateways.js",
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn src/index.ts"
   },

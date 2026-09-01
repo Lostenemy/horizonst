@@ -63,7 +63,19 @@ const schema = z.object({
   MAIL_FROM: z.string().default('no_reply@example.invalid'),
   MAIL_EHLO_DOMAIN: z.string().default('example.invalid'),
   MAIL_TLS_REJECT_UNAUTHORIZED: z.coerce.boolean().default(false),
-  APP_BASE_URL: z.string().default('http://localhost:3100')
+  APP_BASE_URL: z.string().default('http://localhost:3100'),
+  HARDWARE_MANAGER_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  HARDWARE_MANAGER_BASE_URL: z.string().url().default('http://app:3000'),
+  HARDWARE_MANAGER_SERVICE_TOKEN: z.string().optional(),
+  HARDWARE_MANAGER_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(3000)
+}).superRefine((value, ctx) => {
+  if (value.HARDWARE_MANAGER_ENABLED && !value.HARDWARE_MANAGER_SERVICE_TOKEN?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['HARDWARE_MANAGER_SERVICE_TOKEN'],
+      message: 'HARDWARE_MANAGER_SERVICE_TOKEN is required when Hardware Manager is enabled'
+    });
+  }
 });
 
 export const env = schema.parse(process.env);

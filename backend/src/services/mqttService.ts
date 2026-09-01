@@ -6,6 +6,7 @@ import { decodeMk3 } from './decoders/mk3Decoder';
 import { handleDeviceRecord } from './deviceProcessor';
 import { pool } from '../db/pool';
 import { ProcessedDeviceRecord } from '../types';
+import { handleHardwareGatewayAck } from './gatewayAck';
 
 let client: MqttClient | null = null;
 let mqttConnected = false;
@@ -32,6 +33,16 @@ export const getMqttStatus = () => ({
   lastError: mqttLastError,
   reconnectDelay
 });
+
+export const publishMqttJson = async (topic: string, payload: Record<string, unknown>): Promise<void> => {
+  if (!client || !mqttConnected) throw new Error('MQTT client is not connected');
+  await new Promise<void>((resolve, reject) => {
+    client!.publish(topic, JSON.stringify(payload), { qos: 1 }, (error?: Error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+};
 
 export const initMqtt = async (): Promise<void> => {
   if (client) {
@@ -157,6 +168,7 @@ export const initMqtt = async (): Promise<void> => {
       }
 
       const gatewayMac = records[0]?.gatewayMac || parseGatewayMacFromTopic(topic) || null;
+      await handleHardwareGatewayAck(topic, payloadText);
       try {
         if (shouldPersistLocally) {
           await pool.query(
