@@ -81,25 +81,25 @@ test('resuelve primero por hardware_device_id y no considera el nombre una diver
   assert.deepEqual(calls, ['http://hardware-manager.test/api/internal/v1/hardware/devices/1']);
 });
 
-test('si el id no existe hace fallback por MAC canónica', async () => {
+test('un 404 del id reconciliado es explícito y no vuelve a decidir por MAC local', async () => {
   const calls: string[] = [];
   const result = await resolveHardwareDevice(localTag, { fetch: async (input) => {
     calls.push(String(input));
-    return calls.length === 1 ? jsonResponse({}, 404) : jsonResponse({ ...centralDevice, id: 7 });
+    return jsonResponse({}, 404);
   }});
-  assert.equal(result.source, 'central');
-  assert.ok(result.divergences.includes('hardware_device_id'));
-  assert.equal(calls[1], 'http://hardware-manager.test/api/internal/v1/hardware/devices/by-mac/DF9DDAA7EAB3');
+  assert.equal(result.source, 'central_not_found');
+  assert.deepEqual(result.divergences, ['central_device_not_found']);
+  assert.deepEqual(calls, ['http://hardware-manager.test/api/internal/v1/hardware/devices/1']);
 });
 
-test('404 por id y MAC, incluido recurso ajeno oculto, vuelve a local sin filtrar información', async () => {
+test('404 de un recurso ajeno oculto no activa fallback local', async () => {
   let calls = 0;
   const result = await resolveHardwareDevice(localTag, { fetch: async () => {
     calls += 1;
     return jsonResponse({}, 404);
   }});
-  assert.equal(calls, 2);
-  assert.equal(result.source, 'local_fallback');
+  assert.equal(calls, 1);
+  assert.equal(result.source, 'central_not_found');
   assert.deepEqual(result.divergences, ['central_device_not_found']);
 });
 

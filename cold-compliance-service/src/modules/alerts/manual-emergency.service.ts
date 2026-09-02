@@ -3,12 +3,14 @@ import { logger } from '../../utils/logger';
 import { appendAuditLog } from '../audit/audit.service';
 import { ParsedManualEmergencyEvent } from '../presence/payload-parser';
 import { createAlert } from './alerts.service';
+import { resolveEventTechnicalIdentity } from '../hardware-manager/event-identity.service';
 
 const DEDUPLICATION_WINDOW_SECONDS = 60;
 
 interface EmergencyContext {
   tag_id: string;
   active: boolean;
+  gateway_id: string | null;
   worker_id: string | null;
   worker_name: string | null;
   cold_room_id: string | null;
@@ -18,7 +20,9 @@ export function manualEmergencyDeduplicationKey(tagUid: string, triggerCount: nu
   return `${tagUid}:${triggerCount ?? 'missing'}`;
 }
 
-async function auditRejected(event: ParsedManualEmergencyEvent, reason: 'unknown_tag' | 'inactive_tag'): Promise<void> {
+type RejectionReason = 'unknown_tag' | 'inactive_tag' | 'central_not_found' | 'central_rejected' | 'mapping_not_found';
+
+async function auditRejected(event: ParsedManualEmergencyEvent, reason: RejectionReason): Promise<void> {
   await appendAuditLog({
     actorType: 'system',
     action: `manual_emergency_rejected_${reason}`,
@@ -40,8 +44,26 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
     triggerCount: event.triggerCount
   }, 'manual emergency received');
 
+  const identity = await resolveEventTechnicalIdentity({ tagMac: event.tagUid, gatewayMac: event.gatewayMac });
+  if (identity.source === 'central_not_found' || identity.source === 'central_rejected') {
+    const reason = identity.source === 'central_not_found' ? 'central_not_found' : 'central_rejected';
+    logger.warn({ gatewayMac: event.gatewayMac, tagUid: event.tagUid, technicalReason: identity.reason }, 'manual emergency rejected by Hardware Manager');
+    await auditRejected(event, reason);
+    return;
+  }
+
+  const centralIdentity = identity.source === 'central';
+  const tagClause = centralIdentity
+    ? 't.hardware_device_id = $1'
+    : "LOWER(REPLACE(REPLACE(t.tag_uid, ':', ''), '-', '')) = $1";
+  const gatewayClause = centralIdentity
+    ? 'g.hardware_gateway_id = $2'
+    : "LOWER(REPLACE(REPLACE(g.gateway_mac, ':', ''), '-', '')) = $2";
+  const tagLookupValue = centralIdentity ? identity.hardwareDeviceId : event.tagUid.toLowerCase();
+  const gatewayLookupValue = centralIdentity ? identity.hardwareGatewayId : event.gatewayMac.toLowerCase();
+
   const client = await db.connect();
-  let rejection: 'unknown_tag' | 'inactive_tag' | null = null;
+  let rejection: RejectionReason | null = null;
   let createdAlertId: string | null = null;
   let context: EmergencyContext | null = null;
 
@@ -55,6 +77,7 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
               t.active,
               assignment.worker_id,
               assignment.worker_name,
+              gateway.gateway_id,
               COALESCE(pos.cold_room_id, session.cold_room_id, gateway.cold_room_id) AS cold_room_id
        FROM tags t
        LEFT JOIN LATERAL (
@@ -74,21 +97,24 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
          LIMIT 1
        ) session ON TRUE
        LEFT JOIN LATERAL (
-         SELECT g.cold_room_id
+         SELECT g.id AS gateway_id, g.cold_room_id
          FROM gateways g
-         WHERE LOWER(REPLACE(REPLACE(g.gateway_mac, ':', ''), '-', '')) = $2
+         WHERE ${gatewayClause}
          LIMIT 1
        ) gateway ON TRUE
-       WHERE LOWER(REPLACE(REPLACE(t.tag_uid, ':', ''), '-', '')) = $1
+       WHERE ${tagClause}
        LIMIT 1`,
-      [event.tagUid, event.gatewayMac]
+      [tagLookupValue, gatewayLookupValue]
     );
 
     context = contextResult.rows[0] ?? null;
     if (!context) {
       rejection = 'unknown_tag';
       await client.query('ROLLBACK');
-    } else if (!context.active) {
+    } else if (centralIdentity && !context.gateway_id) {
+      rejection = 'mapping_not_found';
+      await client.query('ROLLBACK');
+    } else if (!centralIdentity && !context.active) {
       rejection = 'inactive_tag';
       await client.query('ROLLBACK');
     } else {
@@ -171,7 +197,7 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
       triggerCount: event.triggerCount,
       workerId: context?.worker_id ?? null,
       coldRoomId: context?.cold_room_id ?? null
-    }, rejection === 'unknown_tag' ? 'manual emergency rejected unknown tag' : 'manual emergency rejected inactive tag');
+    }, 'manual emergency rejected');
     await auditRejected(event, rejection);
     return;
   }

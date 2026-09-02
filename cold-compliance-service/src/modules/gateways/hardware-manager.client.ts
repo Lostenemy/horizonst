@@ -23,7 +23,7 @@ export type HardwareGateway = {
 };
 
 export type HardwareGatewayResolution = {
-  source: 'central' | 'local_fallback' | 'local_disabled';
+  source: 'central' | 'local_fallback' | 'local_disabled' | 'central_not_found';
   local: LocalGatewayReference;
   central: HardwareGateway | null;
   divergences: string[];
@@ -35,10 +35,15 @@ export function normalizeHorneoGatewayMac(value: unknown): string | null {
   return /^[0-9a-f]{12}$/.test(normalized) ? normalized : null;
 }
 
-async function requestHardwareGateway(
+export type HardwareLookup<T> =
+  | { kind: 'found'; value: T }
+  | { kind: 'not_found' }
+  | { kind: 'unavailable'; error: string };
+
+async function requestHardwareGateway<T = HardwareGateway>(
   path: string,
   fetchImpl: typeof fetch = fetch
-): Promise<HardwareGateway | null> {
+): Promise<HardwareLookup<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), env.HARDWARE_MANAGER_TIMEOUT_MS);
   timer.unref();
@@ -47,12 +52,28 @@ async function requestHardwareGateway(
       headers: { Authorization: `Bearer ${env.HARDWARE_MANAGER_SERVICE_TOKEN}` },
       signal: controller.signal
     });
-    if (response.status === 404) return null;
+    if (response.status === 404) return { kind: 'not_found' };
     if (!response.ok) throw new Error(`Hardware Manager returned HTTP ${response.status}`);
-    return await response.json() as HardwareGateway;
+    return { kind: 'found', value: await response.json() as T };
+  } catch (error) {
+    return { kind: 'unavailable', error: String(error) };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export function lookupHardwareGatewayById(id: number, fetchImpl?: typeof fetch): Promise<HardwareLookup<HardwareGateway>> {
+  return requestHardwareGateway(`/api/internal/v1/hardware/gateways/${id}`, fetchImpl);
+}
+
+export function lookupHardwareGatewayByMac(mac: string, fetchImpl?: typeof fetch): Promise<HardwareLookup<HardwareGateway>> {
+  const normalized = normalizeHorneoGatewayMac(mac);
+  if (!normalized) return Promise.resolve({ kind: 'not_found' });
+  return requestHardwareGateway(`/api/internal/v1/hardware/gateways/by-mac/${normalized}`, fetchImpl);
+}
+
+export async function listHardwareGateways(fetchImpl: typeof fetch = fetch): Promise<HardwareLookup<HardwareGateway[]>> {
+  return requestHardwareGateway<HardwareGateway[]>('/api/internal/v1/hardware/gateways', fetchImpl);
 }
 
 export async function resolveHardwareGateway(
@@ -70,17 +91,16 @@ export async function resolveHardwareGateway(
   }
 
   try {
-    let central = local.hardware_gateway_id
-      ? await requestHardwareGateway(`/api/internal/v1/hardware/gateways/${local.hardware_gateway_id}`, deps?.fetch)
-      : null;
-    if (!central) {
-      central = await requestHardwareGateway(`/api/internal/v1/hardware/gateways/by-mac/${localMac}`, deps?.fetch);
-    }
-    if (!central) {
+    const lookup = local.hardware_gateway_id
+      ? await lookupHardwareGatewayById(local.hardware_gateway_id, deps?.fetch)
+      : await lookupHardwareGatewayByMac(localMac, deps?.fetch);
+    if (lookup.kind === 'unavailable') throw new Error(lookup.error);
+    if (lookup.kind === 'not_found') {
       divergences.push('central_gateway_not_found');
-      logger.warn({ localGatewayId: local.id, gatewayMac: localMac, divergences }, 'hardware gateway dual-read fallback');
-      return { source: 'local_fallback', local, central: null, divergences };
+      logger.warn({ localGatewayId: local.id, hardwareGatewayId: local.hardware_gateway_id, gatewayMac: localMac, divergences }, 'linked hardware gateway not found');
+      return { source: 'central_not_found', local, central: null, divergences };
     }
+    const central = lookup.value;
 
     if (local.hardware_gateway_id && central.id !== local.hardware_gateway_id) divergences.push('hardware_gateway_id');
     if (normalizeHorneoGatewayMac(central.mac_address) !== localMac) divergences.push('gateway_mac');

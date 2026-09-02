@@ -24,7 +24,7 @@ export type HardwareDevice = {
 };
 
 export type HardwareDeviceResolution = {
-  source: 'central' | 'local_fallback' | 'local_disabled';
+  source: 'central' | 'local_fallback' | 'local_disabled' | 'central_not_found';
   local: LocalTagReference;
   central: HardwareDevice | null;
   divergences: string[];
@@ -36,10 +36,15 @@ export function normalizeHorneoDeviceMac(value: unknown): string | null {
   return /^[0-9A-F]{12}$/.test(normalized) ? normalized : null;
 }
 
-async function requestHardwareDevice(
+export type HardwareLookup<T> =
+  | { kind: 'found'; value: T }
+  | { kind: 'not_found' }
+  | { kind: 'unavailable'; error: string };
+
+async function requestHardwareDevice<T = HardwareDevice>(
   path: string,
   fetchImpl: typeof fetch = fetch
-): Promise<HardwareDevice | null> {
+): Promise<HardwareLookup<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), env.HARDWARE_MANAGER_TIMEOUT_MS);
   timer.unref();
@@ -48,12 +53,32 @@ async function requestHardwareDevice(
       headers: { Authorization: `Bearer ${env.HARDWARE_MANAGER_SERVICE_TOKEN}` },
       signal: controller.signal
     });
-    if (response.status === 404) return null;
+    if (response.status === 404) return { kind: 'not_found' };
     if (!response.ok) throw new Error(`Hardware Manager returned HTTP ${response.status}`);
-    return await response.json() as HardwareDevice;
+    return { kind: 'found', value: await response.json() as T };
+  } catch (error) {
+    return { kind: 'unavailable', error: String(error) };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export function lookupHardwareDeviceById(id: number, fetchImpl?: typeof fetch): Promise<HardwareLookup<HardwareDevice>> {
+  return requestHardwareDevice(`/api/internal/v1/hardware/devices/${id}`, fetchImpl);
+}
+
+export function lookupHardwareDeviceByMac(mac: string, fetchImpl?: typeof fetch): Promise<HardwareLookup<HardwareDevice>> {
+  const normalized = normalizeHorneoDeviceMac(mac);
+  if (!normalized) return Promise.resolve({ kind: 'not_found' });
+  return requestHardwareDevice(`/api/internal/v1/hardware/devices/by-mac/${normalized}`, fetchImpl);
+}
+
+export async function listHardwareDevices(fetchImpl: typeof fetch = fetch): Promise<HardwareLookup<HardwareDevice[]>> {
+  return requestHardwareDevice<HardwareDevice[]>('/api/internal/v1/hardware/devices', fetchImpl);
+}
+
+export function isOperationalB5(device: HardwareDevice): boolean {
+  return device.active && device.status === 'active' && device.device_type === 'b5';
 }
 
 export async function resolveHardwareDevice(
@@ -71,17 +96,16 @@ export async function resolveHardwareDevice(
   }
 
   try {
-    let central = local.hardware_device_id
-      ? await requestHardwareDevice(`/api/internal/v1/hardware/devices/${local.hardware_device_id}`, deps?.fetch)
-      : null;
-    if (!central) {
-      central = await requestHardwareDevice(`/api/internal/v1/hardware/devices/by-mac/${localMac}`, deps?.fetch);
-    }
-    if (!central) {
+    const lookup = local.hardware_device_id
+      ? await lookupHardwareDeviceById(local.hardware_device_id, deps?.fetch)
+      : await lookupHardwareDeviceByMac(localMac, deps?.fetch);
+    if (lookup.kind === 'unavailable') throw new Error(lookup.error);
+    if (lookup.kind === 'not_found') {
       divergences.push('central_device_not_found');
-      logger.warn({ localTagId: local.id, tagUid: localMac, divergences }, 'hardware device dual-read fallback');
-      return { source: 'local_fallback', local, central: null, divergences };
+      logger.warn({ localTagId: local.id, hardwareDeviceId: local.hardware_device_id, tagUid: localMac, divergences }, 'linked hardware device not found');
+      return { source: 'central_not_found', local, central: null, divergences };
     }
+    const central = lookup.value;
 
     if (local.hardware_device_id && central.id !== local.hardware_device_id) divergences.push('hardware_device_id');
     if (normalizeHorneoDeviceMac(central.ble_mac) !== localMac) divergences.push('tag_uid');

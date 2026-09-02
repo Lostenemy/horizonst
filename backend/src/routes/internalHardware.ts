@@ -50,7 +50,7 @@ router.get('/gateways', async (req: ServiceAuthenticatedRequest, res) => {
     const principal = req.servicePrincipal!;
     const result = await pool.query(
       `${gatewaySelect}
-       WHERE g.company_id = $1 AND g.active = TRUE
+       WHERE g.company_id = $1
        ORDER BY g.name NULLS LAST, g.id`,
       [principal.companyId]
     );
@@ -134,7 +134,7 @@ router.get('/gateways/by-mac/:mac', async (req: ServiceAuthenticatedRequest, res
     const result = await pool.query(
       `${gatewaySelect}
        WHERE regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g') = $1
-         AND g.company_id = $2 AND g.active = TRUE`,
+         AND g.company_id = $2`,
       [mac, principal.companyId]
     );
     if (!result.rows[0]) {
@@ -158,7 +158,7 @@ router.get('/gateways/:gatewayId', async (req: ServiceAuthenticatedRequest, res)
     const principal = req.servicePrincipal!;
     const result = await pool.query(
       `${gatewaySelect}
-       WHERE g.id = $1 AND g.company_id = $2 AND g.active = TRUE`,
+       WHERE g.id = $1 AND g.company_id = $2`,
       [gatewayId, principal.companyId]
     );
     if (!result.rows[0]) {

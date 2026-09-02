@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
-import { LocalTagReference, resolveHardwareDevice } from './hardware-manager.client';
+import { env } from '../../config/env';
+import { logger } from '../../utils/logger';
+import { listHardwareDevices, LocalTagReference, normalizeHorneoDeviceMac, resolveHardwareDevice } from './hardware-manager.client';
 
 export const tagsRouter = Router();
 
-const DEFAULT_FOLLOWUP_DELAY_MS = 45000;
-const DEFAULT_ACTION_DURATION_MS = 3000;
 const MIN_ACTION_DURATION_MS = 100;
 const MAX_ACTION_DURATION_MS = 60000;
 
@@ -26,16 +26,8 @@ function parseOptionalInteger(value: unknown, field: string, min: number, max?: 
 
 tagsRouter.post('/', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
-    const { mac, descripcion } = req.body;
-    const physicalAlarmFollowupDelayMs = parseOptionalInteger(req.body.physicalAlarmFollowupDelayMs, 'physicalAlarmFollowupDelayMs', 0) ?? DEFAULT_FOLLOWUP_DELAY_MS;
-    const physicalAlarmBuzzerDurationMs = parseOptionalInteger(req.body.physicalAlarmBuzzerDurationMs, 'physicalAlarmBuzzerDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS) ?? DEFAULT_ACTION_DURATION_MS;
-    const physicalAlarmVibrationDurationMs = parseOptionalInteger(req.body.physicalAlarmVibrationDurationMs, 'physicalAlarmVibrationDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS) ?? DEFAULT_ACTION_DURATION_MS;
-    const result = await db.query(
-      `INSERT INTO tags(tag_uid, model, physical_alarm_followup_delay_ms, physical_alarm_buzzer_duration_ms, physical_alarm_vibration_duration_ms)
-       VALUES($1,$2,$3,$4,$5) RETURNING *`,
-      [String(mac).toLowerCase(), descripcion ?? null, physicalAlarmFollowupDelayMs, physicalAlarmBuzzerDurationMs, physicalAlarmVibrationDurationMs]
-    );
-    res.status(201).json(result.rows[0]);
+    void req;
+    res.status(409).json({ error: 'hardware_manager_authoritative', message: 'La creación técnica de dispositivos debe realizarse en Hardware Manager.' });
   } catch (e) { next(e); }
 });
 
@@ -43,12 +35,32 @@ tagsRouter.get('/', async (_req, res, next) => {
   try {
     const result = await db.query(
       `SELECT t.*, (SELECT last_battery FROM tag_gateway_presence_state p
-                    WHERE p.tag_uid = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')
+                    WHERE ((t.hardware_device_id IS NOT NULL AND p.hardware_device_id = t.hardware_device_id)
+                           OR (p.hardware_device_id IS NULL AND p.tag_uid = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')))
                       AND last_battery IS NOT NULL
                     ORDER BY last_seen_at DESC LIMIT 1) as last_battery
        FROM tags t ORDER BY created_at DESC`
     );
-    res.json(result.rows);
+    if (!env.HARDWARE_MANAGER_ENABLED) return res.json(result.rows.map((row) => ({ ...row, hardware_source: 'local_disabled' })));
+    const central = await listHardwareDevices();
+    if (central.kind === 'unavailable') {
+      logger.warn({ error: central.error }, 'Hardware Manager unavailable; listing local tags');
+      return res.json(result.rows.map((row) => ({ ...row, hardware_source: 'local_fallback' })));
+    }
+    const byId = new Map((central.kind === 'found' ? central.value : []).map((device) => [device.id, device]));
+    return res.json(result.rows.map((row) => {
+      const hardware = row.hardware_device_id ? byId.get(row.hardware_device_id) : undefined;
+      return hardware ? {
+        ...row,
+        tag_uid: normalizeHorneoDeviceMac(hardware.ble_mac)?.toLowerCase(),
+        model: hardware.name,
+        active: hardware.active,
+        status: hardware.status,
+        device_type: hardware.device_type,
+        technical_description: hardware.description,
+        hardware_source: 'central'
+      } : { ...row, hardware_source: 'central_not_found', hardware_active: false };
+    }));
   } catch (e) { next(e); }
 });
 
@@ -68,62 +80,38 @@ tagsRouter.get('/:id/hardware-resolution', async (req, res, next) => {
 
 tagsRouter.patch('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
+    const technicalFields = ['mac', 'descripcion', 'model', 'active', 'status', 'device_type', 'tag_uid'];
+    if (technicalFields.some((field) => Object.prototype.hasOwnProperty.call(req.body, field))) {
+      return res.status(409).json({ error: 'hardware_manager_authoritative', message: 'MAC, modelo y estado se gestionan en Hardware Manager.' });
+    }
     const physicalAlarmFollowupDelayMs = parseOptionalInteger(req.body.physicalAlarmFollowupDelayMs, 'physicalAlarmFollowupDelayMs', 0);
     const physicalAlarmBuzzerDurationMs = parseOptionalInteger(req.body.physicalAlarmBuzzerDurationMs, 'physicalAlarmBuzzerDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS);
     const physicalAlarmVibrationDurationMs = parseOptionalInteger(req.body.physicalAlarmVibrationDurationMs, 'physicalAlarmVibrationDurationMs', MIN_ACTION_DURATION_MS, MAX_ACTION_DURATION_MS);
+    if (physicalAlarmFollowupDelayMs === undefined && physicalAlarmBuzzerDurationMs === undefined && physicalAlarmVibrationDurationMs === undefined) {
+      return res.status(400).json({ error: 'no_local_fields', message: 'Solo los tres tiempos de alarma física son editables localmente.' });
+    }
     const result = await db.query(
       `UPDATE tags
-       SET tag_uid = COALESCE($2, tag_uid),
-           model = COALESCE($3, model),
-           active = COALESCE($4, active),
-           physical_alarm_followup_delay_ms = COALESCE($5, physical_alarm_followup_delay_ms),
-           physical_alarm_buzzer_duration_ms = COALESCE($6, physical_alarm_buzzer_duration_ms),
-           physical_alarm_vibration_duration_ms = COALESCE($7, physical_alarm_vibration_duration_ms),
+       SET physical_alarm_followup_delay_ms = COALESCE($2, physical_alarm_followup_delay_ms),
+           physical_alarm_buzzer_duration_ms = COALESCE($3, physical_alarm_buzzer_duration_ms),
+           physical_alarm_vibration_duration_ms = COALESCE($4, physical_alarm_vibration_duration_ms),
            updated_at = NOW()
        WHERE id = $1 RETURNING *`,
       [
         req.params.id,
-        req.body.mac ? String(req.body.mac).toLowerCase() : null,
-        req.body.descripcion ?? null,
-        req.body.active ?? null,
         physicalAlarmFollowupDelayMs ?? null,
         physicalAlarmBuzzerDurationMs ?? null,
         physicalAlarmVibrationDurationMs ?? null
       ]
     );
+    if (!result.rowCount) return res.status(404).json({ error: 'not_found' });
     res.json(result.rows[0]);
   } catch (e) { next(e); }
 });
 
 tagsRouter.delete('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
-    const tag = await db.query<{ tag_uid: string }>('SELECT tag_uid FROM tags WHERE id = $1', [req.params.id]);
-    if (!tag.rowCount) return res.status(404).json({ error: 'not_found' });
-
-    const deps = await db.query(
-      `SELECT
-         (SELECT COUNT(*)::int FROM worker_tag_assignments WHERE tag_id = $1) AS assignments,
-         (SELECT COUNT(*)::int FROM cold_room_sessions WHERE tag_id = $1) AS sessions,
-         (SELECT COUNT(*)::int FROM alerts WHERE tag_id = $1) AS alerts,
-         (SELECT COUNT(*)::int FROM incidents WHERE tag_id = $1) AS incidents,
-         (SELECT COUNT(*)::int FROM tag_commands WHERE tag_id = $1) AS tag_commands,
-         (SELECT COUNT(*)::int FROM ble_alarm_sessions WHERE tag_id = $1) AS ble_sessions,
-         (SELECT COUNT(*)::int FROM presence_events WHERE tag_uid = $2) AS presence_events`,
-      [req.params.id, tag.rows[0].tag_uid]
-    );
-
-    const row = deps.rows[0] as Record<string, number>;
-    const blocked = Object.entries(row).filter(([, count]) => Number(count) > 0).map(([name, count]) => ({ relation: name, count }));
-    if (blocked.length) {
-      return res.status(409).json({
-        error: 'dependency_conflict',
-        entity: 'tag',
-        dependencies: blocked,
-        message: `No se puede borrar el tag porque está vinculado a: ${blocked.map((d) => `${d.relation} (${d.count})`).join(', ')}`
-      });
-    }
-
-    await db.query('DELETE FROM tags WHERE id = $1', [req.params.id]);
-    res.status(204).send();
+    void req;
+    res.status(409).json({ error: 'hardware_manager_authoritative', message: 'La baja técnica se gestiona en Hardware Manager; la referencia local se conserva por integridad histórica.' });
   } catch (e) { next(e); }
 });

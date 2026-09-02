@@ -184,6 +184,25 @@ test('Horneo service list is constrained by persisted company_id', async () => {
   assert.deepEqual(await response.json(), [{ id: 10, company_id: COMPANY_HORNEO }]);
 });
 
+test('API interna devuelve gateways inactivos para que Horneo los rechace explícitamente', async () => {
+  let gatewaySql = '';
+  (pool as any).query = async (sql: string) => {
+    if (sql.includes('FROM service_principal_tokens')) return { rows: [serviceIdentityRow()] };
+    if (sql.includes('UPDATE service_principal_tokens')) return { rows: [] };
+    if (sql.includes('FROM gateways g') && sql.includes('ORDER BY')) {
+      gatewaySql = sql;
+      return { rows: [{ id: 10, company_id: COMPANY_HORNEO, active: false }] };
+    }
+    if (sql.includes('INSERT INTO technical_audit_log')) return { rows: [] };
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+  const response = await serviceApi('/api/internal/v1/hardware/gateways');
+  assert.equal(response.status, 200);
+  assert.equal((await response.json())[0].active, false);
+  assert.doesNotMatch(gatewaySql, /g\.active\s*=\s*TRUE/);
+  assert.match(gatewaySql, /g\.company_id = \$1/);
+});
+
 test('Horneo service cannot resolve Company B gateway by id or MAC', async () => {
   const resourceQueries: Array<{ sql: string; params: unknown[] }> = [];
   (pool as any).query = async (sql: string, params: unknown[]) => {

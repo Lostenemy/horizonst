@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger';
 import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
 import { shouldClosePresenceSession } from './presence-timeout-policy';
 import { evaluatePresenceSignal } from './presence-signal-policy';
+import { resolveEventTechnicalIdentity } from '../hardware-manager/event-identity.service';
 const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
 export function isValidSessionStart(startedAt: string): boolean {
   const startedAtMs = Date.parse(startedAt);
@@ -235,11 +236,13 @@ async function closeStaleSessions(): Promise<void> {
      LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
      LEFT JOIN cold_rooms cr ON cr.id = s.cold_room_id
      LEFT JOIN tag_gateway_presence_state ps
-       ON ps.tag_uid = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')
+       ON ((t.hardware_device_id IS NOT NULL AND ps.hardware_device_id = t.hardware_device_id)
+           OR (ps.hardware_device_id IS NULL AND ps.tag_uid = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')))
       AND ps.last_presence_at >= s.started_at
       AND (s.cold_room_id IS NULL OR EXISTS (
         SELECT 1 FROM gateways seen_gateway
-        WHERE regexp_replace(lower(seen_gateway.gateway_mac), '[-:]', '', 'g') = ps.gateway_mac
+        WHERE ((seen_gateway.hardware_gateway_id IS NOT NULL AND ps.hardware_gateway_id = seen_gateway.hardware_gateway_id)
+               OR (ps.hardware_gateway_id IS NULL AND regexp_replace(lower(seen_gateway.gateway_mac), '[-:]', '', 'g') = ps.gateway_mac))
           AND seen_gateway.cold_room_id = s.cold_room_id
       ))
      WHERE s.ended_at IS NULL
@@ -279,6 +282,20 @@ async function closeStaleSessions(): Promise<void> {
 }
 
 export async function processComplianceRules(event: ParsedPresenceEvent): Promise<void> {
+  const identity = await resolveEventTechnicalIdentity({ tagMac: event.tagId, gatewayMac: event.gatewayMac });
+  if (identity.source === 'central_not_found' || identity.source === 'central_rejected') {
+    logger.warn({ eventId: event.eventId, source: identity.source, reason: identity.reason }, 'presence event rejected by technical identity');
+    return;
+  }
+  const centralIdentity = identity.source === 'central';
+  const gatewayLookupClause = centralIdentity
+    ? 'g.hardware_gateway_id = $1'
+    : "regexp_replace(lower(g.gateway_mac), '[-:]', '', 'g') = $1";
+  const tagLookupClause = centralIdentity
+    ? 't.hardware_device_id = $6'
+    : "regexp_replace(lower(t.tag_uid), '[-:]', '', 'g') = $6";
+  const gatewayLookupValue = centralIdentity ? identity.hardwareGatewayId : identity.gatewayMac;
+  const tagLookupValue = centralIdentity ? identity.hardwareDeviceId : identity.tagMac.toLowerCase();
   const tagRes = await db.query(
     `SELECT t.id, t.tag_uid,
             wta.worker_id,
@@ -294,13 +311,16 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
             coalesce(cr.max_daily_minutes, $5) as max_daily_minutes
      FROM tags t
      LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
-     LEFT JOIN gateways g ON regexp_replace(lower(g.gateway_mac), '[-:]', '', 'g') = $1
+     LEFT JOIN gateways g ON ${gatewayLookupClause}
      LEFT JOIN cold_rooms cr ON cr.id = g.cold_room_id
-     WHERE regexp_replace(lower(t.tag_uid), '[-:]', '', 'g') = $6`,
-    [event.gatewayMac.replace(/[:-]/g, '').toLowerCase(), env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.REQUIRED_BREAK_MINUTES, env.MAX_DAILY_MINUTES, event.tagId.replace(/[:-]/g, '').toLowerCase()]
+     WHERE ${tagLookupClause}`,
+    [gatewayLookupValue, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.REQUIRED_BREAK_MINUTES, env.MAX_DAILY_MINUTES, tagLookupValue]
   );
 
-  if (!tagRes.rowCount) return;
+  if (!tagRes.rowCount || (centralIdentity && !tagRes.rows[0].gateway_id)) {
+    logger.warn({ eventId: event.eventId, hardwareDeviceId: identity.hardwareDeviceId, hardwareGatewayId: identity.hardwareGatewayId }, 'presence event has no reconciled local hardware mapping');
+    return;
+  }
   const tag = tagRes.rows[0];
 
   if (typeof event.battery === 'number' && event.battery <= env.BATTERY_ALERT_THRESHOLD) {
@@ -336,9 +356,12 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
     await db.query(
       `UPDATE tag_gateway_presence_state
        SET last_presence_at = GREATEST(COALESCE(last_presence_at, '-infinity'::timestamptz), $3::timestamptz),
+           hardware_device_id = COALESCE($4, hardware_device_id),
+           hardware_gateway_id = COALESCE($5, hardware_gateway_id),
            updated_at = NOW()
        WHERE tag_uid = $1 AND gateway_mac = $2`,
-      [event.tagId.replace(/[:-]/g, '').toLowerCase(), event.gatewayMac.replace(/[:-]/g, '').toLowerCase(), event.timestamp]
+      [event.tagId.replace(/[:-]/g, '').toLowerCase(), event.gatewayMac.replace(/[:-]/g, '').toLowerCase(), event.timestamp,
+        identity.hardwareDeviceId, identity.hardwareGatewayId]
     );
 
     if (event.eventType === 'enter' || event.eventType === 'heartbeat') {
@@ -384,6 +407,9 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
   }
 
   if (event.eventType === 'exit') {
+    const exitGatewayClause = centralIdentity
+      ? 'g.hardware_gateway_id = $1'
+      : "regexp_replace(lower(g.gateway_mac), '[-:]', '', 'g') = $1";
     const activeSessionRes = await db.query<SessionContext>(
       `SELECT s.id,
               s.started_at,
@@ -396,11 +422,11 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
        FROM cold_room_sessions s
        LEFT JOIN tags t ON t.id = s.tag_id
        LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
-       LEFT JOIN gateways g ON regexp_replace(lower(g.gateway_mac), '[-:]', '', 'g') = $1
+       LEFT JOIN gateways g ON ${exitGatewayClause}
        LEFT JOIN cold_rooms cr ON cr.id = COALESCE(s.cold_room_id, g.cold_room_id)
        WHERE s.tag_id = $5 AND s.ended_at IS NULL
        ORDER BY s.started_at DESC LIMIT 1`,
-      [event.gatewayMac, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES, tag.id]
+      [gatewayLookupValue, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES, tag.id]
     );
     if (!activeSessionRes.rowCount) return;
 

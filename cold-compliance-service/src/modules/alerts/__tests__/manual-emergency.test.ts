@@ -79,8 +79,10 @@ test('manual emergency requires frame_type 1 and alarm_status 1', () => {
 
 test('manual emergency service validates tag state, assignment and ordered camera fallback', () => {
   const service = source('src/modules/alerts/manual-emergency.service.ts');
-  assert.match(service, /WHERE LOWER\(REPLACE\(REPLACE\(t\.tag_uid/);
-  assert.match(service, /else if \(!context\.active\)/);
+  assert.match(service, /resolveEventTechnicalIdentity/);
+  assert.match(service, /t\.hardware_device_id = \$1/);
+  assert.match(service, /g\.hardware_gateway_id = \$2/);
+  assert.match(service, /else if \(!centralIdentity && !context\.active\)/);
   assert.match(service, /wta\.active = TRUE/);
   assert.match(service, /context\.worker_name \?\? 'Sin trabajador asignado'/);
   assert.match(service, /COALESCE\(pos\.cold_room_id, session\.cold_room_id, gateway\.cold_room_id\)/);

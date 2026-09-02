@@ -6,7 +6,7 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 import { logger } from '../../utils/logger';
 import { mqttPublish } from '../mqtt/mqtt.service';
 import { configureEmergencyButton } from './gateway-emergency-config.service';
-import { resolveHardwareGateway } from './hardware-manager.client';
+import { listHardwareGateways, LocalGatewayReference, normalizeHorneoGatewayMac, resolveHardwareGateway } from './hardware-manager.client';
 
 export const gatewaysRouter = Router();
 gatewaysRouter.use(requireAuth);
@@ -17,7 +17,8 @@ const gatewayPayloadSchema = z.object({
   mac: z.string().min(1).optional(),
   descripcion: z.string().optional().nullable(),
   rssiThreshold: rssiThresholdSchema.optional(),
-  rssi_threshold: rssiThresholdSchema.optional()
+  rssi_threshold: rssiThresholdSchema.optional(),
+  active: z.boolean().optional()
 });
 
 const applyRssiSchema = z.object({
@@ -34,9 +35,45 @@ function gatewayTopic(gatewayMac: string): string {
   return env.MQTT_COMMAND_TOPIC_TEMPLATE.replace('{gatewayMac}', gatewayMac.toLowerCase());
 }
 
+function httpError(message: string, statusCode: number): Error & { statusCode: number } {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+export async function resolveGatewayMacForCommand(local: LocalGatewayReference, deps?: { fetch?: typeof fetch }): Promise<string> {
+  const resolution = await resolveHardwareGateway(local, deps);
+  if (resolution.source === 'central_not_found') throw httpError('Gateway central no encontrado para el vínculo reconciliado', 409);
+  if (resolution.source === 'central') {
+    if (!resolution.central?.active) throw httpError('Gateway inactivo en Hardware Manager', 409);
+    const centralMac = normalizeHorneoGatewayMac(resolution.central.mac_address);
+    if (!centralMac) throw httpError('MAC central de gateway inválida', 409);
+    return centralMac;
+  }
+  const localMac = normalizeHorneoGatewayMac(local.gateway_mac);
+  if (!localMac) throw httpError('MAC local de gateway inválida', 409);
+  return localMac;
+}
+
 gatewaysRouter.get('/', async (_req, res, next) => {
   try {
-    res.json((await db.query('SELECT * FROM gateways ORDER BY created_at DESC')).rows);
+    const localRows = (await db.query('SELECT * FROM gateways ORDER BY created_at DESC')).rows;
+    if (!env.HARDWARE_MANAGER_ENABLED) return res.json(localRows.map((row) => ({ ...row, hardware_source: 'local_disabled' })));
+    const central = await listHardwareGateways();
+    if (central.kind === 'unavailable') {
+      logger.warn({ error: central.error }, 'Hardware Manager unavailable; listing local gateways');
+      return res.json(localRows.map((row) => ({ ...row, hardware_source: 'local_fallback' })));
+    }
+    const byId = new Map((central.kind === 'found' ? central.value : []).map((gateway) => [gateway.id, gateway]));
+    return res.json(localRows.map((row) => {
+      const hardware = row.hardware_gateway_id ? byId.get(row.hardware_gateway_id) : undefined;
+      return hardware ? {
+        ...row,
+        gateway_mac: normalizeHorneoGatewayMac(hardware.mac_address),
+        description: hardware.description,
+        active: hardware.active,
+        hardware_name: hardware.name,
+        hardware_source: 'central'
+      } : { ...row, hardware_source: 'central_not_found', hardware_active: false };
+    }));
   } catch (error) {
     next(error);
   }
@@ -65,13 +102,8 @@ gatewaysRouter.get('/:id/hardware-resolution', async (req, res, next) => {
 
 gatewaysRouter.post('/', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
-    const parsed = gatewayPayloadSchema.extend({ mac: z.string().min(1) }).parse(req.body);
-    const rssiThreshold = normalizeRssiThreshold(parsed) ?? -127;
-    const result = await db.query(
-      'INSERT INTO gateways(gateway_mac, description, rssi_threshold) VALUES($1,$2,$3) RETURNING *',
-      [String(parsed.mac).toLowerCase(), parsed.descripcion ?? null, rssiThreshold]
-    );
-    res.status(201).json(result.rows[0]);
+    gatewayPayloadSchema.parse(req.body);
+    res.status(409).json({ error: 'hardware_manager_authoritative', message: 'La creación técnica de gateways debe realizarse en Hardware Manager.' });
   } catch (error) {
     next(error);
   }
@@ -80,15 +112,18 @@ gatewaysRouter.post('/', requireRoles(['superadministrador']), async (req, res, 
 gatewaysRouter.patch('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
     const parsed = gatewayPayloadSchema.parse(req.body);
+    if (parsed.mac !== undefined || parsed.descripcion !== undefined || parsed.active !== undefined) {
+      return res.status(409).json({ error: 'hardware_manager_authoritative', message: 'MAC, descripción y estado se gestionan en Hardware Manager.' });
+    }
     const rssiThreshold = normalizeRssiThreshold(parsed);
+    if (rssiThreshold === undefined) return res.status(400).json({ error: 'no_local_fields', message: 'Solo rssiThreshold es editable localmente.' });
     const result = await db.query(
       `UPDATE gateways
-       SET gateway_mac = COALESCE($2, gateway_mac),
-           description = COALESCE($3, description),
-           rssi_threshold = COALESCE($4, rssi_threshold)
+       SET rssi_threshold = $2
        WHERE id = $1 RETURNING *`,
-      [req.params.id, parsed.mac ? String(parsed.mac).toLowerCase() : null, parsed.descripcion ?? null, rssiThreshold ?? null]
+      [req.params.id, rssiThreshold]
     );
+    if (!result.rowCount) return res.status(404).json({ error: 'not_found' });
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -98,10 +133,10 @@ gatewaysRouter.patch('/:id', requireRoles(['superadministrador']), async (req, r
 gatewaysRouter.post('/:id/apply-rssi', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
     const parsed = applyRssiSchema.parse(req.body);
-    const gateway = await db.query<{ gateway_mac: string; rssi_threshold: number }>('SELECT gateway_mac, rssi_threshold FROM gateways WHERE id = $1', [req.params.id]);
+    const gateway = await db.query<LocalGatewayReference>('SELECT id, gateway_mac, hardware_gateway_id, rssi_threshold, cold_room_id, plant_id FROM gateways WHERE id = $1', [req.params.id]);
     if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
 
-    const gatewayMac = gateway.rows[0].gateway_mac;
+    const gatewayMac = await resolveGatewayMacForCommand(gateway.rows[0]);
     const rssi = parsed.rssi ?? normalizeRssiThreshold(parsed) ?? gateway.rows[0].rssi_threshold;
     const payload = {
       msg_id: 1042,
@@ -126,10 +161,10 @@ gatewaysRouter.post('/:id/apply-rssi', requireRoles(['superadministrador']), asy
 
 gatewaysRouter.post('/:id/configure-emergency-button', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
-    const gateway = await db.query<{ gateway_mac: string }>('SELECT gateway_mac FROM gateways WHERE id = $1', [req.params.id]);
+    const gateway = await db.query<LocalGatewayReference>('SELECT id, gateway_mac, hardware_gateway_id, rssi_threshold, cold_room_id, plant_id FROM gateways WHERE id = $1', [req.params.id]);
     if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
 
-    const gatewayMac = gateway.rows[0].gateway_mac;
+    const gatewayMac = await resolveGatewayMacForCommand(gateway.rows[0]);
     const topic = gatewayTopic(gatewayMac);
     const configuration = await configureEmergencyButton({ gatewayMac, topic });
     logger[configuration.ok ? 'info' : 'warn']({ gatewayId: req.params.id, gatewayMac, topic, results: configuration.results }, 'emergency button configuration completed');
@@ -148,29 +183,7 @@ gatewaysRouter.post('/:id/configure-emergency-button', requireRoles(['superadmin
 
 gatewaysRouter.delete('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
   try {
-    const gateway = await db.query<{ gateway_mac: string }>('SELECT gateway_mac FROM gateways WHERE id = $1', [req.params.id]);
-    if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
-
-    const deps = await db.query(
-      `SELECT
-         (SELECT COUNT(*)::int FROM tag_commands WHERE gateway_id = $1) AS tag_commands,
-         (SELECT COUNT(*)::int FROM presence_events WHERE gateway_mac = $2) AS presence_events`,
-      [req.params.id, gateway.rows[0].gateway_mac]
-    );
-
-    const row = deps.rows[0] as Record<string, number>;
-    const blocked = Object.entries(row).filter(([, count]) => Number(count) > 0).map(([name, count]) => ({ relation: name, count }));
-    if (blocked.length) {
-      return res.status(409).json({
-        error: 'dependency_conflict',
-        entity: 'gateway',
-        dependencies: blocked,
-        message: `No se puede borrar el gateway porque está vinculado a: ${blocked.map((d) => `${d.relation} (${d.count})`).join(', ')}`
-      });
-    }
-
-    await db.query('DELETE FROM gateways WHERE id = $1', [req.params.id]);
-    res.status(204).send();
+    res.status(409).json({ error: 'hardware_manager_authoritative', message: 'La baja técnica se gestiona en Hardware Manager; la referencia local se conserva por integridad histórica.' });
   } catch (error: any) {
     if (error?.code === '23503') {
       return res.status(409).json({ error: 'dependency_conflict', entity: 'gateway', message: 'No se puede borrar el gateway porque está referenciado por otras tablas' });
