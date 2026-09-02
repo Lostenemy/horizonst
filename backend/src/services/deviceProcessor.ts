@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { pool } from '../db/pool';
 import { ProcessedDeviceRecord } from '../types';
+import { normalizeMacAddress } from '../utils/mac';
 
 interface GatewayRow {
   id: number;
@@ -49,9 +50,14 @@ export const handleDeviceRecord = async (record: ProcessedDeviceRecord): Promise
       return;
     }
 
+    const deviceMac = normalizeMacAddress(record.bleMac);
+    if (!deviceMac) {
+      await client.query('ROLLBACK');
+      return;
+    }
     const deviceResult = await client.query<DeviceRow>(
       `SELECT id, owner_id, company_id FROM devices WHERE ble_mac = $1 AND active = true LIMIT 1`,
-      [record.bleMac.toUpperCase()]
+      [deviceMac]
     );
     const device = deviceResult.rows[0];
     if (!device) {

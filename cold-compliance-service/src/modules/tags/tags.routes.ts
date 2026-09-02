@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
+import { LocalTagReference, resolveHardwareDevice } from './hardware-manager.client';
 
 export const tagsRouter = Router();
 
@@ -49,6 +50,20 @@ tagsRouter.get('/', async (_req, res, next) => {
     );
     res.json(result.rows);
   } catch (e) { next(e); }
+});
+
+tagsRouter.get('/:id/hardware-resolution', async (req, res, next) => {
+  try {
+    const result = await db.query<LocalTagReference>(
+      `SELECT id, tag_uid, hardware_device_id, model, active,
+              physical_alarm_followup_delay_ms, physical_alarm_buzzer_duration_ms,
+              physical_alarm_vibration_duration_ms
+       FROM tags WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'not_found' });
+    return res.json(await resolveHardwareDevice(result.rows[0]));
+  } catch (e) { return next(e); }
 });
 
 tagsRouter.patch('/:id', requireRoles(['superadministrador']), async (req, res, next) => {
