@@ -7,9 +7,17 @@ import { resolveGatewayMacForCommand } from '../../gateways/gateways.routes';
 import { HardwareGateway } from '../../gateways/hardware-manager.client';
 import { HardwareDevice } from '../../tags/hardware-manager.client';
 import { validateTechnicalTargets } from '../../tag-control/infrastructure/tag-control.repository';
-import { resolveEventTechnicalIdentity } from '../event-identity.service';
+import {
+  clearEventTechnicalIdentityCache,
+  HardwareInventoryCache,
+  resolveEventTechnicalIdentity
+} from '../event-identity.service';
 
-const originalEnabled = env.HARDWARE_MANAGER_ENABLED;
+const original = {
+  enabled: env.HARDWARE_MANAGER_ENABLED,
+  cacheTtlMs: env.HARDWARE_MANAGER_CACHE_TTL_MS,
+  errorTtlMs: env.HARDWARE_MANAGER_CACHE_ERROR_TTL_MS
+};
 const device: HardwareDevice = {
   id: 31, name: 'B5 central', ble_mac: 'FD9D4F8AE226', description: null,
   company_id: 'horneo', device_type: 'b5', status: 'active', active: true
@@ -19,14 +27,29 @@ const gateway: HardwareGateway = {
   company_id: 'horneo', rssi_threshold: -70, active: true
 };
 const found = <T>(value: T) => Promise.resolve({ kind: 'found' as const, value });
+const inventoryDeps = (
+  devices: HardwareDevice[] = [device],
+  gateways: HardwareGateway[] = [gateway],
+  cache = new HardwareInventoryCache()
+) => ({ cache, listDevices: async () => found(devices), listGateways: async () => found(gateways) });
 
-beforeEach(() => { (env as any).HARDWARE_MANAGER_ENABLED = true; });
-afterEach(() => { (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled; });
+beforeEach(() => {
+  (env as any).HARDWARE_MANAGER_ENABLED = true;
+  (env as any).HARDWARE_MANAGER_CACHE_TTL_MS = 30000;
+  (env as any).HARDWARE_MANAGER_CACHE_ERROR_TTL_MS = 2000;
+  clearEventTechnicalIdentityCache();
+});
+afterEach(() => {
+  (env as any).HARDWARE_MANAGER_ENABLED = original.enabled;
+  (env as any).HARDWARE_MANAGER_CACHE_TTL_MS = original.cacheTtlMs;
+  (env as any).HARDWARE_MANAGER_CACHE_ERROR_TTL_MS = original.errorTtlMs;
+  clearEventTechnicalIdentityCache();
+});
 
 test('event identity accepts an operational B5 and gateway from the central company scope', async () => {
   const result = await resolveEventTechnicalIdentity(
     { tagMac: 'fd:9d:4f:8a:e2:26', gatewayMac: '28:05:a5:5e:fb:68' },
-    { lookupDeviceByMac: async () => found(device), lookupGatewayByMac: async () => found(gateway) }
+    inventoryDeps()
   );
   assert.equal(result.source, 'central');
   assert.equal(result.hardwareDeviceId, 31);
@@ -43,7 +66,7 @@ test('inactive, maintenance and non-B5 devices are rejected by central state', a
   ]) {
     const result = await resolveEventTechnicalIdentity(
       { tagMac: device.ble_mac, gatewayMac: gateway.mac_address },
-      { lookupDeviceByMac: async () => found({ ...device, ...patch }), lookupGatewayByMac: async () => found(gateway) }
+      inventoryDeps([{ ...device, ...patch }])
     );
     assert.equal(result.source, 'central_rejected');
   }
@@ -52,19 +75,19 @@ test('inactive, maintenance and non-B5 devices are rejected by central state', a
 test('other-company hidden resource and reconciled 404 remain explicit', async () => {
   const result = await resolveEventTechnicalIdentity(
     { tagMac: device.ble_mac, gatewayMac: gateway.mac_address },
-    { lookupDeviceByMac: async () => ({ kind: 'not_found' }), lookupGatewayByMac: async () => found(gateway) }
+    inventoryDeps([])
   );
   assert.equal(result.source, 'central_not_found');
   assert.equal(result.reason, 'central_device_not_found');
   const missingGateway = await resolveEventTechnicalIdentity(
     { tagMac: device.ble_mac, gatewayMac: gateway.mac_address },
-    { lookupDeviceByMac: async () => found(device), lookupGatewayByMac: async () => ({ kind: 'not_found' }) }
+    inventoryDeps([device], [])
   );
   assert.equal(missingGateway.source, 'central_not_found');
   assert.equal(missingGateway.reason, 'central_gateway_not_found');
   const inactiveGateway = await resolveEventTechnicalIdentity(
     { tagMac: device.ble_mac, gatewayMac: gateway.mac_address },
-    { lookupDeviceByMac: async () => found(device), lookupGatewayByMac: async () => found({ ...gateway, active: false }) }
+    inventoryDeps([device], [{ ...gateway, active: false }])
   );
   assert.equal(inactiveGateway.source, 'central_rejected');
   assert.equal(inactiveGateway.reason, 'central_gateway_inactive');
@@ -73,10 +96,95 @@ test('other-company hidden resource and reconciled 404 remain explicit', async (
 test('only central unavailability enables controlled local event fallback', async () => {
   const result = await resolveEventTechnicalIdentity(
     { tagMac: device.ble_mac, gatewayMac: gateway.mac_address },
-    { lookupDeviceByMac: async () => ({ kind: 'unavailable', error: 'offline' }), lookupGatewayByMac: async () => found(gateway) }
+    {
+      cache: new HardwareInventoryCache(),
+      listDevices: async () => ({ kind: 'unavailable', error: 'offline' }),
+      listGateways: async () => found([gateway])
+    }
   );
   assert.equal(result.source, 'local_fallback');
   assert.equal(result.reason, 'central_unavailable');
+});
+
+test('consecutive events share one inventory refresh instead of two remote reads per event', async () => {
+  const cache = new HardwareInventoryCache();
+  let deviceLists = 0;
+  let gatewayLists = 0;
+  const deps = {
+    cache,
+    listDevices: async () => { deviceLists += 1; return found([device]); },
+    listGateways: async () => { gatewayLists += 1; return found([gateway]); }
+  };
+  for (let index = 0; index < 50; index += 1) {
+    const result = await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps);
+    assert.equal(result.source, 'central');
+  }
+  assert.equal(deviceLists, 1);
+  assert.equal(gatewayLists, 1);
+});
+
+test('cache expiry refreshes inventory and observes central active/status/type changes', async () => {
+  let now = 1_000;
+  let refreshes = 0;
+  let currentDevice = device;
+  const cache = new HardwareInventoryCache(() => now);
+  const deps = {
+    cache,
+    listDevices: async () => { refreshes += 1; return found([currentDevice]); },
+    listGateways: async () => found([gateway])
+  };
+
+  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'central');
+  currentDevice = { ...device, status: 'maintenance' };
+  now += env.HARDWARE_MANAGER_CACHE_TTL_MS - 1;
+  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'central');
+  assert.equal(refreshes, 1);
+
+  now += 1;
+  const refreshed = await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps);
+  assert.equal(refreshed.source, 'central_rejected');
+  assert.equal(refreshed.reason, 'central_device_status_maintenance');
+  assert.equal(refreshes, 2);
+});
+
+test('concurrent cache misses are coalesced into one pair of inventory requests', async () => {
+  const cache = new HardwareInventoryCache();
+  let deviceLists = 0;
+  let gatewayLists = 0;
+  const deps = {
+    cache,
+    listDevices: async () => { deviceLists += 1; await Promise.resolve(); return found([device]); },
+    listGateways: async () => { gatewayLists += 1; await Promise.resolve(); return found([gateway]); }
+  };
+  const results = await Promise.all(Array.from({ length: 20 }, () =>
+    resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)
+  ));
+  assert.ok(results.every((result) => result.source === 'central'));
+  assert.equal(deviceLists, 1);
+  assert.equal(gatewayLists, 1);
+});
+
+test('temporary outage is cached briefly, preserves fallback and retries after error TTL', async () => {
+  let now = 1_000;
+  let calls = 0;
+  let unavailable = true;
+  const cache = new HardwareInventoryCache(() => now);
+  const deps = {
+    cache,
+    listDevices: async () => {
+      calls += 1;
+      return unavailable ? { kind: 'unavailable' as const, error: 'offline' } : found([device]);
+    },
+    listGateways: async () => found([gateway])
+  };
+  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'local_fallback');
+  unavailable = false;
+  now += env.HARDWARE_MANAGER_CACHE_ERROR_TTL_MS - 1;
+  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'local_fallback');
+  assert.equal(calls, 1);
+  now += 1;
+  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'central');
+  assert.equal(calls, 2);
 });
 
 test('tag-control keeps strategy candidates but replaces divergent local MACs with central MACs', async () => {

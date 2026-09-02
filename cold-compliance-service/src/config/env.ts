@@ -67,7 +67,9 @@ const schema = z.object({
   HARDWARE_MANAGER_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   HARDWARE_MANAGER_BASE_URL: z.string().url().default('http://app:3000'),
   HARDWARE_MANAGER_SERVICE_TOKEN: z.string().optional(),
-  HARDWARE_MANAGER_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(3000)
+  HARDWARE_MANAGER_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(3000),
+  HARDWARE_MANAGER_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(300000).default(30000),
+  HARDWARE_MANAGER_CACHE_ERROR_TTL_MS: z.coerce.number().int().min(250).max(30000).default(5000)
 }).superRefine((value, ctx) => {
   if (value.HARDWARE_MANAGER_ENABLED && !value.HARDWARE_MANAGER_SERVICE_TOKEN?.trim()) {
     ctx.addIssue({
