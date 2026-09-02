@@ -58,7 +58,7 @@ docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT min(
 docker compose logs --since=15m cold_compliance_service app | grep -E "maintenance|presence timeout|BLE session|failed"
 ```
 
-5. Validar con MQTT/hardware real: entrada, heartbeat válido, salida por 45 s de ausencia, reentrada de gracia, buzzer, fallo inducido de vibración/desconexión y cierre posterior de presencia. Durante la espera BLE, enviar otro heartbeat y comprobar que su ingesta no espera a la secuencia física. Confirmar que los topics siguen siendo `gw/+/publish` y `gw/{gatewayMac}/subscribe`.
+5. Validar con MQTT/hardware real: entrada, heartbeat válido, salida por 45 s de ausencia, reentrada de gracia, buzzer, fallo inducido de vibración/desconexión y cierre posterior de presencia. Durante la espera BLE, enviar otro heartbeat y comprobar que su ingesta no espera a la secuencia física. Confirmar que Hardware Manager conserva `gw/+/publish`, que Horneo sólo mantiene suscripciones exactas `gw/{gatewayMac}/publish` obtenidas del inventario y que los comandos salen desde Hardware Manager por `gw/{gatewayMac}/subscribe`.
 
 ## Limpieza controlada del histórico existente
 

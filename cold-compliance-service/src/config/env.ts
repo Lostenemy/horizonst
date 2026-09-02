@@ -16,7 +16,7 @@ const schema = z.object({
   MQTT_USERNAME: z.string().optional(),
   MQTT_PASSWORD: z.string().optional(),
   MQTT_CLIENT_ID: z.string().default('cold-compliance-service'),
-  MQTT_SUB_TOPICS: z.string().default('gw/+/publish'),
+  MQTT_SUB_TOPICS: z.string().default(''),
   MQTT_COMMAND_TOPIC_TEMPLATE: z.string().default('gw/{gatewayMac}/subscribe'),
   PRESENCE_EXIT_TIMEOUT_MS: z.coerce.number().default(30000),
   PRESENCE_SWEEP_INTERVAL_MS: z.coerce.number().default(10000),
@@ -46,10 +46,7 @@ const schema = z.object({
   TAG_CONTROL_GATEWAY_CANDIDATE_LIMIT: z.coerce.number().default(4),
   TAG_CONTROL_GATEWAY_CANDIDATE_WINDOW_MS: z.coerce.number().default(120000),
   TAG_ALARM_PHYSICAL_ENABLED: z.coerce.boolean().default(true),
-  TAG_SESSION_PASSWORD: z.string().default('Moko4321'),
-  TAG_ALARM_CONNECT_TIMEOUT_MS: z.coerce.number().default(12000),
   TAG_ALARM_CONNECT_MAX_RETRIES: z.coerce.number().default(2),
-  TAG_ALARM_ACTION_TIMEOUT_MS: z.coerce.number().default(8000),
   TAG_ALARM_BLE_SESSION_TTL_MS: z.coerce.number().default(120000),
   TAG_ALARM_POST_CONNECT_DELAY_MS: z.coerce.number().default(1200),
   TAG_ALARM_BETWEEN_ACTION_DELAY_MS: z.coerce.number().default(500),
@@ -68,6 +65,8 @@ const schema = z.object({
   HARDWARE_MANAGER_BASE_URL: z.string().url().default('http://app:3000'),
   HARDWARE_MANAGER_SERVICE_TOKEN: z.string().optional(),
   HARDWARE_MANAGER_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(3000),
+  HARDWARE_MANAGER_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(20000),
+  HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
   HARDWARE_MANAGER_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(300000).default(30000),
   HARDWARE_MANAGER_CACHE_ERROR_TTL_MS: z.coerce.number().int().min(250).max(30000).default(5000)
 }).superRefine((value, ctx) => {

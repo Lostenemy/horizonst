@@ -57,8 +57,8 @@ Required identity:
 - password stored as bcrypt in broker DB (`crypt(..., gen_salt('bf'))`)
 
 Required topics (ACL):
-- subscribe: `gw/+/publish`
-- publish: `gw/+/subscribe`
+- subscribe: una entrada exacta `gw/{gatewayMac}/publish` por cada gateway activa asignada a Horneo;
+- publish: una entrada exacta `gw/{gatewayMac}/subscribe` por gateway mientras existan comandos manuales heredados; la alarma física B5, RSSI y configuración B5 se ejecutan mediante Hardware Manager.
 
 > HorizonST enforces ACL by `client_id`, not only by username/password.
 > The service will not work unless this broker registration exists.
@@ -131,8 +131,10 @@ npm run dev
 
 ### Core
 - `MQTT_URL`, `MQTT_CLIENT_ID`, `MQTT_USERNAME`, `MQTT_PASSWORD`
-- `MQTT_SUB_TOPICS=gw/+/publish`
+- `MQTT_SUB_TOPICS=` (sin comodines; con Hardware Manager activo se obtiene dinámicamente el inventario de gateways)
 - `MQTT_COMMAND_TOPIC_TEMPLATE=gw/{gatewayMac}/subscribe`
+- `HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS=30000`
+- `HARDWARE_MANAGER_COMMAND_TIMEOUT_MS=20000`
 
 ### Compliance
 - `MAX_CONTINUOUS_MINUTES=45`

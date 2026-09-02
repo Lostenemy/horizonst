@@ -1,21 +1,12 @@
 import { env } from '../../../config/env';
-import { mqttPublish } from '../../mqtt/mqtt.service';
 import { ResolvedTargetCandidate, resolveTagTargets } from '../infrastructure/tag-control.repository';
-import { waitForGatewayReplyMulti } from '../infrastructure/gateway-reply-listener';
 import { logger } from '../../../utils/logger';
 import { sleep } from '../../../utils/sleep';
 import { isBleSessionActive, markBleSessionActive, markBleSessionDisconnected } from '../infrastructure/ble-session.repository';
 import { db } from '../../../db/pool';
+import { executeHardwareB5Command } from '../../hardware-manager/hardware-command.client';
 
 export type PhysicalAlarmAction = 'led' | 'buzzer' | 'vibration';
-
-const COMMANDS: Record<PhysicalAlarmAction | 'connect' | 'disconnect', { msgId: number; ackMsgId: number }> = {
-  connect: { msgId: 1150, ackMsgId: 3151 },
-  led: { msgId: 1158, ackMsgId: 3159 },
-  buzzer: { msgId: 1160, ackMsgId: 3161 },
-  vibration: { msgId: 1169, ackMsgId: 3170 },
-  disconnect: { msgId: 1200, ackMsgId: 3201 }
-};
 
 const activeTagAlarms = new Set<string>();
 const DEFAULT_FOLLOWUP_DELAY_MS = 45000;
@@ -23,49 +14,10 @@ const DEFAULT_ACTION_DURATION_MS = 3000;
 const MIN_ACTION_DURATION_MS = 100;
 const MAX_ACTION_DURATION_MS = 60000;
 
-function toTopic(gatewayMac: string): string {
-  return env.MQTT_COMMAND_TOPIC_TEMPLATE.replace('{gatewayMac}', gatewayMac.toLowerCase());
-}
-
-async function publishAndWaitAck(params: {
-  gatewayMac: string;
-  tagUid: string;
-  command: 'connect' | 'disconnect' | PhysicalAlarmAction;
-  data: Record<string, unknown>;
-  timeoutMs: number;
-}): Promise<void> {
-  const commandDef = COMMANDS[params.command];
-  const payload = {
-    msg_id: commandDef.msgId,
-    device_info: { mac: params.gatewayMac.toUpperCase() },
-    data: { mac: params.tagUid.toUpperCase(), ...params.data }
-  };
-
-  logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, command: params.command, msgId: commandDef.msgId, data: params.data }, 'physical alarm command requested');
-  await mqttPublish(toTopic(params.gatewayMac), payload);
-
-  const ack = await waitForGatewayReplyMulti({
-    gatewayMac: params.gatewayMac,
-    msgIds: [commandDef.ackMsgId, commandDef.msgId, commandDef.msgId + 2000, commandDef.msgId + 2001],
-    timeoutMs: params.timeoutMs
-  });
-
-  if (ack.resultCode !== 0) {
-    throw new Error(`command ${params.command} failed result_code=${ack.resultCode} result_msg=${ack.resultMsg ?? '-'}`);
-  }
-
-  logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, command: params.command, ackMsgId: ack.msgId }, 'physical alarm command ack');
-}
-
-
 interface PhysicalAlarmSettings {
   followupDelayMs: number;
   buzzerDurationMs: number;
   vibrationDurationMs: number;
-}
-
-export function durationMsToGatewaySeconds(durationMs: number): number {
-  return Math.max(1, Math.ceil(durationMs / 1000));
 }
 
 function normalizeActionDurationMs(value: unknown): number {
@@ -91,68 +43,45 @@ async function resolvePhysicalAlarmSettings(tagId: string): Promise<PhysicalAlar
   };
 }
 
-export async function connectTagSession(params: { gatewayMac: string; tagUid: string }): Promise<void> {
+type CentralTarget = Pick<ResolvedTargetCandidate, 'gatewayMac' | 'tagUid' | 'hardwareGatewayId' | 'hardwareDeviceId'>;
+
+export async function connectTagSession(
+  params: CentralTarget,
+  deps?: { execute?: typeof executeHardwareB5Command; wait?: typeof sleep }
+): Promise<void> {
   const maxAttempts = Math.max(1, env.TAG_ALARM_CONNECT_MAX_RETRIES + 1);
+  const execute = deps?.execute ?? executeHardwareB5Command;
+  const wait = deps?.wait ?? sleep;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, attempt }, 'connect requested');
-      await publishAndWaitAck({
-        gatewayMac: params.gatewayMac,
-        tagUid: params.tagUid,
-        command: 'connect',
-        data: { passwd: env.TAG_SESSION_PASSWORD },
-        timeoutMs: env.TAG_ALARM_CONNECT_TIMEOUT_MS
-      });
+      await execute({ ...params, command: 'connect' });
       logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, attempt }, 'connect ack');
       return;
     } catch (error) {
       if (attempt >= maxAttempts) throw error;
       logger.warn({ gatewayMac: params.gatewayMac, tagUid: params.tagUid, attempt, error }, 'connect failed, retrying');
-      await sleep(500);
+      await wait(500);
     }
   }
 }
 
-export async function sendLedAlert(params: { gatewayMac: string; tagUid: string }): Promise<void> {
-  await publishAndWaitAck({
-    gatewayMac: params.gatewayMac,
-    tagUid: params.tagUid,
-    command: 'led',
-    data: { flash_time: 100, flash_interval: 10 },
-    timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
-  });
+export async function sendLedAlert(params: CentralTarget): Promise<void> {
+  await executeHardwareB5Command({ ...params, command: 'led' });
 }
 
-export async function sendBuzzerAlert(params: { gatewayMac: string; tagUid: string; durationMs: number }): Promise<void> {
-  await publishAndWaitAck({
-    gatewayMac: params.gatewayMac,
-    tagUid: params.tagUid,
-    command: 'buzzer',
-    data: { ring_time: durationMsToGatewaySeconds(params.durationMs), ring_interval: 10 },
-    timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
-  });
+export async function sendBuzzerAlert(params: CentralTarget & { durationMs: number }): Promise<void> {
+  await executeHardwareB5Command({ ...params, command: 'buzzer' });
 }
 
-export async function sendVibrationAlert(params: { gatewayMac: string; tagUid: string; durationMs: number }): Promise<void> {
-  await publishAndWaitAck({
-    gatewayMac: params.gatewayMac,
-    tagUid: params.tagUid,
-    command: 'vibration',
-    data: { shake_time: durationMsToGatewaySeconds(params.durationMs), shake_interval: 10 },
-    timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
-  });
+export async function sendVibrationAlert(params: CentralTarget & { durationMs: number }): Promise<void> {
+  await executeHardwareB5Command({ ...params, command: 'vibration' });
 }
 
-export async function disconnectTagSession(params: { gatewayMac: string; tagUid: string }): Promise<void> {
+export async function disconnectTagSession(params: CentralTarget): Promise<void> {
   logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid }, 'disconnect requested');
-  await publishAndWaitAck({
-    gatewayMac: params.gatewayMac,
-    tagUid: params.tagUid,
-    command: 'disconnect',
-    data: {},
-    timeoutMs: env.TAG_ALARM_ACTION_TIMEOUT_MS
-  });
+  await executeHardwareB5Command({ ...params, command: 'disconnect' });
   logger.info({ gatewayMac: params.gatewayMac, tagUid: params.tagUid }, 'disconnect ack');
 }
 
@@ -187,7 +116,7 @@ export async function executeConnectedTagCommandSequence(params: {
   for (const candidate of params.candidates) {
     logger.info({ ...params.context, gatewayMac: candidate.gatewayMac, tagUid: params.tagUid, lastSeenAt: candidate.lastSeenAt, rssi: candidate.rssi, sameColdRoom: candidate.sameColdRoom }, 'trying gateway');
     try {
-      await deps.connect({ gatewayMac: candidate.gatewayMac, tagUid: params.tagUid });
+      await deps.connect({ ...candidate, tagUid: params.tagUid });
       logger.info({ ...params.context, gatewayMac: candidate.gatewayMac, tagUid: params.tagUid }, 'connect success');
       logger.info({ ...params.context, selectedGatewayMac: candidate.gatewayMac, tagUid: params.tagUid }, 'selected gateway');
     } catch (error: any) {
@@ -210,7 +139,7 @@ export async function executeConnectedTagCommandSequence(params: {
       throw error;
     } finally {
       try {
-        await deps.disconnect({ gatewayMac: candidate.gatewayMac, tagUid: params.tagUid });
+        await deps.disconnect({ ...candidate, tagUid: params.tagUid });
         disconnectAck = true;
         logger.info({ ...params.context, gatewayMac: candidate.gatewayMac, tagUid: params.tagUid }, 'disconnect success');
       } catch (error) {
@@ -290,15 +219,15 @@ export async function executeAlarmSequence(params: {
         for (let i = 0; i < actions.length; i++) {
           const action = actions[i];
           if (action === 'led') {
-            await sendLedAlert({ gatewayMac: selectedTarget.gatewayMac, tagUid: target.tagUid });
+            await sendLedAlert({ ...selectedTarget, tagUid: target.tagUid });
             logger.info({ alertId: params.alertId, gatewayMac: selectedTarget.gatewayMac, step: i + 1, total: actions.length, actions }, 'led success');
           }
           if (action === 'buzzer') {
-            await sendBuzzerAlert({ gatewayMac: selectedTarget.gatewayMac, tagUid: target.tagUid, durationMs: alarmSettings.buzzerDurationMs });
+            await sendBuzzerAlert({ ...selectedTarget, tagUid: target.tagUid, durationMs: alarmSettings.buzzerDurationMs });
             logger.info({ alertId: params.alertId, gatewayMac: selectedTarget.gatewayMac, step: i + 1, total: actions.length, actions, durationMs: alarmSettings.buzzerDurationMs }, 'buzzer success');
           }
           if (action === 'vibration') {
-            await sendVibrationAlert({ gatewayMac: selectedTarget.gatewayMac, tagUid: target.tagUid, durationMs: alarmSettings.vibrationDurationMs });
+            await sendVibrationAlert({ ...selectedTarget, tagUid: target.tagUid, durationMs: alarmSettings.vibrationDurationMs });
             logger.info({ alertId: params.alertId, gatewayMac: selectedTarget.gatewayMac, step: i + 1, total: actions.length, actions, durationMs: alarmSettings.vibrationDurationMs }, 'vibration success');
           }
 

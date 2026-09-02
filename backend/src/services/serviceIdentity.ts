@@ -1,7 +1,19 @@
 import crypto from 'node:crypto';
 
 export const HARDWARE_READ_SCOPE = 'hardware.read' as const;
+export const HARDWARE_COMMAND_SCOPE = 'hardware.command' as const;
+export const HARDWARE_SERVICE_SCOPES = [HARDWARE_READ_SCOPE, HARDWARE_COMMAND_SCOPE] as const;
+export type HardwareServiceScope = typeof HARDWARE_SERVICE_SCOPES[number];
 export const SERVICE_TOKEN_PREFIX = 'hst_svc_';
+
+export function normalizeHardwareServiceScopes(value: unknown): HardwareServiceScope[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const scopes = [...new Set(value)];
+  if (scopes.some((scope) => typeof scope !== 'string' || !HARDWARE_SERVICE_SCOPES.includes(scope as HardwareServiceScope))) {
+    return null;
+  }
+  return HARDWARE_SERVICE_SCOPES.filter((scope) => scopes.includes(scope));
+}
 
 export function normalizeServiceCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';

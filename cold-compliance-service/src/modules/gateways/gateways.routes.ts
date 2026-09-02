@@ -4,9 +4,8 @@ import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { logger } from '../../utils/logger';
-import { mqttPublish } from '../mqtt/mqtt.service';
-import { configureEmergencyButton } from './gateway-emergency-config.service';
 import { listHardwareGateways, LocalGatewayReference, normalizeHorneoGatewayMac, resolveHardwareGateway } from './hardware-manager.client';
+import { executeHardwareGatewayManagementCommand } from '../hardware-manager/hardware-command.client';
 
 export const gatewaysRouter = Router();
 gatewaysRouter.use(requireAuth);
@@ -29,10 +28,6 @@ const applyRssiSchema = z.object({
 
 function normalizeRssiThreshold(input: { rssiThreshold?: number; rssi_threshold?: number }): number | undefined {
   return input.rssiThreshold ?? input.rssi_threshold;
-}
-
-function gatewayTopic(gatewayMac: string): string {
-  return env.MQTT_COMMAND_TOPIC_TEMPLATE.replace('{gatewayMac}', gatewayMac.toLowerCase());
 }
 
 function httpError(message: string, statusCode: number): Error & { statusCode: number } {
@@ -135,25 +130,16 @@ gatewaysRouter.post('/:id/apply-rssi', requireRoles(['superadministrador']), asy
     const parsed = applyRssiSchema.parse(req.body);
     const gateway = await db.query<LocalGatewayReference>('SELECT id, gateway_mac, hardware_gateway_id, rssi_threshold, cold_room_id, plant_id FROM gateways WHERE id = $1', [req.params.id]);
     if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
+    if (!gateway.rows[0].hardware_gateway_id) return res.status(409).json({ error: 'hardware_manager_mapping_required' });
 
-    const gatewayMac = await resolveGatewayMacForCommand(gateway.rows[0]);
     const rssi = parsed.rssi ?? normalizeRssiThreshold(parsed) ?? gateway.rows[0].rssi_threshold;
-    const payload = {
-      msg_id: 1042,
-      device_info: { mac: gatewayMac.toUpperCase() },
-      data: { rssi }
-    };
-    const topic = gatewayTopic(gatewayMac);
-
-    await mqttPublish(topic, payload);
-    logger.info({ gatewayId: req.params.id, gatewayMac, topic, rssi }, 'rssi command published to gateway topic');
-    res.status(202).json({
-      ok: true,
-      status: 'published',
-      message: 'RSSI command published to gateway topic. Gateway acknowledgement is not verified.',
-      topic,
-      payload
+    const result = await executeHardwareGatewayManagementCommand({
+      hardwareGatewayId: gateway.rows[0].hardware_gateway_id,
+      action: 'apply-rssi',
+      body: { rssi }
     });
+    logger[result.status === 200 ? 'info' : 'warn']({ gatewayId: req.params.id, hardwareGatewayId: gateway.rows[0].hardware_gateway_id, rssi, status: result.status }, 'central RSSI command completed');
+    res.status(result.status).json(result.body);
   } catch (error) {
     next(error);
   }
@@ -163,19 +149,14 @@ gatewaysRouter.post('/:id/configure-emergency-button', requireRoles(['superadmin
   try {
     const gateway = await db.query<LocalGatewayReference>('SELECT id, gateway_mac, hardware_gateway_id, rssi_threshold, cold_room_id, plant_id FROM gateways WHERE id = $1', [req.params.id]);
     if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
+    if (!gateway.rows[0].hardware_gateway_id) return res.status(409).json({ error: 'hardware_manager_mapping_required' });
 
-    const gatewayMac = await resolveGatewayMacForCommand(gateway.rows[0]);
-    const topic = gatewayTopic(gatewayMac);
-    const configuration = await configureEmergencyButton({ gatewayMac, topic });
-    logger[configuration.ok ? 'info' : 'warn']({ gatewayId: req.params.id, gatewayMac, topic, results: configuration.results }, 'emergency button configuration completed');
-    res.status(configuration.ok ? 200 : 207).json({
-      ok: configuration.ok,
-      status: configuration.ok ? 'configured' : 'partial_failure',
-      message: configuration.ok ? 'B5 configurado correctamente.' : 'La configuración B5 no ha sido confirmada por todos los comandos.',
-      topic,
-      commands: configuration.commands,
-      results: configuration.results
+    const result = await executeHardwareGatewayManagementCommand({
+      hardwareGatewayId: gateway.rows[0].hardware_gateway_id,
+      action: 'configure-emergency-button'
     });
+    logger[result.status === 200 ? 'info' : 'warn']({ gatewayId: req.params.id, hardwareGatewayId: gateway.rows[0].hardware_gateway_id, status: result.status }, 'central emergency button configuration completed');
+    res.status(result.status).json(result.body);
   } catch (error) {
     next(error);
   }

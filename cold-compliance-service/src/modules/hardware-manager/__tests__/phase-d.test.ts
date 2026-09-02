@@ -227,7 +227,7 @@ test('tag-control excludes unmapped or inactive hardware but falls back on outag
   }), [candidate]);
 });
 
-test('RSSI and B5 command routes derive the topic MAC from the central gateway', async () => {
+test('RSSI and B5 routes resolve central identity and delegate technical execution to Hardware Manager', async () => {
   const local = {
     id: 'gateway-local', gateway_mac: 'AAAAAAAAAAAA', hardware_gateway_id: 41,
     rssi_threshold: -70, cold_room_id: null, plant_id: null
@@ -237,10 +237,10 @@ test('RSSI and B5 command routes derive the topic MAC from the central gateway',
   });
   assert.equal(mac, '2805a55efb68');
   const routes = readFileSync(join(process.cwd(), 'src/modules/gateways/gateways.routes.ts'), 'utf8');
-  assert.match(routes, /msg_id: 1042/);
-  assert.match(routes, /gatewayTopic\(gatewayMac\)/);
-  assert.match(routes, /configureEmergencyButton\(\{ gatewayMac, topic \}\)/);
-  assert.match(routes, /MQTT_COMMAND_TOPIC_TEMPLATE/);
+  assert.match(routes, /executeHardwareGatewayManagementCommand/);
+  assert.match(routes, /action: 'apply-rssi'/);
+  assert.match(routes, /action: 'configure-emergency-button'/);
+  assert.doesNotMatch(routes, /mqttPublish|configureEmergencyButton/);
   assert.doesNotMatch(routes, /\/MKGW3\/.*\/send/);
 });
 

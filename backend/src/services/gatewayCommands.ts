@@ -7,8 +7,18 @@ import { HardwareGatewayAck, waitForHardwareGatewayAck } from './gatewayAck';
 export interface GatewayCommandPayload extends Record<string, unknown> {
   msg_id: number;
   device_info: { mac: string };
-  data: Record<string, number>;
+  data: Record<string, string | number>;
 }
+
+export type PhysicalB5Command = 'connect' | 'led' | 'buzzer' | 'vibration' | 'disconnect';
+
+const PHYSICAL_B5_COMMANDS: Record<PhysicalB5Command, number> = {
+  connect: 1150,
+  led: 1158,
+  buzzer: 1160,
+  vibration: 1169,
+  disconnect: 1200
+};
 
 export interface GatewayCommandActor {
   type: 'user' | 'service' | 'system';
@@ -27,6 +37,15 @@ export interface GatewayCommandResult {
 }
 
 export class GatewayCommandBusyError extends Error {}
+
+function sanitizeJournalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeJournalValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+    key,
+    /pass(word|wd)?/i.test(key) ? '[REDACTED]' : sanitizeJournalValue(nested)
+  ]));
+}
 
 export async function expireStaleGatewayCommands(gatewayId?: number): Promise<number> {
   const values: unknown[] = [];
@@ -119,6 +138,48 @@ export function buildRssiGatewayCommand(gatewayMacInput: string, rssi: number): 
   };
 }
 
+export function durationMsToGatewaySeconds(durationMs: number): number {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error('Invalid B5 action duration');
+  return Math.max(1, Math.ceil(durationMs / 1000));
+}
+
+export function buildPhysicalB5Command(params: {
+  command: PhysicalB5Command;
+  gatewayMac: string;
+  deviceMac: string;
+  durationMs?: number;
+  sessionPassword?: string;
+}): GatewayCommandPayload {
+  const gatewayMac = normalizeGatewayMac(params.gatewayMac);
+  const deviceMac = normalizeGatewayMac(params.deviceMac);
+  if (!gatewayMac || !deviceMac) throw new Error('Invalid physical B5 command MAC');
+  const baseData = { mac: deviceMac.toUpperCase() };
+  let data: GatewayCommandPayload['data'];
+  switch (params.command) {
+    case 'connect':
+      if (!params.sessionPassword) throw new Error('B5 session password is not configured');
+      data = { ...baseData, passwd: params.sessionPassword };
+      break;
+    case 'led':
+      data = { ...baseData, flash_time: 100, flash_interval: 10 };
+      break;
+    case 'buzzer':
+      data = { ...baseData, ring_time: durationMsToGatewaySeconds(params.durationMs ?? 0), ring_interval: 10 };
+      break;
+    case 'vibration':
+      data = { ...baseData, shake_time: durationMsToGatewaySeconds(params.durationMs ?? 0), shake_interval: 10 };
+      break;
+    case 'disconnect':
+      data = baseData;
+      break;
+  }
+  return {
+    msg_id: PHYSICAL_B5_COMMANDS[params.command],
+    device_info: { mac: gatewayMac.toUpperCase() },
+    data
+  };
+}
+
 const commandTopic = (gatewayMac: string): string => `gw/${gatewayMac}/subscribe`;
 
 async function executeCommand(params: {
@@ -131,6 +192,7 @@ async function executeCommand(params: {
   requestId?: string;
   timeoutMs: number;
   idempotencyKey?: string;
+  journalPayload?: GatewayCommandPayload;
   deps?: {
     publish?: typeof publishMqttJson;
     waitForAck?: typeof waitForHardwareGatewayAck;
@@ -149,7 +211,7 @@ async function executeCommand(params: {
       params.companyId,
       params.command.msg_id,
       params.commandType,
-      JSON.stringify(params.command),
+      JSON.stringify(sanitizeJournalValue(params.journalPayload ?? params.command)),
       params.actor.type,
       params.actor.userId ?? null,
       params.actor.serviceId ?? null,
@@ -186,7 +248,7 @@ async function executeCommand(params: {
            result_code = $4, result_message = $5, response_payload = $6::jsonb
        WHERE id = $1`,
       [commandId, status === 'success' ? 'ack_success' : 'ack_error', ack.msgId,
-       ack.resultCode, ack.resultMessage ?? null, JSON.stringify(ack.payload)]
+       ack.resultCode, ack.resultMessage ?? null, JSON.stringify(sanitizeJournalValue(ack.payload))]
     );
     return {
       commandId,
@@ -211,6 +273,46 @@ async function executeCommand(params: {
       status: timedOut ? 'timeout' : 'error',
       resultMessage: message
     };
+  }
+}
+
+export async function executePhysicalB5Command(params: {
+  gatewayId: number;
+  companyId: string;
+  gatewayMac: string;
+  deviceMac: string;
+  command: PhysicalB5Command;
+  durationMs?: number;
+  sessionPassword?: string;
+  actor: GatewayCommandActor;
+  requestId?: string;
+  timeoutMs: number;
+  deps?: Parameters<typeof executeCommand>[0]['deps'];
+}): Promise<GatewayCommandResult> {
+  const lockClient = await pool.connect();
+  try {
+    await expireStaleGatewayCommands(params.gatewayId);
+    await acquireGatewayLock(lockClient, params.gatewayId);
+    const command = buildPhysicalB5Command(params);
+    const journalPayload = params.command === 'connect'
+      ? { ...command, data: { mac: command.data.mac } }
+      : command;
+    return await executeCommand({
+      gatewayId: params.gatewayId,
+      companyId: params.companyId,
+      gatewayMac: params.gatewayMac,
+      commandType: `b5_physical_${params.command}`,
+      command,
+      journalPayload,
+      actor: params.actor,
+      requestId: params.requestId,
+      timeoutMs: params.timeoutMs,
+      idempotencyKey: params.requestId ? `${params.requestId}:${command.msg_id}` : undefined,
+      deps: params.deps
+    });
+  } finally {
+    try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
+    lockClient.release();
   }
 }
 

@@ -8,6 +8,7 @@ import {
   createOpaqueServiceToken,
   HARDWARE_READ_SCOPE,
   hashServiceToken,
+  normalizeHardwareServiceScopes,
   normalizeServiceCode,
   parseOptionalExpiry,
   serviceTokenHint
@@ -39,10 +40,10 @@ router.get('/', async (_req, res) => {
 router.post('/', async (req: AuthenticatedRequest, res) => {
   const code = normalizeServiceCode(req.body?.code);
   const companyId = req.body?.companyId;
-  const scopes = req.body?.scopes ?? [HARDWARE_READ_SCOPE];
+  const scopes = normalizeHardwareServiceScopes(req.body?.scopes ?? [HARDWARE_READ_SCOPE]);
   const expiresAt = parseOptionalExpiry(req.body?.expiresAt);
   if (!SERVICE_CODE_PATTERN.test(code) || !validateUuid(companyId)
-      || !Array.isArray(scopes) || scopes.length !== 1 || scopes[0] !== HARDWARE_READ_SCOPE
+      || !scopes
       || expiresAt === undefined) {
     return res.status(400).json({ message: 'Invalid service principal' });
   }
@@ -88,6 +89,36 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     return res.status(500).json({ message: 'Failed to create service principal' });
   } finally {
     client.release();
+  }
+});
+
+router.patch('/:id/scopes', async (req: AuthenticatedRequest, res) => {
+  if (!validateUuid(req.params.id)) return res.status(400).json({ message: 'Invalid service principal id' });
+  const scopes = normalizeHardwareServiceScopes(req.body?.scopes);
+  if (!scopes) return res.status(400).json({ message: 'Invalid service scopes' });
+  try {
+    const result = await pool.query(
+      `UPDATE service_principals SET scopes = $2::text[], updated_at = NOW()
+       WHERE id = $1 AND active = TRUE
+       RETURNING id, code, company_id, scopes, active, updated_at`,
+      [req.params.id, scopes]
+    );
+    const principal = result.rows[0];
+    if (!principal) return res.status(404).json({ message: 'Service principal not found' });
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id,
+      action: 'service_principal.scopes.update',
+      entityType: 'service_principal',
+      entityId: principal.id,
+      companyId: principal.company_id,
+      requestId: req.requestId,
+      result: 'success',
+      after: { scopes: principal.scopes }
+    });
+    return res.json(principal);
+  } catch (error) {
+    console.error('Failed to update service principal scopes', error);
+    return res.status(500).json({ message: 'Failed to update service principal scopes' });
   }
 });
 
