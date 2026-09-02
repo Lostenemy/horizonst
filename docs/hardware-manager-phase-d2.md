@@ -30,6 +30,8 @@ Antes de activar D.2 en un entorno:
 
 No se debe incluir el valor de `B5_SESSION_PASSWORD` en logs, incidencias, tests ni commits.
 
+Horneo mantiene `HARDWARE_MANAGER_COMMAND_TIMEOUT_MS=20000` para comandos individuales. La operación secuencial `configure-emergency-button` usa un presupuesto HTTP independiente, `HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS=45000`, superior al peor caso nominal de cuatro comandos de 8 segundos más margen. No debe reducirse por debajo de 40 segundos.
+
 ## Rollback
 
 El rollback operativo consiste en desactivar la activación de D.2 en Horneo y retirar `hardware.command` de su principal. Si además se revierte el esquema, primero debe comprobarse que ningún principal conserva el scope nuevo y después restaurar el constraint anterior:

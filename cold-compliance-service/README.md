@@ -135,6 +135,7 @@ npm run dev
 - `MQTT_COMMAND_TOPIC_TEMPLATE=gw/{gatewayMac}/subscribe`
 - `HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS=30000`
 - `HARDWARE_MANAGER_COMMAND_TIMEOUT_MS=20000`
+- `HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS=45000` (presupuesto HTTP para los cuatro comandos secuenciales de configuración B5)
 
 ### Compliance
 - `MAX_CONTINUOUS_MINUTES=45`

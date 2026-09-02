@@ -1,6 +1,13 @@
 import { env } from '../../config/env';
 
 export type HardwareB5Command = 'connect' | 'led' | 'buzzer' | 'vibration' | 'disconnect';
+type ManagementAction = 'apply-rssi' | 'configure-emergency-button';
+
+export function hardwareManagementTimeoutMs(action: ManagementAction): number {
+  return action === 'configure-emergency-button'
+    ? env.HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS
+    : env.HARDWARE_MANAGER_COMMAND_TIMEOUT_MS;
+}
 
 export async function executeHardwareB5Command(params: {
   hardwareGatewayId?: number | null;
@@ -48,15 +55,20 @@ export async function executeHardwareB5Command(params: {
 
 export async function executeHardwareGatewayManagementCommand(params: {
   hardwareGatewayId?: number | null;
-  action: 'apply-rssi' | 'configure-emergency-button';
+  action: ManagementAction;
   body?: Record<string, unknown>;
   fetchImpl?: typeof fetch;
+  timer?: {
+    set: typeof setTimeout;
+    clear: typeof clearTimeout;
+  };
 }): Promise<{ status: number; body: Record<string, unknown> }> {
   if (!env.HARDWARE_MANAGER_ENABLED) throw new Error('Hardware Manager command execution is disabled');
   if (!params.hardwareGatewayId) throw new Error('Central gateway mapping is required');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), env.HARDWARE_MANAGER_COMMAND_TIMEOUT_MS);
-  timer.unref();
+  const timerApi = params.timer ?? { set: setTimeout, clear: clearTimeout };
+  const timer = timerApi.set(() => controller.abort(), hardwareManagementTimeoutMs(params.action));
+  timer.unref?.();
   try {
     const response = await (params.fetchImpl ?? fetch)(
       `${env.HARDWARE_MANAGER_BASE_URL.replace(/\/$/, '')}/api/internal/v1/hardware/gateways/${params.hardwareGatewayId}/${params.action}`,
@@ -73,6 +85,6 @@ export async function executeHardwareGatewayManagementCommand(params: {
     const body = await response.json().catch(() => ({})) as Record<string, unknown>;
     return { status: response.status, body };
   } finally {
-    clearTimeout(timer);
+    timerApi.clear(timer);
   }
 }

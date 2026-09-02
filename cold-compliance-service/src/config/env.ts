@@ -66,6 +66,7 @@ const schema = z.object({
   HARDWARE_MANAGER_SERVICE_TOKEN: z.string().optional(),
   HARDWARE_MANAGER_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(3000),
   HARDWARE_MANAGER_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(20000),
+  HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS: z.coerce.number().int().min(40000).max(180000).default(45000),
   HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
   HARDWARE_MANAGER_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(300000).default(30000),
   HARDWARE_MANAGER_CACHE_ERROR_TTL_MS: z.coerce.number().int().min(250).max(30000).default(5000)

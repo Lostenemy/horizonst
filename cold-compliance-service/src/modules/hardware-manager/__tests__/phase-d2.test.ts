@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { buildCentralGatewayPublishTopics } from '../../mqtt/mqtt.service';
-import { executeHardwareB5Command, executeHardwareGatewayManagementCommand } from '../hardware-command.client';
+import {
+  executeHardwareB5Command,
+  executeHardwareGatewayManagementCommand,
+  hardwareManagementTimeoutMs
+} from '../hardware-command.client';
 import { env } from '../../../config/env';
 import { connectTagSession } from '../../tag-control/application/tag-physical-alarm.service';
 
@@ -66,6 +70,43 @@ test('legacy Horneo RSSI/B5 endpoints delegate their central id to Hardware Mana
     (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled;
   }
   assert.deepEqual(body, { rssi: -72 });
+});
+
+test('B5 sequential configuration remains alive beyond 20s within its independent full-sequence budget', async () => {
+  const originalEnabled = env.HARDWARE_MANAGER_ENABLED;
+  const originalIndividual = env.HARDWARE_MANAGER_COMMAND_TIMEOUT_MS;
+  const originalSequence = env.HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS;
+  (env as any).HARDWARE_MANAGER_ENABLED = true;
+  (env as any).HARDWARE_MANAGER_COMMAND_TIMEOUT_MS = 20000;
+  (env as any).HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS = 45000;
+  let scheduledAbortMs = 0;
+  const virtualElapsedMs = 21000;
+  try {
+    const result = await executeHardwareGatewayManagementCommand({
+      hardwareGatewayId: 41,
+      action: 'configure-emergency-button',
+      timer: {
+        set: ((_callback: () => void, timeoutMs?: number) => {
+          scheduledAbortMs = timeoutMs ?? 0;
+          return { unref: () => undefined } as unknown as NodeJS.Timeout;
+        }) as typeof setTimeout,
+        clear: (() => undefined) as typeof clearTimeout
+      },
+      fetchImpl: async (_input, init) => {
+        assert.equal(init?.signal instanceof AbortSignal && init.signal.aborted, false);
+        assert.ok(virtualElapsedMs > env.HARDWARE_MANAGER_COMMAND_TIMEOUT_MS);
+        assert.ok(virtualElapsedMs < scheduledAbortMs);
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+    });
+    assert.equal(result.status, 200);
+    assert.equal(scheduledAbortMs, 45000);
+    assert.equal(hardwareManagementTimeoutMs('apply-rssi'), 20000);
+  } finally {
+    (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled;
+    (env as any).HARDWARE_MANAGER_COMMAND_TIMEOUT_MS = originalIndividual;
+    (env as any).HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS = originalSequence;
+  }
 });
 
 test('physical alarm orchestration has no direct MQTT execution and keeps fallback, finally disconnect and timing semantics', () => {
