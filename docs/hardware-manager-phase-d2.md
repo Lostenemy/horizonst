@@ -34,7 +34,18 @@ Horneo mantiene `HARDWARE_MANAGER_COMMAND_TIMEOUT_MS=20000` para comandos indivi
 
 ## Rollback
 
-El rollback operativo consiste en desactivar la activación de D.2 en Horneo y retirar `hardware.command` de su principal. Si además se revierte el esquema, primero debe comprobarse que ningún principal conserva el scope nuevo y después restaurar el constraint anterior:
+No se debe usar simplemente `HARDWARE_MANAGER_ENABLED=false` como rollback de D.2. Esa variable controla la integración central, pero no restaura el ejecutor físico local ni la suscripción MQTT global que existían en D.1. Aplicarla de forma aislada puede dejar Horneo sin el camino técnico necesario para presencia o alarmas.
+
+El rollback operativo debe realizarse en este orden:
+
+1. Declarar la ventana de rollback y detener nuevas activaciones de D.2 según el procedimiento operativo del entorno. No modificar todavía el principal de servicio ni la constraint SQL: son compatibles con D.1 y mantenerlos evita retirar una dependencia antes de recuperar Horneo.
+2. Restaurar el artefacto de Horneo construido desde D.1, commit `a451caafe5bb708e78899fbe84360a7a0ab7c4d0`, o la imagen anterior de Horneo que haya sido validada y registrada para ese entorno. No reconstruir una combinación de archivos D.1/D.2 ni hacer una reversión parcial sobre el contenedor en ejecución.
+3. Restaurar la configuración requerida por el ejecutor físico local de D.1. Esto incluye la variable de contraseña de sesión B5 que utilizaba D.1, obtenida del almacén de secretos autorizado, además de los timeouts y reintentos locales aplicables. No copiar, documentar, imprimir ni validar mostrando el valor del secreto; comprobar únicamente que la referencia está definida y es accesible para el proceso.
+4. Restaurar las ACL MQTT de D.1 para la identidad de Horneo: lectura de `gw/+/publish` y escritura de `gw/+/subscribe`. Restaurar asimismo la suscripción de Horneo a `gw/+/publish` y conservar el tópico de comandos `gw/{gatewayMac}/subscribe`. Realizar el cambio de ACL de forma coordinada con el cambio de artefacto para evitar una ventana sin recepción.
+5. Arrancar o sustituir Horneo siguiendo el procedimiento normal del entorno y verificar primero la recepción de presencia. Confirmar conexión MQTT, recepción de heartbeats reales y avance de las marcas de presencia para gateways conocidas; comprobar también que no aparecen rechazos de ACL ni errores de suscripción. No declarar recuperado el servicio hasta que esta recepción esté confirmada.
+6. Verificar de forma no invasiva que el ejecutor físico anterior vuelve a estar operativo: módulo cargado, configuración obligatoria presente, cliente MQTT conectado, tópico de publicación resoluble y listener de ACK registrado. No enviar comandos 1150, 1158, 1160, 1169, 1200 ni ninguna alarma/configuración real durante el rollback salvo autorización expresa para una prueba controlada con hardware.
+7. Sólo después de confirmar presencia y disponibilidad del ejecutor D.1 se puede retirar `hardware.command` del principal Horneo si se desea revertir también la autorización introducida por D.2. Mantener `hardware.read` mientras D.1 lo necesite para la lectura central y la reconciliación.
+8. Si también se quiere revertir el esquema, comprobar previamente que ningún principal de servicio conserva `hardware.command`. Sólo entonces restaurar el constraint anterior:
 
 ```sql
 BEGIN;
@@ -45,5 +56,7 @@ ALTER TABLE service_principals
   CHECK (scopes <@ ARRAY['hardware.read']::text[]);
 COMMIT;
 ```
+
+9. Cerrar el rollback registrando el artefacto o imagen restaurada, las ACL efectivas, las comprobaciones de presencia realizadas y el estado final de los scopes. El valor del secreto B5 no debe aparecer en el registro.
 
 No se han ejecutado migraciones, despliegues ni comandos contra hardware durante el desarrollo.
