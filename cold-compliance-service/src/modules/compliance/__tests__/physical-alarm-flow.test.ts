@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const serviceRoot = join(process.cwd(), 'src');
@@ -24,13 +24,34 @@ test('presence grace and reminder alarms use the connected physical sequence wit
   assert.doesNotMatch(presenceState, /sendCriticalExposureAlert|sendPreLimitAlert|sendEarlyReentryBlockedAlert|sendManDownAlert/);
 });
 
-test('manual tag-control routes remain the only direct sendTagCommand entry point for UI/API commands', () => {
-  const routes = source('modules/tag-control/tag-control.routes.ts');
-  const tagControlService = source('modules/tag-control/application/tag-control.service.ts');
+test('physical alarm delegates in Hardware Manager without direct MQTT execution', () => {
+  const physicalAlarm = source('modules/tag-control/application/tag-physical-alarm.service.ts');
 
-  assert.match(routes, /sendTagCommand/);
-  assert.match(tagControlService, /export async function sendTagCommand/);
-  assert.doesNotMatch(tagControlService, /export async function sendPreLimitAlert|export async function sendCriticalExposureAlert|export async function sendEarlyReentryBlockedAlert|export async function sendManDownAlert/);
+  assert.match(physicalAlarm, /executeHardwareB5Command/);
+  assert.doesNotMatch(physicalAlarm, /mqttPublish|TAG_SESSION_PASSWORD/);
+});
+
+test('resolveTagTargets preserves functional gateway selection strategies and signals', () => {
+  const repository = source('modules/tag-control/infrastructure/tag-control.repository.ts');
+
+  assert.match(repository, /export async function resolveTagTargets/);
+  assert.match(repository, /'last_seen' \| 'camera_assigned' \| 'hybrid'/);
+  assert.match(repository, /recent_presence/);
+  assert.match(repository, /last_seen_at DESC/);
+  assert.match(repository, /rssi DESC NULLS LAST/);
+  assert.match(repository, /same_cold_room/);
+  assert.match(repository, /validateTechnicalTargets/);
+  assert.match(repository, /controlled local command target fallback/);
+});
+
+test('historical tag command tables have no destructive migration', () => {
+  const migrationsDir = join(process.cwd(), 'migrations');
+  const migrations = readdirSync(migrationsDir)
+    .filter((name) => name.endsWith('.sql'))
+    .map((name) => readFileSync(join(migrationsDir, name), 'utf8'))
+    .join('\n');
+
+  assert.doesNotMatch(migrations, /(?:DROP\s+TABLE|TRUNCATE|DELETE\s+FROM)\s+(?:IF\s+EXISTS\s+)?tag_command(?:s|_attempts|_responses|_templates)\b/i);
 });
 
 test('createAlert logs and dispatches the robust physical alarm sequence once per alert', () => {

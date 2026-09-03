@@ -10,10 +10,7 @@ import {
   normalizeHorneoGatewayMac
 } from '../gateways/hardware-manager.client';
 
-type MessageHandler = (topic: string, payload: Buffer) => Promise<void> | void;
-
 let client: MqttClient | null = null;
-const handlers = new Set<MessageHandler>();
 const MIN_ACCEPTED_TS_MS = Date.parse('2025-01-01T00:00:00.000Z');
 const subscribedTopics = new Set<string>();
 let topicRefreshTimer: NodeJS.Timeout | null = null;
@@ -70,24 +67,6 @@ function parsePayloadTimestampMs(value: unknown): number | null {
     if (!Number.isNaN(parsed)) return parsed;
   }
   return null;
-}
-
-export function addMqttMessageHandler(handler: MessageHandler): void {
-  handlers.add(handler);
-}
-
-export function removeMqttMessageHandler(handler: MessageHandler): void {
-  handlers.delete(handler);
-}
-
-export function mqttPublish(topic: string, payload: Record<string, unknown>): Promise<void> {
-  if (!client) throw new Error('mqtt client not initialized');
-  return new Promise((resolve, reject) => {
-    client!.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
 }
 
 function isGatewayCommandReply(payload: unknown): boolean {
@@ -151,14 +130,6 @@ export function startMqttConsumer(): void {
       }
     } catch (err) {
       logger.error({ err, topic }, 'failed processing mqtt payload as presence');
-    }
-
-    for (const handler of handlers) {
-      try {
-        await handler(topic, payload);
-      } catch (err) {
-        logger.error({ err, topic }, 'mqtt handler failed');
-      }
     }
   });
 

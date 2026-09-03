@@ -42,10 +42,13 @@ src/
 migrations/
 ```
 
-## MQTT (sin romper esquema productivo)
+## MQTT de Horneo
 
-- **App → Gateway (comandos)**: `gw/{gatewayMac}/subscribe`
-- **Gateway → App (reply + eventos)**: `gw/{gatewayMac}/publish`
+- **Gateway → Horneo (eventos)**: `gw/{gatewayMac}/publish`
+- **Hardware Manager → Gateway (comandos)**: `gw/{gatewayMac}/subscribe`
+
+Horneo solo consume eventos y no publica comandos MQTT directos. Los tópicos y
+el formato de MAC del protocolo productivo no cambian.
 
 ## MQTT configuration
 
@@ -58,50 +61,10 @@ Required identity:
 
 Required topics (ACL):
 - subscribe: una entrada exacta `gw/{gatewayMac}/publish` por cada gateway activa asignada a Horneo;
-- publish: una entrada exacta `gw/{gatewayMac}/subscribe` por gateway mientras existan comandos manuales heredados; la alarma física B5, RSSI y configuración B5 se ejecutan mediante Hardware Manager.
+- publish: ninguno para Horneo; la alarma física B5, RSSI y configuración B5 se ejecutan mediante Hardware Manager.
 
 > HorizonST enforces ACL by `client_id`, not only by username/password.
 > The service will not work unless this broker registration exists.
-
-## Formato de comandos soportados
-
-### LED (1101)
-```json
-{
-  "msg_id": 1101,
-  "device_info": { "mac": "4C11AE8BE624" },
-  "data": { "mac": "AABBCCDDEEFF", "led_state": 1, "duration": 5000 }
-}
-```
-
-### Buzzer (1102)
-```json
-{
-  "msg_id": 1102,
-  "device_info": { "mac": "4C11AE8BE624" },
-  "data": { "mac": "AABBCCDDEEFF", "buzzer_state": 1, "frequency": 2000, "duration": 3000 }
-}
-```
-
-### Vibración (1103)
-```json
-{
-  "msg_id": 1103,
-  "device_info": { "mac": "4C11AE8BE624" },
-  "data": { "mac": "AABBCCDDEEFF", "vibration_state": 1, "intensity": 100, "duration": 2000 }
-}
-```
-
-## Correlación y resultados gateway
-
-Se correlaciona por `msg_id + gateway_mac` y se interpreta `result_code`:
-- `0`: success
-- `1`: length error
-- `2`: type error
-- `3`: range error
-- `4`: no object error
-
-Estados de comando: `pending`, `sent`, `ack_ok`, `ack_error`, `timeout`, `failed`.
 
 ## Database
 
@@ -132,7 +95,6 @@ npm run dev
 ### Core
 - `MQTT_URL`, `MQTT_CLIENT_ID`, `MQTT_USERNAME`, `MQTT_PASSWORD`
 - `MQTT_SUB_TOPICS=` (sin comodines; con Hardware Manager activo se obtiene dinámicamente el inventario de gateways)
-- `MQTT_COMMAND_TOPIC_TEMPLATE=gw/{gatewayMac}/subscribe`
 - `HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS=30000`
 - `HARDWARE_MANAGER_COMMAND_TIMEOUT_MS=20000`
 - `HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS=45000` (presupuesto HTTP para los cuatro comandos secuenciales de configuración B5)
@@ -143,13 +105,7 @@ npm run dev
 - `REQUIRED_BREAK_MINUTES=15`
 - `MAX_DAILY_MINUTES=360`
 
-### Tag-control
-- `TAG_CONTROL_ENABLED=true`
-- `TAG_CONTROL_DEFAULT_TIMEOUT_MS=8000`
-- `TAG_CONTROL_MAX_RETRIES=2`
-- `TAG_CONTROL_MSG_ID_START=1100`
-- `TAG_CONTROL_REQUIRE_REPLY=true`
-- `TAG_CONTROL_DEDUP_WINDOW_MS=10000`
+### Selección de gateway para alarmas físicas
 - `TAG_CONTROL_GATEWAY_STRATEGY=hybrid` (`last_seen|camera_assigned|hybrid`)
 
 ## Endpoints
@@ -167,34 +123,14 @@ npm run dev
 - `GET /incidents`, `POST /incidents/:id/notes`, `POST /incidents/:id/close`
 - `GET /reports/daily-summary.xlsx`, `GET /reports/incidents.pdf`
 
-### Tag-control
-- `POST /tag-control/led`
-- `POST /tag-control/buzzer`
-- `POST /tag-control/vibration`
-- `POST /tag-control/custom`
-- `POST /tag-control/custom-alert` (alias legacy)
-- `GET /tag-control/commands`
-- `GET /tag-control/commands/active`
-- `GET /tag-control/commands/:id`
-- `GET /tag-control/templates`
-- `POST /tag-control/templates`
-- `PATCH /tag-control/templates/:id`
+## Control técnico de hardware
 
-## Flujo comando-respuesta completo
+El control técnico de hardware pertenece a Hardware Manager.
 
-1. `compliance` o API manual solicita alerta de tag.
-2. `tag-control` resuelve trabajador/tag/gateway (estrategia configurable).
-3. Valida parámetros y construye payload.
-4. Publica en `gw/{gatewayMac}/subscribe`.
-5. Espera reply en `gw/{gatewayMac}/publish`.
-6. Persiste intentos, response y estado final.
-7. Registra auditoría de resultado.
-
-## Supuestos de protocolo
-
-- El gateway MKGW3 actúa como puente BLE.
-- El ACK del gateway confirma recepción/parseo del comando MQTT, **no garantiza siempre** la ejecución física final en periférico si firmware no expone confirmación profunda.
-- Parámetros exactos y semántica final pueden variar por firmware BXP-B-CR; el servicio queda preparado para ajustar templates y validadores.
+Horneo conserva la selección funcional del B5 y del gateway para las alarmas de
+compliance y presencia, pero no ofrece endpoints manuales de control técnico ni
+publica directamente comandos MQTT. Las tablas locales de tags, gateways y el
+histórico de comandos se conservan.
 
 ## Docker Compose
 

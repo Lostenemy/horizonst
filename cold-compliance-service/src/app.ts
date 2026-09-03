@@ -13,7 +13,6 @@ import { incidentsRouter } from './modules/incidents/incidents.routes';
 import { realtimeRouter } from './modules/realtime/realtime.routes';
 import { reportsRouter } from './modules/reports/reports.routes';
 import { tagsRouter } from './modules/tags/tags.routes';
-import { tagControlRouter } from './modules/tag-control/tag-control.routes';
 import { usersRouter } from './modules/workers/users.routes';
 import { workersRouter } from './modules/workers/workers.routes';
 
@@ -41,7 +40,6 @@ export function buildApp() {
   app.use('/dashboard', dashboardRouter);
   app.use('/realtime', realtimeRouter);
   app.use('/reports', reportsRouter);
-  app.use('/tag-control', tagControlRouter);
 
   const webDir = path.resolve(process.cwd(), 'web');
   app.use('/web', express.static(webDir));

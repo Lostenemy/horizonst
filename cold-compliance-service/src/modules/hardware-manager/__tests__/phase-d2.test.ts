@@ -26,6 +26,7 @@ test('clean MQTT reconnect rebuilds exact subscriptions and never restores a wil
   const source = readFileSync(join(process.cwd(), 'src/modules/mqtt/mqtt.service.ts'), 'utf8');
   assert.match(source, /client\.on\('connect',[\s\S]*subscribedTopics\.clear\(\)[\s\S]*refreshMqttSubscriptions/);
   assert.match(source, /!topic\.includes\('\+'\) && !topic\.includes\('#'\)/);
+  assert.doesNotMatch(source, /gw\/\+\/publish/);
 });
 
 test('Horneo sends only central ids, command and duration; never MQTT topic, MAC or B5 password', async () => {
