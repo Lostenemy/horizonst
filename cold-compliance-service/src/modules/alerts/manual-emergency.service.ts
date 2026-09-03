@@ -9,7 +9,7 @@ const DEDUPLICATION_WINDOW_SECONDS = 60;
 
 interface EmergencyContext {
   tag_id: string;
-  hardware_device_id: number;
+  hardware_device_id: number | null;
   active: boolean;
   gateway_id: string | null;
   worker_id: string | null;
@@ -17,8 +17,11 @@ interface EmergencyContext {
   cold_room_id: string | null;
 }
 
-export function manualEmergencyDeduplicationKey(tagUid: string, triggerCount: number | null): string {
-  return `${tagUid}:${triggerCount ?? 'missing'}`;
+export function manualEmergencyDeduplicationKey(tagIdentity: string | number, triggerCount: number | null): string {
+  const identity = typeof tagIdentity === 'number'
+    ? `hardware:${tagIdentity}`
+    : `tag:${tagIdentity.replace(/[:-]/g, '').toLowerCase()}`;
+  return `${identity}:${triggerCount ?? 'missing'}`;
 }
 
 type RejectionReason = 'unknown_tag' | 'inactive_tag' | 'central_not_found' | 'central_rejected' | 'mapping_not_found';
@@ -70,9 +73,6 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
 
   try {
     await client.query('BEGIN');
-    const deduplicationKey = manualEmergencyDeduplicationKey(event.tagUid, event.triggerCount);
-    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [deduplicationKey]);
-
     const contextResult = await client.query<EmergencyContext>(
       `SELECT t.id AS tag_id,
               t.hardware_device_id,
@@ -86,15 +86,21 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
          SELECT wta.worker_id, w.full_name AS worker_name
          FROM worker_tag_assignments wta
          LEFT JOIN workers w ON w.id = wta.worker_id
-         WHERE wta.tag_id = t.id AND wta.active = TRUE
+         WHERE ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
+                OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+           AND wta.active = TRUE
          ORDER BY wta.assigned_at DESC
          LIMIT 1
        ) assignment ON TRUE
-       LEFT JOIN presence_operational_state pos ON pos.tag_id = t.id
+       LEFT JOIN presence_operational_state pos
+         ON ((t.hardware_device_id IS NOT NULL AND pos.hardware_device_id = t.hardware_device_id)
+             OR (pos.hardware_device_id IS NULL AND pos.tag_id = t.id))
        LEFT JOIN LATERAL (
          SELECT crs.cold_room_id
          FROM cold_room_sessions crs
-         WHERE crs.tag_id = t.id AND crs.ended_at IS NULL
+         WHERE ((t.hardware_device_id IS NOT NULL AND crs.hardware_device_id = t.hardware_device_id)
+                OR (crs.hardware_device_id IS NULL AND crs.tag_id = t.id))
+           AND crs.ended_at IS NULL
          ORDER BY crs.started_at DESC
          LIMIT 1
        ) session ON TRUE
@@ -119,16 +125,24 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
     } else if (!centralIdentity && !context.active) {
       rejection = 'inactive_tag';
       await client.query('ROLLBACK');
+    } else if (!Number.isInteger(context.hardware_device_id)) {
+      rejection = 'mapping_not_found';
+      await client.query('ROLLBACK');
     } else {
+      const hardwareDeviceId = context.hardware_device_id as number;
+      const deduplicationKey = manualEmergencyDeduplicationKey(hardwareDeviceId, event.triggerCount);
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [deduplicationKey]);
+
       const duplicate = await client.query<{ id: string }>(
-        `SELECT id
-         FROM alerts
-         WHERE tag_id = $1
+        `SELECT a.id
+         FROM alerts a
+         WHERE (a.hardware_device_id = $1
+                OR (a.hardware_device_id IS NULL AND a.tag_id = $2))
            AND alert_type = 'manual_emergency'
-           AND created_at >= NOW() - ($3 * INTERVAL '1 second')
-           AND metadata ->> 'triggerCount' IS NOT DISTINCT FROM $2
+           AND created_at >= NOW() - ($4 * INTERVAL '1 second')
+           AND metadata ->> 'triggerCount' IS NOT DISTINCT FROM $3
          LIMIT 1`,
-        [context.tag_id, event.triggerCount === null ? null : String(event.triggerCount), DEDUPLICATION_WINDOW_SECONDS]
+        [hardwareDeviceId, context.tag_id, event.triggerCount === null ? null : String(event.triggerCount), DEDUPLICATION_WINDOW_SECONDS]
       );
 
       if (duplicate.rowCount) {
@@ -166,7 +180,7 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
       const alert = await createAlert({
         workerId: context.worker_id ?? undefined,
         tagId: context.tag_id,
-        hardwareDeviceId: context.hardware_device_id,
+        hardwareDeviceId,
         coldRoomId: context.cold_room_id ?? undefined,
         severity: 'critical',
         alertType: 'manual_emergency',

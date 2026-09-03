@@ -29,7 +29,9 @@ workersRouter.get('/', async (_req, res, next) => {
        LEFT JOIN LATERAL (
          SELECT a.tag_id, t.tag_uid
          FROM worker_tag_assignments a
-         JOIN tags t ON t.id = a.tag_id
+         JOIN tags t
+           ON ((a.hardware_device_id IS NOT NULL AND t.hardware_device_id = a.hardware_device_id)
+               OR (a.hardware_device_id IS NULL AND t.id = a.tag_id))
          WHERE a.worker_id = w.id AND a.active = true
          ORDER BY a.assigned_at DESC
          LIMIT 1

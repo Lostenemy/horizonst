@@ -12,7 +12,7 @@ interface PresenceStateTag {
 
 interface PresenceOperationalState {
   tag_id: string;
-  hardware_device_id: number;
+  hardware_device_id: number | null;
   worker_id: string | null;
   cold_room_id: string | null;
   inside: boolean;
@@ -67,8 +67,12 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
     throw new Error('central_hardware_mapping_required: presence state requires hardwareDeviceId');
   }
   const current = await db.query<PresenceOperationalState>(
-    `SELECT * FROM presence_operational_state WHERE tag_id = $1`,
-    [tag.id]
+    `SELECT *
+     FROM presence_operational_state
+     WHERE hardware_device_id = $1
+        OR (hardware_device_id IS NULL AND tag_id = $2)
+     LIMIT 1`,
+    [tag.hardware_device_id, tag.id]
   );
 
   const nowMs = Date.parse(eventTs);
@@ -106,6 +110,7 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
       alertId: `grace-reentry:${tag.id}:${Date.parse(eventTs) || Date.now()}`,
       workerId: tag.worker_id ?? undefined,
       tagId: tag.id,
+      hardwareDeviceId: tag.hardware_device_id,
       severity: 'critical',
       alertType: 'alarm_rule_alarm'
     }, 'failed to run immediate physical alarm for grace reentry');
@@ -158,20 +163,21 @@ export async function markPresenceAlarm(tagId: string, eventTs: string, context:
   );
 }
 
-export async function markPresenceExit(tagId: string, exitTs: string): Promise<void> {
+export async function markPresenceExit(tagId: string, hardwareDeviceId: number | null, exitTs: string): Promise<void> {
   const graceMinutes = await resolveOperationalGraceMinutes();
   const intervalExpr = `${graceMinutes} minutes`;
   await db.query(
     `UPDATE presence_operational_state
      SET inside = FALSE,
          in_grace = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN TRUE ELSE FALSE END,
-         grace_started_at = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $2::timestamptz ELSE grace_started_at END,
-         grace_until = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $2::timestamptz + $3::interval ELSE NULL END,
+         grace_started_at = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $3::timestamptz ELSE grace_started_at END,
+         grace_until = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $3::timestamptz + $4::interval ELSE NULL END,
          in_alarm = FALSE,
          reminder_sent_at = NULL,
          updated_at = NOW()
-     WHERE tag_id = $1`,
-    [tagId, exitTs, intervalExpr]
+     WHERE hardware_device_id = $1
+        OR (hardware_device_id IS NULL AND tag_id = $2)`,
+    [hardwareDeviceId, tagId, exitTs, intervalExpr]
   );
 }
 
@@ -207,6 +213,7 @@ export async function sendGraceReentryReminders(): Promise<void> {
           )
         )
       RETURNING pos.tag_id,
+                pos.hardware_device_id,
                 pos.worker_id,
                 pos.cold_room_id,
                 pos.inside,
@@ -226,6 +233,7 @@ export async function sendGraceReentryReminders(): Promise<void> {
       alertId: `reentry-reminder:${row.tag_id}:${Math.floor(Date.now() / cadenceMs)}`,
       workerId: row.worker_id ?? undefined,
       tagId: row.tag_id,
+      hardwareDeviceId: row.hardware_device_id ?? undefined,
       severity: 'critical',
       alertType: 'alarm_rule_alarm'
     }, 'failed to run physical reminder alarm sequence');

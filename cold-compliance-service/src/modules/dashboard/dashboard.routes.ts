@@ -17,8 +17,13 @@ dashboardRouter.get('/presence', async (_req, res, next) => {
               EXTRACT(EPOCH FROM (NOW() - s.started_at))::INT AS elapsed_seconds,
               CASE WHEN COALESCE(pos.in_alarm, FALSE) THEN 'alarma' ELSE 'dentro' END AS presence_status
        FROM cold_room_sessions s
-       LEFT JOIN presence_operational_state pos ON pos.tag_id = s.tag_id
-       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
+       LEFT JOIN presence_operational_state pos
+         ON ((s.hardware_device_id IS NOT NULL AND pos.hardware_device_id = s.hardware_device_id)
+             OR (pos.hardware_device_id IS NULL AND pos.tag_id = s.tag_id))
+       LEFT JOIN worker_tag_assignments wta
+         ON ((s.hardware_device_id IS NOT NULL AND wta.hardware_device_id = s.hardware_device_id)
+             OR (wta.hardware_device_id IS NULL AND wta.tag_id = s.tag_id))
+        AND wta.active = true
        LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
        WHERE s.ended_at IS NULL
          AND s.started_at >= $1::timestamptz
@@ -42,7 +47,10 @@ dashboardRouter.get('/grace', async (_req, res, next) => {
               'gracia' AS presence_status
        FROM presence_operational_state pos
        LEFT JOIN workers w ON w.id = pos.worker_id
-       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = pos.tag_id AND wta.active = TRUE
+       LEFT JOIN worker_tag_assignments wta
+         ON ((pos.hardware_device_id IS NOT NULL AND wta.hardware_device_id = pos.hardware_device_id)
+             OR (wta.hardware_device_id IS NULL AND wta.tag_id = pos.tag_id))
+        AND wta.active = TRUE
        LEFT JOIN workers wa ON wa.id = wta.worker_id
        WHERE pos.inside = FALSE
          AND pos.in_grace = TRUE

@@ -96,7 +96,9 @@ export async function consumeInspectionRows(
               COALESCE(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))::int, 0) AS duration_seconds
        FROM cold_room_sessions s
        JOIN workers w ON w.id = s.worker_id
-       LEFT JOIN tags t ON t.id = s.tag_id
+       LEFT JOIN tags t
+         ON ((s.hardware_device_id IS NOT NULL AND t.hardware_device_id = s.hardware_device_id)
+             OR (s.hardware_device_id IS NULL AND t.id = s.tag_id))
        ${whereClause}
        ORDER BY s.started_at DESC, s.id DESC
        LIMIT $${values.length}`,

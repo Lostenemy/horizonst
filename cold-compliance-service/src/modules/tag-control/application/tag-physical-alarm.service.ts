@@ -152,7 +152,12 @@ export async function executeConnectedTagCommandSequence(params: {
         logger.error({ ...params.context, error, tagId: params.tagId, gatewayMac: candidate.gatewayMac }, 'disconnect failed; closing internal BLE lease without physical confirmation');
       }
 
-      await deps.markDisconnected({ tagId: params.tagId, confirmed: disconnectAck, error: disconnectError });
+      await deps.markDisconnected({
+        tagId: params.tagId,
+        ...(Number.isInteger(candidate.hardwareDeviceId) ? { hardwareDeviceId: candidate.hardwareDeviceId } : {}),
+        confirmed: disconnectAck,
+        error: disconnectError
+      });
       logger.info({ ...params.context, tagId: params.tagId, gatewayMac: candidate.gatewayMac, disconnectAck }, 'closed internal BLE session');
 
       logger.info({ ...params.context, disconnectAck, selectedGatewayMac: candidate.gatewayMac }, 'connected tag command sequence finished');
@@ -172,6 +177,7 @@ function resolveAlarmActions(alert: { severity: string; alertType: string }): Ph
 export async function executeAlarmSequence(params: {
   workerId?: string;
   tagId?: string;
+  hardwareDeviceId?: number;
   tagUid?: string;
   gatewayMac?: string;
   severity: string;
@@ -186,6 +192,7 @@ export async function executeAlarmSequence(params: {
   const candidates = await resolveTagTargets({
     workerId: params.workerId,
     tagId: params.tagId,
+    hardwareDeviceId: params.hardwareDeviceId,
     tagUid: params.tagUid,
     gatewayMac: params.gatewayMac,
     strategy: env.TAG_CONTROL_GATEWAY_STRATEGY
@@ -199,7 +206,7 @@ export async function executeAlarmSequence(params: {
     return;
   }
 
-  const bleActive = await isBleSessionActive({ tagId: target.tagId });
+  const bleActive = await isBleSessionActive({ tagId: target.tagId, hardwareDeviceId: target.hardwareDeviceId });
   if (bleActive) {
     logger.info({ alertId: params.alertId, tagId: target.tagId }, 'skipped duplicate physical alarm (BLE session already active)');
     return;

@@ -1,12 +1,13 @@
 import { env } from '../../../config/env';
 import { db } from '../../../db/pool';
 
-export async function isBleSessionActive(params: { tagId: string }): Promise<boolean> {
+export async function isBleSessionActive(params: { tagId: string; hardwareDeviceId?: number | null }): Promise<boolean> {
   const result = await db.query<{ is_active: boolean }>(
     `SELECT is_active AND lease_expires_at > NOW() AS is_active
      FROM ble_alarm_sessions
-     WHERE tag_id = $1`,
-    [params.tagId]
+     WHERE hardware_device_id = $1
+        OR (hardware_device_id IS NULL AND tag_id = $2)`,
+    [params.hardwareDeviceId ?? null, params.tagId]
   );
 
   return Boolean(result.rows[0]?.is_active);
@@ -36,17 +37,18 @@ export async function markBleSessionActive(params: { tagId: string; hardwareDevi
   );
 }
 
-export async function markBleSessionDisconnected(params: { tagId: string; confirmed?: boolean; error?: string }): Promise<void> {
+export async function markBleSessionDisconnected(params: { tagId: string; hardwareDeviceId?: number | null; confirmed?: boolean; error?: string }): Promise<void> {
   await db.query(
     `UPDATE ble_alarm_sessions
      SET is_active = FALSE,
          disconnected_at = NOW(),
          disconnect_requested_at = NOW(),
-         disconnect_confirmed_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
-         last_error = $3,
+         disconnect_confirmed_at = CASE WHEN $3 THEN NOW() ELSE NULL END,
+         last_error = $4,
          updated_at = NOW()
-     WHERE tag_id = $1`,
-    [params.tagId, params.confirmed === true, params.error ?? null]
+     WHERE hardware_device_id = $1
+        OR (hardware_device_id IS NULL AND tag_id = $2)`,
+    [params.hardwareDeviceId ?? null, params.tagId, params.confirmed === true, params.error ?? null]
   );
 }
 

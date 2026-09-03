@@ -81,13 +81,14 @@ export async function validateTechnicalTargets(
 export async function resolveTagTargets(params: {
   workerId?: string;
   tagId?: string;
+  hardwareDeviceId?: number;
   tagUid?: string;
   gatewayMac?: string;
   strategy: GatewayStrategy;
   limit?: number;
   recentWindowMs?: number;
 }): Promise<ResolvedTargetCandidate[]> {
-  if (params.gatewayMac && (params.tagId || params.tagUid)) {
+  if (params.gatewayMac && (params.tagId || params.hardwareDeviceId || params.tagUid)) {
     let gatewayClause = 'g.gateway_mac = $1';
     let gatewayValue: string | number = params.gatewayMac.toLowerCase();
     let tagUidClause = 't.tag_uid = COALESCE($3, t.tag_uid)';
@@ -99,7 +100,7 @@ export async function resolveTagTargets(params: {
         gatewayClause = 'g.hardware_gateway_id = $1';
         gatewayValue = centralGateway.value.id;
       }
-      if (!params.tagId && params.tagUid) {
+      if (!params.tagId && !params.hardwareDeviceId && params.tagUid) {
         const centralDevice = await lookupHardwareDeviceByMac(params.tagUid);
         if (centralDevice.kind === 'not_found' || (centralDevice.kind === 'found' && !isOperationalB5(centralDevice.value))) return [];
         if (centralDevice.kind === 'found') {
@@ -113,12 +114,17 @@ export async function resolveTagTargets(params: {
               g.id as gateway_id, g.gateway_mac, g.hardware_gateway_id,
               NULL::timestamptz as last_seen_at, NULL::int as rssi, NULL::boolean as same_cold_room
        FROM tags t
-       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
+       LEFT JOIN worker_tag_assignments wta
+         ON ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
+             OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+        AND wta.active = true
        LEFT JOIN workers w ON w.id = wta.worker_id
        JOIN gateways g ON ${gatewayClause}
-       WHERE t.id = COALESCE($2::uuid, t.id) AND ${tagUidClause}
+       WHERE t.id = COALESCE($2::uuid, t.id)
+         AND ($4::integer IS NULL OR t.hardware_device_id = $4)
+         AND ${tagUidClause}
        LIMIT 1`,
-      [gatewayValue, params.tagId ?? null, tagUidValue]
+      [gatewayValue, params.tagId ?? null, tagUidValue, params.hardwareDeviceId ?? null]
     );
     return validateTechnicalTargets(direct.rows.map(mapTarget));
   }
@@ -132,18 +138,24 @@ export async function resolveTagTargets(params: {
          SELECT t.id as tag_id, t.tag_uid, t.hardware_device_id, w.id as worker_id, w.full_name,
                 s.cold_room_id AS active_cold_room_id
          FROM tags t
-         LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
+         LEFT JOIN worker_tag_assignments wta
+           ON ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
+               OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+          AND wta.active = true
          LEFT JOIN workers w ON w.id = wta.worker_id
          LEFT JOIN LATERAL (
-           SELECT cold_room_id
-           FROM cold_room_sessions
-           WHERE tag_id = t.id AND ended_at IS NULL
-           ORDER BY started_at DESC
+           SELECT s.cold_room_id
+           FROM cold_room_sessions s
+           WHERE ((t.hardware_device_id IS NOT NULL AND s.hardware_device_id = t.hardware_device_id)
+                  OR (s.hardware_device_id IS NULL AND s.tag_id = t.id))
+             AND s.ended_at IS NULL
+           ORDER BY s.started_at DESC
            LIMIT 1
          ) s ON true
          WHERE ($1::uuid IS NULL OR w.id = $1::uuid)
            AND ($2::uuid IS NULL OR t.id = $2::uuid)
            AND ($3::text IS NULL OR t.tag_uid = $3)
+           AND ($7::integer IS NULL OR t.hardware_device_id = $7)
          LIMIT 1
        ), recent_presence AS (
          SELECT ps.gateway_mac,
@@ -167,7 +179,7 @@ export async function resolveTagTargets(params: {
          rp.last_seen_at DESC,
          rp.rssi DESC NULLS LAST
        LIMIT $5`,
-      [params.workerId ?? null, params.tagId ?? null, params.tagUid?.toLowerCase() ?? null, `${recentWindowMs} milliseconds`, limit, params.strategy]
+      [params.workerId ?? null, params.tagId ?? null, params.tagUid?.toLowerCase() ?? null, `${recentWindowMs} milliseconds`, limit, params.strategy, params.hardwareDeviceId ?? null]
     );
     if (candidates.rowCount) {
       const validated = await validateTechnicalTargets(candidates.rows.map(mapTarget));
@@ -180,17 +192,23 @@ export async function resolveTagTargets(params: {
             g.id as gateway_id, g.gateway_mac, g.hardware_gateway_id,
             NULL::timestamptz as last_seen_at, NULL::int as rssi, true as same_cold_room
      FROM tags t
-     LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
+     LEFT JOIN worker_tag_assignments wta
+       ON ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
+           OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+      AND wta.active = true
      LEFT JOIN workers w ON w.id = wta.worker_id
-     JOIN cold_room_sessions s ON s.tag_id = t.id
+     JOIN cold_room_sessions s
+       ON ((t.hardware_device_id IS NOT NULL AND s.hardware_device_id = t.hardware_device_id)
+           OR (s.hardware_device_id IS NULL AND s.tag_id = t.id))
      JOIN gateways g ON g.cold_room_id = s.cold_room_id
      WHERE s.ended_at IS NULL
        AND ($1::uuid IS NULL OR w.id = $1::uuid)
        AND ($2::uuid IS NULL OR t.id = $2::uuid)
        AND ($3::text IS NULL OR t.tag_uid = $3)
+       AND ($5::integer IS NULL OR t.hardware_device_id = $5)
      ORDER BY s.started_at DESC, g.gateway_mac ASC
      LIMIT $4`,
-    [params.workerId ?? null, params.tagId ?? null, params.tagUid?.toLowerCase() ?? null, limit]
+    [params.workerId ?? null, params.tagId ?? null, params.tagUid?.toLowerCase() ?? null, limit, params.hardwareDeviceId ?? null]
   );
 
   return validateTechnicalTargets(byCamera.rows.map(mapTarget));

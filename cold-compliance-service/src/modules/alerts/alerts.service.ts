@@ -61,6 +61,7 @@ export async function createAlert(params: {
       alertId: alert.id,
       workerId: alert.worker_id ?? undefined,
       tagId: alert.tag_id ?? undefined,
+      hardwareDeviceId: alert.hardware_device_id ?? undefined,
       severity: alert.severity,
       alertType: alert.alert_type
     }).catch((error) => {
@@ -74,6 +75,7 @@ export async function createAlert(params: {
 export async function triggerPhysicalAlarmSequence(params: {
   workerId?: string;
   tagId?: string;
+  hardwareDeviceId?: number;
   severity: 'info' | 'warning' | 'critical';
   alertType: string;
   alertId: string;
@@ -82,6 +84,7 @@ export async function triggerPhysicalAlarmSequence(params: {
     alertId: params.alertId,
     workerId: params.workerId,
     tagId: params.tagId,
+    hardwareDeviceId: params.hardwareDeviceId,
     severity: params.severity,
     alertType: params.alertType
   });

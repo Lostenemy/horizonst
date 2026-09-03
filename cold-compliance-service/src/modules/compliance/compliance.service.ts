@@ -43,12 +43,13 @@ async function evaluateOperationalAlarmRules(tag: {
 }): Promise<void> {
   const sessionRes = await db.query<ActiveSession>(
     `SELECT s.id, s.started_at, s.worker_id, s.cold_room_id, s.tag_id,
-            COALESCE(s.hardware_device_id, t.hardware_device_id) AS hardware_device_id
+            COALESCE(s.hardware_device_id, $1::integer) AS hardware_device_id
      FROM cold_room_sessions s
-     JOIN tags t ON t.id = s.tag_id
-     WHERE s.tag_id = $1 AND s.ended_at IS NULL
+     WHERE (s.hardware_device_id = $1
+            OR (s.hardware_device_id IS NULL AND s.tag_id = $2))
+       AND s.ended_at IS NULL
      ORDER BY s.started_at DESC LIMIT 1`,
-    [tag.id]
+    [tag.hardware_device_id, tag.id]
   );
   if (!sessionRes.rowCount) return;
 
@@ -66,9 +67,10 @@ async function evaluateOperationalAlarmRules(tag: {
   const operationalState = await db.query<{ in_alarm: boolean }>(
     `SELECT in_alarm
      FROM presence_operational_state
-     WHERE tag_id = $1
+     WHERE hardware_device_id = $1
+        OR (hardware_device_id IS NULL AND tag_id = $2)
      LIMIT 1`,
-    [tag.id]
+    [tag.hardware_device_id, tag.id]
   );
   let alreadyInOperationalAlarm = operationalState.rows[0]?.in_alarm === true;
 
@@ -168,7 +170,7 @@ async function finalizeSession(
   if (!updateResult.rowCount) return false;
 
   const closed = updateResult.rows[0];
-  await markPresenceExit(closed.tag_id, endedAt);
+  await markPresenceExit(closed.tag_id, closed.hardware_device_id, endedAt);
   const durationMinutes = (Date.parse(endedAt) - Date.parse(closed.started_at)) / 60000;
 
   await db.query(
@@ -248,8 +250,13 @@ async function closeStaleSessions(): Promise<void> {
             COALESCE(cr.max_daily_minutes, $3) AS max_daily_minutes,
             COALESCE(MAX(ps.last_presence_at), s.started_at) AS last_seen_at
      FROM cold_room_sessions s
-     JOIN tags t ON t.id = s.tag_id
-     LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
+     JOIN tags t
+       ON ((s.hardware_device_id IS NOT NULL AND t.hardware_device_id = s.hardware_device_id)
+           OR (s.hardware_device_id IS NULL AND t.id = s.tag_id))
+     LEFT JOIN worker_tag_assignments wta
+       ON ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
+           OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+      AND wta.active = true
      LEFT JOIN cold_rooms cr ON cr.id = s.cold_room_id
      LEFT JOIN tag_gateway_presence_state ps
        ON ((t.hardware_device_id IS NOT NULL AND ps.hardware_device_id = t.hardware_device_id)
@@ -320,13 +327,17 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
             cr.id as cold_room_id,
             cr.name as cold_room_name,
             g.id as gateway_id,
+            g.hardware_gateway_id,
             g.rssi_threshold,
             coalesce(cr.max_continuous_minutes, $2) as max_continuous_minutes,
             coalesce(cr.pre_alert_minutes, $3) as pre_alert_minutes,
             coalesce(cr.required_break_minutes, $4) as required_break_minutes,
             coalesce(cr.max_daily_minutes, $5) as max_daily_minutes
      FROM tags t
-     LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
+     LEFT JOIN worker_tag_assignments wta
+       ON ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
+           OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+      AND wta.active = true
      LEFT JOIN gateways g ON ${gatewayLookupClause}
      LEFT JOIN cold_rooms cr ON cr.id = g.cold_room_id
      WHERE ${tagLookupClause}`,
@@ -338,6 +349,10 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
     return;
   }
   const tag = tagRes.rows[0];
+  if (!Number.isInteger(tag.hardware_device_id)) {
+    logger.warn({ eventId: event.eventId, tagId: tag.id }, 'presence event rejected because local legacy tag has no central hardware identity');
+    return;
+  }
 
   if (typeof event.battery === 'number' && event.battery <= env.BATTERY_ALERT_THRESHOLD) {
     await createAlert({
@@ -354,8 +369,13 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
 
   if (event.eventType === 'enter' || event.eventType === 'heartbeat' || event.eventType === 'movement') {
     const activeSession = await db.query(
-      `SELECT 1 FROM cold_room_sessions WHERE tag_id = $1 AND ended_at IS NULL LIMIT 1`,
-      [tag.id]
+      `SELECT 1
+       FROM cold_room_sessions s
+       WHERE (s.hardware_device_id = $1
+              OR (s.hardware_device_id IS NULL AND s.tag_id = $2))
+         AND s.ended_at IS NULL
+       LIMIT 1`,
+      [tag.hardware_device_id, tag.id]
     );
     const signal = evaluatePresenceSignal({
       gatewayRegistered: Boolean(tag.gateway_id),
@@ -376,9 +396,11 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
            hardware_device_id = COALESCE($4, hardware_device_id),
            hardware_gateway_id = COALESCE($5, hardware_gateway_id),
            updated_at = NOW()
-       WHERE tag_uid = $1 AND gateway_mac = $2`,
+       WHERE (hardware_device_id = $4 AND hardware_gateway_id = $5)
+          OR (hardware_device_id IS NULL AND hardware_gateway_id IS NULL
+              AND tag_uid = $1 AND gateway_mac = $2)`,
       [event.tagId.replace(/[:-]/g, '').toLowerCase(), event.gatewayMac.replace(/[:-]/g, '').toLowerCase(), event.timestamp,
-        identity.hardwareDeviceId, identity.hardwareGatewayId]
+        tag.hardware_device_id, tag.hardware_gateway_id]
     );
 
     if (event.eventType === 'enter' || event.eventType === 'heartbeat') {
@@ -389,10 +411,12 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
 
     if (event.eventType === 'enter') {
       const lastClosedSession = await db.query(
-        `SELECT ended_at FROM cold_room_sessions
-         WHERE tag_id = $1 AND ended_at IS NOT NULL
+        `SELECT ended_at FROM cold_room_sessions s
+         WHERE (s.hardware_device_id = $1
+                OR (s.hardware_device_id IS NULL AND s.tag_id = $2))
+           AND s.ended_at IS NOT NULL
          ORDER BY ended_at DESC LIMIT 1`,
-        [tag.id]
+        [tag.hardware_device_id, tag.id]
       );
 
       if (lastClosedSession.rowCount) {
@@ -440,13 +464,20 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
               COALESCE(cr.pre_alert_minutes, $3) AS pre_alert_minutes,
               COALESCE(cr.max_daily_minutes, $4) AS max_daily_minutes
        FROM cold_room_sessions s
-       LEFT JOIN tags t ON t.id = s.tag_id
-       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = s.tag_id AND wta.active = true
+       LEFT JOIN tags t
+         ON ((s.hardware_device_id IS NOT NULL AND t.hardware_device_id = s.hardware_device_id)
+             OR (s.hardware_device_id IS NULL AND t.id = s.tag_id))
+       LEFT JOIN worker_tag_assignments wta
+         ON ((s.hardware_device_id IS NOT NULL AND wta.hardware_device_id = s.hardware_device_id)
+             OR (wta.hardware_device_id IS NULL AND wta.tag_id = s.tag_id))
+        AND wta.active = true
        LEFT JOIN gateways g ON ${exitGatewayClause}
        LEFT JOIN cold_rooms cr ON cr.id = COALESCE(s.cold_room_id, g.cold_room_id)
-       WHERE s.tag_id = $5 AND s.ended_at IS NULL
+       WHERE (s.hardware_device_id = $5
+              OR (s.hardware_device_id IS NULL AND s.tag_id = $6))
+         AND s.ended_at IS NULL
        ORDER BY s.started_at DESC LIMIT 1`,
-      [gatewayLookupValue, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES, tag.id]
+      [gatewayLookupValue, env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES, tag.hardware_device_id, tag.id]
     );
     if (!activeSessionRes.rowCount) return;
 
@@ -460,8 +491,13 @@ export function startComplianceRuleLoop(): void {
     db.query(
       `SELECT DISTINCT t.id, t.hardware_device_id, wta.worker_id, g.cold_room_id
        FROM cold_room_sessions s
-       JOIN tags t ON t.id = s.tag_id
-       LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true
+       JOIN tags t
+         ON ((s.hardware_device_id IS NOT NULL AND t.hardware_device_id = s.hardware_device_id)
+             OR (s.hardware_device_id IS NULL AND t.id = s.tag_id))
+       LEFT JOIN worker_tag_assignments wta
+         ON ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
+             OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+        AND wta.active = true
        LEFT JOIN gateways g ON g.cold_room_id = s.cold_room_id
        WHERE s.ended_at IS NULL`
     )

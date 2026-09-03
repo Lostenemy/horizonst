@@ -146,6 +146,6 @@ test('manual emergency invariants and no physical feedback remain exact', () => 
   assert.match(parser, /typeText === 'bxp-button'/);
   assert.match(parser, /frameType === 1/);
   assert.match(parser, /alarmStatus === 1/);
-  assert.match(service, /manualEmergencyDeduplicationKey\(event\.tagUid, event\.triggerCount\)/);
+  assert.match(service, /manualEmergencyDeduplicationKey\(hardwareDeviceId, event\.triggerCount\)/);
   assert.match(service, /dispatchPhysicalAlarm: false/);
 });

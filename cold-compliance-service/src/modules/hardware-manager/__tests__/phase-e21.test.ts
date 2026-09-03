@@ -111,7 +111,8 @@ test('E.1 and B5/MQTT invariants remain in place', () => {
   assert.doesNotMatch(app, /tagControlRouter|app\.use\(['"]\/tag-control/);
   assert.doesNotMatch(mqtt, /mqttPublish|gw\/\+\/publish/);
   assert.match(emergency, /dispatchPhysicalAlarm: false/);
-  assert.match(emergency, /hardwareDeviceId: context\.hardware_device_id/);
+  assert.match(emergency, /const hardwareDeviceId = context\.hardware_device_id as number/);
+  assert.match(emergency, /hardwareDeviceId,/);
   assert.match(physical, /executeHardwareB5Command/);
   assert.match(physical, /hardwareDeviceId: candidate\.hardwareDeviceId/);
   assert.doesNotMatch(physical, /mqttPublish|TAG_SESSION_PASSWORD/);
