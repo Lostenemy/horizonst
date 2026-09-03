@@ -151,7 +151,14 @@ workersRouter.post('/:id/assign-tag', requireRoles(['supervisor', 'administrador
     }
 
     await db.query('UPDATE worker_tag_assignments SET active = false, unassigned_at = NOW() WHERE worker_id = $1 AND active = true', [req.params.id]);
-    await db.query('UPDATE worker_tag_assignments SET active = false, unassigned_at = NOW() WHERE tag_id = $1 AND active = true', [tagId]);
+    await db.query(
+      `UPDATE worker_tag_assignments
+       SET active = false, unassigned_at = NOW()
+       WHERE (hardware_device_id = $1
+              OR (hardware_device_id IS NULL AND tag_id = $2))
+         AND active = true`,
+      [tag.rows[0].hardware_device_id, tagId]
+    );
     const result = await db.query(
       `INSERT INTO worker_tag_assignments(worker_id, tag_id, hardware_device_id, assigned_at, active)
        VALUES($1, $2, $3, NOW(), true) RETURNING *`,

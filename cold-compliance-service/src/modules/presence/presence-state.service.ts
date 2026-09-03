@@ -77,6 +77,16 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
 
   const nowMs = Date.parse(eventTs);
   const row = current.rows[0];
+  if (row && row.hardware_device_id === null) {
+    await db.query(
+      `UPDATE presence_operational_state
+       SET hardware_device_id = $1,
+           updated_at = NOW()
+       WHERE tag_id = $2
+         AND hardware_device_id IS NULL`,
+      [tag.hardware_device_id, tag.id]
+    );
+  }
   const graceActive = Boolean(
     row?.in_grace
       && row.grace_until
@@ -91,8 +101,9 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
         tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
       )
       VALUES($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, NULL, $5, NULL, NOW())
-      ON CONFLICT (tag_id)
-      DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, presence_operational_state.hardware_device_id),
+      ON CONFLICT (hardware_device_id) WHERE hardware_device_id IS NOT NULL
+      DO UPDATE SET tag_id = EXCLUDED.tag_id,
+                    hardware_device_id = EXCLUDED.hardware_device_id,
                     worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
                     cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                     inside = TRUE,
@@ -123,8 +134,9 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
       tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, reminder_sent_at, updated_at
     )
     VALUES($1, $2, $3, $4, TRUE, FALSE, FALSE, NULL, NULL, NULL, NOW())
-    ON CONFLICT (tag_id)
-    DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, presence_operational_state.hardware_device_id),
+    ON CONFLICT (hardware_device_id) WHERE hardware_device_id IS NOT NULL
+    DO UPDATE SET tag_id = EXCLUDED.tag_id,
+                  hardware_device_id = EXCLUDED.hardware_device_id,
                   worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
                   cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                   inside = TRUE,
@@ -144,11 +156,20 @@ export async function markPresenceAlarm(tagId: string, eventTs: string, context:
     throw new Error('central_hardware_mapping_required: presence alarm state requires hardwareDeviceId');
   }
   await db.query(
+    `UPDATE presence_operational_state
+     SET hardware_device_id = $1,
+         updated_at = NOW()
+     WHERE tag_id = $2
+       AND hardware_device_id IS NULL`,
+    [context.hardwareDeviceId, tagId]
+  );
+  await db.query(
     `INSERT INTO presence_operational_state(
       tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
     ) VALUES($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, NULL, $5, NULL, NOW())
-    ON CONFLICT (tag_id)
-    DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, presence_operational_state.hardware_device_id),
+    ON CONFLICT (hardware_device_id) WHERE hardware_device_id IS NOT NULL
+    DO UPDATE SET tag_id = EXCLUDED.tag_id,
+                  hardware_device_id = EXCLUDED.hardware_device_id,
                   worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
                   cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                   inside = TRUE,

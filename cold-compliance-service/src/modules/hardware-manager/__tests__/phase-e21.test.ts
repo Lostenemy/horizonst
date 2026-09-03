@@ -46,7 +46,7 @@ test('central uniqueness coexists with current tag_id keys and open-session inde
   assert.match(source('migrations/012_presence_storage_hardening.sql'), /uq_cold_room_sessions_one_open_per_tag[\s\S]+cold_room_sessions\(tag_id\)[\s\S]+ended_at IS NULL/);
 });
 
-test('all six active writers dual-write hardware_device_id while conflicts stay on tag_id', () => {
+test('all six active writers retain dual-write after central conflict keys are adopted', () => {
   const workers = source('src/modules/workers/workers.routes.ts');
   const compliance = source('src/modules/compliance/compliance.service.ts');
   const alerts = source('src/modules/alerts/alerts.service.ts');
@@ -63,12 +63,12 @@ test('all six active writers dual-write hardware_device_id while conflicts stay 
   const presenceInserts = [...presence.matchAll(/INSERT INTO presence_operational_state\(([^]*?)\)\s*(?:VALUES|SELECT)/g)];
   assert.ok(presenceInserts.length >= 3);
   assert.ok(presenceInserts.every((match) => match[1].includes('hardware_device_id')));
-  assert.match(presence, /hardware_device_id\s*=\s*COALESCE\(EXCLUDED\.hardware_device_id,\s*presence_operational_state\.hardware_device_id\)/s);
-  assert.match(presence, /ON CONFLICT \(tag_id\)/);
+  assert.match(presence, /DO UPDATE SET tag_id = EXCLUDED\.tag_id,[\s\S]+hardware_device_id = EXCLUDED\.hardware_device_id/);
+  assert.match(presence, /ON CONFLICT \(hardware_device_id\) WHERE hardware_device_id IS NOT NULL/);
 
   assert.match(ble, /INSERT INTO ble_alarm_sessions\([^)]*hardware_device_id[^)]*\)/s);
-  assert.match(ble, /hardware_device_id\s*=\s*COALESCE\(EXCLUDED\.hardware_device_id,\s*ble_alarm_sessions\.hardware_device_id\)/s);
-  assert.match(ble, /ON CONFLICT \(tag_id\)/);
+  assert.match(ble, /DO UPDATE SET tag_id = EXCLUDED\.tag_id,[\s\S]+hardware_device_id = EXCLUDED\.hardware_device_id/);
+  assert.match(ble, /ON CONFLICT \(hardware_device_id\) WHERE hardware_device_id IS NOT NULL/);
 });
 
 test('tagged alerts require central identity while legitimate untagged alerts remain supported', async () => {

@@ -15,12 +15,12 @@ test('compliance prioritizes central operational identity and retains null-only 
   assert.match(compliance, /\[tag\.hardware_device_id, tag\.id\]/);
 });
 
-test('presence state reads and updates by central id with a legacy tag fallback', () => {
+test('presence state reads by central id with legacy fallback and writes by central conflict key', () => {
   const presence = source('src/modules/presence/presence-state.service.ts');
   assert.match(presence, /WHERE hardware_device_id = \$1[\s\S]+hardware_device_id IS NULL AND tag_id = \$2/);
   assert.match(presence, /markPresenceExit\([\s\S]+hardwareDeviceId/);
   assert.match(presence, /RETURNING pos\.tag_id,[\s\S]+pos\.hardware_device_id/);
-  assert.match(presence, /ON CONFLICT \(tag_id\)/);
+  assert.match(presence, /ON CONFLICT \(hardware_device_id\) WHERE hardware_device_id IS NOT NULL/);
 });
 
 test('manual emergency correlates and deduplicates by central identity first', () => {
@@ -72,12 +72,12 @@ test('API snapshots and presentation lookups prefer central identity without cha
   }
 });
 
-test('BLE lookups support central identity while the transitional local key remains intact', () => {
+test('BLE lookups and writes use central identity while the transitional local key remains intact', () => {
   const ble = source('src/modules/tag-control/infrastructure/ble-session.repository.ts');
   assert.match(ble, /isBleSessionActive\([\s\S]+hardwareDeviceId/);
   assert.match(ble, /markBleSessionDisconnected\([\s\S]+hardwareDeviceId/);
   assert.match(ble, /hardware_device_id = \$1[\s\S]+hardware_device_id IS NULL AND tag_id = \$2/);
-  assert.match(ble, /ON CONFLICT \(tag_id\)/);
+  assert.match(ble, /ON CONFLICT \(hardware_device_id\) WHERE hardware_device_id IS NOT NULL/);
   assert.match(source('migrations/005_ble_alarm_sessions.sql'), /tag_id UUID PRIMARY KEY/);
   assert.match(source('migrations/008_presence_operational_state.sql'), /tag_id UUID PRIMARY KEY/);
   assert.match(source('migrations/012_presence_storage_hardening.sql'), /uq_cold_room_sessions_one_open_per_tag[\s\S]+cold_room_sessions\(tag_id\)/);

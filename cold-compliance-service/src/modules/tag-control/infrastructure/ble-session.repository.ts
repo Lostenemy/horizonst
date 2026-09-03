@@ -18,11 +18,20 @@ export async function markBleSessionActive(params: { tagId: string; hardwareDevi
     throw new Error('central_hardware_mapping_required: BLE sessions require hardwareDeviceId');
   }
   await db.query(
+    `UPDATE ble_alarm_sessions
+     SET hardware_device_id = $1,
+         updated_at = NOW()
+     WHERE tag_id = $2
+       AND hardware_device_id IS NULL`,
+    [params.hardwareDeviceId, params.tagId]
+  );
+  await db.query(
     `INSERT INTO ble_alarm_sessions(tag_id, hardware_device_id, tag_uid, gateway_mac, is_active, connected_at, disconnected_at,
                                     lease_expires_at, disconnect_requested_at, disconnect_confirmed_at, last_error, updated_at)
      VALUES($1, $2, $3, $4, TRUE, NOW(), NULL, NOW() + $5::interval, NULL, NULL, NULL, NOW())
-     ON CONFLICT (tag_id)
-     DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, ble_alarm_sessions.hardware_device_id),
+     ON CONFLICT (hardware_device_id) WHERE hardware_device_id IS NOT NULL
+     DO UPDATE SET tag_id = EXCLUDED.tag_id,
+                   hardware_device_id = EXCLUDED.hardware_device_id,
                    tag_uid = EXCLUDED.tag_uid,
                    gateway_mac = EXCLUDED.gateway_mac,
                    is_active = TRUE,
