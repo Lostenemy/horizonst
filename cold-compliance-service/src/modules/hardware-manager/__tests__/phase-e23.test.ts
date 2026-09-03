@@ -30,7 +30,7 @@ test('migration is additive and leaves local hardware overlays and command histo
   assert.match(source('migrations/001_init.sql'), /CREATE TABLE IF NOT EXISTS cold_room_sessions[\s\S]+tag_id UUID REFERENCES tags\(id\)/);
 });
 
-test('presence operational UPSERTs use the partial central unique index and preserve rollback data', () => {
+test('presence operational UPSERTs use central identity without lazy legacy repair', () => {
   const presence = source('src/modules/presence/presence-state.service.ts');
   const centralConflicts = presence.match(/ON CONFLICT \(hardware_device_id\) WHERE hardware_device_id IS NOT NULL/g) ?? [];
 
@@ -38,45 +38,46 @@ test('presence operational UPSERTs use the partial central unique index and pres
   assert.doesNotMatch(presence, /ON CONFLICT \(tag_id\)/);
   assert.match(presence, /INSERT INTO presence_operational_state\(\s*tag_id, hardware_device_id/);
   assert.match(presence, /DO UPDATE SET tag_id = EXCLUDED\.tag_id,[\s\S]+hardware_device_id = EXCLUDED\.hardware_device_id/);
-  assert.match(presence, /WHERE tag_id = \$2\s+AND hardware_device_id IS NULL/);
+  assert.doesNotMatch(presence, /WHERE tag_id = \$\d|hardware_device_id IS NULL/);
   for (const field of ['worker_id', 'cold_room_id', 'inside', 'in_alarm', 'in_grace', 'grace_until', 'grace_started_at', 'last_alarm_at', 'reminder_sent_at', 'updated_at']) {
     assert.match(presence, new RegExp(field));
   }
 });
 
-test('BLE UPSERT uses central identity without changing lease or disconnect semantics', () => {
+test('BLE UPSERT uses central identity without lazy legacy repair', () => {
   const ble = source('src/modules/tag-control/infrastructure/ble-session.repository.ts');
 
   assert.match(ble, /central_hardware_mapping_required: BLE sessions require hardwareDeviceId/);
   assert.match(ble, /ON CONFLICT \(hardware_device_id\) WHERE hardware_device_id IS NOT NULL/);
   assert.doesNotMatch(ble, /ON CONFLICT \(tag_id\)/);
   assert.match(ble, /DO UPDATE SET tag_id = EXCLUDED\.tag_id,[\s\S]+hardware_device_id = EXCLUDED\.hardware_device_id/);
-  assert.match(ble, /WHERE tag_id = \$2\s+AND hardware_device_id IS NULL/);
+  assert.doesNotMatch(ble, /WHERE tag_id = \$\d|hardware_device_id IS NULL/);
   for (const field of ['tag_uid', 'gateway_mac', 'is_active', 'connected_at', 'disconnected_at', 'lease_expires_at', 'disconnect_requested_at', 'disconnect_confirmed_at', 'last_error']) {
     assert.match(ble, new RegExp(field));
   }
 });
 
-test('worker assignment replacement is central-first and preserves the HTTP and dual-write contracts', () => {
+test('worker assignment replacement is central-only and preserves the HTTP and dual-write contracts', () => {
   const workers = source('src/modules/workers/workers.routes.ts');
 
-  assert.match(workers, /WHERE \(hardware_device_id = \$1\s+OR \(hardware_device_id IS NULL AND tag_id = \$2\)\)\s+AND active = true/);
-  assert.match(workers, /\[tag\.rows\[0\]\.hardware_device_id, tagId\]/);
+  assert.match(workers, /WHERE hardware_device_id = \$1\s+AND active = true/);
+  assert.match(workers, /\[tag\.rows\[0\]\.hardware_device_id\]/);
   assert.match(workers, /INSERT INTO worker_tag_assignments\(worker_id, tag_id, hardware_device_id, assigned_at, active\)/);
   assert.match(workers, /central_hardware_mapping_required/);
   assert.match(workers, /dependency_tag_commands/);
 });
 
-test('cold room sessions retain central and rollback uniqueness with unchanged conflict handling', () => {
+test('cold room sessions retain central uniqueness with unchanged conflict handling', () => {
   const compliance = source('src/modules/compliance/compliance.service.ts');
   const central = source('migrations/017_operational_hardware_device_id.sql');
-  const rollback = source('migrations/012_presence_storage_hardening.sql');
+  const hardening = source('migrations/019_central_only_operational_identity.sql');
 
   assert.match(compliance, /INSERT INTO cold_room_sessions\(worker_id, tag_id, hardware_device_id/);
   assert.match(compliance, /ON CONFLICT DO NOTHING/);
-  assert.match(compliance, /s\.hardware_device_id = \$1[\s\S]+s\.hardware_device_id IS NULL AND s\.tag_id = \$2/);
+  assert.match(compliance, /s\.hardware_device_id = \$1/);
+  assert.doesNotMatch(compliance, /s\.hardware_device_id IS NULL/);
   assert.match(central, /uq_cold_room_sessions_one_open_per_hardware_device[\s\S]+ON cold_room_sessions\(hardware_device_id\)[\s\S]+ended_at IS NULL[\s\S]+hardware_device_id IS NOT NULL/);
-  assert.match(rollback, /uq_cold_room_sessions_one_open_per_tag[\s\S]+ON cold_room_sessions\(tag_id\)[\s\S]+ended_at IS NULL/);
+  assert.match(hardening, /DROP INDEX IF EXISTS uq_cold_room_sessions_one_open_per_tag/);
 });
 
 test('E.2.2 central-first reads, D.2 receive-only MQTT and B5 emergency invariants remain intact', () => {
@@ -87,9 +88,8 @@ test('E.2.2 central-first reads, D.2 receive-only MQTT and B5 emergency invarian
   const physical = source('src/modules/tag-control/application/tag-physical-alarm.service.ts');
 
   assert.match(repository, /ps\.hardware_device_id = t\.hardware_device_id/);
-  assert.match(repository, /ps\.hardware_device_id IS NULL[\s\S]+ps\.tag_uid/);
   assert.match(repository, /g\.hardware_gateway_id = rp\.hardware_gateway_id/);
-  assert.match(repository, /rp\.hardware_gateway_id IS NULL[\s\S]+rp\.gateway_mac/);
+  assert.doesNotMatch(repository, /hardware_device_id IS NULL|hardware_gateway_id IS NULL/);
   assert.match(mqtt, /`gw\/\$\{mac\}\/publish`/);
   assert.doesNotMatch(mqtt, /mqttPublish|gw\/\+\/publish|\/MKGW3\//);
   assert.match(parser, /numericValue\(payload\?\.msg_id\) !== 3070/);

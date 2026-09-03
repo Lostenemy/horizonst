@@ -29,9 +29,7 @@ workersRouter.get('/', async (_req, res, next) => {
        LEFT JOIN LATERAL (
          SELECT a.tag_id, t.tag_uid
          FROM worker_tag_assignments a
-         JOIN tags t
-           ON ((a.hardware_device_id IS NOT NULL AND t.hardware_device_id = a.hardware_device_id)
-               OR (a.hardware_device_id IS NULL AND t.id = a.tag_id))
+         JOIN tags t ON t.hardware_device_id = a.hardware_device_id
          WHERE a.worker_id = w.id AND a.active = true
          ORDER BY a.assigned_at DESC
          LIMIT 1
@@ -154,10 +152,9 @@ workersRouter.post('/:id/assign-tag', requireRoles(['supervisor', 'administrador
     await db.query(
       `UPDATE worker_tag_assignments
        SET active = false, unassigned_at = NOW()
-       WHERE (hardware_device_id = $1
-              OR (hardware_device_id IS NULL AND tag_id = $2))
+       WHERE hardware_device_id = $1
          AND active = true`,
-      [tag.rows[0].hardware_device_id, tagId]
+      [tag.rows[0].hardware_device_id]
     );
     const result = await db.query(
       `INSERT INTO worker_tag_assignments(worker_id, tag_id, hardware_device_id, assigned_at, active)

@@ -2,12 +2,14 @@ import { env } from '../../../config/env';
 import { db } from '../../../db/pool';
 
 export async function isBleSessionActive(params: { tagId: string; hardwareDeviceId?: number | null }): Promise<boolean> {
+  if (!Number.isInteger(params.hardwareDeviceId)) {
+    throw new Error('central_hardware_mapping_required: BLE sessions require hardwareDeviceId');
+  }
   const result = await db.query<{ is_active: boolean }>(
     `SELECT is_active AND lease_expires_at > NOW() AS is_active
      FROM ble_alarm_sessions
-     WHERE hardware_device_id = $1
-        OR (hardware_device_id IS NULL AND tag_id = $2)`,
-    [params.hardwareDeviceId ?? null, params.tagId]
+     WHERE hardware_device_id = $1`,
+    [params.hardwareDeviceId ?? null]
   );
 
   return Boolean(result.rows[0]?.is_active);
@@ -17,14 +19,6 @@ export async function markBleSessionActive(params: { tagId: string; hardwareDevi
   if (!Number.isInteger(params.hardwareDeviceId)) {
     throw new Error('central_hardware_mapping_required: BLE sessions require hardwareDeviceId');
   }
-  await db.query(
-    `UPDATE ble_alarm_sessions
-     SET hardware_device_id = $1,
-         updated_at = NOW()
-     WHERE tag_id = $2
-       AND hardware_device_id IS NULL`,
-    [params.hardwareDeviceId, params.tagId]
-  );
   await db.query(
     `INSERT INTO ble_alarm_sessions(tag_id, hardware_device_id, tag_uid, gateway_mac, is_active, connected_at, disconnected_at,
                                     lease_expires_at, disconnect_requested_at, disconnect_confirmed_at, last_error, updated_at)
@@ -47,17 +41,19 @@ export async function markBleSessionActive(params: { tagId: string; hardwareDevi
 }
 
 export async function markBleSessionDisconnected(params: { tagId: string; hardwareDeviceId?: number | null; confirmed?: boolean; error?: string }): Promise<void> {
+  if (!Number.isInteger(params.hardwareDeviceId)) {
+    throw new Error('central_hardware_mapping_required: BLE sessions require hardwareDeviceId');
+  }
   await db.query(
     `UPDATE ble_alarm_sessions
      SET is_active = FALSE,
          disconnected_at = NOW(),
          disconnect_requested_at = NOW(),
-         disconnect_confirmed_at = CASE WHEN $3 THEN NOW() ELSE NULL END,
-         last_error = $4,
+         disconnect_confirmed_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
+         last_error = $3,
          updated_at = NOW()
-     WHERE hardware_device_id = $1
-        OR (hardware_device_id IS NULL AND tag_id = $2)`,
-    [params.hardwareDeviceId ?? null, params.tagId, params.confirmed === true, params.error ?? null]
+     WHERE hardware_device_id = $1`,
+    [params.hardwareDeviceId, params.confirmed === true, params.error ?? null]
   );
 }
 

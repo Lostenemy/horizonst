@@ -9,22 +9,18 @@ const DEDUPLICATION_WINDOW_SECONDS = 60;
 
 interface EmergencyContext {
   tag_id: string;
-  hardware_device_id: number | null;
-  active: boolean;
+  hardware_device_id: number;
   gateway_id: string | null;
   worker_id: string | null;
   worker_name: string | null;
   cold_room_id: string | null;
 }
 
-export function manualEmergencyDeduplicationKey(tagIdentity: string | number, triggerCount: number | null): string {
-  const identity = typeof tagIdentity === 'number'
-    ? `hardware:${tagIdentity}`
-    : `tag:${tagIdentity.replace(/[:-]/g, '').toLowerCase()}`;
-  return `${identity}:${triggerCount ?? 'missing'}`;
+export function manualEmergencyDeduplicationKey(hardwareDeviceId: number, triggerCount: number | null): string {
+  return `hardware:${hardwareDeviceId}:${triggerCount ?? 'missing'}`;
 }
 
-type RejectionReason = 'unknown_tag' | 'inactive_tag' | 'central_not_found' | 'central_rejected' | 'mapping_not_found';
+type RejectionReason = 'unknown_tag' | 'central_unavailable' | 'central_not_found' | 'central_rejected' | 'mapping_not_found';
 
 async function auditRejected(event: ParsedManualEmergencyEvent, reason: RejectionReason): Promise<void> {
   await appendAuditLog({
@@ -49,22 +45,12 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
   }, 'manual emergency received');
 
   const identity = await resolveEventTechnicalIdentity({ tagMac: event.tagUid, gatewayMac: event.gatewayMac });
-  if (identity.source === 'central_not_found' || identity.source === 'central_rejected') {
-    const reason = identity.source === 'central_not_found' ? 'central_not_found' : 'central_rejected';
+  if (identity.source !== 'central') {
+    const reason = identity.source;
     logger.warn({ gatewayMac: event.gatewayMac, tagUid: event.tagUid, technicalReason: identity.reason }, 'manual emergency rejected by Hardware Manager');
     await auditRejected(event, reason);
     return;
   }
-
-  const centralIdentity = identity.source === 'central';
-  const tagClause = centralIdentity
-    ? 't.hardware_device_id = $1'
-    : "LOWER(REPLACE(REPLACE(t.tag_uid, ':', ''), '-', '')) = $1";
-  const gatewayClause = centralIdentity
-    ? 'g.hardware_gateway_id = $2'
-    : "LOWER(REPLACE(REPLACE(g.gateway_mac, ':', ''), '-', '')) = $2";
-  const tagLookupValue = centralIdentity ? identity.hardwareDeviceId : event.tagUid.toLowerCase();
-  const gatewayLookupValue = centralIdentity ? identity.hardwareGatewayId : event.gatewayMac.toLowerCase();
 
   const client = await db.connect();
   let rejection: RejectionReason | null = null;
@@ -76,7 +62,6 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
     const contextResult = await client.query<EmergencyContext>(
       `SELECT t.id AS tag_id,
               t.hardware_device_id,
-              t.active,
               assignment.worker_id,
               assignment.worker_name,
               gateway.gateway_id,
@@ -86,20 +71,17 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
          SELECT wta.worker_id, w.full_name AS worker_name
          FROM worker_tag_assignments wta
          LEFT JOIN workers w ON w.id = wta.worker_id
-         WHERE ((t.hardware_device_id IS NOT NULL AND wta.hardware_device_id = t.hardware_device_id)
-                OR (wta.hardware_device_id IS NULL AND wta.tag_id = t.id))
+         WHERE wta.hardware_device_id = t.hardware_device_id
            AND wta.active = TRUE
          ORDER BY wta.assigned_at DESC
          LIMIT 1
        ) assignment ON TRUE
        LEFT JOIN presence_operational_state pos
-         ON ((t.hardware_device_id IS NOT NULL AND pos.hardware_device_id = t.hardware_device_id)
-             OR (pos.hardware_device_id IS NULL AND pos.tag_id = t.id))
+         ON pos.hardware_device_id = t.hardware_device_id
        LEFT JOIN LATERAL (
          SELECT crs.cold_room_id
          FROM cold_room_sessions crs
-         WHERE ((t.hardware_device_id IS NOT NULL AND crs.hardware_device_id = t.hardware_device_id)
-                OR (crs.hardware_device_id IS NULL AND crs.tag_id = t.id))
+         WHERE crs.hardware_device_id = t.hardware_device_id
            AND crs.ended_at IS NULL
          ORDER BY crs.started_at DESC
          LIMIT 1
@@ -107,23 +89,20 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
        LEFT JOIN LATERAL (
          SELECT g.id AS gateway_id, g.cold_room_id
          FROM gateways g
-         WHERE ${gatewayClause}
+         WHERE g.hardware_gateway_id = $2
          LIMIT 1
        ) gateway ON TRUE
-       WHERE ${tagClause}
+       WHERE t.hardware_device_id = $1
        LIMIT 1`,
-      [tagLookupValue, gatewayLookupValue]
+      [identity.hardwareDeviceId, identity.hardwareGatewayId]
     );
 
     context = contextResult.rows[0] ?? null;
     if (!context) {
       rejection = 'unknown_tag';
       await client.query('ROLLBACK');
-    } else if (centralIdentity && !context.gateway_id) {
+    } else if (!context.gateway_id) {
       rejection = 'mapping_not_found';
-      await client.query('ROLLBACK');
-    } else if (!centralIdentity && !context.active) {
-      rejection = 'inactive_tag';
       await client.query('ROLLBACK');
     } else if (!Number.isInteger(context.hardware_device_id)) {
       rejection = 'mapping_not_found';
@@ -136,13 +115,12 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
       const duplicate = await client.query<{ id: string }>(
         `SELECT a.id
          FROM alerts a
-         WHERE (a.hardware_device_id = $1
-                OR (a.hardware_device_id IS NULL AND a.tag_id = $2))
+         WHERE a.hardware_device_id = $1
            AND alert_type = 'manual_emergency'
-           AND created_at >= NOW() - ($4 * INTERVAL '1 second')
-           AND metadata ->> 'triggerCount' IS NOT DISTINCT FROM $3
+           AND created_at >= NOW() - ($3 * INTERVAL '1 second')
+           AND metadata ->> 'triggerCount' IS NOT DISTINCT FROM $2
          LIMIT 1`,
-        [hardwareDeviceId, context.tag_id, event.triggerCount === null ? null : String(event.triggerCount), DEDUPLICATION_WINDOW_SECONDS]
+        [hardwareDeviceId, event.triggerCount === null ? null : String(event.triggerCount), DEDUPLICATION_WINDOW_SECONDS]
       );
 
       if (duplicate.rowCount) {

@@ -30,24 +30,6 @@ function normalizeRssiThreshold(input: { rssiThreshold?: number; rssi_threshold?
   return input.rssiThreshold ?? input.rssi_threshold;
 }
 
-function httpError(message: string, statusCode: number): Error & { statusCode: number } {
-  return Object.assign(new Error(message), { statusCode });
-}
-
-export async function resolveGatewayMacForCommand(local: LocalGatewayReference, deps?: { fetch?: typeof fetch }): Promise<string> {
-  const resolution = await resolveHardwareGateway(local, deps);
-  if (resolution.source === 'central_not_found') throw httpError('Gateway central no encontrado para el vínculo reconciliado', 409);
-  if (resolution.source === 'central') {
-    if (!resolution.central?.active) throw httpError('Gateway inactivo en Hardware Manager', 409);
-    const centralMac = normalizeHorneoGatewayMac(resolution.central.mac_address);
-    if (!centralMac) throw httpError('MAC central de gateway inválida', 409);
-    return centralMac;
-  }
-  const localMac = normalizeHorneoGatewayMac(local.gateway_mac);
-  if (!localMac) throw httpError('MAC local de gateway inválida', 409);
-  return localMac;
-}
-
 gatewaysRouter.get('/', async (_req, res, next) => {
   try {
     const localRows = (await db.query('SELECT * FROM gateways ORDER BY created_at DESC')).rows;

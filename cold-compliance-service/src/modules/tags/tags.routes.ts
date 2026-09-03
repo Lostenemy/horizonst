@@ -35,8 +35,7 @@ tagsRouter.get('/', async (_req, res, next) => {
   try {
     const result = await db.query(
       `SELECT t.*, (SELECT last_battery FROM tag_gateway_presence_state p
-                    WHERE ((t.hardware_device_id IS NOT NULL AND p.hardware_device_id = t.hardware_device_id)
-                           OR (p.hardware_device_id IS NULL AND p.tag_uid = regexp_replace(lower(t.tag_uid), '[-:]', '', 'g')))
+                    WHERE p.hardware_device_id = t.hardware_device_id
                       AND last_battery IS NOT NULL
                     ORDER BY last_seen_at DESC LIMIT 1) as last_battery
        FROM tags t ORDER BY created_at DESC`

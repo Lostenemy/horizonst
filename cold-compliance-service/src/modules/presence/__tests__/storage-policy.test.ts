@@ -5,11 +5,11 @@ import { join } from 'node:path';
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
-test('heartbeat upserts one technical state per canonical tag and gateway', () => {
-  const migration = source('migrations/012_presence_storage_hardening.sql');
+test('heartbeat upserts one technical state per central device and gateway pair', () => {
+  const migration = source('migrations/019_central_only_operational_identity.sql');
   const ingestion = source('src/modules/presence/presence.service.ts');
-  assert.match(migration, /PRIMARY KEY \(tag_uid, gateway_mac\)/);
-  assert.match(ingestion, /ON CONFLICT \(tag_uid, gateway_mac\)[\s\S]*DO UPDATE/);
+  assert.match(migration, /tag_gateway_presence_state_pkey[\s\S]+PRIMARY KEY \(hardware_device_id, hardware_gateway_id\)/);
+  assert.match(ingestion, /ON CONFLICT \(hardware_device_id, hardware_gateway_id\)[\s\S]*DO UPDATE/);
   assert.match(ingestion, /last_rssi/);
   assert.match(ingestion, /last_battery/);
 });

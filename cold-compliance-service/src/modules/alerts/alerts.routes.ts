@@ -49,9 +49,7 @@ alertsRouter.get('/', async (req, res, next) => {
               CASE WHEN a.acknowledged_at IS NULL THEN 'active' ELSE 'archived' END AS status
        FROM alerts a
        LEFT JOIN workers w ON w.id = a.worker_id
-       LEFT JOIN tags t
-         ON ((a.hardware_device_id IS NOT NULL AND t.hardware_device_id = a.hardware_device_id)
-             OR (a.hardware_device_id IS NULL AND t.id = a.tag_id))
+       LEFT JOIN tags t ON t.hardware_device_id = a.hardware_device_id
        LEFT JOIN cold_rooms cr ON cr.id = a.cold_room_id
        ${whereClause}
        ORDER BY a.created_at DESC

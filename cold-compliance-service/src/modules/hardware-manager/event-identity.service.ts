@@ -81,7 +81,7 @@ export function clearEventTechnicalIdentityCache(): void {
 }
 
 export type EventTechnicalIdentity = {
-  source: 'central' | 'local_fallback' | 'local_disabled' | 'central_not_found' | 'central_rejected';
+  source: 'central' | 'central_unavailable' | 'central_not_found' | 'central_rejected';
   tagMac: string;
   gatewayMac: string;
   hardwareDeviceId: number | null;
@@ -103,7 +103,9 @@ export async function resolveEventTechnicalIdentity(
   const gatewayMac = normalizeHorneoGatewayMac(input.gatewayMac) ?? input.gatewayMac.replace(/[:-]/g, '').toLowerCase();
   const base = { tagMac, gatewayMac, hardwareDeviceId: null, hardwareGatewayId: null, device: null, gateway: null };
 
-  if (!env.HARDWARE_MANAGER_ENABLED) return { source: 'local_disabled', ...base };
+  if (!env.HARDWARE_MANAGER_ENABLED) {
+    return { source: 'central_unavailable', ...base, reason: 'central_disabled' };
+  }
 
   const inventory = await (deps?.cache ?? sharedInventoryCache).get({
     listDevices: deps?.listDevices ?? (() => listHardwareDevices()),
@@ -121,8 +123,8 @@ export async function resolveEventTechnicalIdentity(
       tagMac,
       gatewayMac,
       error: inventory.error
-    }, 'Hardware Manager unavailable; using controlled local event fallback');
-    return { source: 'local_fallback', ...base, reason: 'central_unavailable' };
+    }, 'Hardware Manager unavailable; rejecting event without central identity');
+    return { source: 'central_unavailable', ...base, reason: 'central_unavailable' };
   }
 
   const device = inventory.value.devicesByMac.get(tagMac);

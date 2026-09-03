@@ -12,7 +12,7 @@ interface PresenceStateTag {
 
 interface PresenceOperationalState {
   tag_id: string;
-  hardware_device_id: number | null;
+  hardware_device_id: number;
   worker_id: string | null;
   cold_room_id: string | null;
   inside: boolean;
@@ -70,23 +70,12 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
     `SELECT *
      FROM presence_operational_state
      WHERE hardware_device_id = $1
-        OR (hardware_device_id IS NULL AND tag_id = $2)
      LIMIT 1`,
-    [tag.hardware_device_id, tag.id]
+    [tag.hardware_device_id]
   );
 
   const nowMs = Date.parse(eventTs);
   const row = current.rows[0];
-  if (row && row.hardware_device_id === null) {
-    await db.query(
-      `UPDATE presence_operational_state
-       SET hardware_device_id = $1,
-           updated_at = NOW()
-       WHERE tag_id = $2
-         AND hardware_device_id IS NULL`,
-      [tag.hardware_device_id, tag.id]
-    );
-  }
   const graceActive = Boolean(
     row?.in_grace
       && row.grace_until
@@ -156,14 +145,6 @@ export async function markPresenceAlarm(tagId: string, eventTs: string, context:
     throw new Error('central_hardware_mapping_required: presence alarm state requires hardwareDeviceId');
   }
   await db.query(
-    `UPDATE presence_operational_state
-     SET hardware_device_id = $1,
-         updated_at = NOW()
-     WHERE tag_id = $2
-       AND hardware_device_id IS NULL`,
-    [context.hardwareDeviceId, tagId]
-  );
-  await db.query(
     `INSERT INTO presence_operational_state(
       tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
     ) VALUES($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, NULL, $5, NULL, NOW())
@@ -184,21 +165,20 @@ export async function markPresenceAlarm(tagId: string, eventTs: string, context:
   );
 }
 
-export async function markPresenceExit(tagId: string, hardwareDeviceId: number | null, exitTs: string): Promise<void> {
+export async function markPresenceExit(_tagId: string, hardwareDeviceId: number, exitTs: string): Promise<void> {
   const graceMinutes = await resolveOperationalGraceMinutes();
   const intervalExpr = `${graceMinutes} minutes`;
   await db.query(
     `UPDATE presence_operational_state
      SET inside = FALSE,
          in_grace = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN TRUE ELSE FALSE END,
-         grace_started_at = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $3::timestamptz ELSE grace_started_at END,
-         grace_until = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $3::timestamptz + $4::interval ELSE NULL END,
+         grace_started_at = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $2::timestamptz ELSE grace_started_at END,
+         grace_until = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $2::timestamptz + $3::interval ELSE NULL END,
          in_alarm = FALSE,
          reminder_sent_at = NULL,
          updated_at = NOW()
-     WHERE hardware_device_id = $1
-        OR (hardware_device_id IS NULL AND tag_id = $2)`,
-    [hardwareDeviceId, tagId, exitTs, intervalExpr]
+     WHERE hardware_device_id = $1`,
+    [hardwareDeviceId, exitTs, intervalExpr]
   );
 }
 
@@ -254,7 +234,7 @@ export async function sendGraceReentryReminders(): Promise<void> {
       alertId: `reentry-reminder:${row.tag_id}:${Math.floor(Date.now() / cadenceMs)}`,
       workerId: row.worker_id ?? undefined,
       tagId: row.tag_id,
-      hardwareDeviceId: row.hardware_device_id ?? undefined,
+      hardwareDeviceId: row.hardware_device_id,
       severity: 'critical',
       alertType: 'alarm_rule_alarm'
     }, 'failed to run physical reminder alarm sequence');

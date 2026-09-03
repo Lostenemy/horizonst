@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { env } from '../../../config/env';
-import { resolveGatewayMacForCommand } from '../../gateways/gateways.routes';
 import { HardwareGateway } from '../../gateways/hardware-manager.client';
 import { HardwareDevice } from '../../tags/hardware-manager.client';
 import { validateTechnicalTargets } from '../../tag-control/infrastructure/tag-control.repository';
@@ -93,7 +92,7 @@ test('other-company hidden resource and reconciled 404 remain explicit', async (
   assert.equal(inactiveGateway.reason, 'central_gateway_inactive');
 });
 
-test('only central unavailability enables controlled local event fallback', async () => {
+test('central unavailability rejects event identity instead of enabling local fallback', async () => {
   const result = await resolveEventTechnicalIdentity(
     { tagMac: device.ble_mac, gatewayMac: gateway.mac_address },
     {
@@ -102,7 +101,7 @@ test('only central unavailability enables controlled local event fallback', asyn
       listGateways: async () => found([gateway])
     }
   );
-  assert.equal(result.source, 'local_fallback');
+  assert.equal(result.source, 'central_unavailable');
   assert.equal(result.reason, 'central_unavailable');
 });
 
@@ -164,7 +163,7 @@ test('concurrent cache misses are coalesced into one pair of inventory requests'
   assert.equal(gatewayLists, 1);
 });
 
-test('temporary outage is cached briefly, preserves fallback and retries after error TTL', async () => {
+test('temporary outage is cached briefly, rejects locally and retries after error TTL', async () => {
   let now = 1_000;
   let calls = 0;
   let unavailable = true;
@@ -177,10 +176,10 @@ test('temporary outage is cached briefly, preserves fallback and retries after e
     },
     listGateways: async () => found([gateway])
   };
-  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'local_fallback');
+  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'central_unavailable');
   unavailable = false;
   now += env.HARDWARE_MANAGER_CACHE_ERROR_TTL_MS - 1;
-  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'local_fallback');
+  assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'central_unavailable');
   assert.equal(calls, 1);
   now += 1;
   assert.equal((await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, deps)).source, 'central');
@@ -209,7 +208,7 @@ test('tag-control preserves last_seen, camera_assigned and hybrid selection whil
   assert.match(repository, /g\.hardware_gateway_id = rp\.hardware_gateway_id/);
 });
 
-test('tag-control excludes unmapped or inactive hardware but falls back on outage', async () => {
+test('tag-control excludes unmapped, inactive and centrally unavailable hardware', async () => {
   assert.deepEqual(await validateTechnicalTargets([{
     tagId: 'tag-local', tagUid: 'aaaaaaaaaaaa', gatewayId: 'gateway-local', gatewayMac: 'bbbbbbbbbbbb'
   }]), []);
@@ -224,23 +223,16 @@ test('tag-control excludes unmapped or inactive hardware but falls back on outag
   assert.deepEqual(await validateTechnicalTargets([candidate], {
     lookupDeviceById: async () => ({ kind: 'unavailable', error: 'offline' }),
     lookupGatewayById: async () => found(gateway)
-  }), [candidate]);
+  }), []);
 });
 
-test('RSSI and B5 routes resolve central identity and delegate technical execution to Hardware Manager', async () => {
-  const local = {
-    id: 'gateway-local', gateway_mac: 'AAAAAAAAAAAA', hardware_gateway_id: 41,
-    rssi_threshold: -70, cold_room_id: null, plant_id: null
-  };
-  const mac = await resolveGatewayMacForCommand(local, {
-    fetch: async () => new Response(JSON.stringify(gateway), { status: 200, headers: { 'Content-Type': 'application/json' } })
-  });
-  assert.equal(mac, '2805a55efb68');
+test('RSSI and B5 routes delegate central ids to Hardware Manager without local MAC execution', () => {
   const routes = readFileSync(join(process.cwd(), 'src/modules/gateways/gateways.routes.ts'), 'utf8');
   assert.match(routes, /executeHardwareGatewayManagementCommand/);
+  assert.match(routes, /hardwareGatewayId: gateway\.rows\[0\]\.hardware_gateway_id/);
   assert.match(routes, /action: 'apply-rssi'/);
   assert.match(routes, /action: 'configure-emergency-button'/);
-  assert.doesNotMatch(routes, /mqttPublish|configureEmergencyButton/);
+  assert.doesNotMatch(routes, /mqttPublish|configureEmergencyButton|resolveGatewayMacForCommand|MAC local de gateway/);
   assert.doesNotMatch(routes, /\/MKGW3\/.*\/send/);
 });
 
@@ -256,12 +248,12 @@ test('CRUD técnico local queda bloqueado y PATCH de tags conserva solo los tres
   assert.doesNotMatch(gateways.slice(gateways.indexOf("gatewaysRouter.patch('/:id'"), gateways.indexOf("gatewaysRouter.post('/:id\/apply-rssi'")), /SET gateway_mac|SET description/);
 });
 
-test('stale-session correlation prefers central hardware ids and keeps legacy fallback', () => {
+test('stale-session correlation uses central hardware ids exclusively', () => {
   const compliance = readFileSync(join(process.cwd(), 'src/modules/compliance/compliance.service.ts'), 'utf8');
   const migration = readFileSync(join(process.cwd(), 'migrations/016_presence_hardware_references.sql'), 'utf8');
-  assert.match(compliance, /ps\.hardware_device_id = t\.hardware_device_id/);
+  assert.match(compliance, /ps\.hardware_device_id = s\.hardware_device_id/);
   assert.match(compliance, /ps\.hardware_gateway_id = seen_gateway\.hardware_gateway_id/);
-  assert.match(compliance, /ps\.hardware_device_id IS NULL/);
+  assert.doesNotMatch(compliance, /ps\.hardware_device_id IS NULL|ps\.hardware_gateway_id IS NULL/);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS hardware_device_id INTEGER/);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS hardware_gateway_id INTEGER/);
   assert.doesNotMatch(migration, /DROP|DELETE|TRUNCATE/i);

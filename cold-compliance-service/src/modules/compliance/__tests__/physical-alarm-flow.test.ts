@@ -41,7 +41,8 @@ test('resolveTagTargets preserves functional gateway selection strategies and si
   assert.match(repository, /rssi DESC NULLS LAST/);
   assert.match(repository, /same_cold_room/);
   assert.match(repository, /validateTechnicalTargets/);
-  assert.match(repository, /controlled local command target fallback/);
+  assert.match(repository, /rejecting command target without central validation/);
+  assert.doesNotMatch(repository, /controlled local command target fallback/);
 });
 
 test('historical tag command tables have no destructive migration', () => {

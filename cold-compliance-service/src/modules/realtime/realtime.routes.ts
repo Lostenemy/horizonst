@@ -19,11 +19,9 @@ async function loadOperationalSnapshot() {
               CASE WHEN COALESCE(pos.in_alarm, FALSE) THEN 'alarma' ELSE 'dentro' END AS presence_status
        FROM cold_room_sessions s
        LEFT JOIN presence_operational_state pos
-         ON ((s.hardware_device_id IS NOT NULL AND pos.hardware_device_id = s.hardware_device_id)
-             OR (pos.hardware_device_id IS NULL AND pos.tag_id = s.tag_id))
+         ON pos.hardware_device_id = s.hardware_device_id
        LEFT JOIN worker_tag_assignments wta
-         ON ((s.hardware_device_id IS NOT NULL AND wta.hardware_device_id = s.hardware_device_id)
-             OR (wta.hardware_device_id IS NULL AND wta.tag_id = s.tag_id))
+         ON wta.hardware_device_id = s.hardware_device_id
         AND wta.active = true
        LEFT JOIN workers w ON w.id = COALESCE(s.worker_id, wta.worker_id)
        WHERE s.ended_at IS NULL
@@ -41,8 +39,7 @@ async function loadOperationalSnapshot() {
        FROM presence_operational_state pos
        LEFT JOIN workers w ON w.id = pos.worker_id
        LEFT JOIN worker_tag_assignments wta
-         ON ((pos.hardware_device_id IS NOT NULL AND wta.hardware_device_id = pos.hardware_device_id)
-             OR (wta.hardware_device_id IS NULL AND wta.tag_id = pos.tag_id))
+         ON wta.hardware_device_id = pos.hardware_device_id
         AND wta.active = TRUE
        LEFT JOIN workers wa ON wa.id = wta.worker_id
        WHERE pos.inside = FALSE
@@ -65,9 +62,7 @@ async function loadOperationalSnapshot() {
               a.created_at
        FROM alerts a
        LEFT JOIN workers w ON w.id = a.worker_id
-       LEFT JOIN tags t
-         ON ((a.hardware_device_id IS NOT NULL AND t.hardware_device_id = a.hardware_device_id)
-             OR (a.hardware_device_id IS NULL AND t.id = a.tag_id))
+       LEFT JOIN tags t ON t.hardware_device_id = a.hardware_device_id
        LEFT JOIN cold_rooms cr ON cr.id = a.cold_room_id
        WHERE a.acknowledged_at IS NULL
        ORDER BY a.created_at DESC

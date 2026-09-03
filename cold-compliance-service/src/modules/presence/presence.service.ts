@@ -2,31 +2,40 @@ import { db } from '../../db/pool';
 import { env } from '../../config/env';
 import { appendAuditLog } from '../audit/audit.service';
 import { processComplianceRules } from '../compliance/compliance.service';
+import { resolveEventTechnicalIdentity } from '../hardware-manager/event-identity.service';
 import { ParsedPresenceEvent } from './types';
 
 export async function ingestPresenceEvent(event: ParsedPresenceEvent): Promise<void> {
   const tagUid = event.tagId.replace(/[:-]/g, '').toLowerCase();
   const gatewayMac = event.gatewayMac.replace(/[:-]/g, '').toLowerCase();
+  const identity = await resolveEventTechnicalIdentity({ tagMac: event.tagId, gatewayMac: event.gatewayMac });
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO tag_gateway_presence_state(
-         tag_uid, gateway_mac, last_seen_at, last_rssi, last_battery, last_event_id, updated_at
-       ) VALUES($1, $2, $3, $4, $5, $6, NOW())
-       ON CONFLICT (tag_uid, gateway_mac)
-       DO UPDATE SET last_seen_at = GREATEST(tag_gateway_presence_state.last_seen_at, EXCLUDED.last_seen_at),
-                     last_rssi = CASE WHEN EXCLUDED.last_seen_at >= tag_gateway_presence_state.last_seen_at
-                                      THEN COALESCE(EXCLUDED.last_rssi, tag_gateway_presence_state.last_rssi)
-                                      ELSE tag_gateway_presence_state.last_rssi END,
-                     last_battery = CASE WHEN EXCLUDED.last_seen_at >= tag_gateway_presence_state.last_seen_at
-                                         THEN COALESCE(EXCLUDED.last_battery, tag_gateway_presence_state.last_battery)
-                                         ELSE tag_gateway_presence_state.last_battery END,
-                     last_event_id = CASE WHEN EXCLUDED.last_seen_at >= tag_gateway_presence_state.last_seen_at
-                                          THEN EXCLUDED.last_event_id ELSE tag_gateway_presence_state.last_event_id END,
-                     updated_at = NOW()`,
-      [tagUid, gatewayMac, event.timestamp, event.rssi ?? null, event.battery ?? null, event.eventId]
-    );
+    if (identity.source === 'central') {
+      await client.query(
+        `INSERT INTO tag_gateway_presence_state(
+           tag_uid, gateway_mac, hardware_device_id, hardware_gateway_id,
+           last_seen_at, last_rssi, last_battery, last_event_id, updated_at
+         ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (hardware_device_id, hardware_gateway_id)
+           WHERE hardware_device_id IS NOT NULL AND hardware_gateway_id IS NOT NULL
+         DO UPDATE SET tag_uid = EXCLUDED.tag_uid,
+                       gateway_mac = EXCLUDED.gateway_mac,
+                       last_seen_at = GREATEST(tag_gateway_presence_state.last_seen_at, EXCLUDED.last_seen_at),
+                       last_rssi = CASE WHEN EXCLUDED.last_seen_at >= tag_gateway_presence_state.last_seen_at
+                                        THEN COALESCE(EXCLUDED.last_rssi, tag_gateway_presence_state.last_rssi)
+                                        ELSE tag_gateway_presence_state.last_rssi END,
+                       last_battery = CASE WHEN EXCLUDED.last_seen_at >= tag_gateway_presence_state.last_seen_at
+                                           THEN COALESCE(EXCLUDED.last_battery, tag_gateway_presence_state.last_battery)
+                                           ELSE tag_gateway_presence_state.last_battery END,
+                       last_event_id = CASE WHEN EXCLUDED.last_seen_at >= tag_gateway_presence_state.last_seen_at
+                                            THEN EXCLUDED.last_event_id ELSE tag_gateway_presence_state.last_event_id END,
+                       updated_at = NOW()`,
+        [identity.tagMac.toLowerCase(), identity.gatewayMac, identity.hardwareDeviceId, identity.hardwareGatewayId,
+          event.timestamp, event.rssi ?? null, event.battery ?? null, event.eventId]
+      );
+    }
 
     const save = await client.query(
       `INSERT INTO presence_events(event_id, gateway_mac, tag_uid, camera_code, event_type, event_ts, rssi, battery, payload)
@@ -50,8 +59,8 @@ export async function ingestPresenceEvent(event: ParsedPresenceEvent): Promise<v
     }
 
     await client.query('COMMIT');
-    await processComplianceRules(event);
-    if (event.eventType === 'enter' || event.eventType === 'exit') {
+    await processComplianceRules(event, identity);
+    if (identity.source === 'central' && (event.eventType === 'enter' || event.eventType === 'exit')) {
       await appendAuditLog({
         actorType: 'system',
         action: `presence_${event.eventType}`,
