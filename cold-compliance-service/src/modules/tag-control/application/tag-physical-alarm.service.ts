@@ -126,7 +126,12 @@ export async function executeConnectedTagCommandSequence(params: {
       continue;
     }
 
-    await deps.markActive({ tagId: params.tagId, tagUid: params.tagUid, gatewayMac: candidate.gatewayMac });
+    await deps.markActive({
+      tagId: params.tagId,
+      hardwareDeviceId: candidate.hardwareDeviceId,
+      tagUid: params.tagUid,
+      gatewayMac: candidate.gatewayMac
+    });
     logger.info({ ...params.context, tagId: params.tagId, gatewayMac: candidate.gatewayMac }, 'mark tag as BLE-active');
 
     let disconnectAck = false;

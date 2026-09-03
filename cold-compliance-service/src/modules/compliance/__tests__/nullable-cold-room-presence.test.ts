@@ -12,7 +12,7 @@ test('registered gateway without cold room accepts valid RSSI and can open a nul
   assert.deepEqual(decision, { accepted: true, requiredRssi: -85 });
   assert.doesNotMatch(complianceSource, /!tag\.gateway_id \|\| !tag\.cold_room_id/);
   assert.match(complianceSource, /await upsertOpenSession\(tag, event\)/);
-  assert.match(complianceSource, /INSERT INTO cold_room_sessions\(worker_id, tag_id, cold_room_id/);
+  assert.match(complianceSource, /INSERT INTO cold_room_sessions\(worker_id, tag_id, hardware_device_id, cold_room_id/);
 });
 
 test('registered gateway without cold room rejects RSSI below entry threshold plus margin', () => {

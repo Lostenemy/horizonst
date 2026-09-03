@@ -9,6 +9,7 @@ const DEDUPLICATION_WINDOW_SECONDS = 60;
 
 interface EmergencyContext {
   tag_id: string;
+  hardware_device_id: number;
   active: boolean;
   gateway_id: string | null;
   worker_id: string | null;
@@ -74,6 +75,7 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
 
     const contextResult = await client.query<EmergencyContext>(
       `SELECT t.id AS tag_id,
+              t.hardware_device_id,
               t.active,
               assignment.worker_id,
               assignment.worker_name,
@@ -164,6 +166,7 @@ export async function processManualEmergency(event: ParsedManualEmergencyEvent):
       const alert = await createAlert({
         workerId: context.worker_id ?? undefined,
         tagId: context.tag_id,
+        hardwareDeviceId: context.hardware_device_id,
         coldRoomId: context.cold_room_id ?? undefined,
         severity: 'critical',
         alertType: 'manual_emergency',

@@ -20,6 +20,7 @@ interface ActiveSession {
   worker_id: string | null;
   cold_room_id: string | null;
   tag_id: string;
+  hardware_device_id: number;
 }
 
 interface SessionContext {
@@ -28,6 +29,7 @@ interface SessionContext {
   worker_id: string | null;
   cold_room_id: string | null;
   tag_id: string;
+  hardware_device_id: number;
   max_continuous_minutes: number;
   pre_alert_minutes: number;
   max_daily_minutes: number;
@@ -35,14 +37,17 @@ interface SessionContext {
 
 async function evaluateOperationalAlarmRules(tag: {
   id: string;
+  hardware_device_id: number;
   worker_id: string | null;
   cold_room_id: string | null;
 }): Promise<void> {
   const sessionRes = await db.query<ActiveSession>(
-    `SELECT id, started_at, worker_id, cold_room_id, tag_id
-     FROM cold_room_sessions
-     WHERE tag_id = $1 AND ended_at IS NULL
-     ORDER BY started_at DESC LIMIT 1`,
+    `SELECT s.id, s.started_at, s.worker_id, s.cold_room_id, s.tag_id,
+            COALESCE(s.hardware_device_id, t.hardware_device_id) AS hardware_device_id
+     FROM cold_room_sessions s
+     JOIN tags t ON t.id = s.tag_id
+     WHERE s.tag_id = $1 AND s.ended_at IS NULL
+     ORDER BY s.started_at DESC LIMIT 1`,
     [tag.id]
   );
   if (!sessionRes.rowCount) return;
@@ -84,6 +89,7 @@ async function evaluateOperationalAlarmRules(tag: {
         await createAlert({
           workerId: session.worker_id ?? undefined,
           tagId: tag.id,
+          hardwareDeviceId: session.hardware_device_id,
           coldRoomId: session.cold_room_id ?? undefined,
           severity: 'warning',
           alertType: 'alarm_rule_warning',
@@ -96,6 +102,7 @@ async function evaluateOperationalAlarmRules(tag: {
     if (elapsedMinutes >= Number(rule.alarm_minutes)) {
       if (!alreadyInOperationalAlarm) {
         await markPresenceAlarm(session.tag_id, new Date().toISOString(), {
+          hardwareDeviceId: session.hardware_device_id,
           workerId: session.worker_id,
           coldRoomId: session.cold_room_id
         });
@@ -113,6 +120,7 @@ async function evaluateOperationalAlarmRules(tag: {
         await createAlert({
           workerId: session.worker_id ?? undefined,
           tagId: tag.id,
+          hardwareDeviceId: session.hardware_device_id,
           coldRoomId: session.cold_room_id ?? undefined,
           severity: 'critical',
           alertType: 'alarm_rule_alarm',
@@ -129,11 +137,14 @@ async function upsertOpenSession(tag: any, event: ParsedPresenceEvent): Promise<
     logger.error({ tagId: tag.id, eventId: event.eventId, startedAt: event.timestamp }, 'rejected session creation due to invalid started_at');
     return;
   }
+  if (!Number.isInteger(tag.hardware_device_id)) {
+    throw new Error('central_hardware_mapping_required: cold room sessions require hardwareDeviceId');
+  }
   await db.query(
-    `INSERT INTO cold_room_sessions(worker_id, tag_id, cold_room_id, started_at, source_event_id)
-     VALUES($1, $2, $3, $4, $5)
+    `INSERT INTO cold_room_sessions(worker_id, tag_id, hardware_device_id, cold_room_id, started_at, source_event_id)
+     VALUES($1, $2, $3, $4, $5, $6)
      ON CONFLICT DO NOTHING`,
-    [tag.worker_id, tag.id, tag.cold_room_id, event.timestamp, event.eventId]
+    [tag.worker_id, tag.id, tag.hardware_device_id, tag.cold_room_id, event.timestamp, event.eventId]
   );
 }
 
@@ -147,10 +158,11 @@ async function finalizeSession(
     `UPDATE cold_room_sessions
      SET ended_at = $1,
          duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM ($1::timestamptz - started_at)))::int,
-         close_event_id = COALESCE($2, close_event_id)
+         close_event_id = COALESCE($2, close_event_id),
+         hardware_device_id = COALESCE(hardware_device_id, $4)
      WHERE id = $3 AND ended_at IS NULL
-     RETURNING id, started_at, worker_id, cold_room_id, tag_id`,
-    [endedAt, closeEventId, session.id]
+     RETURNING id, started_at, worker_id, cold_room_id, tag_id, hardware_device_id`,
+    [endedAt, closeEventId, session.id, session.hardware_device_id]
   );
 
   if (!updateResult.rowCount) return false;
@@ -173,6 +185,7 @@ async function finalizeSession(
     await createAlert({
       workerId: closed.worker_id ?? undefined,
       tagId: closed.tag_id,
+      hardwareDeviceId: closed.hardware_device_id,
       coldRoomId: closed.cold_room_id ?? undefined,
       severity: prelimit ? 'warning' : 'critical',
       alertType: prelimit ? 'continuous_limit_prewarning' : 'continuous_limit_exceeded',
@@ -190,6 +203,7 @@ async function finalizeSession(
     await openIncident({
       workerId: closed.worker_id ?? undefined,
       tagId: closed.tag_id,
+      hardwareDeviceId: closed.hardware_device_id,
       coldRoomId: closed.cold_room_id ?? undefined,
       incidentType: 'continuous_exposure_breach',
       reason: 'Exceso de permanencia continuada en cámara frigorífica',
@@ -207,6 +221,7 @@ async function finalizeSession(
     await createAlert({
       workerId: closed.worker_id ?? undefined,
       tagId: closed.tag_id,
+      hardwareDeviceId: closed.hardware_device_id,
       coldRoomId: closed.cold_room_id ?? undefined,
       severity: 'critical',
       alertType: 'daily_limit_exceeded',
@@ -226,6 +241,7 @@ async function closeStaleSessions(): Promise<void> {
             COALESCE(s.worker_id, wta.worker_id) AS worker_id,
             s.cold_room_id,
             s.tag_id,
+            COALESCE(s.hardware_device_id, t.hardware_device_id) AS hardware_device_id,
             t.tag_uid,
             COALESCE(cr.max_continuous_minutes, $1) AS max_continuous_minutes,
             COALESCE(cr.pre_alert_minutes, $2) AS pre_alert_minutes,
@@ -247,7 +263,7 @@ async function closeStaleSessions(): Promise<void> {
       ))
      WHERE s.ended_at IS NULL
      GROUP BY s.id, s.started_at, COALESCE(s.worker_id, wta.worker_id), s.cold_room_id,
-              s.tag_id, t.tag_uid, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes`,
+              s.tag_id, s.hardware_device_id, t.hardware_device_id, t.tag_uid, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes`,
     [env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES]
   );
 
@@ -297,7 +313,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
   const gatewayLookupValue = centralIdentity ? identity.hardwareGatewayId : identity.gatewayMac;
   const tagLookupValue = centralIdentity ? identity.hardwareDeviceId : identity.tagMac.toLowerCase();
   const tagRes = await db.query(
-    `SELECT t.id, t.tag_uid,
+    `SELECT t.id, t.tag_uid, t.hardware_device_id,
             wta.worker_id,
             wta.assigned_at,
             wta.unassigned_at,
@@ -327,6 +343,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
     await createAlert({
       workerId: tag.worker_id,
       tagId: tag.id,
+      hardwareDeviceId: tag.hardware_device_id,
       coldRoomId: tag.cold_room_id,
       severity: 'warning',
       alertType: 'low_battery',
@@ -384,6 +401,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
           await createAlert({
             workerId: tag.worker_id,
             tagId: tag.id,
+            hardwareDeviceId: tag.hardware_device_id,
             coldRoomId: tag.cold_room_id,
             severity: 'warning',
             alertType: 'break_not_compliant',
@@ -393,6 +411,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
           await openIncident({
             workerId: tag.worker_id,
             tagId: tag.id,
+            hardwareDeviceId: tag.hardware_device_id,
             coldRoomId: tag.cold_room_id,
             incidentType: 'non_compliant_reentry',
             reason: 'Intento de reentrada sin descanso reglamentario',
@@ -416,6 +435,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
               COALESCE(s.worker_id, wta.worker_id) AS worker_id,
               COALESCE(s.cold_room_id, g.cold_room_id) AS cold_room_id,
               s.tag_id,
+              COALESCE(s.hardware_device_id, t.hardware_device_id) AS hardware_device_id,
               COALESCE(cr.max_continuous_minutes, $2) AS max_continuous_minutes,
               COALESCE(cr.pre_alert_minutes, $3) AS pre_alert_minutes,
               COALESCE(cr.max_daily_minutes, $4) AS max_daily_minutes
@@ -438,7 +458,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent): Promis
 export function startComplianceRuleLoop(): void {
   setInterval(() => {
     db.query(
-      `SELECT DISTINCT t.id, wta.worker_id, g.cold_room_id
+      `SELECT DISTINCT t.id, t.hardware_device_id, wta.worker_id, g.cold_room_id
        FROM cold_room_sessions s
        JOIN tags t ON t.id = s.tag_id
        LEFT JOIN worker_tag_assignments wta ON wta.tag_id = t.id AND wta.active = true

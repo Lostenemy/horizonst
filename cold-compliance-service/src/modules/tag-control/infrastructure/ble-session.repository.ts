@@ -12,23 +12,27 @@ export async function isBleSessionActive(params: { tagId: string }): Promise<boo
   return Boolean(result.rows[0]?.is_active);
 }
 
-export async function markBleSessionActive(params: { tagId: string; tagUid: string; gatewayMac: string }): Promise<void> {
+export async function markBleSessionActive(params: { tagId: string; hardwareDeviceId?: number | null; tagUid: string; gatewayMac: string }): Promise<void> {
+  if (!Number.isInteger(params.hardwareDeviceId)) {
+    throw new Error('central_hardware_mapping_required: BLE sessions require hardwareDeviceId');
+  }
   await db.query(
-    `INSERT INTO ble_alarm_sessions(tag_id, tag_uid, gateway_mac, is_active, connected_at, disconnected_at,
+    `INSERT INTO ble_alarm_sessions(tag_id, hardware_device_id, tag_uid, gateway_mac, is_active, connected_at, disconnected_at,
                                     lease_expires_at, disconnect_requested_at, disconnect_confirmed_at, last_error, updated_at)
-     VALUES($1, $2, $3, TRUE, NOW(), NULL, NOW() + $4::interval, NULL, NULL, NULL, NOW())
+     VALUES($1, $2, $3, $4, TRUE, NOW(), NULL, NOW() + $5::interval, NULL, NULL, NULL, NOW())
      ON CONFLICT (tag_id)
-     DO UPDATE SET tag_uid = EXCLUDED.tag_uid,
+     DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, ble_alarm_sessions.hardware_device_id),
+                   tag_uid = EXCLUDED.tag_uid,
                    gateway_mac = EXCLUDED.gateway_mac,
                    is_active = TRUE,
                    connected_at = NOW(),
                    disconnected_at = NULL,
-                   lease_expires_at = NOW() + $4::interval,
+                   lease_expires_at = NOW() + $5::interval,
                    disconnect_requested_at = NULL,
                    disconnect_confirmed_at = NULL,
                    last_error = NULL,
                    updated_at = NOW()`,
-    [params.tagId, params.tagUid.toLowerCase(), params.gatewayMac.toLowerCase(), `${Math.max(1000, env.TAG_ALARM_BLE_SESSION_TTL_MS)} milliseconds`]
+    [params.tagId, params.hardwareDeviceId, params.tagUid.toLowerCase(), params.gatewayMac.toLowerCase(), `${Math.max(1000, env.TAG_ALARM_BLE_SESSION_TTL_MS)} milliseconds`]
   );
 }
 

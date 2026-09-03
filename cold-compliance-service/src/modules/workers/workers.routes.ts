@@ -135,11 +135,25 @@ workersRouter.post('/:id/assign-tag', requireRoles(['supervisor', 'administrador
       return res.status(409).json({ error: 'inactive_worker', entity: 'worker', message: 'No se puede asignar un tag a un trabajador inactivo.' });
     }
 
+    const tag = await db.query<{ hardware_device_id: number | null }>(
+      'SELECT hardware_device_id FROM tags WHERE id = $1',
+      [tagId]
+    );
+    if (!tag.rowCount) return res.status(404).json({ error: 'not_found' });
+    if (!Number.isInteger(tag.rows[0].hardware_device_id)) {
+      return res.status(409).json({
+        error: 'central_hardware_mapping_required',
+        entity: 'tag',
+        message: 'El tag debe estar reconciliado con Hardware Manager antes de asignarlo.'
+      });
+    }
+
     await db.query('UPDATE worker_tag_assignments SET active = false, unassigned_at = NOW() WHERE worker_id = $1 AND active = true', [req.params.id]);
     await db.query('UPDATE worker_tag_assignments SET active = false, unassigned_at = NOW() WHERE tag_id = $1 AND active = true', [tagId]);
     const result = await db.query(
-      `INSERT INTO worker_tag_assignments(worker_id, tag_id, assigned_at, active) VALUES($1, $2, NOW(), true) RETURNING *`,
-      [req.params.id, tagId]
+      `INSERT INTO worker_tag_assignments(worker_id, tag_id, hardware_device_id, assigned_at, active)
+       VALUES($1, $2, $3, NOW(), true) RETURNING *`,
+      [req.params.id, tagId, tag.rows[0].hardware_device_id]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) { next(e); }

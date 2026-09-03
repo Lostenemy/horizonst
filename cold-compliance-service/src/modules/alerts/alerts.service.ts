@@ -10,6 +10,7 @@ interface CreatedAlert {
   id: string;
   worker_id: string | null;
   tag_id: string | null;
+  hardware_device_id: number | null;
   severity: string;
   alert_type: string;
 }
@@ -17,6 +18,7 @@ interface CreatedAlert {
 export async function createAlert(params: {
   workerId?: string;
   tagId?: string;
+  hardwareDeviceId?: number;
   coldRoomId?: string;
   severity: 'info' | 'warning' | 'critical';
   alertType: string;
@@ -25,14 +27,18 @@ export async function createAlert(params: {
   dispatchPhysicalAlarm?: boolean;
   queryClient?: QueryClient;
 }): Promise<CreatedAlert> {
+  if (params.tagId && !Number.isInteger(params.hardwareDeviceId)) {
+    throw new Error('central_hardware_mapping_required: tagged alerts require hardwareDeviceId');
+  }
   const queryClient = params.queryClient ?? db;
   const inserted = await queryClient.query<CreatedAlert>(
-    `INSERT INTO alerts(worker_id, tag_id, cold_room_id, severity, alert_type, message, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, worker_id, tag_id, severity, alert_type`,
+    `INSERT INTO alerts(worker_id, tag_id, hardware_device_id, cold_room_id, severity, alert_type, message, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, worker_id, tag_id, hardware_device_id, severity, alert_type`,
     [
       params.workerId ?? null,
       params.tagId ?? null,
+      params.hardwareDeviceId ?? null,
       params.coldRoomId ?? null,
       params.severity,
       params.alertType,

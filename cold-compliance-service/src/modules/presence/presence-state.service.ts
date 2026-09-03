@@ -5,12 +5,14 @@ import { triggerPhysicalAlarmSequence } from '../alerts/alerts.service';
 
 interface PresenceStateTag {
   id: string;
+  hardware_device_id: number;
   worker_id: string | null;
   cold_room_id: string | null;
 }
 
 interface PresenceOperationalState {
   tag_id: string;
+  hardware_device_id: number;
   worker_id: string | null;
   cold_room_id: string | null;
   inside: boolean;
@@ -22,6 +24,7 @@ interface PresenceOperationalState {
 }
 
 interface PresenceAlarmContext {
+  hardwareDeviceId: number;
   workerId?: string | null;
   coldRoomId?: string | null;
 }
@@ -60,6 +63,9 @@ function dispatchPhysicalAlarm(params: Parameters<typeof triggerPhysicalAlarmSeq
 }
 
 export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string): Promise<{ isGraceReentry: boolean }> {
+  if (!Number.isInteger(tag.hardware_device_id)) {
+    throw new Error('central_hardware_mapping_required: presence state requires hardwareDeviceId');
+  }
   const current = await db.query<PresenceOperationalState>(
     `SELECT * FROM presence_operational_state WHERE tag_id = $1`,
     [tag.id]
@@ -78,11 +84,12 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
   if (graceActive) {
     await db.query(
       `INSERT INTO presence_operational_state(
-        tag_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
+        tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
       )
-      VALUES($1, $2, $3, TRUE, TRUE, FALSE, NULL, NULL, $4, NULL, NOW())
+      VALUES($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, NULL, $5, NULL, NOW())
       ON CONFLICT (tag_id)
-      DO UPDATE SET worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
+      DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, presence_operational_state.hardware_device_id),
+                    worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
                     cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                     inside = TRUE,
                     in_alarm = TRUE,
@@ -92,7 +99,7 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
                     last_alarm_at = EXCLUDED.last_alarm_at,
                     reminder_sent_at = NULL,
                     updated_at = NOW()`,
-      [tag.id, tag.worker_id, tag.cold_room_id, eventTs]
+      [tag.id, tag.hardware_device_id, tag.worker_id, tag.cold_room_id, eventTs]
     );
 
     dispatchPhysicalAlarm({
@@ -108,11 +115,12 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
 
   await db.query(
     `INSERT INTO presence_operational_state(
-      tag_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, reminder_sent_at, updated_at
+      tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, reminder_sent_at, updated_at
     )
-    VALUES($1, $2, $3, TRUE, FALSE, FALSE, NULL, NULL, NULL, NOW())
+    VALUES($1, $2, $3, $4, TRUE, FALSE, FALSE, NULL, NULL, NULL, NOW())
     ON CONFLICT (tag_id)
-    DO UPDATE SET worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
+    DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, presence_operational_state.hardware_device_id),
+                  worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
                   cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                   inside = TRUE,
                   in_grace = FALSE,
@@ -120,29 +128,33 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
                   grace_started_at = NULL,
                   reminder_sent_at = NULL,
                   updated_at = NOW()`,
-    [tag.id, tag.worker_id, tag.cold_room_id]
+    [tag.id, tag.hardware_device_id, tag.worker_id, tag.cold_room_id]
   );
 
   return { isGraceReentry: false };
 }
 
-export async function markPresenceAlarm(tagId: string, eventTs: string, context: PresenceAlarmContext = {}): Promise<void> {
+export async function markPresenceAlarm(tagId: string, eventTs: string, context: PresenceAlarmContext): Promise<void> {
+  if (!Number.isInteger(context.hardwareDeviceId)) {
+    throw new Error('central_hardware_mapping_required: presence alarm state requires hardwareDeviceId');
+  }
   await db.query(
     `INSERT INTO presence_operational_state(
-      tag_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
-    ) VALUES($1, $2, $3, TRUE, TRUE, FALSE, NULL, NULL, $4, NULL, NOW())
+      tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
+    ) VALUES($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, NULL, $5, NULL, NOW())
     ON CONFLICT (tag_id)
-    DO UPDATE SET worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
+    DO UPDATE SET hardware_device_id = COALESCE(EXCLUDED.hardware_device_id, presence_operational_state.hardware_device_id),
+                  worker_id = COALESCE(EXCLUDED.worker_id, presence_operational_state.worker_id),
                   cold_room_id = COALESCE(EXCLUDED.cold_room_id, presence_operational_state.cold_room_id),
                   inside = TRUE,
                   in_alarm = TRUE,
                   in_grace = FALSE,
                   grace_until = NULL,
                   grace_started_at = NULL,
-                  last_alarm_at = $4,
+                  last_alarm_at = $5,
                   reminder_sent_at = NULL,
                   updated_at = NOW()`,
-    [tagId, context.workerId ?? null, context.coldRoomId ?? null, eventTs]
+    [tagId, context.hardwareDeviceId, context.workerId ?? null, context.coldRoomId ?? null, eventTs]
   );
 }
 
