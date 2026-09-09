@@ -7,7 +7,7 @@ import {
   roleAllowsHardware,
   scopedHardwarePredicate
 } from '../middleware/hardwareRbac';
-import { signToken } from '../utils/jwt';
+import { signToken, credentialVersion } from '../utils/jwt';
 
 const COMPANY_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const COMPANY_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -31,17 +31,30 @@ after(async () => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
-const token = (userId: number, role: Parameters<typeof signToken>[0]['role']) =>
-  signToken({ userId, role });
+const fixtureUsers = new Map<number, { id: number; role: Parameters<typeof signToken>[0]['role']; password_hash: string }>();
+const token = (userId: number, role: Parameters<typeof signToken>[0]['role']) => {
+  fixtureUsers.set(userId, { id: userId, role, password_hash: 'fixture-password-hash' });
+  return signToken({ userId, role, credentialVersion: credentialVersion('fixture-password-hash') });
+};
 
-const api = (path: string, authToken?: string, init: RequestInit = {}) => fetch(`${baseUrl}${path}`, {
+const api = async (path: string, authToken?: string, init: RequestInit = {}) => {
+  const domainQuery = pool.query;
+  (pool as any).query = async (sql: string, params: any[]) => {
+    if (sql === 'SELECT id, role, password_hash FROM users WHERE id = $1') {
+      const user = fixtureUsers.get(params[0]);
+      return { rows: user ? [user] : [] };
+    }
+    return (domainQuery as any).call(pool, sql, params);
+  };
+  try { return await fetch(`${baseUrl}${path}`, {
   ...init,
   headers: {
     'Content-Type': 'application/json',
     ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     ...(init.headers ?? {})
   }
-});
+  }); } finally { pool.query = domainQuery; }
+};
 
 test('anonymous public registration cannot create ADMIN', async () => {
   const response = await api('/api/auth/register', undefined, {

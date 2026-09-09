@@ -1,0 +1,22 @@
+name: Security artifacts
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  incremental-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, revisión verificada
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check added artifacts and recognizable secrets
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          node scripts/check-security-artifacts.cjs --self-test
+          node scripts/check-security-artifacts.cjs --base "$BASE_SHA"

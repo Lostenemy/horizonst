@@ -8,6 +8,7 @@ export type Role = 'ADMIN' | 'USER' | HardwareRole;
 export interface JwtPayload {
   userId: number;
   role: Role;
+  credentialVersion?: string;
 }
 
 export interface GatewayMessage {

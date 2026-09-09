@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
+import { validPassword } from '../auth/password-reset';
 
 export const usersRouter = Router();
 
@@ -65,6 +66,7 @@ usersRouter.post('/', requireRoles(['administrador', 'superadministrador']), asy
     }
 
     assertRoleAllowedForManagement(normalizedRol);
+    if (!validPassword(normalizedPassword)) throw badRequest('Contraseña: mínimo 10 caracteres y máximo 72 bytes UTF-8');
     const result = await db.query(
       `INSERT INTO app_users(first_name,last_name,email,phone,dni,role,status,password_hash,shift)
        VALUES($1,$2,$3,$4,$5,$6,$7,crypt($8, gen_salt('bf')),$9)
@@ -78,6 +80,7 @@ usersRouter.post('/', requireRoles(['administrador', 'superadministrador']), asy
 });
 
 usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
+  let client;
   try {
     const targetUser = await getUserById(req.params.id);
     if (targetUser && req.authUser?.role === 'administrador' && targetUser.role === 'superadministrador') {
@@ -101,7 +104,10 @@ usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']),
     if (normalizedRol !== null) {
       assertRoleAllowedForManagement(normalizedRol);
     }
-    const result = await db.query(
+    if (normalizedPassword !== null && !validPassword(normalizedPassword)) throw badRequest('Contraseña: mínimo 10 caracteres y máximo 72 bytes UTF-8');
+    client = await db.connect();
+    await client.query('BEGIN');
+    const result = await client.query(
       `UPDATE app_users
        SET first_name = COALESCE($2, first_name),
            last_name = COALESCE($3, last_name),
@@ -117,10 +123,16 @@ usersRouter.patch('/:id', requireRoles(['administrador', 'superadministrador']),
        RETURNING id, first_name, last_name, email, phone, dni, role, status, shift, created_at, updated_at`,
       [req.params.id, normalizedNombre, normalizedApellidos, normalizedEmail, normalizedTelefono, normalizedDni, normalizedRol, estado ?? null, normalizedTurno, normalizedPassword]
     );
+    if (normalizedPassword !== null || estado === 'inactive' || (normalizedRol !== null && normalizedRol !== targetUser?.role)) {
+      await client.query('DELETE FROM auth_sessions WHERE user_id = $1', [req.params.id]);
+      await client.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [req.params.id]);
+    }
+    await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (error) {
+    if (client) await client.query('ROLLBACK');
     next(error);
-  }
+  } finally { client?.release(); }
 });
 
 usersRouter.post('/:id/deactivate', requireRoles(['administrador', 'superadministrador']), async (req, res, next) => {
@@ -131,8 +143,15 @@ usersRouter.post('/:id/deactivate', requireRoles(['administrador', 'superadminis
     }
 
     const result = await db.query(
-      `UPDATE app_users SET status = 'inactive', updated_at = NOW() WHERE id = $1
-       RETURNING id, first_name, last_name, email, phone, dni, role, status, shift, created_at, updated_at`,
+      `WITH changed AS (
+         UPDATE app_users SET status = 'inactive', updated_at = NOW() WHERE id = $1
+         RETURNING id, first_name, last_name, email, phone, dni, role, status, shift, created_at, updated_at
+       ), revoked_sessions AS (
+         DELETE FROM auth_sessions USING changed WHERE auth_sessions.user_id = changed.id
+       ), revoked_resets AS (
+         UPDATE password_reset_tokens SET used_at = NOW() FROM changed
+         WHERE password_reset_tokens.user_id = changed.id AND used_at IS NULL
+       ) SELECT * FROM changed`,
       [req.params.id]
     );
     res.json(result.rows[0]);

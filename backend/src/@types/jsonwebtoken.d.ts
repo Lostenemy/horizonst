@@ -30,7 +30,8 @@ declare module 'jsonwebtoken' {
 
   export function verify(
     token: string,
-    secretOrPublicKey: Secret
+    secretOrPublicKey: Secret,
+    options?: { algorithms?: string[] }
   ): string | JwtPayload;
 
   const jwt: {

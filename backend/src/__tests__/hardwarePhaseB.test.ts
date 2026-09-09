@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import app from '../app';
 import { pool } from '../db/pool';
-import { signToken } from '../utils/jwt';
+import { signToken, credentialVersion } from '../utils/jwt';
 import { normalizeGatewayMac } from '../utils/mac';
 import {
   createOpaqueServiceToken,
@@ -224,8 +224,11 @@ test('Horneo service cannot resolve Company B gateway by id or MAC', async () =>
 });
 
 test('new central gateway without company is rejected before SQL mutation', async () => {
-  (pool as any).query = async () => { throw new Error('DB must not be called'); };
-  const userToken = signToken({ userId: 1, role: 'hardware_superadmin' });
+  (pool as any).query = async (sql: string) => {
+    assert.equal(sql, 'SELECT id, role, password_hash FROM users WHERE id = $1', 'only authentication may read before validation');
+    return { rows: [{ id: 1, role: 'hardware_superadmin', password_hash: 'fixture-hash' }] };
+  };
+  const userToken = signToken({ userId: 1, role: 'hardware_superadmin', credentialVersion: credentialVersion('fixture-hash') });
   const response = await fetch(`${baseUrl}/api/gateways`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${userToken}`, 'Content-Type': 'application/json' },

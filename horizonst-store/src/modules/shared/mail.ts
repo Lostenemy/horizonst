@@ -366,6 +366,16 @@ export async function sendEmailVerificationEmail(input: EmailVerificationEmailIn
   await deliver(buildEmailVerificationEmail(input));
 }
 
+export async function sendPasswordResetEmail(input: { email: string; resetUrl: string }, deliver: (content: MailContent) => Promise<void> = sendMail) {
+  if (!env.mail.enabled && deliver === sendMail) throw new Error('mail_disabled');
+  await deliver({
+    to: input.email,
+    subject: 'HorizonST — Recuperación de contraseña',
+    text: `Abre este enlace para restablecer tu contraseña: ${input.resetUrl}\nSi no lo has solicitado, ignora este mensaje.`,
+    html: `<p><a href="${escapeHtml(input.resetUrl)}">Restablecer contraseña</a></p><p>Si no lo has solicitado, ignora este mensaje.</p>`
+  });
+}
+
 export async function sendDistributorWelcomeEmail(input: DistributorWelcomeEmailInput, deliver: (content: MailContent) => Promise<void> = sendMail) {
   const brochure = await readFile(distributorBrochurePath);
   await deliver(buildDistributorWelcomeEmail(input, brochure));

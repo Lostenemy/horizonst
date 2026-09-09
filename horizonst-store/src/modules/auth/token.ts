@@ -15,7 +15,15 @@ export const refreshTokenSeconds = (): number => parseDuration(env.auth.refreshT
 export const passwordResetSeconds = (): number => parseDuration(env.auth.passwordResetTtl);
 export const emailVerificationSeconds = (): number => parseDuration(env.auth.emailVerificationTtl);
 
-export type AccessTokenPayload = { sub: string; email: string; role: 'customer' | 'distributor' | 'admin'; status: string };
+export type AccessTokenPayload = { sub: string; email: string; role: 'customer' | 'distributor' | 'admin'; status: string; credentialVersion?: string };
+
+export const credentialVersion = (passwordHash: string): string =>
+  createHmac('sha256', env.auth.jwtSecret).update('credential-version\0').update(passwordHash).digest('hex');
+
+export const matchesCredentialVersion = (version: unknown, passwordHash: string): boolean => {
+  if (typeof version !== 'string' || !/^[a-f0-9]{64}$/.test(version)) return false;
+  return timingSafeEqual(Buffer.from(version, 'hex'), Buffer.from(credentialVersion(passwordHash), 'hex'));
+};
 
 export const signAccessToken = (payload: AccessTokenPayload): string => {
   const now = Math.floor(Date.now() / 1000);
@@ -27,13 +35,16 @@ export const signAccessToken = (payload: AccessTokenPayload): string => {
 };
 
 export const verifyAccessToken = (token: string): AccessTokenPayload => {
-  const [header, body, signature] = token.split('.');
-  if (!header || !body || !signature) throw new Error('Invalid token');
+  const parts = token.split('.');
+  const [header, body, signature] = parts;
+  if (parts.length !== 3 || !header || !body || !signature) throw new Error('Invalid token');
+  const metadata = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+  if (metadata.alg !== 'HS256' || metadata.typ !== 'JWT') throw new Error('Invalid token');
   const expected = createHmac('sha256', env.auth.jwtSecret).update(`${header}.${body}`).digest('base64url');
-  if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) throw new Error('Invalid token');
+  if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) throw new Error('Invalid token');
   const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-  if (parsed.exp < Math.floor(Date.now() / 1000)) throw new Error('Expired token');
-  return { sub: parsed.sub, email: parsed.email, role: parsed.role, status: parsed.status };
+  if (!Number.isFinite(parsed.exp) || parsed.exp <= Math.floor(Date.now() / 1000) || parsed.iss !== 'horizonst-store' || typeof parsed.sub !== 'string') throw new Error('Invalid or expired token');
+  return { sub: parsed.sub, email: parsed.email, role: parsed.role, status: parsed.status, credentialVersion: parsed.credentialVersion };
 };
 
 export const createOpaqueToken = (): string => randomBytes(32).toString('base64url');
