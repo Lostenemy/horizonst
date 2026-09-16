@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -7,6 +9,13 @@ import app
 
 
 class VmqAdminTests(unittest.TestCase):
+  def test_compose_enables_init_reaper_for_vernemq_observer(self):
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text(encoding="utf-8")
+    service = re.search(r"(?ms)^  vernemq_observer:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|^volumes:|\Z)", compose)
+
+    self.assertIsNotNone(service, "vernemq_observer service must exist")
+    self.assertRegex(service.group("body"), r"(?m)^    init: true\s*$")
+
   def test_run_vmq_admin_limits_erlang_schedulers(self):
     captured = {}
 

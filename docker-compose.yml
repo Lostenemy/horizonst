@@ -206,6 +206,7 @@ services:
       - horizonst
 
   vernemq_observer:
+    init: true
     build:
       context: ./vernemq-observer
     environment:
