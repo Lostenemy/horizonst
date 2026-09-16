@@ -11,7 +11,7 @@ export function createLoginRateLimit(now = Date.now) {
       globalAttempts = 0;
       attempts.clear();
     }
-    const source = req.socket.remoteAddress || 'unknown';
+    const source = req.ip || req.socket.remoteAddress || 'unknown';
     const count = (attempts.get(source) || 0) + 1;
     globalAttempts += 1;
     if (attempts.size < 1000 || attempts.has(source)) attempts.set(source, count);

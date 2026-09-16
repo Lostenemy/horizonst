@@ -1,5 +1,6 @@
 import cors from "cors";
 import { createLoginRateLimit } from "./loginRateLimit.js";
+import { createTrustedProxy } from "./trustedProxy.js";
 import express from "express";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
@@ -25,6 +26,7 @@ const logger = pino({
 });
 
 const app = express();
+app.set('trust proxy', createTrustedProxy(process.env.UI_TRUSTED_PROXY_IP || ''));
 app.use(helmet());
 app.use(express.json({ limit: "1mb" }));
 
