@@ -230,6 +230,8 @@ docker compose run --rm horizonst_store npm run migrate
 # internamente: node dist/db/migrate.js
 ```
 
+Si la base solo registra `001`–`010`, **no ejecutar** `npm run migrate` para desplegar la remediación de seguridad: también aplicaría las migraciones comerciales `011`–`015`. Tras revisar una copia aislada y autorizar la operación, `npm run migrate:security` ejecuta exclusivamente el SQL versionado `016_auth_rate_limits.sql`, en una transacción, con registro y SHA-256 en `store.security_migrations`. No modifica `store.schema_migrations`; `011`–`015` siguen pendientes para reconciliación posterior. Cuando esa reconciliación se autorice, el runner general podrá ejecutar `011`–`015` y aplicar idempotentemente `016` antes de registrarla también en su historial normal. El comando de seguridad es repetible y comprueba la estructura requerida. No arrancar la nueva versión de login antes de completar y verificar esta migración; en ausencia de la tabla devuelve 503.
+
 ### Pruebas rápidas con curl
 
 ```bash

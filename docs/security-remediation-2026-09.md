@@ -46,6 +46,8 @@ Ventana de quince minutos, contando intentos admitidos, no solo fallidos:
 2. `cold-compliance-service/migrations/021_auth_rate_limits.sql`.
 3. `horizonst-store/migrations/016_auth_rate_limits.sql`.
 
+En bases Store con solo `001`–`010` registrados, el runner general aplicaría también `011`–`015`, que afectan al catálogo comercial. Para esta remediación usar exclusivamente `horizonst-store` → `npm run migrate:security` (tras validación aislada y autorización operativa). Este comando aplica solo el SQL `016` y registra su checksum en `store.security_migrations`, sin marcar `011`–`015` como aplicadas ni modificar `store.schema_migrations`. Es idempotente; la reconciliación comercial queda como trabajo posterior. No ejecutar `npm run migrate` en ese estado. La migración separada no implica autorización para desplegar.
+
 Solo crean contadores y su índice de caducidad, sin modificar filas históricas, usuarios, FKs de overlays o hardware. Los runners existentes las envuelven en transacción. Se corrige el runner Horneo para utilizar una única conexión PostgreSQL durante BEGIN, ejecución, registro y COMMIT/ROLLBACK; usar consultas independientes del pool no garantiza esa propiedad. La prueba previa se actualiza para comprobar esta garantía más fuerte.
 
 No se han ejecutado estas migraciones contra ninguna base desplegada. En este entorno no se localizaron binarios PostgreSQL para una instancia desechable; queda pendiente la validación SQL real.
