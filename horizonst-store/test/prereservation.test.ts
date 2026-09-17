@@ -116,7 +116,8 @@ let tokenIndex = 0;
 const confirmationEmails: any[] = [];
 const commercialEmails: any[] = [];
 const app = express();
-configureTrustProxy(app);
+// El socket local representa al único proxy autorizado en esta prueba HTTP.
+configureTrustProxy(app, '127.0.0.1');
 app.use(express.json());
 app.use('/api/public/prereservation', createPrereservationRouter({
   pool,

@@ -1,5 +1,7 @@
 import path from 'node:path';
 import express from 'express';
+import { configureTrustProxy } from './config/trust-proxy';
+import { env } from './config/env';
 import { db } from './db/pool';
 import { errorHandler } from './middleware/error-handler';
 import { alarmRulesRouter } from './modules/alarm-rules/alarm-rules.routes';
@@ -18,7 +20,16 @@ import { workersRouter } from './modules/workers/workers.routes';
 
 export function buildApp() {
   const app = express();
-  app.set('trust proxy', true);
+  app.disable('x-powered-by');
+  configureTrustProxy(app, env.TRUSTED_PROXY_IP);
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Content-Security-Policy', "object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
+    // Inventariar los manejadores inline antes de imponer script-src sin romper la UI.
+    res.setHeader('Content-Security-Policy-Report-Only', "script-src 'self'");
+    next();
+  });
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));

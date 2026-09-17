@@ -68,6 +68,7 @@ const mail: StoreMailConfig = {
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: numberFromEnv(process.env.PORT ?? process.env.STORE_PORT, 4020),
+  trustedProxyIp: process.env.TRUSTED_PROXY_IP?.trim() || undefined,
   databaseUrl: process.env.DATABASE_URL,
   db: {
     host: process.env.DB_HOST ?? 'postgres',

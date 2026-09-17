@@ -4,29 +4,44 @@ import { db } from '../../db/pool';
 import { requireAuth } from '../../middleware/auth';
 import { env } from '../../config/env';
 import { sendMail } from '../../utils/mail';
+import { resetPasswordWithToken, validPassword } from './password-reset';
+import { createAuthRateLimit } from '../../middleware/auth-rate-limit';
 
 export const authRouter = Router();
+authRouter.use(createAuthRateLimit(db));
 
 authRouter.post('/login', async (req, res, next) => {
+  let client;
   try {
     const { username, password } = req.body;
-    const result = await db.query(
+    if (typeof username !== 'string' || !username || username.length > 320 || typeof password !== 'string' || !password || Buffer.byteLength(password, 'utf8') > 72) {
+      return res.status(400).json({ error: 'invalid_credentials' });
+    }
+    client = await db.connect();
+    await client.query('BEGIN');
+    const result = await client.query(
       `SELECT id, email, role, first_name, last_name, status
        FROM app_users
        WHERE (email = $1 OR lower(first_name) = lower($1))
        AND password_hash = crypt($2, password_hash)
-       LIMIT 1`,
+       LIMIT 1 FOR UPDATE`,
       [String(username ?? ''), String(password ?? '')]
     );
     const user = result.rows[0];
-    if (!user || user.status !== 'active') return res.status(401).json({ error: 'invalid_credentials' });
+    if (!user || user.status !== 'active') {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
 
     const token = crypto.randomBytes(32).toString('hex');
-    await db.query('INSERT INTO auth_sessions(token, user_id, expires_at) VALUES($1,$2, NOW() + INTERVAL \'12 hours\')', [token, user.id]);
+    await client.query('INSERT INTO auth_sessions(token, user_id, expires_at) VALUES($1,$2, NOW() + INTERVAL \'12 hours\')', [token, user.id]);
+    await client.query('COMMIT');
+    res.setHeader('Cache-Control', 'no-store');
     res.json({ token, user });
   } catch (error) {
+    if (client) await client.query('ROLLBACK');
     next(error);
-  }
+  } finally { client?.release(); }
 });
 
 authRouter.post('/logout', requireAuth, async (req, res, next) => {
@@ -77,16 +92,10 @@ authRouter.post('/forgot-password', async (req, res, next) => {
 authRouter.post('/reset-password', async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
-    const found = await db.query(
-      `SELECT id, user_id FROM password_reset_tokens
-       WHERE token = $1 AND used_at IS NULL AND expires_at > NOW()`,
-      [String(token ?? '')]
-    );
-    const row = found.rows[0];
-    if (!row) return res.status(400).json({ error: 'invalid_token' });
-
-    await db.query('UPDATE app_users SET password_hash = crypt($2, gen_salt(\'bf\')), updated_at = NOW() WHERE id = $1', [row.user_id, String(newPassword ?? '')]);
-    await db.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1', [row.id]);
+    if (!validPassword(newPassword)) return res.status(400).json({ error: 'invalid_password', message: 'La contraseña debe tener al menos 10 caracteres y no superar 72 bytes UTF-8.' });
+    if (typeof token !== 'string' || !/^[a-f0-9]{48}$/.test(token) || !await resetPasswordWithToken(db, token, newPassword)) {
+      return res.status(400).json({ error: 'invalid_token' });
+    }
     res.json({ status: 'ok' });
   } catch (error) {
     next(error);

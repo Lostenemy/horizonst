@@ -5,10 +5,12 @@ import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth } from './middleware.js';
 import { writeAuditLog } from '../shared/audit.js';
-import { sanitizeMailError, sendDistributorWelcomeEmail, sendEmailVerificationEmail } from '../shared/mail.js';
+import { sanitizeMailError, sendDistributorWelcomeEmail, sendEmailVerificationEmail, sendPasswordResetEmail } from '../shared/mail.js';
 import { env } from '../../config/env.js';
-import { createOpaqueToken, emailVerificationSeconds, expiresAtSql, hashToken, passwordResetSeconds, refreshTokenSeconds, signAccessToken } from './token.js';
+import { createOpaqueToken, credentialVersion, emailVerificationSeconds, expiresAtSql, hashToken, passwordResetSeconds, refreshTokenSeconds, signAccessToken } from './token.js';
 import { registerDistributorSchema } from './distributor-registration.js';
+import { resetStorePassword } from './password-reset.js';
+import { createAuthRateLimit } from './rate-limit.js';
 
 const scrypt = promisify(scryptCallback);
 const HASH_PREFIX = 'scrypt';
@@ -31,13 +33,14 @@ const verifyPassword = async (password: string, storedHash: string): Promise<boo
 };
 
 const safeUserFields = 'id, email, full_name, phone, role, status, created_at, last_login_at';
-const buildAuthResponse = (user: any, refreshToken: string) => ({
+const buildAuthResponse = (user: any, refreshToken: string, passwordHash: string) => ({
   user,
-  accessToken: signAccessToken({ sub: user.id, email: user.email, role: user.role, status: user.status }),
+  accessToken: signAccessToken({ sub: user.id, email: user.email, role: user.role, status: user.status, credentialVersion: credentialVersion(passwordHash) }),
   refreshToken
 });
 
 export const authRouter = Router();
+authRouter.use(createAuthRateLimit(pool));
 
 export const consumeEmailVerificationToken = async (client: any, tokenId: string, userId: string) => {
   await client.query(
@@ -177,33 +180,44 @@ authRouter.post('/resend-verification', async (req, res, next) => {
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 
-const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+const loginSchema = z.object({ email: z.string().email().max(320), password: z.string().min(1).max(200) });
 
 authRouter.post('/login', async (req, res, next) => {
+  let client;
   try {
     const input = loginSchema.parse(req.body);
-    const { rows } = await pool.query(`SELECT ${safeUserFields}, password_hash FROM store.users WHERE email = $1`, [input.email.toLowerCase()]);
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const { rows } = await client.query(`SELECT ${safeUserFields}, password_hash FROM store.users WHERE email = $1 FOR UPDATE`, [input.email.toLowerCase()]);
     const user = rows[0];
-    if (!user || user.status !== 'active' || !(await verifyPassword(input.password, user.password_hash))) { res.status(401).json({ error: GENERIC_LOGIN_ERROR }); return; }
+    if (!user || user.status !== 'active' || !(await verifyPassword(input.password, user.password_hash))) { await client.query('ROLLBACK'); res.status(401).json({ error: GENERIC_LOGIN_ERROR }); return; }
     const refreshToken = createOpaqueToken();
-    await pool.query('INSERT INTO store.refresh_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [user.id, hashToken(refreshToken), expiresAtSql(refreshTokenSeconds()), req.header('user-agent') ?? null, req.ip]);
-    await pool.query('UPDATE store.users SET last_login_at = now(), updated_at = now() WHERE id = $1', [user.id]);
+    await client.query('INSERT INTO store.refresh_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [user.id, hashToken(refreshToken), expiresAtSql(refreshTokenSeconds()), req.header('user-agent') ?? null, req.ip]);
+    await client.query('UPDATE store.users SET last_login_at = now(), updated_at = now() WHERE id = $1', [user.id]);
+    await client.query('COMMIT');
     const { password_hash: _passwordHash, ...safeUser } = user;
-    res.json(buildAuthResponse(safeUser, refreshToken));
-  } catch (error) { next(error); }
+    res.json(buildAuthResponse(safeUser, refreshToken, _passwordHash));
+  } catch (error) { if (client) await client.query('ROLLBACK'); next(error); }
+  finally { client?.release(); }
 });
 
 authRouter.post('/refresh', async (req, res, next) => {
+  let client;
   try {
     const input = z.object({ refreshToken: z.string().min(20) }).parse(req.body);
     const tokenHash = hashToken(input.refreshToken);
-    const { rows } = await pool.query(`SELECT rt.id AS token_id, u.${safeUserFields.replaceAll(', ', ', u.')} FROM store.refresh_tokens rt JOIN store.users u ON u.id = rt.user_id WHERE rt.token_hash = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now() AND u.status = 'active'`, [tokenHash]);
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const { rows } = await client.query(`SELECT rt.id AS token_id, u.password_hash, u.${safeUserFields.replaceAll(', ', ', u.')} FROM store.refresh_tokens rt JOIN store.users u ON u.id = rt.user_id WHERE rt.token_hash = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now() AND u.status = 'active' FOR UPDATE OF u`, [tokenHash]);
     const row = rows[0];
-    if (!row) { res.status(401).json({ error: 'Invalid refresh token' }); return; }
-    const { token_id: tokenId, ...user } = row;
-    await pool.query('UPDATE store.refresh_tokens SET last_used_at = now() WHERE id = $1', [tokenId]);
-    res.json({ user, accessToken: signAccessToken({ sub: user.id, email: user.email, role: user.role, status: user.status }) });
-  } catch (error) { next(error); }
+    const current = row && await client.query('SELECT id FROM store.refresh_tokens WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()', [row.token_id]);
+    if (!row || !current?.rowCount) { await client.query('ROLLBACK'); res.status(401).json({ error: 'Invalid refresh token' }); return; }
+    const { token_id: tokenId, password_hash: passwordHash, ...user } = row;
+    await client.query('UPDATE store.refresh_tokens SET last_used_at = now() WHERE id = $1', [tokenId]);
+    await client.query('COMMIT');
+    res.json({ user, accessToken: signAccessToken({ sub: user.id, email: user.email, role: user.role, status: user.status, credentialVersion: credentialVersion(passwordHash) }) });
+  } catch (error) { if (client) await client.query('ROLLBACK'); next(error); }
+  finally { client?.release(); }
 });
 
 authRouter.post('/logout', async (req, res, next) => {
@@ -216,24 +230,26 @@ authRouter.get('/me', requireAuth, async (req, res, next) => {
 
 authRouter.post('/request-password-reset', async (req, res, next) => {
   try {
-    const input = z.object({ email: z.string().email() }).parse(req.body);
+    const input = z.object({ email: z.string().email().max(320) }).parse(req.body);
     const { rows } = await pool.query('SELECT id FROM store.users WHERE email = $1 AND status = $2', [input.email.toLowerCase(), 'active']);
-    let resetToken: string | undefined;
-    if (rows[0]) { resetToken = createOpaqueToken(); await pool.query('INSERT INTO store.password_reset_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [rows[0].id, hashToken(resetToken), expiresAtSql(passwordResetSeconds()), req.header('user-agent') ?? null, req.ip]); }
-    res.json({ message: 'If the account exists, password reset instructions will be sent.', resetToken: process.env.NODE_ENV === 'production' ? undefined : resetToken });
+    if (rows[0]) {
+      const resetToken = createOpaqueToken();
+      await pool.query('INSERT INTO store.password_reset_tokens (user_id, token_hash, expires_at, user_agent, ip_address) VALUES ($1,$2,$3,$4,$5)', [rows[0].id, hashToken(resetToken), expiresAtSql(passwordResetSeconds()), req.header('user-agent') ?? null, req.ip]);
+      try {
+        await sendPasswordResetEmail({ email: input.email.toLowerCase(), resetUrl: `${env.publicBaseUrl.replace(/\/$/, '')}/reset-password#token=${encodeURIComponent(resetToken)}` });
+      } catch {
+        // No devolver ni registrar el token, incluso con SMTP deshabilitado o en desarrollo.
+        console.error('Password reset email delivery failed');
+      }
+    }
+    res.json({ message: 'If the account exists, password reset instructions will be sent.' });
   } catch (error) { next(error); }
 });
 
 authRouter.post('/reset-password', async (req, res, next) => {
-  const client = await pool.connect();
   try {
-    const input = z.object({ token: z.string().min(20), password: z.string().min(10).max(200) }).parse(req.body);
-    const { rows } = await client.query('SELECT prt.id, prt.user_id FROM store.password_reset_tokens prt JOIN store.users u ON u.id = prt.user_id WHERE prt.token_hash = $1 AND prt.revoked_at IS NULL AND prt.used_at IS NULL AND prt.expires_at > now() AND u.status = $2', [hashToken(input.token), 'active']);
-    if (!rows[0]) { res.status(400).json({ error: 'Invalid or expired reset token' }); return; }
-    await client.query('BEGIN');
-    await client.query('UPDATE store.users SET password_hash = $2, updated_at = now() WHERE id = $1', [rows[0].user_id, await hashPassword(input.password)]);
-    await client.query('UPDATE store.password_reset_tokens SET used_at = now(), revoked_at = now() WHERE id = $1', [rows[0].id]);
-    await client.query('UPDATE store.refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [rows[0].user_id]);
-    await client.query('COMMIT'); res.json({ ok: true });
-  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
+    const input = z.object({ token: z.string().min(20).max(200), password: z.string().min(10).max(200) }).parse(req.body);
+    if (!await resetStorePassword(pool, input.token, await hashPassword(input.password))) { res.status(400).json({ error: 'Invalid or expired reset token' }); return; }
+    res.json({ ok: true });
+  } catch (error) { next(error); }
 });

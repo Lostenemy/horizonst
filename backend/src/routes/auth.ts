@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { pool } from '../db/pool';
-import { verifyPassword } from '../utils/crypto';
-import { signToken } from '../utils/jwt';
+import { verifyPasswordAsync } from '../utils/crypto';
+import { signToken, credentialVersion } from '../utils/jwt';
+import { createAuthRateLimit } from '../middleware/authRateLimit';
 
 const router = Router();
+const loginRateLimit = createAuthRateLimit(pool);
 
 router.post('/register', (_req, res) => {
   return res.status(403).json({
@@ -11,9 +13,9 @@ router.post('/register', (_req, res) => {
   });
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginRateLimit, async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
+  if (typeof email !== 'string' || email.length > 320 || !email || typeof password !== 'string' || !password || password.length > 1024) {
     return res.status(400).json({ message: 'Email and password are required' });
   }
 
@@ -30,12 +32,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const valid = verifyPassword(password, user.password_hash, user.password_salt);
+    const valid = await verifyPasswordAsync(password, user.password_hash, user.password_salt);
     if (!valid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = signToken({ userId: user.id, role: user.role });
+    const token = signToken({ userId: user.id, role: user.role, credentialVersion: credentialVersion(user.password_hash) });
 
     return res.json({
       token,

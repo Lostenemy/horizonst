@@ -31,7 +31,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
 export const createServer = (staticRoot = webDist) => {
   const app = express();
-  configureTrustProxy(app);
+  configureTrustProxy(app, env.trustedProxyIp);
   const guidePath = path.join(staticRoot, 'recursos', 'guia-appcc-2026.pdf');
 
   app.use(helmet({ contentSecurityPolicy: false }));

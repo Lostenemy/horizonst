@@ -30,12 +30,14 @@ test('Post-E.1 keeps both identities mandatory, changes no rows and documents th
 
 test('the migration runner applies each SQL migration transactionally', () => {
   const runner = readFileSync(join(process.cwd(), 'src/db/migrate.ts'), 'utf8');
-  assert.match(runner, /await db\.query\('BEGIN'\)/);
-  assert.match(runner, /await db\.query\(sql\)/);
-  assert.match(runner, /await db\.query\('COMMIT'\)/);
-  assert.match(runner, /await db\.query\('ROLLBACK'\)/);
-  assert.ok(runner.indexOf("await db.query('BEGIN')") < runner.indexOf('await db.query(sql)'));
-  assert.ok(runner.indexOf('await db.query(sql)') < runner.indexOf("await db.query('COMMIT')"));
+  assert.match(runner, /const client = await db\.connect\(\)/);
+  assert.match(runner, /await client\.query\('BEGIN'\)/);
+  assert.match(runner, /await client\.query\(sql\)/);
+  assert.match(runner, /await client\.query\('COMMIT'\)/);
+  assert.match(runner, /await client\.query\('ROLLBACK'\)/);
+  assert.match(runner, /finally \{ client\.release\(\)/);
+  assert.ok(runner.indexOf("await client.query('BEGIN')") < runner.indexOf('await client.query(sql)'));
+  assert.ok(runner.indexOf('await client.query(sql)') < runner.indexOf("await client.query('COMMIT')"));
 });
 
 const databaseUrl = process.env.POST_E1_TEST_DATABASE_URL;

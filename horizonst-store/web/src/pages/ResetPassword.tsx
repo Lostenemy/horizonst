@@ -1,10 +1,14 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import ErrorMessage from '../components/ErrorMessage';
 import { postJson } from '../lib/api';
 
 export default function ResetPassword() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [resetToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') || '');
+  useEffect(() => {
+    if (window.location.hash) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -22,7 +26,7 @@ export default function ResetPassword() {
     <section className="panel narrow">
       <h1>Restablecer contraseña</h1>
       <form onSubmit={submit}>
-        <input name="token" placeholder="Token" required />
+        <input name="token" placeholder="Token" defaultValue={resetToken} required autoComplete="off" />
         <input name="password" type="password" minLength={10} placeholder="Nueva contraseña" required />
         <button type="submit">Actualizar</button>
       </form>

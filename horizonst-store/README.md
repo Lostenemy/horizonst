@@ -11,7 +11,7 @@ Servicio privado base para la futura tienda HorizonST en `tienda.horizonst.com.e
 
 ### Proxy inverso
 
-Express confía exactamente en un salto de proxy (`trust proxy = 1`), correspondiente al Nginx frontal. Esta política permite usar `req.ip` para límites de peticiones sin confiar en el primer valor arbitrario de `X-Forwarded-For`. El servicio debe continuar publicado únicamente en `127.0.0.1:4020` y Nginx debe conservar estas cabeceras:
+Express confía exclusivamente en la IP configurada mediante `TRUSTED_PROXY_IP` (`172.18.0.1` en el Compose actual), correspondiente al Nginx frontal. Esta política permite usar `req.ip` para límites de peticiones sin confiar en valores arbitrarios de `X-Forwarded-For`. El servicio debe continuar publicado únicamente en `127.0.0.1:4020` y Nginx debe conservar estas cabeceras:
 
 ```nginx
 proxy_set_header X-Real-IP $remote_addr;
@@ -229,6 +229,8 @@ docker compose build horizonst_store
 docker compose run --rm horizonst_store npm run migrate
 # internamente: node dist/db/migrate.js
 ```
+
+Si la base solo registra `001`–`010`, **no ejecutar** `npm run migrate` para desplegar la remediación de seguridad: también aplicaría las migraciones comerciales `011`–`015`. Tras revisar una copia aislada y autorizar la operación, `npm run migrate:security` ejecuta exclusivamente el SQL versionado `016_auth_rate_limits.sql`, en una transacción, con registro y SHA-256 en `store.security_migrations`. No modifica `store.schema_migrations`; `011`–`015` siguen pendientes para reconciliación posterior. Cuando esa reconciliación se autorice, el runner general podrá ejecutar `011`–`015` y aplicar idempotentemente `016` antes de registrarla también en su historial normal. El comando de seguridad es repetible y comprueba la estructura requerida. No arrancar la nueva versión de login antes de completar y verificar esta migración; en ausencia de la tabla devuelve 503.
 
 ### Pruebas rápidas con curl
 

@@ -58,7 +58,26 @@ function esc(value) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Solo los controles construidos aquí pueden saltarse el escapado de texto de tabla.
+const trustedCells = new WeakSet();
+function htmlCell(html) {
+  const cell = Object.freeze({ html });
+  trustedCells.add(cell);
+  return cell;
+}
+function renderCell(value) {
+  return value && typeof value === 'object' && trustedCells.has(value) ? value.html : esc(value);
+}
+function actionId(value) {
+  const id = String(value ?? '');
+  return /^[a-zA-Z0-9_-]{1,128}$/.test(id) ? id : '';
+}
+function validNewPassword(value) {
+  return typeof value === 'string' && value.length >= 10 && new TextEncoder().encode(value).length <= 72;
 }
 
 
@@ -219,7 +238,7 @@ function renderManualEmergencyBanner(activeAlerts = []) {
             <span>${esc(formatDateTimeMadrid(alert.created_at))}</span>
             <span>Tag B5: ${esc(formatTagUid(alert.tag_uid))}</span>
           </div>
-          ${roleCan('supervisor') ? `<button class="manual-emergency-ack" onclick="archiveAlert('${alert.id}')">Reconocer y archivar</button>` : ''}
+          ${roleCan('supervisor') ? `<button class="manual-emergency-ack" onclick="archiveAlert('${actionId(alert.id)}')">Reconocer y archivar</button>` : ''}
         </article>
       `).join('')}
     </div>
@@ -292,36 +311,39 @@ function showSection(section) {
 function renderNav() {
   q('mainTabs').innerHTML = tabs
     .filter((tab) => !currentUser || canAccessSection(tab.id))
-    .map((tab) => `<button data-section="${tab.id}" onclick="showSection('${tab.id}')">${tab.label}</button>`)
+    .map((tab) => `<button data-section="${actionId(tab.id)}" onclick="showSection('${actionId(tab.id)}')">${tab.label}</button>`)
     .join('');
   if (window.innerWidth <= 768) q('mainTabs').classList.remove('open');
 }
 
-function setSessionText(extra = '') {
+function setSessionText(insideCount = null, alertCount = null) {
+  const activity = Number.isFinite(insideCount) && Number.isFinite(alertCount)
+    ? ` · dentro: ${insideCount} · alertas: <a class="header-alert-badge" href="#" onclick="showSection('alertsCenter');return false;">${alertCount}</a>`
+    : '';
   q('sessionBox').innerHTML = currentUser
-    ? `<div class="header-right"><div class="header-user-info"><b>${currentUser.email}</b><br><small>${roleLabel(currentUser.role)} ${extra}</small></div><button class="btn-logout" onclick="logout()">Salir</button></div>`
+    ? `<div class="header-right"><div class="header-user-info"><b>${esc(currentUser.email)}</b><br><small>${esc(roleLabel(currentUser.role))}${activity}</small></div><button class="btn-logout" onclick="logout()">Salir</button></div>`
     : '';
 }
 
 function setGlobalStatus(message) {
-  q('globalStatus').innerHTML = `<span class="live-timestamp">${message}</span>`;
+  q('globalStatus').innerHTML = `<span class="live-timestamp">${esc(message)}</span>`;
 }
 
 function stateBadge(state) {
-  if (state === 'alarma') return '<span class="badge alert">Alarma</span>';
-  if (state === 'dentro') return '<span class="badge warn">Dentro</span>';
-  return '<span class="badge ok">Fuera</span>';
+  if (state === 'alarma') return htmlCell('<span class="badge alert">Alarma</span>');
+  if (state === 'dentro') return htmlCell('<span class="badge warn">Dentro</span>');
+  return htmlCell('<span class="badge ok">Fuera</span>');
 }
 
 function severityBadge(severity) {
-  if (severity === 'critical') return '<span class="badge alert">Crítica</span>';
-  if (severity === 'warning') return '<span class="badge warn">Advertencia</span>';
-  return '<span class="badge info">Info</span>';
+  if (severity === 'critical') return htmlCell('<span class="badge alert">Crítica</span>');
+  if (severity === 'warning') return htmlCell('<span class="badge warn">Advertencia</span>');
+  return htmlCell('<span class="badge info">Info</span>');
 }
 
 function table(headers, rows, tableClass = "") {
-  const body = rows.length ? rows.map((r) => `<tr>${r.map((c, idx) => `<td data-label="${headers[idx] || ''}">${c == null ? '' : c}</td>`).join('')}</tr>`).join('') : '<tr class="empty-state"><td colspan="99">Sin datos</td></tr>';
-  return `<div class="table-wrap ${tableClass}"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const body = rows.length ? rows.map((r) => `<tr>${r.map((c, idx) => `<td data-label="${esc(typeof headers[idx] === 'string' ? headers[idx] : '')}">${renderCell(c)}</td>`).join('')}</tr>`).join('') : '<tr class="empty-state"><td colspan="99">Sin datos</td></tr>';
+  return `<div class="table-wrap ${esc(tableClass)}"><table><thead><tr>${headers.map((h) => `<th>${renderCell(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function startInlineEdit(scope, id, draft) { inlineEdit[scope] = { id, draft: { ...draft } }; }
@@ -374,13 +396,13 @@ async function renderDashboard(snapshot) {
   const hasWarning = activeAlerts.some((a) => a.severity === 'warning');
   const alertKpiClass = hasCritical ? 'alert' : hasWarning ? 'warn' : 'success';
   const alertsRows = activeAlerts.slice(0, 5).map((a) => [
-    `<a href="#" onclick="openAlertsFiltered('${a.severity}');return false;">${alertTypeLabel(a.alert_type)}</a>`,
+    htmlCell(`<a href="#" onclick="openAlertsFiltered('${['critical', 'warning', 'info'].includes(a.severity) ? a.severity : ''}');return false;">${esc(alertTypeLabel(a.alert_type))}</a>`),
     severityBadge(a.severity),
     a.message,
     formatDateTimeMadrid(a.created_at)
   ]);
   const workersRows = (data.workersInside || []).map((w) => [w.full_name, w.dni, Math.floor(w.elapsed_seconds / 60), stateBadge(w.presence_status)]);
-  const graceRows = (data.workersInGrace || []).map((w) => [w.full_name, formatRemaining(w.remaining_seconds), '<span class="badge info">Gracia</span>']);
+  const graceRows = (data.workersInGrace || []).map((w) => [w.full_name, formatRemaining(w.remaining_seconds), htmlCell('<span class="badge info">Gracia</span>')]);
   const systemState = data.systemOnline === false
     ? '<span class="badge alert">Sistema offline</span>'
     : data.totals.workersInside === 0
@@ -436,7 +458,7 @@ function validateUserFormLive() {
   const dniEl = q('uDni');
   if (!emailEl || !passEl || !dniEl) return;
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailEl.value);
-  const passOk = passEl.value.length >= 8;
+  const passOk = validNewPassword(passEl.value);
   const dniOk = /^[0-9XYZxyz][0-9]{7}[A-Za-z]$/.test(dniEl.value.trim()) || /^[A-Za-z0-9]{6,12}$/.test(dniEl.value.trim());
   emailEl.className = emailEl.value ? (emailOk ? 'valid' : 'invalid') : '';
   passEl.className = passEl.value ? (passOk ? 'valid' : 'invalid') : '';
@@ -497,7 +519,7 @@ function validateCreateUserForm() {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) { setFieldError('uEmail', 'Introduce un email válido'); hasError = true; }
   if (!payload.dni) { setFieldError('uDni', 'El DNI es obligatorio'); hasError = true; }
   if (!payload.rol) { setFieldError('uRol', 'Selecciona un rol'); hasError = true; }
-  if (!payload.password || payload.password.length < 8) { setFieldError('uPass', 'La contraseña debe tener al menos 8 caracteres'); hasError = true; }
+  if (!validNewPassword(payload.password)) { setFieldError('uPass', 'La contraseña debe tener al menos 10 caracteres y no superar 72 bytes UTF-8'); hasError = true; }
   return hasError ? null : payload;
 }
 
@@ -550,7 +572,7 @@ async function renderUsers() {
         <div class="field"><label>DNI <span class="required-asterisk">*</span></label><input id="uDni" placeholder="DNI" oninput="validateUserFormLive()" /></div>
         <div class="field"><label>Rol <span class="required-asterisk">*</span></label><select id="uRol"><option value="supervisor">Supervisor</option><option value="administrador">Administrador</option></select></div>
         <div class="field"><label>Estado</label><select id="uEstado"><option value="active">Activo</option><option value="inactive">Inactivo</option></select></div>
-        <div class="field"><label>Contraseña <span class="required-asterisk">*</span></label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 8 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary password-toggle-btn btn-mostrar" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
+        <div class="field"><label>Contraseña <span class="required-asterisk">*</span></label><div class="inline"><input id="uPass" type="password" placeholder="Mínimo 10 caracteres" oninput="validateUserFormLive()" /><button type="button" class="secondary password-toggle-btn btn-mostrar" onclick="togglePassword('uPass', this)">Mostrar</button></div></div>
         <div class="field"><label>Turno</label><select id="uTurno"><option value="mañana">Mañana</option><option value="tarde">Tarde</option><option value="noche">Noche</option></select></div>
       </div>
       <button class="mt-12" onclick="createUser()">Crear usuario</button>
@@ -564,7 +586,7 @@ async function renderUsers() {
       u.phone || '-',
       u.dni,
       u.shift || '-',
-      `<div class="table-actions user-table-actions">${(u.role === 'superadministrador' && !canManageSuperadmin) ? '<span class="muted">Sin acciones</span>' : `<button onclick="openUserEditModal('${u.id}')">Editar</button><button onclick="deactivateUser('${u.id}')">Desactivar</button>`}${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${u.id}')">Borrar</button>` : ''}</div>`
+      htmlCell(`<div class="table-actions user-table-actions">${(u.role === 'superadministrador' && !canManageSuperadmin) ? '<span class="muted">Sin acciones</span>' : `<button onclick="openUserEditModal('${actionId(u.id)}')">Editar</button><button onclick="deactivateUser('${actionId(u.id)}')">Desactivar</button>`}${roleCan('superadministrador') ? `<button class='danger' onclick="deleteUser('${actionId(u.id)}')">Borrar</button>` : ''}</div>`)
     ])))}
     ${renderUserEditModal()}
   `;
@@ -667,7 +689,7 @@ function validateUserEditModal() {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.email || '').trim())) { setModalFieldError('umEmail', 'Introduce un email válido'); hasError = true; }
   if (!String(d.dni || '').trim()) { setModalFieldError('umDni', 'El DNI no puede estar vacío'); hasError = true; }
   if (d.originalRole !== 'superadministrador' && !String(d.rol || '').trim()) { setModalFieldError('umRol', 'Selecciona un rol'); hasError = true; }
-  if (String(d.password || '').trim() && String(d.password).trim().length < 8) { setModalFieldError('umPass', 'La contraseña debe tener al menos 8 caracteres'); hasError = true; }
+  if (String(d.password || '').trim() && !validNewPassword(String(d.password).trim())) { setModalFieldError('umPass', 'La contraseña debe tener al menos 10 caracteres y no superar 72 bytes UTF-8'); hasError = true; }
   return !hasError;
 }
 async function saveUserModalEdit() {
@@ -677,7 +699,7 @@ async function saveUserModalEdit() {
   }
   const d = userEditModal.data;
   try {
-    await api(`/users/${d.id}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.originalRole === 'superadministrador' ? null : d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
+    await api(`/users/${actionId(d.id)}`, { method: 'PATCH', body: JSON.stringify({ nombre: d.nombre, apellidos: d.apellidos, email: d.email, telefono: d.telefono || null, dni: d.dni, rol: d.originalRole === 'superadministrador' ? null : d.rol, estado: d.estado, turno: d.turno || null, password: d.password || null }) });
     userEditModal.open = false;
     userEditModal.data = null;
     toast('Usuario actualizado');
@@ -711,7 +733,7 @@ function renderUserEditModal() {
           <div class="field"><label>Rol <span class="required-asterisk">*</span></label>${d.originalRole === 'superadministrador' ? `<input value="Superadministrador" disabled /><small class="help">No editable desde esta pantalla.</small>` : `<select id="umRol" onchange="updateUserEditModalField('rol', this.value)"><option value="supervisor" ${d.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="administrador" ${d.rol === 'administrador' ? 'selected' : ''}>Administrador</option></select>`}<div id="umRolError" class="field-error"></div></div>
           <div class="field"><label>Estado</label><select id="umEstado" onchange="updateUserEditModalField('estado', this.value)"><option value="active" ${d.estado === 'active' ? 'selected' : ''}>Activo</option><option value="inactive" ${d.estado === 'inactive' ? 'selected' : ''}>Inactivo</option></select><div id="umEstadoError" class="field-error"></div></div>
           <div class="field"><label>Turno</label><select id="umTurno" onchange="updateUserEditModalField('turno', this.value)"><option value="mañana" ${d.turno === 'mañana' ? 'selected' : ''}>Mañana</option><option value="tarde" ${d.turno === 'tarde' ? 'selected' : ''}>Tarde</option><option value="noche" ${d.turno === 'noche' ? 'selected' : ''}>Noche</option></select><div id="umTurnoError" class="field-error"></div></div>
-          <div class="field"><label>Nueva contraseña (opcional)</label><input id="umPass" type="password" placeholder="Mínimo 8 caracteres" oninput="updateUserEditModalField('password', this.value)" /><div id="umPassError" class="field-error"></div></div>
+          <div class="field"><label>Nueva contraseña (opcional)</label><input id="umPass" type="password" placeholder="Mínimo 10 caracteres" oninput="updateUserEditModalField('password', this.value)" /><div id="umPassError" class="field-error"></div></div>
         </div>
         <div class="modal-actions mt-12">
           <button class="secondary" type="button" onclick="closeUserEditModal()">Cancelar</button>
@@ -771,30 +793,30 @@ async function renderInventory() {
       const delay = t.physical_alarm_followup_delay_ms == null ? TAG_DEFAULT_FOLLOWUP_DELAY_MS : t.physical_alarm_followup_delay_ms;
       const buzzerDuration = t.physical_alarm_buzzer_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_buzzer_duration_ms;
       const vibrationDuration = t.physical_alarm_vibration_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_vibration_duration_ms;
-      if (!editing) return [t.tag_uid, t.model || '', formatSecondsFromMs(delay), formatSecondsFromMs(buzzerDuration), formatSecondsFromMs(vibrationDuration), t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>', t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? `<button onclick="beginTagInlineEdit('${t.id}')">Editar</button> <button class='danger' onclick="deleteTag('${t.id}')">Borrar</button>` : '-'];
+      if (!editing) return [t.tag_uid, t.model || '', formatSecondsFromMs(delay), formatSecondsFromMs(buzzerDuration), formatSecondsFromMs(vibrationDuration), htmlCell(t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>'), t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? htmlCell(`<button onclick="beginTagInlineEdit('${actionId(t.id)}')">Editar</button> <button class='danger' onclick="deleteTag('${actionId(t.id)}')">Borrar</button>`) : '-'];
       const d = inlineEdit.tags.draft;
       return [
-        `<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`,
-        `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('tags','descripcion',this.value)"/>`,
-        `<input type="number" min="0" step="0.1" value="${esc(d.physicalAlarmFollowupDelayMs)}" oninput="updateInlineEdit('tags','physicalAlarmFollowupDelayMs',this.value)"/>`,
-        `<input type="number" min="0.1" max="60" step="0.1" value="${esc(d.physicalAlarmBuzzerDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmBuzzerDurationMs',this.value)"/>`,
-        `<input type="number" min="0.1" max="60" step="0.1" value="${esc(d.physicalAlarmVibrationDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmVibrationDurationMs',this.value)"/>`,
-        `<select onchange="updateInlineEdit('tags','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Activo</option><option value="false" ${!d.active ? 'selected' : ''}>Inactivo</option></select>`,
+        htmlCell(`<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`),
+        htmlCell(`<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('tags','descripcion',this.value)"/>`),
+        htmlCell(`<input type="number" min="0" step="0.1" value="${esc(d.physicalAlarmFollowupDelayMs)}" oninput="updateInlineEdit('tags','physicalAlarmFollowupDelayMs',this.value)"/>`),
+        htmlCell(`<input type="number" min="0.1" max="60" step="0.1" value="${esc(d.physicalAlarmBuzzerDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmBuzzerDurationMs',this.value)"/>`),
+        htmlCell(`<input type="number" min="0.1" max="60" step="0.1" value="${esc(d.physicalAlarmVibrationDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmVibrationDurationMs',this.value)"/>`),
+        htmlCell(`<select onchange="updateInlineEdit('tags','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Activo</option><option value="false" ${!d.active ? 'selected' : ''}>Inactivo</option></select>`),
         '-',
-        `<button onclick="saveTagInlineEdit('${t.id}')">Guardar</button> <button class="secondary" onclick="cancelTagInlineEdit()">Cancelar</button>`
+        htmlCell(`<button onclick="saveTagInlineEdit('${actionId(t.id)}')">Guardar</button> <button class="secondary" onclick="cancelTagInlineEdit()">Cancelar</button>`)
       ];
     }))}
     <h3 class="mt-12">Listado de gateways</h3>
     ${table(['MAC', 'Descripción', 'RSSI mínimo', 'Acciones'], gateways.map((g) => {
       const editing = inlineEdit.gateways.id === g.id;
       const rssiThreshold = g.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD;
-      if (!editing) return [g.gateway_mac, g.description || '', rssiThreshold, roleCan('superadministrador') ? `<button onclick="beginGatewayInlineEdit('${g.id}')">Editar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button onclick="configureEmergencyButton('${g.id}')">Configurar B5</button> <button class='danger' onclick="deleteGateway('${g.id}')">Borrar</button>` : '-'];
+      if (!editing) return [g.gateway_mac, g.description || '', rssiThreshold, roleCan('superadministrador') ? htmlCell(`<button onclick="beginGatewayInlineEdit('${actionId(g.id)}')">Editar</button> <button onclick="applyGatewayRssi('${actionId(g.id)}')">Aplicar RSSI</button> <button onclick="configureEmergencyButton('${actionId(g.id)}')">Configurar B5</button> <button class='danger' onclick="deleteGateway('${actionId(g.id)}')">Borrar</button>`) : '-'];
       const d = inlineEdit.gateways.draft;
       return [
-        `<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`,
-        `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('gateways','descripcion',this.value)"/>`,
-        `<input type="number" min="-127" max="0" step="1" value="${esc(d.rssiThreshold)}" oninput="updateInlineEdit('gateways','rssiThreshold',this.value)"/>`,
-        `<button onclick="saveGatewayInlineEdit('${g.id}')">Guardar</button> <button onclick="applyGatewayRssi('${g.id}')">Aplicar RSSI</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`
+        htmlCell(`<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`),
+        htmlCell(`<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('gateways','descripcion',this.value)"/>`),
+        htmlCell(`<input type="number" min="-127" max="0" step="1" value="${esc(d.rssiThreshold)}" oninput="updateInlineEdit('gateways','rssiThreshold',this.value)"/>`),
+        htmlCell(`<button onclick="saveGatewayInlineEdit('${actionId(g.id)}')">Guardar</button> <button onclick="applyGatewayRssi('${actionId(g.id)}')">Aplicar RSSI</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`)
       ];
     }))}
   `;
@@ -886,7 +908,7 @@ async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se pu
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 
 function renderTagOptions(tags) {
-  return tags.filter((t) => t.active).map((t) => `<option value="${t.id}">${esc((t.model || 'Tag sin descripción'))} (${esc(t.tag_uid)})</option>`).join('');
+  return tags.filter((t) => t.active).map((t) => `<option value="${actionId(t.id)}">${esc((t.model || 'Tag sin descripción'))} (${esc(t.tag_uid)})</option>`).join('');
 }
 function currentWorkerHasTag(workers, workerId) { const w = workers.find((item) => item.id === workerId); return w && w.current_tag_uid; }
 function workerDependencyCounts(worker) {
@@ -904,22 +926,22 @@ function workerDependencySummary(worker) {
   return Object.entries(workerDependencyCounts(worker)).filter(([, count]) => count > 0).map(([name, count]) => `${labels[name]} (${count})`).join(', ');
 }
 function renderWorkerActions(worker) {
-  const actions = [`<button onclick="beginWorkerInlineEdit('${worker.id}')">Editar</button>`];
+  const actions = [`<button onclick="beginWorkerInlineEdit('${actionId(worker.id)}')">Editar</button>`];
   if (worker.current_tag_uid) {
-    actions.push(`<button onclick="unassignTag('${worker.id}')">Desasignar</button>`);
+    actions.push(`<button onclick="unassignTag('${actionId(worker.id)}')">Desasignar</button>`);
     actions.push('<span class="help">Desasigna el tag antes de borrar o desactivar.</span>');
-    return actions.join(' ');
+    return htmlCell(actions.join(' '));
   }
 
   if (workerHasOperationalHistory(worker)) {
-    if (worker.active) actions.push(`<button class="warning" onclick="deactivateWorker('${worker.id}')">Desactivar</button>`);
+    if (worker.active) actions.push(`<button class="warning" onclick="deactivateWorker('${actionId(worker.id)}')">Desactivar</button>`);
     else actions.push('<span class="badge warn">Desactivado</span>');
     actions.push(`<span class="help" title="${esc(workerDependencySummary(worker))}">Tiene histórico operativo; no se borra físicamente.</span>`);
-    return actions.join(' ');
+    return htmlCell(actions.join(' '));
   }
 
-  actions.push(`<button class='danger' onclick="deleteWorker('${worker.id}')">Borrar físico</button>`);
-  return actions.join(' ');
+  actions.push(`<button class='danger' onclick="deleteWorker('${actionId(worker.id)}')">Borrar físico</button>`);
+  return htmlCell(actions.join(' '));
 }
 
 async function renderAssignments() {
@@ -940,7 +962,7 @@ async function renderAssignments() {
         <h3>2) Asignar tag</h3>
         <p class="help">Si el trabajador ya tenía tag, la asignación anterior se cierra automáticamente.</p>
         <div class="grid two">
-          <div class="field"><label>Trabajador</label><select id="asWorker" onchange="showAssignmentWarning()" ${assignableWorkers.length ? '' : 'disabled'}>${assignableWorkers.map((w) => `<option value="${w.id}">${esc(w.full_name)} (${esc(w.dni)})</option>`).join('')}</select></div>
+          <div class="field"><label>Trabajador</label><select id="asWorker" onchange="showAssignmentWarning()" ${assignableWorkers.length ? '' : 'disabled'}>${assignableWorkers.map((w) => `<option value="${actionId(w.id)}">${esc(w.full_name)} (${esc(w.dni)})</option>`).join('')}</select></div>
           <div class="field"><label>Tag</label><select id="asTag">${renderTagOptions(tags)}</select></div>
         </div>
         <div id="assignmentWarning" class="help mt-12"></div>
@@ -954,12 +976,12 @@ async function renderAssignments() {
       if (!editing) return [w.full_name, w.dni, w.current_tag_uid || '-', roleLabel(w.role), w.active ? 'Sí' : 'No', renderWorkerActions(w)];
       const d = inlineEdit.workers.draft;
       return [
-        `<input value="${esc(d.fullName)}" oninput="updateInlineEdit('workers','fullName',this.value)"/>`,
+        htmlCell(`<input value="${esc(d.fullName)}" oninput="updateInlineEdit('workers','fullName',this.value)"/>`),
         w.dni,
         w.current_tag_uid || '-',
-        `<input value="${esc(d.role)}" oninput="updateInlineEdit('workers','role',this.value)"/>`,
-        `<select onchange="updateInlineEdit('workers','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Sí</option><option value="false" ${!d.active ? 'selected' : ''}>No</option></select>`,
-        `<button onclick="saveWorkerInlineEdit('${w.id}')">Guardar</button> <button class="secondary" onclick="cancelWorkerInlineEdit()">Cancelar</button>`
+        htmlCell(`<input value="${esc(d.role)}" oninput="updateInlineEdit('workers','role',this.value)"/>`),
+        htmlCell(`<select onchange="updateInlineEdit('workers','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Sí</option><option value="false" ${!d.active ? 'selected' : ''}>No</option></select>`),
+        htmlCell(`<button onclick="saveWorkerInlineEdit('${actionId(w.id)}')">Guardar</button> <button class="secondary" onclick="cancelWorkerInlineEdit()">Cancelar</button>`)
       ];
     }))}
     <h3 class="mt-12">Histórico de asignaciones</h3>
@@ -1117,7 +1139,7 @@ async function renderAlertsCenter() {
   alertsUI.visibleIds = paged.map((a) => a.id);
   const totalPages = Math.max(1, Math.ceil(alerts.length / alertsUI.pageSize));
 
-  const headers = ['<input id="acSelectAll" type="checkbox" onchange="toggleVisibleAlertsFromHeader(this.checked)" aria-label="Seleccionar todas las alertas visibles" />', 'Fecha', 'Trabajador', 'DNI', 'Tag'];
+  const headers = [htmlCell('<input id="acSelectAll" type="checkbox" onchange="toggleVisibleAlertsFromHeader(this.checked)" aria-label="Seleccionar todas las alertas visibles" />'), 'Fecha', 'Trabajador', 'DNI', 'Tag'];
   if (showCamera) headers.push('Cámara');
   headers.push('Tipo', 'Severidad', 'Mensaje', 'Estado', 'Archivado por', 'Acciones');
 
@@ -1136,9 +1158,9 @@ async function renderAlertsCenter() {
       <span class="help">Filtros reactivos: se aplican automáticamente.</span>
     </div>
     ${table(headers, paged.map((a) => {
-      const row = [`<input type="checkbox" ${alertsUI.selected.has(a.id) ? 'checked' : ''} onchange="toggleAlertSelection('${a.id}', this.checked)"/>`, formatDateTimeMadrid(a.created_at), a.worker_name, a.worker_dni, a.tag_uid];
+      const row = [htmlCell(`<input type="checkbox" ${alertsUI.selected.has(a.id) ? 'checked' : ''} onchange="toggleAlertSelection('${actionId(a.id)}', this.checked)"/>`), formatDateTimeMadrid(a.created_at), a.worker_name, a.worker_dni, a.tag_uid];
       if (showCamera) row.push(a.cold_room_name || '-');
-      row.push(alertTypeLabel(a.alert_type), severityBadge(a.severity), a.message, a.status === 'active' ? '<span class="badge warn">Activa</span>' : '<span class="badge archived">Archivada</span>', a.acknowledged_by || '-', a.status === 'active' ? `<button class="btn-archive" aria-label="Archivar" onclick="archiveAlert('${a.id}')">Archivar</button>` : '-');
+      row.push(alertTypeLabel(a.alert_type), severityBadge(a.severity), a.message, htmlCell(a.status === 'active' ? '<span class="badge warn">Activa</span>' : '<span class="badge archived">Archivada</span>'), a.acknowledged_by || '-', a.status === 'active' ? htmlCell(`<button class="btn-archive" aria-label="Archivar" onclick="archiveAlert('${actionId(a.id)}')">Archivar</button>`) : '-');
       return row;
     }), 'alerts-mobile-compact')}
     <div class="actions mt-12">
@@ -1169,15 +1191,15 @@ async function renderAlarms() {
     <button class="mt-12" onclick="createAlarmRule()">Crear regla</button>
     ${table(['Descripción', 'Min buzzer/shaker', 'Min alarma', 'Min gracia fuera', 'Estado', 'Acciones'], rules.map((r) => {
       const editing = inlineEdit.alarmRules.id === r.id;
-      if (!editing) return [r.description, r.buzzer_shaker_minutes, r.alarm_minutes, (r.alarm_visibility_grace_minutes == null ? 15 : r.alarm_visibility_grace_minutes), r.active ? '<span class="badge ok">Activa</span>' : '<span class="badge warn">Inactiva</span>', `<button onclick="beginAlarmRuleInlineEdit('${r.id}')">Editar</button> <button class="${r.active ? 'warning' : 'success'}" onclick="toggleAlarm('${r.id}', ${!r.active})">${r.active ? 'Apagar' : 'Activar'}</button> <button class='danger' onclick="deleteAlarm('${r.id}')">Eliminar</button>`];
+      if (!editing) return [r.description, r.buzzer_shaker_minutes, r.alarm_minutes, (r.alarm_visibility_grace_minutes == null ? 15 : r.alarm_visibility_grace_minutes), htmlCell(r.active ? '<span class="badge ok">Activa</span>' : '<span class="badge warn">Inactiva</span>'), htmlCell(`<button onclick="beginAlarmRuleInlineEdit('${actionId(r.id)}')">Editar</button> <button class="${r.active ? 'warning' : 'success'}" onclick="toggleAlarm('${actionId(r.id)}', ${!r.active})">${r.active ? 'Apagar' : 'Activar'}</button> <button class='danger' onclick="deleteAlarm('${actionId(r.id)}')">Eliminar</button>`)];
       const d = inlineEdit.alarmRules.draft;
       return [
-        `<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('alarmRules','descripcion',this.value)"/>`,
-        `<input type="number" min="1" value="${esc(d.minutosBuzzerShaker)}" oninput="updateInlineEdit('alarmRules','minutosBuzzerShaker',this.value)"/>`,
-        `<input type="number" min="1" value="${esc(d.minutosAlarma)}" oninput="updateInlineEdit('alarmRules','minutosAlarma',this.value)"/>`,
-        `<input type="number" min="1" value="${esc(d.minutosGraciaFuera)}" oninput="updateInlineEdit('alarmRules','minutosGraciaFuera',this.value)"/>`,
-        `<select onchange="updateInlineEdit('alarmRules','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Activa</option><option value="false" ${!d.active ? 'selected' : ''}>Inactiva</option></select>`,
-        `<button onclick="saveAlarmRuleInlineEdit('${r.id}')">Guardar</button> <button class="secondary" onclick="cancelAlarmRuleInlineEdit()">Cancelar</button>`
+        htmlCell(`<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('alarmRules','descripcion',this.value)"/>`),
+        htmlCell(`<input type="number" min="1" value="${esc(d.minutosBuzzerShaker)}" oninput="updateInlineEdit('alarmRules','minutosBuzzerShaker',this.value)"/>`),
+        htmlCell(`<input type="number" min="1" value="${esc(d.minutosAlarma)}" oninput="updateInlineEdit('alarmRules','minutosAlarma',this.value)"/>`),
+        htmlCell(`<input type="number" min="1" value="${esc(d.minutosGraciaFuera)}" oninput="updateInlineEdit('alarmRules','minutosGraciaFuera',this.value)"/>`),
+        htmlCell(`<select onchange="updateInlineEdit('alarmRules','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Activa</option><option value="false" ${!d.active ? 'selected' : ''}>Inactiva</option></select>`),
+        htmlCell(`<button onclick="saveAlarmRuleInlineEdit('${actionId(r.id)}')">Guardar</button> <button class="secondary" onclick="cancelAlarmRuleInlineEdit()">Cancelar</button>`)
       ];
     }))}
   `;
@@ -1274,17 +1296,51 @@ async function downloadReport(url, filename, button) {
 
 function startRealtime() {
   if (realtimeSource) realtimeSource.close();
-  realtimeSource = new EventSource(`/realtime/stream?access_token=${encodeURIComponent(token)}`);
-  realtimeSource.addEventListener('snapshot', (event) => {
-    const payload = JSON.parse(event.data);
+  const controller = new AbortController();
+  const sessionToken = token;
+  realtimeSource = { close: () => controller.abort() };
+  const onSnapshot = (payload) => {
     lastSnapshot = payload;
     renderManualEmergencyBanner(payload.activeAlerts || []);
-    setSessionText(`· dentro: ${payload.totals.workersInside} · alertas: <a class="header-alert-badge" href="#" onclick="showSection('alertsCenter');return false;">${payload.totals.activeAlerts}</a>`);
+    setSessionText(Number(payload.totals.workersInside), Number(payload.totals.activeAlerts));
     if (!q('dashboard').hidden) renderDashboard(payload);
-  });
-  realtimeSource.onerror = () => {
-    setGlobalStatus('<span class="badge alert">Conexión en tiempo real no disponible. Reintentando…</span>');
   };
+  // Fetch permite SSE con Authorization, sin colocar credenciales reutilizables en URLs.
+  (async () => {
+    while (!controller.signal.aborted && token === sessionToken) {
+      try {
+        const response = await fetch('/realtime/stream', { headers: { Authorization: `Bearer ${sessionToken}` }, signal: controller.signal, cache: 'no-store' });
+        if (response.status === 401) { await logout(); return; }
+        if (!response.ok || !response.body) throw new Error('stream_unavailable');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        try {
+          while (!controller.signal.aborted) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let boundary;
+            while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+              const frame = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+              if (frame.startsWith('event: snapshot\n')) {
+                const data = frame.split('\n').filter((line) => line.startsWith('data: ')).map((line) => line.slice(6)).join('\n');
+                onSnapshot(JSON.parse(data));
+              }
+            }
+          }
+        } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+      } catch { /* La reconexión no imprime cabeceras ni tokens. */ }
+      if (controller.signal.aborted || token !== sessionToken) return;
+      setGlobalStatus('Conexión en tiempo real no disponible. Reintentando…');
+      await new Promise((resolve) => {
+        const done = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve(); };
+        const timer = setTimeout(done, 5000);
+        controller.signal.addEventListener('abort', done, { once: true });
+      });
+    }
+  })();
 }
 
 (function wireLoginForm() {

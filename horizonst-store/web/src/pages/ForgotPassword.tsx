@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { postJson } from '../lib/api';
 
-type PasswordResetResponse = { message: string; resetToken?: string };
+type PasswordResetResponse = { message: string };
 
 export default function ForgotPassword() {
   const [message, setMessage] = useState('');
@@ -12,7 +12,7 @@ export default function ForgotPassword() {
       '/api/auth/request-password-reset',
       Object.fromEntries(new FormData(event.currentTarget))
     );
-    setMessage(`${data.message}${data.resetToken ? ` Token dev: ${data.resetToken}` : ''}`);
+    setMessage(data.message);
   }
 
   return (
@@ -20,7 +20,7 @@ export default function ForgotPassword() {
       <h1>Recuperar contraseña</h1>
       <form onSubmit={submit}>
         <input name="email" type="email" placeholder="Email" required />
-        <button type="submit">Solicitar token</button>
+        <button type="submit">Enviar enlace de recuperación</button>
       </form>
       {message && <p className="success">{message}</p>}
     </section>

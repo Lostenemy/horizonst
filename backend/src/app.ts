@@ -16,11 +16,12 @@ import servicePrincipalRouter from './routes/servicePrincipals';
 import internalHardwareRouter from './routes/internalHardware';
 import { getMqttStatus } from './services/mqttService';
 import { config } from './config';
+import { configureTrustProxy } from './config/trustProxy';
 import { requestContext, secureHeaders } from './middleware/requestContext';
 
 const app = express();
 
-app.set('trust proxy', 1);
+configureTrustProxy(app, config.trustedProxyIp);
 
 app.use(requestContext);
 app.use(secureHeaders);

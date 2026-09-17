@@ -152,7 +152,7 @@ A SQL helper template is included at `scripts/register-mqtt-client.sql`.
 
 - El servicio **no configura Nginx automáticamente**.
 - Escucha en `PORT` interno (por defecto `3100`) y está preparado para publicarse detrás de proxy inverso.
-- Express usa `trust proxy = true`, por lo que respeta `X-Forwarded-For` y `X-Forwarded-Proto`.
+- Express solo confía en la IP exacta indicada por `TRUSTED_PROXY_IP` (`172.18.0.1` en Compose). Solo las conexiones procedentes de ese proxy pueden aportar `X-Forwarded-For`; una conexión directa no puede elegir su identidad mediante la cabecera.
 - Rutas mínimas para monitorización desde Nginx/upstream: `/health` y `/ready`.
 - Dominio objetivo de publicación: `horneo.horizonst.com.es` (configurado fuera de este servicio).
 

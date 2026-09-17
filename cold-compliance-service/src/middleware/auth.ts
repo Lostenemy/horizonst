@@ -21,8 +21,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     const auth = req.header('authorization');
     const bearerToken = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
-    const queryToken = typeof req.query.access_token === 'string' ? req.query.access_token : null;
-    const token = bearerToken ?? queryToken;
+    const token = bearerToken;
     if (!token) return res.status(401).json({ error: 'unauthorized' });
 
     const result = await db.query(

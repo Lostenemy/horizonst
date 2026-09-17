@@ -97,22 +97,29 @@ realtimeRouter.get('/stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const push = async () => {
+    // La conexión larga también debe observar logout, caducidad y recuperación de cuenta.
+    const session = await db.query(
+      `SELECT 1 FROM auth_sessions s JOIN app_users u ON u.id = s.user_id
+       WHERE s.token = $1 AND s.expires_at > NOW() AND u.status = 'active'`,
+      [req.header('authorization')?.slice(7)]
+    );
+    if (!session.rowCount) { clearInterval(timer); res.end(); return; }
     const payload = await loadOperationalSnapshot();
     res.write(`event: snapshot\n`);
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
 
-  const timer = setInterval(() => {
-    push().catch(() => {
-      clearInterval(timer);
-      res.end();
-    });
-  }, 5000);
+  let pending = false;
+  const tick = async () => {
+    if (pending || res.writableEnded) return;
+    pending = true;
+    try { await push(); }
+    catch { clearInterval(timer); res.end(); }
+    finally { pending = false; }
+  };
+  const timer = setInterval(tick, 5000);
 
-  push().catch(() => {
-    clearInterval(timer);
-    res.end();
-  });
+  void tick();
 
   req.on('close', () => clearInterval(timer));
 });
