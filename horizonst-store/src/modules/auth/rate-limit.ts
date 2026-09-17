@@ -13,8 +13,8 @@ export function createAuthRateLimit(store: Store): RequestHandler {
     const path = req.path.toLowerCase().replace(/\/+$/, '');
     if (req.method !== 'POST' || !protectedPaths.has(path)) { next(); return; }
     res.setHeader('Cache-Control', 'no-store');
-    // No confiar en X-Forwarded-For arbitrario. Detrás de proxy se comparte este presupuesto.
-    const address = req.socket.remoteAddress || 'unknown';
+    // req.ip solo incorpora X-Forwarded-For cuando la conexión viene del proxy exacto configurado.
+    const address = req.ip || 'unknown';
     const account = typeof (req.body?.email ?? req.body?.username) === 'string'
       ? String(req.body.email ?? req.body.username).trim().toLowerCase().slice(0, 320) : '';
     const group = path === '/login' ? 'login' : 'recovery-registration';

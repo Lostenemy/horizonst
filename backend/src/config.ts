@@ -77,6 +77,7 @@ interface MqttConfig {
 interface AppConfig {
   port: number;
   host: string;
+  trustedProxyIp?: string;
   jwtSecret: string;
   jwtExpiresIn: string;
   corsAllowedOrigins: string[];
@@ -128,6 +129,7 @@ const mailEnabled = parseBoolean(process.env.MAIL_ENABLED, true);
 export const config: AppConfig = {
   port: parseNumber(process.env.PORT, 3000),
   host: process.env.HOST || '0.0.0.0',
+  trustedProxyIp: firstNonEmpty(process.env.TRUSTED_PROXY_IP),
   jwtSecret: requiredSecret('JWT_SECRET', process.env.JWT_SECRET, 32),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
   corsAllowedOrigins: parseList(process.env.CORS_ALLOWED_ORIGINS),

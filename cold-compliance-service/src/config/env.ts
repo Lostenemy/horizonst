@@ -7,6 +7,7 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3100),
   LOG_LEVEL: z.string().default('info'),
+  TRUSTED_PROXY_IP: z.string().trim().optional(),
   DB_HOST: z.string().default('postgres'),
   DB_PORT: z.coerce.number().default(5432),
   DB_USER: z.string().default('horizonst'),

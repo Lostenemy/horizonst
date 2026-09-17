@@ -1,5 +1,7 @@
 import path from 'node:path';
 import express from 'express';
+import { configureTrustProxy } from './config/trust-proxy';
+import { env } from './config/env';
 import { db } from './db/pool';
 import { errorHandler } from './middleware/error-handler';
 import { alarmRulesRouter } from './modules/alarm-rules/alarm-rules.routes';
@@ -19,7 +21,7 @@ import { workersRouter } from './modules/workers/workers.routes';
 export function buildApp() {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 'loopback');
+  configureTrustProxy(app, env.TRUSTED_PROXY_IP);
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');

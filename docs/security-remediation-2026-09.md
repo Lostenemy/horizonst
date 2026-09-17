@@ -35,7 +35,7 @@ Ventana de quince minutos, contando intentos admitidos, no solo fallidos:
 - 10 por combinación dirección/cuenta y grupo.
 - Se separa login de recuperación/registro. Rutas operativas, eventos BLE y lecturas autenticadas no consumen estos contadores.
 - El identificador de cuenta se toma solo de email/username, nunca de contraseña o token. Las claves persistidas son SHA-256; esto es seudonimización, no anonimización frente a diccionarios.
-- Se usa `socket.remoteAddress`, no cabeceras de origen controlables por el cliente. Detrás de un proxy, los usuarios comparten el presupuesto de esa conexión. Esta decisión evita suplantación de IP, pero requiere medir capacidad y diseñar confianza explícita en el proxy si se necesita granularidad por cliente.
+- Backend, Horneo y Store usan `req.ip` después de configurar una función de confianza que acepta exclusivamente `TRUSTED_PROXY_IP` (`172.18.0.1` en Compose, incluida su representación IPv4-mapeada). Nginx añade la IP efectiva y Express ignora cabeceras de origen en conexiones que no proceden de ese proxy. No se permite confianza posicional, CIDR amplio ni `trust proxy = true`.
 - No hay bloqueo permanente de cuentas. La ventana vence y se devuelve `Retry-After` en 429. Si falta la tabla o falla PostgreSQL, el acceso protegido responde 503, sin habilitar intentos ilimitados.
 - Se limpian hasta 500 contadores caducados por operación de mantenimiento, como máximo una vez por minuto por proceso activo. Los contadores no afectan a tablas de presencia o histórico.
 - MQTT UI mantiene un límite local: 10 por origen y 120 globales cada quince minutos. Se reinicia con el proceso y no se comparte entre réplicas: no sustituye una protección de perímetro distribuida.
