@@ -1,6 +1,6 @@
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
-import { executeAlarmSequence } from '../tag-control/application/tag-physical-alarm.service';
+import { executeAlarmSequence, PhysicalAlarmSequenceResult } from '../tag-control/application/tag-physical-alarm.service';
 
 interface QueryClient {
   query: typeof db.query;
@@ -13,6 +13,38 @@ interface CreatedAlert {
   hardware_device_id: number | null;
   severity: string;
   alert_type: string;
+}
+
+export async function executeAndRecordPhysicalAlarm(
+  params: Parameters<typeof executeAlarmSequence>[0],
+  deps?: { execute?: typeof executeAlarmSequence; query?: typeof db.query }
+): Promise<PhysicalAlarmSequenceResult> {
+  const execute = deps?.execute ?? executeAlarmSequence;
+  const query = deps?.query ?? db.query.bind(db);
+  let outcome: PhysicalAlarmSequenceResult;
+  try {
+    outcome = await execute(params);
+  } catch (error) {
+    await recordPhysicalOutcome('failed');
+    throw error;
+  }
+  await recordPhysicalOutcome(outcome.status, outcome.selectedGatewayMac);
+  return outcome;
+
+  async function recordPhysicalOutcome(status: PhysicalAlarmSequenceResult['status'] | 'failed', gatewayMac?: string): Promise<void> {
+    try {
+      // Solo se conserva el último intento físico; no modifica acknowledged_at ni dispara otra alarma.
+      const updated = await query(
+        `UPDATE alerts
+         SET metadata = jsonb_set(metadata, '{physicalDispatch}', $2::jsonb, true)
+         WHERE id = $1`,
+        [params.alertId, JSON.stringify({ status, gatewayMac: gatewayMac ?? null, completedAt: new Date().toISOString() })]
+      );
+      if (updated.rowCount !== 1) logger.error({ alertId: params.alertId }, 'physical alarm outcome has no alert row');
+    } catch (error) {
+      logger.error({ alertId: params.alertId, error }, 'failed to persist physical alarm outcome');
+    }
+  }
 }
 
 export async function createAlert(params: {
@@ -57,7 +89,7 @@ export async function createAlert(params: {
       workerId: alert.worker_id
     }, 'compliance alert dispatching physical alarm sequence');
 
-    executeAlarmSequence({
+    executeAndRecordPhysicalAlarm({
       alertId: alert.id,
       workerId: alert.worker_id ?? undefined,
       tagId: alert.tag_id ?? undefined,
@@ -80,7 +112,7 @@ export async function triggerPhysicalAlarmSequence(params: {
   alertType: string;
   alertId: string;
 }): Promise<void> {
-  await executeAlarmSequence({
+  await executeAndRecordPhysicalAlarm({
     alertId: params.alertId,
     workerId: params.workerId,
     tagId: params.tagId,

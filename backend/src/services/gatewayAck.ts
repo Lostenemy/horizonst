@@ -102,13 +102,14 @@ export async function handleHardwareGatewayAck(topic: string, payloadText: strin
   try {
     await pool.query(
       `UPDATE hardware_gateway_commands c
-       SET status = CASE WHEN $3 = 0 AND NOT EXISTS (
+       SET status = CASE WHEN $3 <> 0 THEN 'ack_error'
+         WHEN EXISTS (
              SELECT 1 FROM hardware_gateway_commands prior
              WHERE prior.gateway_id = c.gateway_id AND prior.msg_id = c.msg_id
                AND prior.status = 'timed_out' AND prior.id <> c.id
-           ) THEN 'ack_success' ELSE 'ack_error' END,
+           ) THEN 'ack_ambiguous' ELSE 'ack_success' END,
            ack_at = NOW(), ack_msg_id = $2, result_code = $3,
-           result_message = CASE WHEN EXISTS (
+           result_message = CASE WHEN $3 = 0 AND EXISTS (
              SELECT 1 FROM hardware_gateway_commands prior
              WHERE prior.gateway_id = c.gateway_id AND prior.msg_id = c.msg_id
                AND prior.status = 'timed_out' AND prior.id <> c.id

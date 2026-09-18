@@ -116,7 +116,7 @@ test('manual emergency disables physical dispatch while existing alerts keep def
   const alerts = source('src/modules/alerts/alerts.service.ts');
   assert.match(service, /dispatchPhysicalAlarm: false/);
   assert.match(alerts, /params\.dispatchPhysicalAlarm !== false/);
-  assert.match(alerts, /executeAlarmSequence\(/);
+  assert.match(alerts, /executeAndRecordPhysicalAlarm\(/);
 });
 
 test('realtime snapshot enriches active alerts for the global emergency banner', () => {

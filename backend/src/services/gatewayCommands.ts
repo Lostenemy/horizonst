@@ -252,7 +252,7 @@ async function executeCommand(params: {
        SET status = $2, ack_at = COALESCE(ack_at, NOW()), ack_msg_id = $3,
            result_code = $4, result_message = $5, response_payload = $6::jsonb
        WHERE id = $1`,
-      [commandId, status === 'success' ? 'ack_success' : 'ack_error', ack.msgId,
+      [commandId, status === 'success' ? 'ack_success' : status === 'ambiguous' ? 'ack_ambiguous' : 'ack_error', ack.msgId,
        ack.resultCode, resultMessage ?? null, JSON.stringify(redactHardwarePayload(ack.payload))]
     );
     return {
@@ -262,7 +262,7 @@ async function executeCommand(params: {
       resultCode: ack.resultCode,
       resultMessage,
       ackMsgId: ack.msgId,
-      ...(ambiguousCorrelation ? { ackAmbiguous: true } : {})
+      ...(status === 'ambiguous' ? { ackAmbiguous: true } : {})
     };
   } catch (error: any) {
     const message = String(error?.message ?? error);

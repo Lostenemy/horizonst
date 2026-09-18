@@ -468,15 +468,17 @@ test('MQTT reply with a payload MAC different from its topic cannot resolve a wa
   assert.equal(journalWrites, 0);
 });
 
-test('direct MQTT journal update never marks an ACK successful after an earlier timeout of the same key', async () => {
+test('direct MQTT journal distinguishes an ambiguous positive ACK from a real rejection after timeout', async () => {
   let updateSql = '';
   (pool as any).query = async (sql: string) => { updateSql = sql; return { rows: [], rowCount: 0 }; };
   await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
     msg_id: 1040, device_info: { mac: '2805A55EFB68' }, result_code: 0
   }));
-  assert.match(updateSql, /NOT EXISTS[\s\S]+prior\.gateway_id = c\.gateway_id AND prior\.msg_id = c\.msg_id/);
+  assert.match(updateSql, /WHEN \$3 <> 0 THEN 'ack_error'/);
+  assert.match(updateSql, /THEN 'ack_ambiguous' ELSE 'ack_success'/);
+  assert.match(updateSql, /prior\.gateway_id = c\.gateway_id AND prior\.msg_id = c\.msg_id/);
   assert.match(updateSql, /prior\.status = 'timed_out'/);
-  assert.match(updateSql, /THEN 'ack_success' ELSE 'ack_error'/);
+  assert.match(updateSql, /result_message = CASE WHEN \$3 = 0 AND EXISTS/);
 });
 
 function mockCorrelationJournal() {

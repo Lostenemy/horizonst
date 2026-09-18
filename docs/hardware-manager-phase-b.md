@@ -153,7 +153,7 @@ POST /api/gateways/:id/apply-rssi
 GET  /api/gateways/:id/commands
 ```
 
-Cada comando se persiste antes de publicar. Un advisory lock y un índice único parcial serializan la ejecución por gateway. Los estados distinguen `pending`, `published`, `ack_success`, `ack_error`, `timed_out` y `publish_error`. Publicar nunca equivale a éxito.
+Cada comando se persiste antes de publicar. Un advisory lock y un índice único parcial serializan la ejecución por gateway. Tras la migración `006_gateway_ack_ambiguous.sql`, los estados distinguen `pending`, `published`, `ack_success`, `ack_ambiguous` (ACK positivo sin correlación inequívoca), `ack_error` (rechazo real), `timed_out` y `publish_error`. Publicar nunca equivale a éxito.
 
 Al arrancar y de forma periódica, el journal convierte en `timed_out` los comandos activos cuyo plazo ya venció. La misma recuperación se ejecuta antes de una secuencia nueva, evitando que un reinicio deje bloqueado el gateway.
 

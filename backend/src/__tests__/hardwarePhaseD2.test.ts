@@ -82,6 +82,7 @@ test('physical B5 payloads use exact MKGW3 commands and convert milliseconds to 
 
 function mockDatabase(historicalTimeout = false) {
   const inserts: unknown[][] = [];
+  const updates: unknown[][] = [];
   (pool as any).connect = async () => ({
     query: async (sql: string) => sql.includes('pg_try_advisory_lock')
       ? { rows: [{ locked: true }] }
@@ -97,14 +98,17 @@ function mockDatabase(historicalTimeout = false) {
       inserts.push(params);
       return { rows: [{ id: `command-${inserts.length}` }] };
     }
-    if (sql.includes('UPDATE hardware_gateway_commands')) return { rows: [], rowCount: 0 };
+    if (sql.includes('UPDATE hardware_gateway_commands')) {
+      updates.push(params);
+      return { rows: [], rowCount: 0 };
+    }
     throw new Error(`Unexpected query: ${sql}`);
   };
-  return inserts;
+  return { inserts, updates };
 }
 
 test('historical timed_out 1150 on gateway 142b2fe271b4 yields an unverified 202, never a confirmed success', async () => {
-  const inserts = mockDatabase(true);
+  const { inserts, updates } = mockDatabase(true);
   const result = await executePhysicalB5Command({
     gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
     command: 'connect', sessionPassword: 'simulation-only-secret',
@@ -120,13 +124,23 @@ test('historical timed_out 1150 on gateway 142b2fe271b4 yields an unverified 202
   assert.equal(result.status, 'ambiguous');
   assert.equal(result.ackAmbiguous, true);
   assert.equal(physicalB5HttpStatus(result), 202);
+  assert.ok(updates.some((params) => params[1] === 'ack_ambiguous' && params[3] === 0));
+  assert.equal(updates.some((params) => params[1] === 'ack_error'), false);
   assert.doesNotMatch(String(inserts[0]), /simulation-only-secret|passwd/);
   assert.equal(physicalB5HttpStatus({ ...result, resultCode: 4 }), 502);
 });
 
+test('new ACK status migration separates positive ambiguous replies without rewriting historical rows', () => {
+  const migration = fs.readFileSync(path.resolve(process.cwd(), 'migrations', '006_gateway_ack_ambiguous.sql'), 'utf8');
+  assert.match(migration, /DROP CONSTRAINT hardware_gateway_commands_status_check/);
+  assert.match(migration, /ADD CONSTRAINT hardware_gateway_commands_status_check/);
+  assert.match(migration, /'ack_success', 'ack_ambiguous', 'ack_error'/);
+  assert.doesNotMatch(migration, /\b(?:UPDATE|DELETE|TRUNCATE)\s+hardware_gateway_commands\b/i);
+});
+
 test('physical execution accepts only result_code 0 and correlates base/+2000/+2001 ACK ids', async () => {
   for (const resultCode of [0, 1, 2, 3, 4]) {
-    mockDatabase();
+    const { updates } = mockDatabase();
     let expectedIds: number[] = [];
     const result = await executePhysicalB5Command({
       gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '2805a55efb68', deviceMac: 'fd9d4f8ae226',
@@ -141,11 +155,30 @@ test('physical execution accepts only result_code 0 and correlates base/+2000/+2
     });
     assert.deepEqual(expectedIds, [1158, 3158, 3159]);
     assert.equal(result.status, resultCode === 0 ? 'success' : 'error');
+    assert.ok(updates.some((params) => params[1] === (resultCode === 0 ? 'ack_success' : 'ack_error')));
   }
 });
 
+test('historical timeout does not turn a real gateway rejection into ack_ambiguous', async () => {
+  const { updates } = mockDatabase(true);
+  const result = await executePhysicalB5Command({
+    gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
+    command: 'connect', sessionPassword: 'simulation-only-secret',
+    actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 100,
+    deps: {
+      publish: async () => undefined,
+      waitForAck: async ({ gatewayMac }) => ({ gatewayMac, msgId: 1150, resultCode: 4, resultMessage: 'no object error', payload: {} })
+    }
+  });
+  assert.equal(result.status, 'error');
+  assert.equal(result.ackAmbiguous, undefined);
+  assert.equal(result.resultMessage, 'no object error');
+  assert.equal(physicalB5HttpStatus(result), 502);
+  assert.ok(updates.some((params) => params[1] === 'ack_error' && params[3] === 4));
+});
+
 test('physical execution records timeout and never journals the B5 password', async () => {
-  const inserts = mockDatabase();
+  const { inserts } = mockDatabase();
   const result = await executePhysicalB5Command({
     gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '2805a55efb68', deviceMac: 'fd9d4f8ae226',
     command: 'connect', sessionPassword: 'not-journaled', actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 100,

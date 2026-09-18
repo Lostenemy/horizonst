@@ -90,9 +90,14 @@ export async function disconnectTagSession(params: CentralTarget): Promise<Hardw
 
 
 export interface ConnectedTagCommandResult {
-  status: 'success' | 'attempted_unverified' | 'failed_no_gateway_connected' | 'failed_action';
+  status: 'success' | 'attempted_unverified' | 'failed_no_gateway_connected';
   selectedGatewayMac?: string;
   connectFailures: Array<{ gatewayMac: string; error: string }>;
+}
+
+export interface PhysicalAlarmSequenceResult {
+  status: 'success' | 'attempted_unverified' | 'skipped';
+  selectedGatewayMac?: string;
 }
 
 export async function executeConnectedTagCommandSequence(params: {
@@ -195,11 +200,11 @@ export async function executeAlarmSequence(params: {
   severity: string;
   alertType: string;
   alertId: string;
-}): Promise<void> {
-  if (!env.TAG_ALARM_PHYSICAL_ENABLED) return;
+}): Promise<PhysicalAlarmSequenceResult> {
+  if (!env.TAG_ALARM_PHYSICAL_ENABLED) return { status: 'skipped' };
 
   const actions = resolveAlarmActions({ severity: params.severity, alertType: params.alertType });
-  if (!actions.length) return;
+  if (!actions.length) return { status: 'skipped' };
 
   const candidates = await resolveTagTargets({
     workerId: params.workerId,
@@ -215,13 +220,13 @@ export async function executeAlarmSequence(params: {
 
   if (activeTagAlarms.has(target.tagId)) {
     logger.info({ alertId: params.alertId, tagId: target.tagId }, 'skipped duplicate physical alarm (tag already running)');
-    return;
+    return { status: 'skipped' };
   }
 
   const bleActive = await isBleSessionActive({ tagId: target.tagId, hardwareDeviceId: target.hardwareDeviceId });
   if (bleActive) {
     logger.info({ alertId: params.alertId, tagId: target.tagId }, 'skipped duplicate physical alarm (BLE session already active)');
-    return;
+    return { status: 'skipped' };
   }
 
   activeTagAlarms.add(target.tagId);
@@ -278,6 +283,7 @@ export async function executeAlarmSequence(params: {
       logger.warn({ alertId: params.alertId, tagId: target.tagId, gatewayMac: result.selectedGatewayMac },
         'physical alarm attempted; gateway ACK correlation or disconnect remains unverified');
     }
+    return { status: result.status, selectedGatewayMac: result.selectedGatewayMac };
   } finally {
     activeTagAlarms.delete(target.tagId);
   }

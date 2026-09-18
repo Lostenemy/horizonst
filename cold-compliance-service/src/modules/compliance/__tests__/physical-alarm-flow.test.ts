@@ -57,7 +57,7 @@ test('historical tag command tables have no destructive migration', () => {
 
 test('createAlert logs and dispatches the robust physical alarm sequence once per alert', () => {
   const alerts = source('modules/alerts/alerts.service.ts');
-  const executeCalls = alerts.match(/executeAlarmSequence\(/g) ?? [];
+  const dispatchCalls = alerts.match(/executeAndRecordPhysicalAlarm\(/g) ?? [];
 
   assert.match(alerts, /compliance alert dispatching physical alarm sequence/);
   assert.match(alerts, /alertId: alert\.id/);
@@ -65,5 +65,5 @@ test('createAlert logs and dispatches the robust physical alarm sequence once pe
   assert.match(alerts, /severity: alert\.severity/);
   assert.match(alerts, /tagId: alert\.tag_id/);
   assert.match(alerts, /workerId: alert\.worker_id/);
-  assert.equal(executeCalls.length, 2, 'createAlert and triggerPhysicalAlarmSequence should each call executeAlarmSequence once');
+  assert.equal(dispatchCalls.length, 3, 'one wrapper definition plus one call each from createAlert and triggerPhysicalAlarmSequence');
 });
