@@ -16,19 +16,15 @@ export interface HardwareGatewayAck {
   resultCode: number;
   resultMessage?: string;
   payload: Record<string, unknown>;
-  receivedSequence?: number;
 }
 
 type Waiter = {
   resolve: (ack: HardwareGatewayAck) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
-  signal?: AbortSignal;
-  onAbort?: () => void;
 };
 
 const waiters = new Map<string, Waiter[]>();
-let receivedSequence = 0;
 
 const keyFor = (gatewayMac: string, msgId: number): string => `${gatewayMac}:${msgId}`;
 
@@ -38,19 +34,16 @@ function removeWaiter(keys: string[], target: Waiter): void {
     if (remaining.length) waiters.set(key, remaining);
     else waiters.delete(key);
   }
-  if (target.signal && target.onAbort) target.signal.removeEventListener('abort', target.onAbort);
 }
 
 export function waitForHardwareGatewayAck(params: {
   gatewayMac: string;
   msgIds: number[];
   timeoutMs: number;
-  signal?: AbortSignal;
 }): Promise<HardwareGatewayAck> {
   const gatewayMac = normalizeGatewayMac(params.gatewayMac);
   const msgIds = [...new Set(params.msgIds.filter(Number.isInteger))];
   if (!gatewayMac || !msgIds.length) return Promise.reject(new Error('Invalid gateway ACK waiter'));
-  if (params.signal?.aborted) return Promise.reject(new Error('gateway ACK waiter cancelled'));
   const keys = msgIds.map((msgId) => keyFor(gatewayMac, msgId));
 
   return new Promise((resolve, reject) => {
@@ -61,20 +54,13 @@ export function waitForHardwareGatewayAck(params: {
         resolve(ack);
       },
       reject,
-      signal: params.signal,
       timer: setTimeout(() => {
         removeWaiter(keys, waiter);
         reject(new Error(`timeout waiting gateway reply msg_ids=${msgIds.join(',')}`));
       }, params.timeoutMs)
     };
-    waiter.onAbort = () => {
-      clearTimeout(waiter.timer);
-      removeWaiter(keys, waiter);
-      reject(new Error('gateway ACK waiter cancelled'));
-    };
     waiter.timer.unref();
     for (const key of keys) waiters.set(key, [...(waiters.get(key) ?? []), waiter]);
-    params.signal?.addEventListener('abort', waiter.onAbort, { once: true });
   });
 }
 
@@ -96,8 +82,7 @@ export function normalizeHardwareGatewayAck(
     msgId,
     resultCode,
     resultMessage: String(data.result_msg ?? data.data?.result_msg ?? resultMessages[resultCode] ?? ''),
-    payload: data,
-    receivedSequence: ++receivedSequence
+    payload: data
   };
 }
 

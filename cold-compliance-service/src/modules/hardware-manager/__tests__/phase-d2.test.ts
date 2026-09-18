@@ -57,7 +57,7 @@ test('Horneo accepts only an explicitly ambiguous 202 and does not turn it into 
   (env as any).HARDWARE_MANAGER_ENABLED = true;
   try {
     const request = { hardwareGatewayId: 41, hardwareDeviceId: 31, command: 'connect' as const };
-    const ambiguous = () => new Response(JSON.stringify({ status: 'ambiguous', ackAmbiguous: true, resultCode: 0, connectionState: 'established' }), {
+    const ambiguous = () => new Response(JSON.stringify({ status: 'ambiguous', ackAmbiguous: true, resultCode: 0, connectionState: 'unverified' }), {
       status: 202, headers: { 'Content-Type': 'application/json' }
     });
     assert.equal(await executeHardwareB5Command({ ...request, fetchImpl: async () => ambiguous() }), 'ambiguous');
@@ -73,7 +73,7 @@ test('Horneo accepts only an explicitly ambiguous 202 and does not turn it into 
     }), /invalid ambiguous response/);
     await assert.rejects(() => executeHardwareB5Command({
       ...request, fetchImpl: async () => new Response(JSON.stringify({ status: 'success', resultCode: 0 }), { status: 200 })
-    }), /lacks confirmed 3151 completion/);
+    }), /cannot be confirmed by HTTP 200/);
     await assert.rejects(() => executeHardwareB5Command({
       ...request, fetchImpl: async () => new Response(JSON.stringify({ status: 'error', resultCode: 4 }), { status: 502 })
     }), /HTTP 502 result_code=4/);
@@ -82,7 +82,7 @@ test('Horneo accepts only an explicitly ambiguous 202 and does not turn it into 
   }
 });
 
-test('automatic alarm stops after unattributed 3151 without action, retry or fallback', async () => {
+test('automatic alarm preserves one best-effort physical sequence after accepted 1150 without claiming BLE connection', async () => {
   const originalEnabled = env.HARDWARE_MANAGER_ENABLED;
   (env as any).HARDWARE_MANAGER_ENABLED = true;
   const candidate = { tagId: 'tag-1', tagUid: 'fd9d4f8ae226', gatewayId: 'gw-1',
@@ -90,12 +90,12 @@ test('automatic alarm stops after unattributed 3151 without action, retry or fal
   let actions = 0;
   let connects = 0;
   let disconnects = 0;
-  const run = async (connectionState: string | undefined) => executeConnectedTagCommandSequence({
+  const run = async () => executeConnectedTagCommandSequence({
     tagId: candidate.tagId, tagUid: candidate.tagUid, candidates: [candidate, { ...candidate, gatewayMac: '222222222222' }],
     deps: {
       connect: async () => { connects += 1; return executeHardwareB5Command({
         hardwareGatewayId: 41, hardwareDeviceId: 31, command: 'connect',
-        fetchImpl: async () => new Response(JSON.stringify({ status: 'connection_unverified', resultCode: 0, connectionState }), { status: 202 })
+        fetchImpl: async () => new Response(JSON.stringify({ status: 'accepted_unverified', resultCode: 0, connectionState: 'unverified' }), { status: 202 })
       }); },
       disconnect: async () => { disconnects += 1; return 'confirmed'; },
       markActive: async () => undefined,
@@ -104,10 +104,10 @@ test('automatic alarm stops after unattributed 3151 without action, retry or fal
     runActions: async () => { actions += 1; return 'confirmed'; }
   });
   try {
-    assert.equal((await run('unverified')).status, 'attempted_unverified');
-    assert.equal(actions, 0);
+    assert.equal((await run()).status, 'attempted_unverified');
+    assert.equal(actions, 1);
     assert.equal(connects, 1);
-    assert.equal(disconnects, 0);
+    assert.equal(disconnects, 1);
   } finally {
     (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled;
   }

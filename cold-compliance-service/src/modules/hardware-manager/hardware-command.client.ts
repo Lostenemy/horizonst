@@ -1,7 +1,7 @@
 import { env } from '../../config/env';
 
 export type HardwareB5Command = 'connect' | 'led' | 'buzzer' | 'vibration' | 'disconnect';
-export type HardwareB5CommandOutcome = 'confirmed' | 'ambiguous' | 'unverified';
+export type HardwareB5CommandOutcome = 'confirmed' | 'ambiguous' | 'accepted_unverified';
 type ManagementAction = 'apply-rssi' | 'configure-emergency-button';
 
 export function hardwareManagementTimeoutMs(action: ManagementAction): number {
@@ -41,11 +41,10 @@ export async function executeHardwareB5Command(params: {
     );
     if (response.status === 202) {
       const body = await response.json().catch(() => null) as { status?: string; ackAmbiguous?: boolean; resultCode?: number; connectionState?: string } | null;
-      if (params.command === 'connect' && body?.status === 'connection_unverified'
-          && body.connectionState === 'unverified'
-          && (body.resultCode === undefined || body.resultCode === 0)) return 'unverified';
+      if (params.command === 'connect' && body?.status === 'accepted_unverified'
+          && body.resultCode === 0 && body.connectionState === 'unverified') return 'accepted_unverified';
       if (body?.status === 'ambiguous' && body.ackAmbiguous === true && body.resultCode === 0
-          && (params.command !== 'connect' || body.connectionState === 'established')) return 'ambiguous';
+          && (params.command !== 'connect' || body.connectionState === 'unverified')) return 'ambiguous';
       throw new Error(`Hardware Manager B5 ${params.command} returned an invalid ambiguous response`);
     }
     if (!response.ok) {
@@ -58,12 +57,7 @@ export async function executeHardwareB5Command(params: {
       } catch { /* response body is optional */ }
       throw new Error(`Hardware Manager B5 ${params.command} failed: ${detail}`);
     }
-    if (params.command === 'connect') {
-      const body = await response.json().catch(() => null) as { status?: string; connectionState?: string } | null;
-      if (body?.status !== 'success' || body.connectionState !== 'established') {
-        throw new Error('Hardware Manager B5 connect response lacks confirmed 3151 completion');
-      }
-    }
+    if (params.command === 'connect') throw new Error('Hardware Manager B5 connect cannot be confirmed by HTTP 200');
     return 'confirmed';
   } finally {
     clearTimeout(timer);

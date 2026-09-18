@@ -191,7 +191,7 @@ function physicalCommandTimeoutMs(command: PhysicalB5Command): number {
   const name = command === 'connect' ? 'B5_CONNECT_TIMEOUT_MS' : 'B5_ACTION_TIMEOUT_MS';
   const fallback = command === 'connect' ? 12000 : 8000;
   const parsed = Number(process.env[name] ?? fallback);
-  // Horneo espera como máximo 20 s por comando físico; 1150 y 3151 comparten un presupuesto de 15 s.
+  // Horneo espera como máximo 20 s por comando físico; el ACK 1150 dispone de hasta 15 s.
   const upperBound = command === 'connect' ? 15000 : 120000;
   return Number.isFinite(parsed) ? Math.min(upperBound, Math.max(100, Math.floor(parsed))) : fallback;
 }
@@ -256,7 +256,7 @@ router.post('/gateways/:gatewayId/b5-command', requireCommand, async (req: Servi
       action: `internal.gateway.b5.${command}`, entityType: 'gateway', entityId: gatewayId,
       companyId: principal.companyId, requestId: req.requestId,
       result: result.status === 'success' ? 'success'
-        : result.status === 'ambiguous' || result.status === 'connection_unverified' ? 'unverified' : 'failure', after: result
+        : result.status === 'ambiguous' || result.status === 'accepted_unverified' ? 'unverified' : 'failure', after: result
     });
     // 202 permite continuar el intento físico, sin declarar que el ACK pertenezca a esta solicitud.
     return res.status(physicalB5HttpStatus(result)).json(result);
