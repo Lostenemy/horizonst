@@ -16,6 +16,7 @@ import { resetServiceRateLimitsForTests } from '../middleware/serviceAuth';
 import {
   buildB5GatewayCommands,
   configureB5Gateway,
+  executeManagedGatewayCommand,
   expireStaleGatewayCommands,
   GatewayCommandBusyError
 } from '../services/gatewayCommands';
@@ -347,6 +348,7 @@ function mockCommandDatabase(lock = true) {
   });
   (pool as any).query = async (sql: string) => {
     queries.push(sql);
+    if (sql.includes('AS ambiguous')) return { rows: [{ ambiguous: false }] };
     if (sql.includes('INSERT INTO hardware_gateway_commands')) return { rows: [{ id: `command-${++nextId}` }] };
     if (sql.includes('UPDATE hardware_gateway_commands')) return { rows: [] };
     throw new Error(`Unexpected command query: ${sql}`);
@@ -451,4 +453,110 @@ test('ACK correlation uses gateway and expected msg_id', async () => {
   assert.equal(ack.msgId, 3045);
   assert.equal(ack.resultCode, 0);
   assert.equal(normalizeHardwareGatewayAck('gw/2805a55efb68/publish', { msg_id: 3045, result_code: 4 })?.resultMessage, 'no object error');
+});
+
+test('MQTT reply with a payload MAC different from its topic cannot resolve a waiter or update the journal', async () => {
+  let journalWrites = 0;
+  (pool as any).query = async () => { journalWrites += 1; return { rows: [] }; };
+  const waiter = waitForHardwareGatewayAck({ gatewayMac: '2805a55efb68', msgIds: [1040], timeoutMs: 20 });
+  const mismatched = JSON.stringify({
+    msg_id: 1040, device_info: { mac: 'FFFFFFFFFFFF' }, result_code: 0
+  });
+  assert.equal(normalizeHardwareGatewayAck('gw/2805a55efb68/publish', JSON.parse(mismatched)), null);
+  await handleHardwareGatewayAck('gw/2805a55efb68/publish', mismatched);
+  await assert.rejects(waiter, /timeout waiting gateway reply/);
+  assert.equal(journalWrites, 0);
+});
+
+test('direct MQTT journal update never marks an ACK successful after an earlier timeout of the same key', async () => {
+  let updateSql = '';
+  (pool as any).query = async (sql: string) => { updateSql = sql; return { rows: [], rowCount: 0 }; };
+  await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
+    msg_id: 1040, device_info: { mac: '2805A55EFB68' }, result_code: 0
+  }));
+  assert.match(updateSql, /NOT EXISTS[\s\S]+prior\.gateway_id = c\.gateway_id AND prior\.msg_id = c\.msg_id/);
+  assert.match(updateSql, /prior\.status = 'timed_out'/);
+  assert.match(updateSql, /THEN 'ack_success' ELSE 'ack_error'/);
+});
+
+function mockCorrelationJournal() {
+  let timedOut = false;
+  let nextId = 0;
+  const published: number[] = [];
+  (pool as any).connect = async () => ({
+    query: async (sql: string) => sql.includes('pg_try_advisory_lock')
+      ? { rows: [{ locked: true }] }
+      : { rows: [{ pg_advisory_unlock: true }] },
+    release: () => undefined
+  });
+  (pool as any).query = async (sql: string, params: unknown[] = []) => {
+    if (sql.includes('AS ambiguous')) return { rows: [{ ambiguous: timedOut }] };
+    if (sql.includes('INSERT INTO hardware_gateway_commands')) return { rows: [{ id: `correlation-${++nextId}` }] };
+    if (sql.includes('UPDATE hardware_gateway_commands')) {
+      if (params[1] === 'timed_out') timedOut = true;
+      return { rows: [], rowCount: 0 };
+    }
+    throw new Error(`Unexpected journal query: ${sql}`);
+  };
+  return { published, hasTimeout: () => timedOut };
+}
+
+const managedScanCommand = {
+  gatewayId: 10,
+  companyId: COMPANY_HORNEO,
+  gatewayMac: '2805a55efb68',
+  commandType: 'ble_scan',
+  command: { msg_id: 1040, device_info: { mac: '2805A55EFB68' }, data: { scan_switch: 1 } },
+  actor: { type: 'user' as const, userId: 1 },
+  timeoutMs: 20
+};
+
+test('after timeout, a late simulated MQTT ACK cannot be presented as success of the next same-msg_id command', async () => {
+  const journal = mockCorrelationJournal();
+  const first = await executeManagedGatewayCommand({
+    ...managedScanCommand,
+    deps: { publish: async (_topic, payload) => { journal.published.push(payload.msg_id as number); } }
+  });
+  assert.equal(first.status, 'timeout');
+  assert.equal(journal.hasTimeout(), true);
+
+  // El ACK tardío de la primera petición llega cuando no hay ninguna nueva en espera.
+  await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
+    msg_id: 1040, device_info: { mac: '2805A55EFB68' }, result_code: 0
+  }));
+  const second = await executeManagedGatewayCommand({
+    ...managedScanCommand,
+    deps: {
+      publish: async (topic, payload) => {
+        journal.published.push(payload.msg_id as number);
+        // Una repetición indistinguible del ACK anterior llega durante la segunda espera.
+        await handleHardwareGatewayAck(topic.replace('/subscribe', '/publish'), JSON.stringify({
+          msg_id: 1040, device_info: { mac: '2805A55EFB68' }, result_code: 0
+        }));
+      }
+    }
+  });
+  assert.deepEqual(journal.published, [1040, 1040]);
+  assert.equal(second.status, 'error');
+  assert.equal(second.resultCode, 0);
+  assert.equal(second.ackAmbiguous, true);
+  assert.match(second.resultMessage || '', /correlation ambiguous/);
+});
+
+test('two serialized commands with the same msg_id remain usable when neither prior command timed out', async () => {
+  const journal = mockCorrelationJournal();
+  const send = async () => executeManagedGatewayCommand({
+    ...managedScanCommand,
+    deps: {
+      publish: async (topic, payload) => {
+        journal.published.push(payload.msg_id as number);
+        await handleHardwareGatewayAck(topic.replace('/subscribe', '/publish'), JSON.stringify({
+          msg_id: 1040, device_info: { mac: '2805A55EFB68' }, result_code: 0
+        }));
+      }
+    }
+  });
+  assert.equal((await send()).status, 'success');
+  assert.equal((await send()).status, 'success');
+  assert.deepEqual(journal.published, [1040, 1040]);
 });

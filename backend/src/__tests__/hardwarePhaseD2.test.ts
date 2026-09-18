@@ -88,6 +88,7 @@ function mockDatabase() {
     release: () => undefined
   });
   (pool as any).query = async (sql: string, params: unknown[] = []) => {
+    if (sql.includes('AS ambiguous')) return { rows: [{ ambiguous: false }] };
     if (sql.includes('INSERT INTO hardware_gateway_commands')) {
       inserts.push(params);
       return { rows: [{ id: `command-${inserts.length}` }] };

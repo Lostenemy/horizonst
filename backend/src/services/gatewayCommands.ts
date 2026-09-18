@@ -35,6 +35,7 @@ export interface GatewayCommandResult {
   resultCode?: number;
   resultMessage?: string;
   ackMsgId?: number;
+  ackAmbiguous?: boolean;
 }
 
 export class GatewayCommandBusyError extends Error {}
@@ -173,6 +174,7 @@ export function buildPhysicalB5Command(params: {
 }
 
 const commandTopic = (gatewayMac: string): string => `gw/${gatewayMac}/subscribe`;
+const AMBIGUOUS_ACK_MESSAGE = 'ACK correlation ambiguous after previous timeout for this gateway and msg_id';
 
 async function executeCommand(params: {
   gatewayId: number;
@@ -192,6 +194,16 @@ async function executeCommand(params: {
 }): Promise<GatewayCommandResult> {
   const gatewayMac = normalizeGatewayMac(params.gatewayMac);
   if (!gatewayMac) throw new Error('Invalid gateway MAC');
+  // El firmware no ofrece identificador por solicitud: tras un timeout, un ACK tardío
+  // puede corresponder a cualquiera de los siguientes comandos del mismo tipo.
+  const priorTimeout = await pool.query<{ ambiguous: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM hardware_gateway_commands
+       WHERE gateway_id = $1 AND msg_id = $2 AND status = 'timed_out'
+     ) AS ambiguous`,
+    [params.gatewayId, params.command.msg_id]
+  );
+  const ambiguousCorrelation = priorTimeout.rows[0]?.ambiguous === true;
   const inserted = await pool.query<{ id: string }>(
     `INSERT INTO hardware_gateway_commands
        (gateway_id, company_id, msg_id, command_type, payload, actor_type, actor_user_id,
@@ -233,22 +245,24 @@ async function executeCommand(params: {
       [commandId]
     );
     const ack: HardwareGatewayAck = await ackPromise;
-    const status = ack.resultCode === 0 ? 'success' : 'error';
+    const status = ack.resultCode === 0 && !ambiguousCorrelation ? 'success' : 'error';
+    const resultMessage = ambiguousCorrelation ? AMBIGUOUS_ACK_MESSAGE : ack.resultMessage;
     await pool.query(
       `UPDATE hardware_gateway_commands
        SET status = $2, ack_at = COALESCE(ack_at, NOW()), ack_msg_id = $3,
            result_code = $4, result_message = $5, response_payload = $6::jsonb
        WHERE id = $1`,
       [commandId, status === 'success' ? 'ack_success' : 'ack_error', ack.msgId,
-       ack.resultCode, ack.resultMessage ?? null, JSON.stringify(redactHardwarePayload(ack.payload))]
+       ack.resultCode, resultMessage ?? null, JSON.stringify(redactHardwarePayload(ack.payload))]
     );
     return {
       commandId,
       msgId: params.command.msg_id,
       status,
       resultCode: ack.resultCode,
-      resultMessage: ack.resultMessage,
-      ackMsgId: ack.msgId
+      resultMessage,
+      ackMsgId: ack.msgId,
+      ...(ambiguousCorrelation ? { ackAmbiguous: true } : {})
     };
   } catch (error: any) {
     const message = String(error?.message ?? error);

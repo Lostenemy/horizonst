@@ -73,11 +73,12 @@ export function normalizeHardwareGatewayAck(
   const msgId = data.msg_id;
   const resultCode = data.result_code ?? data.data?.result_code;
   if (!Number.isInteger(msgId) || !Number.isInteger(resultCode)) return null;
-  const topicMac = topic.match(/^gw\/([^/]+)\/publish$/i)?.[1];
-  const gatewayMac = normalizeGatewayMac(data.device_info?.mac ?? topicMac);
-  if (!gatewayMac) return null;
+  const topicMac = normalizeGatewayMac(topic.match(/^gw\/([^/]+)\/publish$/i)?.[1]);
+  if (!topicMac) return null;
+  const payloadMacValue = data.device_info?.mac;
+  if (payloadMacValue !== undefined && normalizeGatewayMac(payloadMacValue) !== topicMac) return null;
   return {
-    gatewayMac,
+    gatewayMac: topicMac,
     msgId,
     resultCode,
     resultMessage: String(data.result_msg ?? data.data?.result_msg ?? resultMessages[resultCode] ?? ''),
@@ -101,9 +102,18 @@ export async function handleHardwareGatewayAck(topic: string, payloadText: strin
   try {
     await pool.query(
       `UPDATE hardware_gateway_commands c
-       SET status = CASE WHEN $3 = 0 THEN 'ack_success' ELSE 'ack_error' END,
+       SET status = CASE WHEN $3 = 0 AND NOT EXISTS (
+             SELECT 1 FROM hardware_gateway_commands prior
+             WHERE prior.gateway_id = c.gateway_id AND prior.msg_id = c.msg_id
+               AND prior.status = 'timed_out' AND prior.id <> c.id
+           ) THEN 'ack_success' ELSE 'ack_error' END,
            ack_at = NOW(), ack_msg_id = $2, result_code = $3,
-           result_message = $4, response_payload = $5::jsonb
+           result_message = CASE WHEN EXISTS (
+             SELECT 1 FROM hardware_gateway_commands prior
+             WHERE prior.gateway_id = c.gateway_id AND prior.msg_id = c.msg_id
+               AND prior.status = 'timed_out' AND prior.id <> c.id
+           ) THEN 'ACK correlation ambiguous after previous timeout' ELSE $4 END,
+           response_payload = $5::jsonb
        FROM gateways g
        WHERE c.gateway_id = g.id
          AND regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g') = $1
