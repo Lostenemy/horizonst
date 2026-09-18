@@ -52,6 +52,33 @@ test('Horneo sends only central ids, command and duration; never MQTT topic, MAC
   assert.doesNotMatch(String(request!.init?.body), /password|passwd|subscribe|publish|[0-9A-F]{12}/i);
 });
 
+test('Horneo accepts only an explicitly ambiguous 202 and does not turn it into a confirmed connect', async () => {
+  const originalEnabled = env.HARDWARE_MANAGER_ENABLED;
+  (env as any).HARDWARE_MANAGER_ENABLED = true;
+  try {
+    const request = { hardwareGatewayId: 41, hardwareDeviceId: 31, command: 'connect' as const };
+    const ambiguous = () => new Response(JSON.stringify({ status: 'ambiguous', ackAmbiguous: true, resultCode: 0 }), {
+      status: 202, headers: { 'Content-Type': 'application/json' }
+    });
+    assert.equal(await executeHardwareB5Command({ ...request, fetchImpl: async () => ambiguous() }), 'ambiguous');
+    let attempts = 0;
+    const outcome = await connectTagSession({ gatewayMac: '142b2fe271b4', tagUid: 'fd9d4f8ae226', ...request }, {
+      execute: async () => { attempts += 1; return 'ambiguous'; },
+      wait: async () => { throw new Error('ambiguous connect must not retry'); }
+    });
+    assert.equal(outcome, 'ambiguous');
+    assert.equal(attempts, 1);
+    await assert.rejects(() => executeHardwareB5Command({
+      ...request, fetchImpl: async () => new Response('{}', { status: 202 })
+    }), /invalid ambiguous response/);
+    await assert.rejects(() => executeHardwareB5Command({
+      ...request, fetchImpl: async () => new Response(JSON.stringify({ status: 'error', resultCode: 4 }), { status: 502 })
+    }), /HTTP 502 result_code=4/);
+  } finally {
+    (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled;
+  }
+});
+
 test('legacy Horneo RSSI/B5 endpoints delegate their central id to Hardware Manager', async () => {
   const originalEnabled = env.HARDWARE_MANAGER_ENABLED;
   (env as any).HARDWARE_MANAGER_ENABLED = true;

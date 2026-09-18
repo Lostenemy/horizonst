@@ -12,7 +12,7 @@ export interface TechnicalAuditEntry {
   entityId: string | number;
   companyId?: string | null;
   requestId?: string;
-  result: 'success' | 'failure' | 'denied';
+  result: 'success' | 'failure' | 'denied' | 'unverified';
   before?: unknown;
   after?: unknown;
 }

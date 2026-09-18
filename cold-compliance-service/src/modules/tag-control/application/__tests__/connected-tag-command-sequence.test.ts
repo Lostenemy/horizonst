@@ -92,3 +92,40 @@ test('runs connect, buzzer/vibration action callback, disconnect and state clean
     'disconnected'
   ]);
 });
+
+test('historical 1150 ambiguity attempts actions on the same gateway without claiming physical success', async () => {
+  const calls: string[] = [];
+  let disconnectConfirmed: boolean | undefined;
+  const result = await executeConnectedTagCommandSequence({
+    tagId: 'tag-1', tagUid: 'fd9d4f8ae226',
+    candidates: [{ ...candidates[0], gatewayMac: '142b2fe271b4' }, candidates[1]],
+    deps: {
+      connect: async ({ gatewayMac }) => { calls.push(`connect:${gatewayMac}`); return 'ambiguous'; },
+      disconnect: async ({ gatewayMac }) => { calls.push(`disconnect:${gatewayMac}`); return 'confirmed'; },
+      markActive: async ({ gatewayMac }) => { calls.push(`lease:${gatewayMac}`); },
+      markDisconnected: async ({ confirmed }) => { disconnectConfirmed = confirmed; calls.push('closed'); }
+    },
+    runActions: async ({ gatewayMac }) => { calls.push(`alarm:${gatewayMac}`); return 'confirmed'; }
+  });
+  assert.equal(result.status, 'attempted_unverified');
+  assert.equal(result.selectedGatewayMac, '142b2fe271b4');
+  assert.equal(disconnectConfirmed, true);
+  assert.deepEqual(calls, [
+    'connect:142b2fe271b4', 'lease:142b2fe271b4', 'alarm:142b2fe271b4',
+    'disconnect:142b2fe271b4', 'closed'
+  ]);
+});
+
+test('an ambiguous action or disconnect never reports a confirmed physical alarm', async () => {
+  const result = await executeConnectedTagCommandSequence({
+    tagId: 'tag-1', tagUid: 'fd9d4f8ae226', candidates: [candidates[0]],
+    deps: {
+      connect: async () => 'confirmed',
+      disconnect: async () => 'ambiguous',
+      markActive: async () => undefined,
+      markDisconnected: async ({ confirmed }) => assert.equal(confirmed, false)
+    },
+    runActions: async () => 'ambiguous'
+  });
+  assert.equal(result.status, 'attempted_unverified');
+});

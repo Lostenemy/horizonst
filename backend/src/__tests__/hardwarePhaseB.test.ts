@@ -537,7 +537,7 @@ test('after timeout, a late simulated MQTT ACK cannot be presented as success of
     }
   });
   assert.deepEqual(journal.published, [1040, 1040]);
-  assert.equal(second.status, 'error');
+  assert.equal(second.status, 'ambiguous');
   assert.equal(second.resultCode, 0);
   assert.equal(second.ackAmbiguous, true);
   assert.match(second.resultMessage || '', /correlation ambiguous/);

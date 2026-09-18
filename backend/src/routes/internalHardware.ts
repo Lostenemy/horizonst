@@ -13,7 +13,8 @@ import {
   configureGatewayRssi,
   executePhysicalB5Command,
   GatewayCommandBusyError,
-  PhysicalB5Command
+  PhysicalB5Command,
+  physicalB5HttpStatus
 } from '../services/gatewayCommands';
 
 const router = Router();
@@ -250,9 +251,10 @@ router.post('/gateways/:gatewayId/b5-command', requireCommand, async (req: Servi
       actorType: 'service', actorCode: principal.code, actorServiceId: principal.id,
       action: `internal.gateway.b5.${command}`, entityType: 'gateway', entityId: gatewayId,
       companyId: principal.companyId, requestId: req.requestId,
-      result: result.status === 'success' ? 'success' : 'failure', after: result
+      result: result.status === 'success' ? 'success' : result.status === 'ambiguous' ? 'unverified' : 'failure', after: result
     });
-    return res.status(result.status === 'success' ? 200 : result.status === 'timeout' ? 504 : 502).json(result);
+    // 202 permite continuar el intento físico, sin declarar que el ACK pertenezca a esta solicitud.
+    return res.status(physicalB5HttpStatus(result)).json(result);
   } catch (error) {
     if (error instanceof GatewayCommandBusyError || (error as any)?.code === '23505') {
       return res.status(409).json({ message: 'Gateway already has an active command' });

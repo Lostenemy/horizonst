@@ -31,7 +31,7 @@ export interface GatewayCommandActor {
 export interface GatewayCommandResult {
   commandId: string;
   msgId: number;
-  status: 'success' | 'error' | 'timeout';
+  status: 'success' | 'error' | 'timeout' | 'ambiguous';
   resultCode?: number;
   resultMessage?: string;
   ackMsgId?: number;
@@ -245,8 +245,8 @@ async function executeCommand(params: {
       [commandId]
     );
     const ack: HardwareGatewayAck = await ackPromise;
-    const status = ack.resultCode === 0 && !ambiguousCorrelation ? 'success' : 'error';
-    const resultMessage = ambiguousCorrelation ? AMBIGUOUS_ACK_MESSAGE : ack.resultMessage;
+    const status = ack.resultCode !== 0 ? 'error' : ambiguousCorrelation ? 'ambiguous' : 'success';
+    const resultMessage = status === 'ambiguous' ? AMBIGUOUS_ACK_MESSAGE : ack.resultMessage;
     await pool.query(
       `UPDATE hardware_gateway_commands
        SET status = $2, ack_at = COALESCE(ack_at, NOW()), ack_msg_id = $3,
@@ -389,6 +389,12 @@ export async function configureGatewayRssi(params: {
     try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
     lockClient.release();
   }
+}
+
+export function physicalB5HttpStatus(result: GatewayCommandResult): number {
+  if (result.status === 'success') return 200;
+  if (result.status === 'ambiguous' && result.resultCode === 0 && result.ackAmbiguous === true) return 202;
+  return result.status === 'timeout' ? 504 : 502;
 }
 
 export async function executeManagedGatewayCommand(params: {

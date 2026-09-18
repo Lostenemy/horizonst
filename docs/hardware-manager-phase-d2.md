@@ -16,6 +16,14 @@ El endpoint exige `hardware.command`, resuelve gateway y dispositivo con el `com
 
 Los comandos son 1150 (conectar), 1158 (LED), 1160 (buzzer), 1169 (vibración) y 1200 (desconectar). La correlación admite `msg_id`, `msg_id + 2000` y `msg_id + 2001`; sólo `result_code = 0` es éxito. El tópico de salida sigue siendo `gw/{gatewayMac}/subscribe`. Los endpoints heredados de Horneo para RSSI y configuración B5 también delegan en las implementaciones centrales existentes, sin duplicar sus payloads ni su lógica de ACK.
 
+### ACK ambiguo en alarmas físicas
+
+El protocolo no aporta un identificador único por solicitud. Si existe un `timed_out` anterior para la misma gateway y `msg_id`, un ACK posterior con `result_code = 0` no demuestra a qué intento pertenece. El journal histórico se conserva: no se borran timeouts para recuperar una apariencia de correlación. Hardware Manager registra el ACK como no confirmado y, exclusivamente para el endpoint físico B5, responde `202` con `status: "ambiguous"`, `ackAmbiguous: true` y `resultCode: 0`; una respuesta con código distinto de cero sigue siendo error. El audit técnico marca el caso `unverified`, nunca `success`.
+
+Horneo no trata ese `202` como un `502`: no reintenta la conexión ambigua ni cambia a otra gateway, porque eso podría duplicar efectos físicos. Mantiene un lease interno de exclusión, intenta LED/buzzer/vibración en esa gateway y solicita la desconexión. Registra el resultado como `attempted_unverified` si cualquier paso fue ambiguo o la desconexión no quedó confirmada; no afirma que el B5 haya sonado. Los fallos reales siguen usando el camino de error y fallback existente. La alerta funcional permanece registrada aunque la entrega física no pueda verificarse. La emergencia manual mantiene `dispatchPhysicalAlarm: false`.
+
+Límite pendiente: sin identificador de petición del fabricante ni verificación independiente del estado/efecto en el B5, no es posible atribuir inequívocamente un ACK tardío ni demostrar la ejecución física. Un `202` conserva la disponibilidad del intento automático, pero no equivale a éxito confirmado y requiere supervisión operativa si se repite.
+
 ## Migración y configuración
 
 La migración aditiva `backend/migrations/003_hardware_command_scope.sql` amplía el constraint de scopes para aceptar `hardware.read` y `hardware.command`. No modifica principales existentes ni concede el scope nuevo automáticamente.

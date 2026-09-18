@@ -9,7 +9,8 @@ import { resetServiceRateLimitsForTests } from '../middleware/serviceAuth';
 import {
   buildPhysicalB5Command,
   durationMsToGatewaySeconds,
-  executePhysicalB5Command
+  executePhysicalB5Command,
+  physicalB5HttpStatus
 } from '../services/gatewayCommands';
 import {
   HARDWARE_COMMAND_SCOPE,
@@ -79,7 +80,7 @@ test('physical B5 payloads use exact MKGW3 commands and convert milliseconds to 
   assert.equal(durationMsToGatewaySeconds(500), 1);
 });
 
-function mockDatabase() {
+function mockDatabase(historicalTimeout = false) {
   const inserts: unknown[][] = [];
   (pool as any).connect = async () => ({
     query: async (sql: string) => sql.includes('pg_try_advisory_lock')
@@ -88,7 +89,10 @@ function mockDatabase() {
     release: () => undefined
   });
   (pool as any).query = async (sql: string, params: unknown[] = []) => {
-    if (sql.includes('AS ambiguous')) return { rows: [{ ambiguous: false }] };
+    if (sql.includes('AS ambiguous')) {
+      if (historicalTimeout) assert.deepEqual(params, [41, 1150]);
+      return { rows: [{ ambiguous: historicalTimeout }] };
+    }
     if (sql.includes('INSERT INTO hardware_gateway_commands')) {
       inserts.push(params);
       return { rows: [{ id: `command-${inserts.length}` }] };
@@ -98,6 +102,27 @@ function mockDatabase() {
   };
   return inserts;
 }
+
+test('historical timed_out 1150 on gateway 142b2fe271b4 yields an unverified 202, never a confirmed success', async () => {
+  const inserts = mockDatabase(true);
+  const result = await executePhysicalB5Command({
+    gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
+    command: 'connect', sessionPassword: 'simulation-only-secret',
+    actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 100,
+    deps: {
+      publish: async (topic) => assert.equal(topic, 'gw/142b2fe271b4/subscribe'),
+      waitForAck: async ({ gatewayMac, msgIds }) => {
+        assert.deepEqual(msgIds, [1150, 3150, 3151]);
+        return { gatewayMac, msgId: 1150, resultCode: 0, payload: { result_code: 0 } };
+      }
+    }
+  });
+  assert.equal(result.status, 'ambiguous');
+  assert.equal(result.ackAmbiguous, true);
+  assert.equal(physicalB5HttpStatus(result), 202);
+  assert.doesNotMatch(String(inserts[0]), /simulation-only-secret|passwd/);
+  assert.equal(physicalB5HttpStatus({ ...result, resultCode: 4 }), 502);
+});
 
 test('physical execution accepts only result_code 0 and correlates base/+2000/+2001 ACK ids', async () => {
   for (const resultCode of [0, 1, 2, 3, 4]) {

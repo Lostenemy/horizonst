@@ -1,6 +1,7 @@
 import { env } from '../../config/env';
 
 export type HardwareB5Command = 'connect' | 'led' | 'buzzer' | 'vibration' | 'disconnect';
+export type HardwareB5CommandOutcome = 'confirmed' | 'ambiguous';
 type ManagementAction = 'apply-rssi' | 'configure-emergency-button';
 
 export function hardwareManagementTimeoutMs(action: ManagementAction): number {
@@ -15,7 +16,7 @@ export async function executeHardwareB5Command(params: {
   command: HardwareB5Command;
   durationMs?: number;
   fetchImpl?: typeof fetch;
-}): Promise<void> {
+}): Promise<HardwareB5CommandOutcome> {
   if (!env.HARDWARE_MANAGER_ENABLED) throw new Error('Hardware Manager command execution is disabled');
   if (!params.hardwareGatewayId || !params.hardwareDeviceId) throw new Error('Central hardware mapping is required');
   const controller = new AbortController();
@@ -38,6 +39,11 @@ export async function executeHardwareB5Command(params: {
         signal: controller.signal
       }
     );
+    if (response.status === 202) {
+      const body = await response.json().catch(() => null) as { status?: string; ackAmbiguous?: boolean; resultCode?: number } | null;
+      if (body?.status === 'ambiguous' && body.ackAmbiguous === true && body.resultCode === 0) return 'ambiguous';
+      throw new Error(`Hardware Manager B5 ${params.command} returned an invalid ambiguous response`);
+    }
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
       try {
@@ -48,6 +54,7 @@ export async function executeHardwareB5Command(params: {
       } catch { /* response body is optional */ }
       throw new Error(`Hardware Manager B5 ${params.command} failed: ${detail}`);
     }
+    return 'confirmed';
   } finally {
     clearTimeout(timer);
   }
