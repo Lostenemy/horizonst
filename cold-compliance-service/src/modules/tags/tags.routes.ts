@@ -52,7 +52,7 @@ tagsRouter.get('/', async (_req, res, next) => {
       return hardware ? {
         ...row,
         tag_uid: normalizeHorneoDeviceMac(hardware.ble_mac)?.toLowerCase(),
-        model: hardware.name,
+        hardware_name: hardware.name,
         active: hardware.active,
         status: hardware.status,
         device_type: hardware.device_type,

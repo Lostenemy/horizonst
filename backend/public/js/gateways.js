@@ -18,10 +18,21 @@ const gatewayOwnerSelect = document.getElementById('gatewayOwner');
 const gatewayCompanySelect = document.getElementById('gatewayCompany');
 const gatewaysTableBody = document.querySelector('#gatewaysTable tbody');
 const gatewaysEmpty = document.getElementById('gatewaysEmpty');
+const technicalPanel = document.getElementById('gatewayTechnicalPanel');
+const technicalTitle = document.getElementById('gatewayTechnicalTitle');
+const technicalSummary = document.getElementById('gatewayTechnicalSummary');
+const technicalActions = document.getElementById('gatewayTechnicalActions');
+const bluetoothPanel = document.getElementById('gatewayBluetoothPanel');
+const technicalFeedback = document.getElementById('gatewayTechnicalFeedback');
+const gatewayRssi = document.getElementById('gatewayRssi');
+const commandsBody = document.querySelector('#gatewayCommandsTable tbody');
+const auditBody = document.querySelector('#gatewayAuditTable tbody');
+const devicesBody = document.querySelector('#gatewayDevicesTable tbody');
 
 let gateways = [];
 let owners = [];
 let companies = [];
+let selectedGateway = null;
 
 const normalizeMac = (value) => {
   if (!value) return '';
@@ -51,6 +62,14 @@ const loadOwners = async () => {
 const loadGateways = async () => {
   gateways = await apiGet('/gateways');
   renderGateways();
+  if (selectedGateway) {
+    const updated = gateways.find((gateway) => gateway.id === selectedGateway.id);
+    if (updated) await selectGateway(updated);
+    else {
+      selectedGateway = null;
+      technicalPanel.hidden = true;
+    }
+  }
 };
 
 const ownerLabel = (gateway) => {
@@ -140,13 +159,150 @@ const handleEditGateway = async (gateway) => {
 const handleDeleteGateway = async (gateway) => {
   const confirmed = await confirmAction({
     title: 'Eliminar gateway',
-    message: `¿Seguro que quieres eliminar la gateway <strong>${gateway.name || gateway.mac_address}</strong>?`,
+    message: `¿Seguro que quieres desactivar la gateway ${gateway.mac_address}?`,
     confirmText: 'Eliminar'
   });
   if (!confirmed) return;
   await apiDelete(`/gateways/${gateway.id}`);
   await loadGateways();
 };
+
+const renderHistory = (body, items, columns) => {
+  body.replaceChildren();
+  for (const item of items) {
+    const row = document.createElement('tr');
+    for (const column of columns) {
+      const cell = document.createElement('td');
+      cell.textContent = String(column(item) ?? '—');
+      row.appendChild(cell);
+    }
+    body.appendChild(row);
+  }
+};
+
+const refreshTechnicalHistory = async () => {
+  if (!selectedGateway || document.hidden) return;
+  const gatewayId = selectedGateway.id;
+  try {
+    const [commands, audit] = await Promise.all([
+      apiGet(`/gateways/${gatewayId}/commands`),
+      apiGet(`/gateways/${gatewayId}/audit`)
+    ]);
+    if (selectedGateway?.id !== gatewayId) return;
+    renderHistory(commandsBody, commands, [
+      (item) => new Date(item.created_at).toLocaleString('es-ES'),
+      (item) => item.command_type,
+      (item) => item.msg_id,
+      (item) => item.status,
+      (item) => item.result_code == null ? item.result_message : `${item.result_code}: ${item.result_message || ''}`
+    ]);
+    renderHistory(auditBody, audit, [
+      (item) => new Date(item.created_at).toLocaleString('es-ES'),
+      (item) => item.action,
+      (item) => item.result,
+      (item) => item.actor_user_id ?? item.actor_code
+    ]);
+  } catch (error) {
+    technicalFeedback.textContent = `No se pudo actualizar el historial: ${error.message}`;
+  }
+};
+
+const selectGateway = async (gateway) => {
+  selectedGateway = gateway;
+  technicalPanel.hidden = false;
+  technicalTitle.textContent = gateway.name || gateway.mac_address;
+  technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin empresa'} · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'}`;
+  technicalActions.hidden = !canEditHardware || !gateway.active || !gateway.company_id;
+  bluetoothPanel.hidden = technicalActions.hidden;
+  gatewayRssi.value = gateway.rssi_threshold ?? -127;
+  technicalFeedback.textContent = '';
+  await Promise.all([refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
+};
+
+const refreshGatewayDevices = async (gatewayId) => {
+  try {
+    const devices = await apiGet('/devices');
+    if (selectedGateway?.id !== gatewayId) return;
+    renderHistory(devicesBody, devices.filter((device) => Number(device.last_gateway_id) === gatewayId), [
+      (item) => item.name || 'Sin nombre',
+      (item) => item.ble_mac,
+      (item) => item.device_type,
+      (item) => item.last_seen_at ? new Date(item.last_seen_at).toLocaleString('es-ES') : '—'
+    ]);
+  } catch (error) {
+    technicalFeedback.textContent = `No se pudo cargar el inventario de tags: ${error.message}`;
+  }
+};
+
+document.getElementById('gatewayApplyRssi').addEventListener('click', async () => {
+  const rssi = Number(gatewayRssi.value);
+  if (!Number.isInteger(rssi) || rssi < -127 || rssi > 0) {
+    technicalFeedback.textContent = 'El RSSI debe ser un entero entre -127 y 0 dBm.';
+    return;
+  }
+  if (!selectedGateway || !await confirmAction({ title: 'Aplicar filtro BLE', message: `Aplicar RSSI ${rssi} dBm a ${selectedGateway.mac_address}?`, confirmText: 'Aplicar' })) return;
+  try {
+    technicalFeedback.textContent = 'Esperando confirmación de la gateway…';
+    const result = await apiPost(`/gateways/${selectedGateway.id}/apply-rssi`, { rssi });
+    technicalFeedback.textContent = result.status === 'success' ? 'RSSI aplicado y confirmado.' : `No confirmado: ${result.resultMessage || result.status}`;
+    await refreshTechnicalHistory();
+  } catch (error) {
+    technicalFeedback.textContent = `No se pudo aplicar RSSI: ${error.message}`;
+  }
+});
+
+document.getElementById('gatewayConfigureB5').addEventListener('click', async () => {
+  if (!selectedGateway || !await confirmAction({ title: 'Configurar doble pulsación B5', message: `Se enviarán cuatro comandos BLE a ${selectedGateway.mac_address}. ¿Continuar?`, confirmText: 'Configurar' })) return;
+  try {
+    technicalFeedback.textContent = 'Esperando confirmación de los cuatro comandos…';
+    const result = await apiPost(`/gateways/${selectedGateway.id}/configure-emergency-button`, {});
+    technicalFeedback.textContent = result.ok
+      ? 'B5 configurado correctamente: cuatro comandos confirmados.'
+      : `Configuración incompleta: ${(result.results || []).map((item) => `${item.msgId}: ${item.status}${item.resultCode == null ? '' : ` (${item.resultCode})`}`).join(' · ')}`;
+    await refreshTechnicalHistory();
+  } catch (error) {
+    technicalFeedback.textContent = `No se pudo configurar B5: ${error.message}`;
+  }
+});
+
+const bluetoothFields = {
+  scan: 'scan_switch',
+  'filter-relation': 'relation',
+  duplicates: 'rule',
+  phy: 'phy_filter',
+  'report-interval': 'interval',
+  'scan-mode': 'scan_mode'
+};
+
+for (const button of bluetoothPanel.querySelectorAll('[data-ble-command]')) {
+  button.addEventListener('click', async () => {
+    const operation = button.dataset.bleCommand;
+    const input = bluetoothPanel.querySelector(`[data-ble-input="${operation}"]`);
+    const value = Number(input.value);
+    if (!selectedGateway || !Number.isInteger(value) || (operation === 'report-interval' && (value < 0 || value > 86400))) {
+      technicalFeedback.textContent = 'Valor Bluetooth no válido.';
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: 'Aplicar configuración Bluetooth',
+      message: `Enviar ${operation}=${value} a ${selectedGateway.mac_address}? Algunos cambios pueden afectar la presencia.`,
+      confirmText: 'Aplicar'
+    });
+    if (!confirmed) return;
+    try {
+      technicalFeedback.textContent = 'Esperando confirmación de la gateway…';
+      const result = await apiPost(`/gateways/${selectedGateway.id}/bluetooth/${operation}`, { [bluetoothFields[operation]]: value });
+      technicalFeedback.textContent = result.status === 'success'
+        ? `${operation} confirmado por la gateway.`
+        : `${operation} no confirmado: ${result.resultMessage || result.status}`;
+      await refreshTechnicalHistory();
+    } catch (error) {
+      technicalFeedback.textContent = `No se pudo aplicar ${operation}: ${error.message}`;
+    }
+  });
+}
+
+setInterval(() => { void refreshTechnicalHistory(); }, 5000);
 
 const renderGateways = () => {
   gatewaysTableBody.innerHTML = '';
@@ -156,19 +312,21 @@ const renderGateways = () => {
   }
   gatewaysEmpty.style.display = 'none';
 
-  gateways.forEach((gateway) => {
+    gateways.forEach((gateway) => {
     const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${gateway.name || 'Sin nombre'}</td>
-      <td>${gateway.mac_address}</td>
-      <td>${gateway.company_name || 'Sin empresa (legacy)'}</td>
-      <td>${ownerLabel(gateway)}</td>
-      <td>${gateway.active ? 'Activa' : 'Inactiva'}</td>
-      <td></td>
-    `;
-    const actionsCell = row.querySelector('td:last-child');
+    for (const value of [gateway.name || 'Sin nombre', gateway.mac_address, gateway.company_name || 'Sin empresa (legacy)', ownerLabel(gateway), gateway.active ? 'Activa' : 'Inactiva', '']) {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.appendChild(cell);
+    }
+    const actionsCell = row.lastElementChild;
     const container = document.createElement('div');
     container.className = 'actions';
+    const technicalButton = document.createElement('button');
+    technicalButton.type = 'button';
+    technicalButton.textContent = 'Gestión técnica';
+    technicalButton.addEventListener('click', () => selectGateway(gateway));
+    container.appendChild(technicalButton);
 
     if (canEditHardware) {
       const editButton = document.createElement('button');

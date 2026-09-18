@@ -13,8 +13,10 @@ import { appendTechnicalAudit } from '../services/technicalAudit';
 import {
   configureB5Gateway,
   configureGatewayRssi,
+  executeManagedGatewayCommand,
   GatewayCommandBusyError
 } from '../services/gatewayCommands';
+import { buildBluetoothGatewayCommand, isBluetoothOperation } from '../services/gatewayBluetoothCommands';
 
 const router = Router();
 
@@ -135,6 +137,29 @@ router.get('/:gatewayId/commands', authenticate, async (req: AuthenticatedReques
   }
 });
 
+router.get('/:gatewayId/audit', authenticate, async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const scope = await resolveHardwareAccess(req.user!, 'read');
+    const values: unknown[] = [gatewayId];
+    const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
+    const gateway = await pool.query(`SELECT g.id, g.company_id FROM gateways g WHERE g.id = $1 AND ${predicate}`, values);
+    if (!gateway.rows[0]) return res.status(404).json({ message: 'Gateway not found' });
+    const result = await pool.query(
+      `SELECT id, actor_user_id, actor_type, actor_code, action, result, request_id, created_at
+       FROM technical_audit_log
+       WHERE entity_type = 'gateway' AND entity_id = $1 AND company_id IS NOT DISTINCT FROM $2::uuid
+       ORDER BY created_at DESC LIMIT 200`,
+      [String(gatewayId), gateway.rows[0].company_id]
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    console.error('Failed to list gateway audit', error);
+    return res.status(500).json({ message: 'Failed to list gateway audit' });
+  }
+});
+
 router.post('/:gatewayId/configure-emergency-button', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
   const gatewayId = Number(req.params.gatewayId);
   if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
@@ -214,6 +239,50 @@ router.post('/:gatewayId/apply-rssi', authenticate, authorizeHardware('technicia
     }
     console.error('Failed to configure gateway RSSI', error);
     return res.status(500).json({ message: 'Failed to configure gateway RSSI' });
+  }
+});
+
+router.post('/:gatewayId/bluetooth/:operation', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId) || !isBluetoothOperation(req.params.operation)) {
+    return res.status(400).json({ message: 'Invalid Bluetooth operation' });
+  }
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    let command;
+    try {
+      command = buildBluetoothGatewayCommand(gateway.mac_address, req.params.operation, req.body);
+    } catch {
+      return res.status(400).json({ message: 'Invalid Bluetooth configuration' });
+    }
+    const result = await executeManagedGatewayCommand({
+      gatewayId,
+      companyId: gateway.company_id,
+      gatewayMac: gateway.mac_address,
+      commandType: `ble_${req.params.operation}`,
+      command,
+      actor: { type: 'user', userId: req.user!.id },
+      requestId: req.requestId,
+      timeoutMs: commandTimeoutMs()
+    });
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id,
+      action: `gateway.ble.${req.params.operation}`,
+      entityType: 'gateway',
+      entityId: gatewayId,
+      companyId: gateway.company_id,
+      requestId: req.requestId,
+      result: result.status === 'success' ? 'success' : 'failure',
+      after: result
+    });
+    return res.status(result.status === 'success' ? 200 : result.status === 'timeout' ? 504 : 502).json(result);
+  } catch (error) {
+    if (error instanceof GatewayCommandBusyError || (error as any)?.code === '23505') {
+      return res.status(409).json({ message: 'Gateway already has an active command sequence' });
+    }
+    console.error('Failed to configure gateway Bluetooth', error);
+    return res.status(500).json({ message: 'Failed to configure gateway Bluetooth' });
   }
 });
 

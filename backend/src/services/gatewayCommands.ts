@@ -3,6 +3,7 @@ import { pool } from '../db/pool';
 import { normalizeGatewayMac } from '../utils/mac';
 import { publishMqttJson } from './mqttService';
 import { HardwareGatewayAck, waitForHardwareGatewayAck } from './gatewayAck';
+import { redactHardwarePayload } from './hardwarePayloadRedaction';
 
 export interface GatewayCommandPayload extends Record<string, unknown> {
   msg_id: number;
@@ -37,15 +38,6 @@ export interface GatewayCommandResult {
 }
 
 export class GatewayCommandBusyError extends Error {}
-
-function sanitizeJournalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizeJournalValue);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
-    key,
-    /pass(word|wd)?/i.test(key) ? '[REDACTED]' : sanitizeJournalValue(nested)
-  ]));
-}
 
 export async function expireStaleGatewayCommands(gatewayId?: number): Promise<number> {
   const values: unknown[] = [];
@@ -211,7 +203,7 @@ async function executeCommand(params: {
       params.companyId,
       params.command.msg_id,
       params.commandType,
-      JSON.stringify(sanitizeJournalValue(params.journalPayload ?? params.command)),
+      JSON.stringify(redactHardwarePayload(params.journalPayload ?? params.command)),
       params.actor.type,
       params.actor.userId ?? null,
       params.actor.serviceId ?? null,
@@ -248,7 +240,7 @@ async function executeCommand(params: {
            result_code = $4, result_message = $5, response_payload = $6::jsonb
        WHERE id = $1`,
       [commandId, status === 'success' ? 'ack_success' : 'ack_error', ack.msgId,
-       ack.resultCode, ack.resultMessage ?? null, JSON.stringify(sanitizeJournalValue(ack.payload))]
+       ack.resultCode, ack.resultMessage ?? null, JSON.stringify(redactHardwarePayload(ack.payload))]
     );
     return {
       commandId,
@@ -379,6 +371,31 @@ export async function configureGatewayRssi(params: {
       await pool.query('UPDATE gateways SET rssi_threshold = $2, updated_at = NOW() WHERE id = $1', [params.gatewayId, params.rssi]);
     }
     return result;
+  } finally {
+    try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
+    lockClient.release();
+  }
+}
+
+export async function executeManagedGatewayCommand(params: {
+  gatewayId: number;
+  companyId: string;
+  gatewayMac: string;
+  commandType: string;
+  command: GatewayCommandPayload;
+  actor: GatewayCommandActor;
+  requestId?: string;
+  timeoutMs: number;
+  deps?: Parameters<typeof executeCommand>[0]['deps'];
+}): Promise<GatewayCommandResult> {
+  const lockClient = await pool.connect();
+  try {
+    await expireStaleGatewayCommands(params.gatewayId);
+    await acquireGatewayLock(lockClient, params.gatewayId);
+    return await executeCommand({
+      ...params,
+      idempotencyKey: params.requestId ? `${params.requestId}:${params.command.msg_id}` : undefined
+    });
   } finally {
     try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
     lockClient.release();

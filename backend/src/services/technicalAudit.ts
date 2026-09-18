@@ -1,18 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool } from '../db/pool';
-
-const SENSITIVE_KEY = /(password|passwd|secret|token|credential|authorization|ble_pass)/i;
-
-const redact = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(redact);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-      key,
-      SENSITIVE_KEY.test(key) ? '[REDACTED]' : redact(item)
-    ])
-  );
-};
+import { redactHardwarePayload } from './hardwarePayloadRedaction';
 
 export interface TechnicalAuditEntry {
   actorUserId?: number | null;
@@ -49,8 +37,8 @@ export const appendTechnicalAudit = async (
       entry.companyId ?? null,
       entry.requestId ?? null,
       entry.result,
-      entry.before === undefined ? null : JSON.stringify(redact(entry.before)),
-      entry.after === undefined ? null : JSON.stringify(redact(entry.after))
+      entry.before === undefined ? null : JSON.stringify(redactHardwarePayload(entry.before)),
+      entry.after === undefined ? null : JSON.stringify(redactHardwarePayload(entry.after))
     ]
   );
 };

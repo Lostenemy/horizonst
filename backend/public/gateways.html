@@ -71,6 +71,60 @@
         </div>
         <div class="table-empty" id="gatewaysEmpty">No hay gateways registradas.</div>
       </section>
+      <section class="card" id="gatewayTechnicalPanel" hidden>
+        <h2 id="gatewayTechnicalTitle">Gestión técnica</h2>
+        <p id="gatewayTechnicalSummary"></p>
+        <div class="actions" id="gatewayTechnicalActions" hidden>
+          <label for="gatewayRssi">Filtro RSSI BLE (dBm)</label>
+          <input id="gatewayRssi" type="number" min="-127" max="0" step="1" />
+          <button type="button" id="gatewayApplyRssi">Aplicar RSSI</button>
+          <button type="button" id="gatewayConfigureB5">Configurar doble pulsación B5</button>
+        </div>
+        <div id="gatewayBluetoothPanel" hidden>
+          <h3>Bluetooth · Escaneo y filtros</h3>
+          <p>Cada cambio requiere confirmación de la gateway. Un RSSI incorrecto o apagar el escaneo puede interrumpir la presencia.</p>
+          <div class="form-grid">
+            <label>Escaneo
+              <select data-ble-input="scan"><option value="1">Activado</option><option value="0">Apagado</option></select>
+              <button type="button" data-ble-command="scan">Aplicar</button>
+            </label>
+            <label>Relación entre filtros
+              <select data-ble-input="filter-relation"><option value="0">Ninguna</option><option value="1">MAC</option><option value="2">Nombre</option><option value="3">Datos raw</option><option value="4">Nombre y raw</option><option value="5">MAC, nombre y raw</option><option value="6">Nombre o raw</option><option value="7">Nombre y MAC</option><option value="8">Combinado V2.X</option></select>
+              <button type="button" data-ble-command="filter-relation">Aplicar</button>
+            </label>
+            <label>Filtro de duplicados
+              <select data-ble-input="duplicates"><option value="0">Desactivado</option><option value="1">Por MAC</option><option value="2">MAC y tipo</option><option value="3">MAC y raw</option></select>
+              <button type="button" data-ble-command="duplicates">Aplicar</button>
+            </label>
+            <label>PHY
+              <select data-ble-input="phy"><option value="0">1M V4.2</option><option value="1">1M V5.0</option><option value="2">1M V4.2/V5.0</option><option value="3">Coded PHY V5.0</option><option value="4">Todos V2.X</option></select>
+              <button type="button" data-ble-command="phy">Aplicar</button>
+            </label>
+            <label>Intervalo de reporte BLE (0 = tiempo real)
+              <input data-ble-input="report-interval" type="number" min="0" max="86400" step="1" value="0" />
+              <button type="button" data-ble-command="report-interval">Aplicar</button>
+            </label>
+            <label>Modo de escaneo
+              <select data-ble-input="scan-mode"><option value="0">Activo</option><option value="1">Pasivo</option></select>
+              <button type="button" data-ble-command="scan-mode">Aplicar</button>
+            </label>
+          </div>
+        </div>
+        <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>
+        <h3>Comandos recientes</h3>
+        <div class="table-wrapper"><table id="gatewayCommandsTable">
+          <thead><tr><th>Fecha</th><th>Comando</th><th>msg_id</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
+        </table></div>
+        <h3>Auditoría técnica</h3>
+        <div class="table-wrapper"><table id="gatewayAuditTable">
+          <thead><tr><th>Fecha</th><th>Acción</th><th>Resultado</th><th>Usuario</th></tr></thead><tbody></tbody>
+        </table></div>
+        <h3>Tags vistos por esta gateway</h3>
+        <p>Inventario central según la última gateway observada; no equivale a una conexión BLE activa.</p>
+        <div class="table-wrapper"><table id="gatewayDevicesTable">
+          <thead><tr><th>Nombre</th><th>MAC</th><th>Tipo</th><th>Última detección</th></tr></thead><tbody></tbody>
+        </table></div>
+      </section>
     </main>
     <footer>&copy; <span id="year"></span> HorizonST</footer>
     <script src="./js/base.js"></script>

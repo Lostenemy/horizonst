@@ -765,59 +765,30 @@ async function renderInventory() {
   }
   const [tags, gateways] = await Promise.all([api('/tags'), api('/gateways')]);
   q('inventory').innerHTML = `
-    <div class="grid two">
-      <div class="card-block">
-        <h3>Tags</h3>
-        ${roleCan('superadministrador') ? `
-          <div class="field"><label>MAC del tag</label><input id="tagMac" placeholder="AA:BB:CC:DD:EE:FF" /></div>
-          <div class="field mt-12"><label>Descripción del tag</label><input id="tagDesc" placeholder="Ej: B5 Terreros" /></div>
-          <div class="field mt-12"><label>Delay buzzer → shaker (s)</label><input id="tagDelay" type="number" min="0" step="0.1" value="45" /></div>
-          <div class="field mt-12"><label>Duración pitido (s)</label><input id="tagBuzzerDuration" type="number" min="0.1" max="60" step="0.1" value="3" required /></div>
-          <div class="field mt-12"><label>Duración vibración (s)</label><input id="tagVibrationDuration" type="number" min="0.1" max="60" step="0.1" value="3" required /></div>
-          <button class="mt-12" onclick="createTag()">Crear tag</button>
-        ` : '<p>Solo superadministrador puede crear tags.</p>'}
-      </div>
-      <div class="card-block">
-        <h3>Gateways</h3>
-        ${roleCan('superadministrador') ? `
-          <div class="field"><label>MAC del gateway</label><input id="gwMac" placeholder="AA:BB:CC:DD:EE:FF" /></div>
-          <div class="field mt-12"><label>Descripción del gateway</label><input id="gwDesc" placeholder="Ej: Gateway cámara 2" /></div>
-          <div class="field mt-12"><label>RSSI mínimo (-127 a 0)</label><input id="gwRssiThreshold" type="number" min="-127" max="0" step="1" value="-127" /></div>
-          <button class="mt-12" onclick="createGateway()">Crear gateway</button>
-        ` : '<p>Solo superadministrador puede crear gateways.</p>'}
-      </div>
-    </div>
+    <p>La identidad y configuración técnica de gateways y tags se gestionan en <a href="/administracion/gateways.html">Administración</a>. Aquí se conservan únicamente los ajustes operativos de alarma.</p>
     <h3 class="mt-12">Listado de tags</h3>
-    ${table(['MAC', 'Descripción', 'Delay (s)', 'Pitido (s)', 'Vibración (s)', 'Activo', 'Último evento', 'Acciones'], tags.map((t) => {
+    ${table(['MAC', 'Nombre', 'Delay (s)', 'Pitido (s)', 'Vibración (s)', 'Activo', 'Último evento', 'Acciones'], tags.map((t) => {
       const editing = inlineEdit.tags.id === t.id;
       const delay = t.physical_alarm_followup_delay_ms == null ? TAG_DEFAULT_FOLLOWUP_DELAY_MS : t.physical_alarm_followup_delay_ms;
       const buzzerDuration = t.physical_alarm_buzzer_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_buzzer_duration_ms;
       const vibrationDuration = t.physical_alarm_vibration_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_vibration_duration_ms;
-      if (!editing) return [t.tag_uid, t.model || '', formatSecondsFromMs(delay), formatSecondsFromMs(buzzerDuration), formatSecondsFromMs(vibrationDuration), htmlCell(t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>'), t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? htmlCell(`<button onclick="beginTagInlineEdit('${actionId(t.id)}')">Editar</button> <button class='danger' onclick="deleteTag('${actionId(t.id)}')">Borrar</button>`) : '-'];
+      if (!editing) return [t.tag_uid, t.hardware_name || t.model || '', formatSecondsFromMs(delay), formatSecondsFromMs(buzzerDuration), formatSecondsFromMs(vibrationDuration), htmlCell(t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>'), t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? htmlCell(`<button onclick="beginTagInlineEdit('${actionId(t.id)}')">Tiempos de alarma</button>`) : '-'];
       const d = inlineEdit.tags.draft;
       return [
-        htmlCell(`<input value="${esc(d.mac)}" oninput="updateInlineEdit('tags','mac',this.value)"/>`),
-        htmlCell(`<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('tags','descripcion',this.value)"/>`),
+        t.tag_uid,
+        t.hardware_name || t.model || '',
         htmlCell(`<input type="number" min="0" step="0.1" value="${esc(d.physicalAlarmFollowupDelayMs)}" oninput="updateInlineEdit('tags','physicalAlarmFollowupDelayMs',this.value)"/>`),
         htmlCell(`<input type="number" min="0.1" max="60" step="0.1" value="${esc(d.physicalAlarmBuzzerDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmBuzzerDurationMs',this.value)"/>`),
         htmlCell(`<input type="number" min="0.1" max="60" step="0.1" value="${esc(d.physicalAlarmVibrationDurationMs)}" oninput="updateInlineEdit('tags','physicalAlarmVibrationDurationMs',this.value)"/>`),
-        htmlCell(`<select onchange="updateInlineEdit('tags','active',this.value==='true')"><option value="true" ${d.active ? 'selected' : ''}>Activo</option><option value="false" ${!d.active ? 'selected' : ''}>Inactivo</option></select>`),
+        htmlCell(t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>'),
         '-',
         htmlCell(`<button onclick="saveTagInlineEdit('${actionId(t.id)}')">Guardar</button> <button class="secondary" onclick="cancelTagInlineEdit()">Cancelar</button>`)
       ];
     }))}
     <h3 class="mt-12">Listado de gateways</h3>
-    ${table(['MAC', 'Descripción', 'RSSI mínimo', 'Acciones'], gateways.map((g) => {
-      const editing = inlineEdit.gateways.id === g.id;
+    ${table(['MAC', 'Nombre', 'Ubicación', 'RSSI mínimo'], gateways.map((g) => {
       const rssiThreshold = g.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD;
-      if (!editing) return [g.gateway_mac, g.description || '', rssiThreshold, roleCan('superadministrador') ? htmlCell(`<button onclick="beginGatewayInlineEdit('${actionId(g.id)}')">Editar</button> <button onclick="applyGatewayRssi('${actionId(g.id)}')">Aplicar RSSI</button> <button onclick="configureEmergencyButton('${actionId(g.id)}')">Configurar B5</button> <button class='danger' onclick="deleteGateway('${actionId(g.id)}')">Borrar</button>`) : '-'];
-      const d = inlineEdit.gateways.draft;
-      return [
-        htmlCell(`<input value="${esc(d.mac)}" oninput="updateInlineEdit('gateways','mac',this.value)"/>`),
-        htmlCell(`<input value="${esc(d.descripcion)}" oninput="updateInlineEdit('gateways','descripcion',this.value)"/>`),
-        htmlCell(`<input type="number" min="-127" max="0" step="1" value="${esc(d.rssiThreshold)}" oninput="updateInlineEdit('gateways','rssiThreshold',this.value)"/>`),
-        htmlCell(`<button onclick="saveGatewayInlineEdit('${actionId(g.id)}')">Guardar</button> <button onclick="applyGatewayRssi('${actionId(g.id)}')">Aplicar RSSI</button> <button class="secondary" onclick="cancelGatewayInlineEdit()">Cancelar</button>`)
-      ];
+      return [g.gateway_mac, g.hardware_name || g.description || '', g.hardware_place_name || '', rssiThreshold];
     }))}
   `;
 }
@@ -843,12 +814,9 @@ async function beginTagInlineEdit(id) {
   const tag = tags.find((t) => t.id === id);
   if (!tag) return;
   startInlineEdit('tags', id, {
-    mac: tag.tag_uid,
-    descripcion: tag.model || '',
     physicalAlarmFollowupDelayMs: msToSeconds(tag.physical_alarm_followup_delay_ms, TAG_DEFAULT_FOLLOWUP_DELAY_MS),
     physicalAlarmBuzzerDurationMs: msToSeconds(tag.physical_alarm_buzzer_duration_ms, TAG_DEFAULT_ACTION_DURATION_MS),
-    physicalAlarmVibrationDurationMs: msToSeconds(tag.physical_alarm_vibration_duration_ms, TAG_DEFAULT_ACTION_DURATION_MS),
-    active: !!tag.active
+    physicalAlarmVibrationDurationMs: msToSeconds(tag.physical_alarm_vibration_duration_ms, TAG_DEFAULT_ACTION_DURATION_MS)
   });
   renderInventory();
 }
@@ -859,7 +827,7 @@ async function saveTagInlineEdit(id) {
   const buzzerDuration = validateTagDurationSecondsAsMs(d.physicalAlarmBuzzerDurationMs, 'Duración pitido');
   const vibrationDuration = validateTagDurationSecondsAsMs(d.physicalAlarmVibrationDurationMs, 'Duración vibración');
   if (delay == null || buzzerDuration == null || vibrationDuration == null) return;
-  await api(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion, active: d.active, physicalAlarmFollowupDelayMs: delay, physicalAlarmBuzzerDurationMs: buzzerDuration, physicalAlarmVibrationDurationMs: vibrationDuration }) });
+  await api(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ physicalAlarmFollowupDelayMs: delay, physicalAlarmBuzzerDurationMs: buzzerDuration, physicalAlarmVibrationDurationMs: vibrationDuration }) });
   cancelInlineEdit('tags');
   toast('Tag actualizado');
   renderInventory();

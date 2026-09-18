@@ -1,0 +1,35 @@
+# Hardware Manager: inventario y límites del protocolo
+
+Estado de esta rama: implementación parcial; **no apta aún para desplegar como Hardware Manager completo**.
+
+## Fuente de verdad y Horneo
+
+Administración (`horizonst`) conserva `gateways` y `devices`, sus nombres, MAC, empresa, estado y ubicación. Horneo conserva overlays operativos unidos por `hardware_gateway_id` y `hardware_device_id`. Los listados de Horneo leen la identidad central mediante la API interna y solo recurren a la copia local si el servicio central no está disponible, según la compatibilidad existente. El nombre de gateway ya llegaba como `hardware_name`, pero la tabla de Horneo enseñaba `description`. El nombre de tag se asignaba a `model`, mezclando nombre editable y modelo. La vista usa ahora `hardware_name` para ambos y conserva el modelo local como dato distinto.
+
+## Clasificación de funciones encontradas en Horneo
+
+| Clase | Función | Decisión |
+| --- | --- | --- |
+| A: Administración | Alta, baja, nombre, MAC, empresa, estado y ubicación de gateway/tag | Ya tienen autoridad central; retirar formularios manuales de Horneo. |
+| A: Administración | RSSI BLE y configuración de doble pulsación B5 | Mostrar controles centrales con confirmación, ACK, historial y auditoría. |
+| A: Administración | Escaneo, relación de filtros, duplicados, PHY, intervalo y modo BLE | Controles tipados centrales cuando el manual especifica el payload completo. |
+| B: interno | Endpoints antiguos de Horneo `apply-rssi` y `configure-emergency-button` | Mantener temporalmente para compatibilidad; reenvían al Hardware Manager y no publican MQTT. |
+| B: interno | Ejecutor B5 de Horneo para alarmas automáticas | Mantener: delega los comandos físicos al Hardware Manager. |
+| C: Horneo | Presencia, RSSI operacional, sesiones, cumplimiento, emergencias, alarmas y tiempos de pitido/vibración de reglas | Son lógica de negocio de frío. |
+| D: posterior | Código JavaScript de creación/baja y edición técnica de inventario Horneo | Ya no se muestra; retirar junto con los endpoints de compatibilidad solo tras verificar consumidores. |
+
+## MQTT y comandos
+
+Se reutilizan `hardware_gateway_commands`, el publicador central, el listener ACK y `technical_audit_log`. Se mantienen exclusivamente `gw/{gatewayMac}/publish` y `gw/{gatewayMac}/subscribe`; Horneo sigue receive-only. Los comandos BLE incorporados en esta rama son 1040, 1041, 1057, 1060, 1063 y 1066. RSSI 1042 y la secuencia B5 1045/1053/1059/1063 ya estaban implementados. La vista muestra también los tags cuyo último gateway observado es el seleccionado; eso **no** implica conexión BLE activa. No se ha enviado ningún comando a hardware real.
+
+Hay una discrepancia de firmware: la secuencia B5 probada en MKGW3 V2.4 usa `parse_adv_data: 1` en 1059, mientras que la guía de septiembre de 2026 dice que `parse_adv_data` fue eliminado en V2.X y menciona 1065 para parseo dedicado. No se cambia la secuencia B5 hasta verificar el firmware real.
+
+La guía de siete páginas enumera muchas operaciones de red, MQTT, tags y OTA sin especificar todos los campos JSON, límites o respuestas. Se revisaron también `Gateway MKGW3.pdf`, `Etiqueta personal B5.pdf` y sus fichas técnicas en la carpeta de documentación facilitada; describen hardware e instalación, pero no incluyen payloads `msg_id`. En especial faltan estructuras completas para BXP-C, BXP-D, BXP-T y BXP-S; 1109/1111/1120/1122; 1156/1160/1162/1164/1171/1174/1176; 1205 y varias lecturas 2XXX/3XXX. No habilitar escrituras ni automatizaciones de estos comandos por inferencia. Las conexiones BLE 1150 → 3151 y equivalentes requieren estado asíncrono antes de exponer acciones manuales de tags; el ACK de aceptación no equivale a conexión. La guía tampoco garantiza una clave de correlación por solicitud para múltiples respuestas tardías del mismo `msg_id`; mantener la exclusión actual por gateway y no afirmar una correlación más fuerte de la que proporciona el protocolo.
+
+## Trabajo aún necesario para completar el objetivo
+
+- Protocolo detallado del fabricante o capturas verificadas de payloads y respuestas por modelo/firmware.
+- Consultas 2XXX y notificaciones 3XXX persistidas y presentadas sin exponer secretos.
+- Estado BLE asíncrono, timeout y correlación de eventos antes de habilitar controles de tags.
+- Capacidades por modelo y formularios tipados para red, MQTT, filtros avanzados, tags, firmware y OTA.
+- Pruebas de permisos, aislamiento multiempresa, concurrencia y respuestas fuera de orden de los flujos nuevos; pruebas sin hardware real.

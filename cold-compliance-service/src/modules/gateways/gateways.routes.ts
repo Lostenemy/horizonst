@@ -48,6 +48,9 @@ gatewaysRouter.get('/', async (_req, res, next) => {
         description: hardware.description,
         active: hardware.active,
         hardware_name: hardware.name,
+        hardware_company_id: hardware.company_id,
+        hardware_place_id: hardware.place_id,
+        hardware_place_name: hardware.place_name,
         hardware_source: 'central'
       } : { ...row, hardware_source: 'central_not_found', hardware_active: false };
     }));

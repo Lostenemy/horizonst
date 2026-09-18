@@ -1,5 +1,6 @@
 import { pool } from '../db/pool';
 import { normalizeGatewayMac } from '../utils/mac';
+import { redactHardwarePayload } from './hardwarePayloadRedaction';
 
 const resultMessages: Record<number, string> = {
   0: 'success',
@@ -108,7 +109,7 @@ export async function handleHardwareGatewayAck(topic: string, payloadText: strin
          AND regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g') = $1
          AND $2 IN (c.msg_id, c.msg_id + 2000, c.msg_id + 2001)
          AND c.status IN ('pending', 'published')`,
-      [ack.gatewayMac, ack.msgId, ack.resultCode, ack.resultMessage ?? null, JSON.stringify(ack.payload)]
+      [ack.gatewayMac, ack.msgId, ack.resultCode, ack.resultMessage ?? null, JSON.stringify(redactHardwarePayload(ack.payload))]
     );
   } catch (error) {
     console.error('Failed to persist hardware gateway ACK', error);
