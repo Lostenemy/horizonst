@@ -125,9 +125,9 @@ test('historical timed_out 1150 on gateway 142b2fe271b4 yields an unverified 202
       }
     }
   });
-  assert.equal(result.status, 'ambiguous');
+  assert.equal(result.status, 'connection_unverified');
   assert.equal(result.ackAmbiguous, true);
-  assert.equal(result.connectionState, 'established');
+  assert.equal(result.connectionState, 'unverified');
   assert.equal(physicalB5HttpStatus(result), 202);
   assert.ok(updates.some((params) => params[1] === 'ack_ambiguous' && params[3] === 0));
   assert.equal(updates.some((params) => params[1] === 'ack_error'), false);
@@ -135,7 +135,7 @@ test('historical timed_out 1150 on gateway 142b2fe271b4 yields an unverified 202
   assert.equal(physicalB5HttpStatus({ ...result, resultCode: 4 }), 502);
 });
 
-test('simulated MQTT 1150 acceptance waits for asynchronous 3151 before B5 connection is established', async () => {
+test('simulated MQTT 1150 acceptance waits for 3151 but cannot establish an unattributed B5 connection', async () => {
   const { updates } = mockDatabase();
   let releaseReport!: () => Promise<void>;
   const reportSent = new Promise<void>((resolve) => {
@@ -162,10 +162,10 @@ test('simulated MQTT 1150 acceptance waits for asynchronous 3151 before B5 conne
   await releaseReport();
   await reportSent;
   const result = await attempt;
-  assert.equal(result.status, 'success');
-  assert.equal(result.connectionState, 'established');
+  assert.equal(result.status, 'connection_unverified');
+  assert.equal(result.connectionState, 'unverified');
   assert.equal(result.connectionReportMsgId, 3151);
-  assert.ok(updates.some((params) => params[1] === 'established'));
+  assert.ok(updates.some((params) => params[0] === result.commandId));
 });
 
 test('1150 acceptance without 3151 times out connection and cannot confirm physical actions', async () => {
@@ -180,9 +180,9 @@ test('1150 acceptance without 3151 times out connection and cannot confirm physi
       }));
     } }
   });
-  assert.equal(result.status, 'timeout');
-  assert.equal(result.connectionState, 'timed_out');
-  assert.equal(physicalB5HttpStatus(result), 504);
+  assert.equal(result.status, 'connection_unverified');
+  assert.equal(result.connectionState, 'unverified');
+  assert.equal(physicalB5HttpStatus(result), 202);
   assert.ok(updates.some((params) => params[0] === result.commandId));
 });
 
@@ -204,10 +204,10 @@ test('a simulated 3151 rejection or wrong tag MAC never establishes the B5 sessi
           : { gatewayMac, msgId: 1150, resultCode: 0, resultMessage: 'success', payload: {} }
       }
     });
-    assert.equal(result.status, 'error');
-    assert.equal(result.connectionState, 'rejected');
-    assert.equal(physicalB5HttpStatus(result), 502);
-    assert.ok(updates.some((params) => params[1] === 'rejected'));
+    assert.equal(result.status, 'connection_unverified');
+    assert.equal(result.connectionState, 'unverified');
+    assert.equal(physicalB5HttpStatus(result), 202);
+    assert.ok(updates.some((params) => params[0] === result.commandId));
   }
 });
 
@@ -226,8 +226,36 @@ test('a stale simulated 3151 received before 1150 acceptance cannot establish th
       }));
     } }
   });
-  assert.equal(result.status, 'error');
-  assert.equal(result.connectionState, 'rejected');
+  assert.equal(result.status, 'connection_unverified');
+  assert.equal(result.connectionState, 'unverified');
+});
+
+test('a late 3151 for an earlier attempt arriving after a new 1150 ACK cannot establish the new connection', async () => {
+  const { updates } = mockDatabase();
+  const base = {
+    gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
+    command: 'connect' as const, sessionPassword: 'simulation-only-secret',
+    actor: { type: 'service' as const, serviceId: 'service', code: 'horneo' }, timeoutMs: 30
+  };
+  const first = await executePhysicalB5Command({ ...base, deps: { publish: async () => {
+    await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+      msg_id: 1150, device_info: { mac: '142B2FE271B4' }, result_code: 0
+    }));
+  } } });
+  assert.equal(first.connectionState, 'unverified');
+  const second = await executePhysicalB5Command({ ...base, deps: { publish: async () => {
+    await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+      msg_id: 1150, device_info: { mac: '142B2FE271B4' }, result_code: 0
+    }));
+    await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+      msg_id: 3151, device_info: { mac: '142B2FE271B4' }, result_code: 0,
+      result_msg: 'Connect succeed', data: { mac: 'FD9D4F8AE226' }
+    }));
+  } } });
+  assert.equal(second.status, 'connection_unverified');
+  assert.equal(second.connectionState, 'unverified');
+  assert.notEqual(first.commandId, second.commandId);
+  assert.ok(updates.some((params) => params[0] === second.commandId));
 });
 
 test('new ACK status migration separates positive ambiguous replies without rewriting historical rows', () => {
@@ -235,6 +263,14 @@ test('new ACK status migration separates positive ambiguous replies without rewr
   assert.match(migration, /DROP CONSTRAINT hardware_gateway_commands_status_check/);
   assert.match(migration, /ADD CONSTRAINT hardware_gateway_commands_status_check/);
   assert.match(migration, /'ack_success', 'ack_ambiguous', 'ack_error'/);
+  assert.doesNotMatch(migration, /\b(?:UPDATE|DELETE|TRUNCATE)\s+hardware_gateway_commands\b/i);
+});
+
+test('connection uncertainty migration is additive and does not rewrite historical commands', () => {
+  const migration = fs.readFileSync(path.resolve(process.cwd(), 'migrations', '008_b5_connection_unverified.sql'), 'utf8');
+  assert.match(migration, /DROP CONSTRAINT hardware_gateway_commands_connection_state_check/);
+  assert.match(migration, /ADD CONSTRAINT hardware_gateway_commands_connection_state_check/);
+  assert.match(migration, /'unverified'/);
   assert.doesNotMatch(migration, /\b(?:UPDATE|DELETE|TRUNCATE)\s+hardware_gateway_commands\b/i);
 });
 
@@ -289,7 +325,8 @@ test('physical execution records timeout and never journals the B5 password', as
       waitForAck: async () => { throw new Error('timeout waiting gateway reply'); }
     }
   });
-  assert.equal(result.status, 'timeout');
+  assert.equal(result.status, 'connection_unverified');
+  assert.equal(result.connectionState, 'unverified');
   assert.doesNotMatch(String(inserts[0]), /not-journaled|passwd/);
 });
 

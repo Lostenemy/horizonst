@@ -136,6 +136,12 @@ export async function executeConnectedTagCommandSequence(params: {
       continue;
     }
 
+    if (connectOutcome === 'unverified') {
+      logger.warn({ ...params.context, gatewayMac: candidate.gatewayMac, tagUid: params.tagUid },
+        'BLE connection cannot be attributed; no action, retry, fallback gateway or disconnect command sent');
+      return { status: 'attempted_unverified', selectedGatewayMac: candidate.gatewayMac, connectFailures };
+    }
+
     // Esta fila actúa como lease de exclusión durante el intento; un ACK ambiguo no confirma la conexión BLE.
     await deps.markActive({
       tagId: params.tagId,

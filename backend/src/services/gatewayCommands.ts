@@ -31,12 +31,12 @@ export interface GatewayCommandActor {
 export interface GatewayCommandResult {
   commandId: string;
   msgId: number;
-  status: 'success' | 'error' | 'timeout' | 'ambiguous';
+  status: 'success' | 'error' | 'timeout' | 'ambiguous' | 'connection_unverified';
   resultCode?: number;
   resultMessage?: string;
   ackMsgId?: number;
   ackAmbiguous?: boolean;
-  connectionState?: 'established' | 'rejected' | 'timed_out';
+  connectionState?: 'established' | 'rejected' | 'timed_out' | 'unverified';
   connectionReportMsgId?: number;
 }
 
@@ -334,32 +334,40 @@ export async function executePhysicalB5Command(params: {
       onAck: (ack) => { acceptanceSequence = ack.receivedSequence; },
       deps: params.deps
     });
-    if (!completionPromise || (result.status !== 'success' && result.status !== 'ambiguous')) return result;
+    if (!completionPromise) return result;
+    if (result.status === 'timeout') {
+      await pool.query(`UPDATE hardware_gateway_commands SET connection_state = 'unverified' WHERE id = $1`, [result.commandId]);
+      return { ...result, status: 'connection_unverified', connectionState: 'unverified',
+        resultMessage: '1150 acceptance is unknown; BLE connection must not be retried automatically' };
+    }
+    if (result.status !== 'success' && result.status !== 'ambiguous') return result;
     await pool.query(`UPDATE hardware_gateway_commands SET connection_state = 'awaiting_report' WHERE id = $1`, [result.commandId]);
     try {
       const report = await completionPromise;
       const reportData = report.payload.data;
       const reportedTagMac = reportData && typeof reportData === 'object'
         ? (reportData as Record<string, unknown>).mac : undefined;
-      const reportValid = report.msgId === 3151
+      const reportMatches = report.msgId === 3151
         && normalizeGatewayMac(report.gatewayMac) === normalizeGatewayMac(params.gatewayMac)
         && report.resultCode === 0
         && report.resultMessage?.trim().toLowerCase() === 'connect succeed'
-        && (acceptanceSequence === undefined || report.receivedSequence === undefined
-          || report.receivedSequence > acceptanceSequence)
-        && (reportedTagMac === undefined || normalizeGatewayMac(reportedTagMac) === normalizeGatewayMac(params.deviceMac));
+        && acceptanceSequence !== undefined && report.receivedSequence !== undefined
+        && report.receivedSequence > acceptanceSequence
+        && normalizeGatewayMac(reportedTagMac) === normalizeGatewayMac(params.deviceMac);
+      // Incluso con MAC coincidente, 3151 no lleva identificador de solicitud: puede ser tardío.
       await pool.query(
-        `UPDATE hardware_gateway_commands SET connection_state = $2, connection_report_at = NOW() WHERE id = $1`,
-        [result.commandId, reportValid ? 'established' : 'rejected']
+        `UPDATE hardware_gateway_commands SET connection_state = 'unverified', connection_report_at = NOW() WHERE id = $1`,
+        [result.commandId]
       );
-      return reportValid
-        ? { ...result, connectionState: 'established', connectionReportMsgId: 3151 }
-        : { ...result, status: 'error', resultCode: report.resultCode,
-            resultMessage: 'B5 connection was not confirmed by a matching 3151 Connect succeed report',
-            connectionState: 'rejected', connectionReportMsgId: report.msgId };
+      return { ...result, status: 'connection_unverified', connectionState: 'unverified',
+        resultMessage: reportMatches
+          ? '3151 matches the tag but cannot be attributed to this 1150 attempt'
+          : '3151 does not identify this tag and attempt; BLE connection remains unverified',
+        connectionReportMsgId: report.msgId };
     } catch {
-      await pool.query(`UPDATE hardware_gateway_commands SET connection_state = 'timed_out' WHERE id = $1`, [result.commandId]);
-      return { ...result, status: 'timeout', resultMessage: 'timeout waiting B5 connection report 3151', connectionState: 'timed_out' };
+      await pool.query(`UPDATE hardware_gateway_commands SET connection_state = 'unverified' WHERE id = $1`, [result.commandId]);
+      return { ...result, status: 'connection_unverified',
+        resultMessage: '3151 was not received; BLE connection remains unverified', connectionState: 'unverified' };
     }
   } finally {
     completionController.abort();
@@ -439,6 +447,8 @@ export async function configureGatewayRssi(params: {
 
 export function physicalB5HttpStatus(result: GatewayCommandResult): number {
   if (result.status === 'success') return 200;
+  if (result.status === 'connection_unverified' && result.resultCode !== undefined && result.resultCode !== 0) return 502;
+  if (result.status === 'connection_unverified') return 202;
   if (result.status === 'ambiguous' && result.resultCode === 0 && result.ackAmbiguous === true) return 202;
   return result.status === 'timeout' ? 504 : 502;
 }

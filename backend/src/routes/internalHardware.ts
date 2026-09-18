@@ -255,7 +255,8 @@ router.post('/gateways/:gatewayId/b5-command', requireCommand, async (req: Servi
       actorType: 'service', actorCode: principal.code, actorServiceId: principal.id,
       action: `internal.gateway.b5.${command}`, entityType: 'gateway', entityId: gatewayId,
       companyId: principal.companyId, requestId: req.requestId,
-      result: result.status === 'success' ? 'success' : result.status === 'ambiguous' ? 'unverified' : 'failure', after: result
+      result: result.status === 'success' ? 'success'
+        : result.status === 'ambiguous' || result.status === 'connection_unverified' ? 'unverified' : 'failure', after: result
     });
     // 202 permite continuar el intento físico, sin declarar que el ACK pertenezca a esta solicitud.
     return res.status(physicalB5HttpStatus(result)).json(result);

@@ -82,30 +82,32 @@ test('Horneo accepts only an explicitly ambiguous 202 and does not turn it into 
   }
 });
 
-test('automatic alarm actions are blocked after acceptance-only 1150 and proceed after simulated 3151', async () => {
+test('automatic alarm stops after unattributed 3151 without action, retry or fallback', async () => {
   const originalEnabled = env.HARDWARE_MANAGER_ENABLED;
   (env as any).HARDWARE_MANAGER_ENABLED = true;
   const candidate = { tagId: 'tag-1', tagUid: 'fd9d4f8ae226', gatewayId: 'gw-1',
     gatewayMac: '142b2fe271b4', hardwareGatewayId: 41, hardwareDeviceId: 31 };
   let actions = 0;
+  let connects = 0;
+  let disconnects = 0;
   const run = async (connectionState: string | undefined) => executeConnectedTagCommandSequence({
-    tagId: candidate.tagId, tagUid: candidate.tagUid, candidates: [candidate],
+    tagId: candidate.tagId, tagUid: candidate.tagUid, candidates: [candidate, { ...candidate, gatewayMac: '222222222222' }],
     deps: {
-      connect: async () => executeHardwareB5Command({
+      connect: async () => { connects += 1; return executeHardwareB5Command({
         hardwareGatewayId: 41, hardwareDeviceId: 31, command: 'connect',
-        fetchImpl: async () => new Response(JSON.stringify({ status: 'success', resultCode: 0, connectionState }), { status: 200 })
-      }),
-      disconnect: async () => 'confirmed',
+        fetchImpl: async () => new Response(JSON.stringify({ status: 'connection_unverified', resultCode: 0, connectionState }), { status: 202 })
+      }); },
+      disconnect: async () => { disconnects += 1; return 'confirmed'; },
       markActive: async () => undefined,
       markDisconnected: async () => undefined
     },
     runActions: async () => { actions += 1; return 'confirmed'; }
   });
   try {
-    assert.equal((await run(undefined)).status, 'failed_no_gateway_connected');
+    assert.equal((await run('unverified')).status, 'attempted_unverified');
     assert.equal(actions, 0);
-    assert.equal((await run('established')).status, 'success');
-    assert.equal(actions, 1);
+    assert.equal(connects, 1);
+    assert.equal(disconnects, 0);
   } finally {
     (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled;
   }
