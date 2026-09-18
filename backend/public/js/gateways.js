@@ -24,6 +24,8 @@ const technicalSummary = document.getElementById('gatewayTechnicalSummary');
 const technicalActions = document.getElementById('gatewayTechnicalActions');
 const bluetoothPanel = document.getElementById('gatewayBluetoothPanel');
 const technicalFeedback = document.getElementById('gatewayTechnicalFeedback');
+const firmwareRecordButton = document.getElementById('gatewayRecordFirmware');
+const firmwareClearButton = document.getElementById('gatewayClearFirmware');
 const gatewayRssi = document.getElementById('gatewayRssi');
 const commandsBody = document.querySelector('#gatewayCommandsTable tbody');
 const auditBody = document.querySelector('#gatewayAuditTable tbody');
@@ -40,6 +42,23 @@ const normalizeMac = (value) => {
 };
 
 const validateMac = (value) => /^[0-9A-F]{12}$/.test(normalizeMac(value));
+const hasVerifiedMkgw3V2 = (gateway) => gateway?.product_model?.toUpperCase() === 'MKGW3'
+  && /^V?2\.\d+(?:\.\d+)?$/i.test(gateway.firmware_version || '')
+  && /^(?:inspection|device-info-2002):[A-Za-z0-9._/-]{8,120}$/.test(gateway.firmware_evidence || '');
+
+const refreshFirmwareControls = (gateway) => {
+  const v2 = hasVerifiedMkgw3V2(gateway);
+  document.getElementById('gatewayConfigureB5').disabled = !v2;
+  for (const operation of ['report-interval', 'scan-mode']) {
+    bluetoothPanel.querySelector(`[data-ble-command="${operation}"]`).disabled = !v2;
+  }
+  for (const operation of ['filter-relation', 'phy']) {
+    const select = bluetoothPanel.querySelector(`[data-ble-input="${operation}"]`);
+    const dependentValue = operation === 'filter-relation' ? '8' : '4';
+    select.querySelector(`option[value="${dependentValue}"]`).disabled = !v2;
+    if (!v2 && select.value === dependentValue) select.value = '0';
+  }
+};
 
 const loadOwners = async () => {
   if (!isAdmin) return;
@@ -193,7 +212,7 @@ const refreshTechnicalHistory = async () => {
       (item) => new Date(item.created_at).toLocaleString('es-ES'),
       (item) => item.command_type,
       (item) => item.msg_id,
-      (item) => item.status,
+      (item) => item.connection_state ? `${item.status} · BLE ${item.connection_state}` : item.status,
       (item) => item.result_code == null ? item.result_message : `${item.result_code}: ${item.result_message || ''}`
     ]);
     renderHistory(auditBody, audit, [
@@ -211,13 +230,50 @@ const selectGateway = async (gateway) => {
   selectedGateway = gateway;
   technicalPanel.hidden = false;
   technicalTitle.textContent = gateway.name || gateway.mac_address;
-  technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin empresa'} · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'}`;
+  technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin empresa'} · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'} · ${gateway.product_model || 'Modelo desconocido'} ${gateway.firmware_version || 'firmware desconocido'}${gateway.firmware_evidence ? ` · evidencia ${gateway.firmware_evidence}` : ''}`;
   technicalActions.hidden = !canEditHardware || !gateway.active || !gateway.company_id;
   bluetoothPanel.hidden = technicalActions.hidden;
+  refreshFirmwareControls(gateway);
   gatewayRssi.value = gateway.rssi_threshold ?? -127;
   technicalFeedback.textContent = '';
   await Promise.all([refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
 };
+
+firmwareRecordButton.addEventListener('click', async () => {
+  if (!selectedGateway || !canEditHardware) return;
+  await openFormModal({
+    title: `Registrar firmware de ${selectedGateway.mac_address}`,
+    submitText: 'Registrar con evidencia',
+    fields: [
+      { name: 'productModel', label: 'Modelo (MKGW3)', type: 'text' },
+      { name: 'firmwareVersion', label: 'Versión (por ejemplo V2.4)', type: 'text' },
+      { name: 'evidence', label: 'Referencia verificable (inspection:ticket-12345678)', type: 'text' }
+    ],
+    initialValues: {
+      productModel: selectedGateway.product_model || 'MKGW3',
+      firmwareVersion: selectedGateway.firmware_version || '',
+      evidence: selectedGateway.firmware_evidence || ''
+    },
+    onSubmit: async (values) => {
+      await apiPut(`/gateways/${selectedGateway.id}/firmware`, {
+        productModel: values.productModel, firmwareVersion: values.firmwareVersion, evidence: values.evidence
+      });
+      await loadGateways();
+    }
+  });
+});
+
+firmwareClearButton.addEventListener('click', async () => {
+  if (!selectedGateway || !canEditHardware) return;
+  const confirmed = await confirmAction({
+    title: 'Marcar firmware desconocido',
+    message: `Se deshabilitarán los controles V2 de ${selectedGateway.mac_address}. ¿Continuar?`,
+    confirmText: 'Marcar desconocido'
+  });
+  if (!confirmed) return;
+  await apiDelete(`/gateways/${selectedGateway.id}/firmware`);
+  await loadGateways();
+});
 
 const refreshGatewayDevices = async (gatewayId) => {
   try {

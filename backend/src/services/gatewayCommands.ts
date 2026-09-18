@@ -36,6 +36,8 @@ export interface GatewayCommandResult {
   resultMessage?: string;
   ackMsgId?: number;
   ackAmbiguous?: boolean;
+  connectionState?: 'established' | 'rejected' | 'timed_out';
+  connectionReportMsgId?: number;
 }
 
 export class GatewayCommandBusyError extends Error {}
@@ -187,6 +189,8 @@ async function executeCommand(params: {
   timeoutMs: number;
   idempotencyKey?: string;
   journalPayload?: GatewayCommandPayload;
+  ackMsgIds?: number[];
+  onAck?: (ack: HardwareGatewayAck) => void;
   deps?: {
     publish?: typeof publishMqttJson;
     waitForAck?: typeof waitForHardwareGatewayAck;
@@ -199,7 +203,8 @@ async function executeCommand(params: {
   const priorTimeout = await pool.query<{ ambiguous: boolean }>(
     `SELECT EXISTS (
        SELECT 1 FROM hardware_gateway_commands
-       WHERE gateway_id = $1 AND msg_id = $2 AND status = 'timed_out'
+       WHERE gateway_id = $1 AND msg_id = $2
+         AND (status = 'timed_out' OR connection_state = 'timed_out')
      ) AS ambiguous`,
     [params.gatewayId, params.command.msg_id]
   );
@@ -230,7 +235,7 @@ async function executeCommand(params: {
   const publish = params.deps?.publish ?? publishMqttJson;
   const ackPromise = waitForAck({
     gatewayMac,
-    msgIds: [params.command.msg_id, params.command.msg_id + 2000, params.command.msg_id + 2001],
+    msgIds: params.ackMsgIds ?? [params.command.msg_id, params.command.msg_id + 2000, params.command.msg_id + 2001],
     timeoutMs: params.timeoutMs
   });
   void ackPromise.catch(() => undefined);
@@ -245,6 +250,7 @@ async function executeCommand(params: {
       [commandId]
     );
     const ack: HardwareGatewayAck = await ackPromise;
+    params.onAck?.(ack);
     const status = ack.resultCode !== 0 ? 'error' : ambiguousCorrelation ? 'ambiguous' : 'success';
     const resultMessage = status === 'ambiguous' ? AMBIGUOUS_ACK_MESSAGE : ack.resultMessage;
     await pool.query(
@@ -296,6 +302,7 @@ export async function executePhysicalB5Command(params: {
   deps?: Parameters<typeof executeCommand>[0]['deps'];
 }): Promise<GatewayCommandResult> {
   const lockClient = await pool.connect();
+  const completionController = new AbortController();
   try {
     await expireStaleGatewayCommands(params.gatewayId);
     await acquireGatewayLock(lockClient, params.gatewayId);
@@ -303,7 +310,16 @@ export async function executePhysicalB5Command(params: {
     const journalPayload = params.command === 'connect'
       ? { ...command, data: { mac: command.data.mac } }
       : command;
-    return await executeCommand({
+    // 1150 confirma aceptación; 3151 es la notificación asíncrona de conexión.
+    const completionPromise = params.command === 'connect'
+      ? (params.deps?.waitForAck ?? waitForHardwareGatewayAck)({
+          gatewayMac: normalizeGatewayMac(params.gatewayMac)!, msgIds: [3151],
+          timeoutMs: params.timeoutMs, signal: completionController.signal
+        })
+      : null;
+    void completionPromise?.catch(() => undefined);
+    let acceptanceSequence: number | undefined;
+    const result = await executeCommand({
       gatewayId: params.gatewayId,
       companyId: params.companyId,
       gatewayMac: params.gatewayMac,
@@ -314,9 +330,39 @@ export async function executePhysicalB5Command(params: {
       requestId: params.requestId,
       timeoutMs: params.timeoutMs,
       idempotencyKey: params.requestId ? `${params.requestId}:${command.msg_id}` : undefined,
+      ...(params.command === 'connect' ? { ackMsgIds: [1150] } : {}),
+      onAck: (ack) => { acceptanceSequence = ack.receivedSequence; },
       deps: params.deps
     });
+    if (!completionPromise || (result.status !== 'success' && result.status !== 'ambiguous')) return result;
+    await pool.query(`UPDATE hardware_gateway_commands SET connection_state = 'awaiting_report' WHERE id = $1`, [result.commandId]);
+    try {
+      const report = await completionPromise;
+      const reportData = report.payload.data;
+      const reportedTagMac = reportData && typeof reportData === 'object'
+        ? (reportData as Record<string, unknown>).mac : undefined;
+      const reportValid = report.msgId === 3151
+        && normalizeGatewayMac(report.gatewayMac) === normalizeGatewayMac(params.gatewayMac)
+        && report.resultCode === 0
+        && report.resultMessage?.trim().toLowerCase() === 'connect succeed'
+        && (acceptanceSequence === undefined || report.receivedSequence === undefined
+          || report.receivedSequence > acceptanceSequence)
+        && (reportedTagMac === undefined || normalizeGatewayMac(reportedTagMac) === normalizeGatewayMac(params.deviceMac));
+      await pool.query(
+        `UPDATE hardware_gateway_commands SET connection_state = $2, connection_report_at = NOW() WHERE id = $1`,
+        [result.commandId, reportValid ? 'established' : 'rejected']
+      );
+      return reportValid
+        ? { ...result, connectionState: 'established', connectionReportMsgId: 3151 }
+        : { ...result, status: 'error', resultCode: report.resultCode,
+            resultMessage: 'B5 connection was not confirmed by a matching 3151 Connect succeed report',
+            connectionState: 'rejected', connectionReportMsgId: report.msgId };
+    } catch {
+      await pool.query(`UPDATE hardware_gateway_commands SET connection_state = 'timed_out' WHERE id = $1`, [result.commandId]);
+      return { ...result, status: 'timeout', resultMessage: 'timeout waiting B5 connection report 3151', connectionState: 'timed_out' };
+    }
   } finally {
+    completionController.abort();
     try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
     lockClient.release();
   }

@@ -40,8 +40,9 @@ export async function executeHardwareB5Command(params: {
       }
     );
     if (response.status === 202) {
-      const body = await response.json().catch(() => null) as { status?: string; ackAmbiguous?: boolean; resultCode?: number } | null;
-      if (body?.status === 'ambiguous' && body.ackAmbiguous === true && body.resultCode === 0) return 'ambiguous';
+      const body = await response.json().catch(() => null) as { status?: string; ackAmbiguous?: boolean; resultCode?: number; connectionState?: string } | null;
+      if (body?.status === 'ambiguous' && body.ackAmbiguous === true && body.resultCode === 0
+          && (params.command !== 'connect' || body.connectionState === 'established')) return 'ambiguous';
       throw new Error(`Hardware Manager B5 ${params.command} returned an invalid ambiguous response`);
     }
     if (!response.ok) {
@@ -53,6 +54,12 @@ export async function executeHardwareB5Command(params: {
           : `${detail} result_code=${body.resultCode} result_msg=${body.resultMessage ?? '-'}`;
       } catch { /* response body is optional */ }
       throw new Error(`Hardware Manager B5 ${params.command} failed: ${detail}`);
+    }
+    if (params.command === 'connect') {
+      const body = await response.json().catch(() => null) as { status?: string; connectionState?: string } | null;
+      if (body?.status !== 'success' || body.connectionState !== 'established') {
+        throw new Error('Hardware Manager B5 connect response lacks confirmed 3151 completion');
+      }
     }
     return 'confirmed';
   } finally {

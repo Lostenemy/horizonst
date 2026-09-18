@@ -51,12 +51,25 @@ const api = (path: string, id?: number, role?: Parameters<typeof signToken>[0]['
     }
   });
 
-function fakeDatabase() {
+function fakeDatabase(verifiedFirmware = false) {
   const observations = { published: [] as Array<{ topic: string; payload: any }>, auditQueries: 0, commandInserts: 0 };
   (pool as any).connect = async () => ({
-    query: async (sql: string) => sql.includes('pg_try_advisory_lock')
-      ? { rows: [{ locked: true }] }
-      : { rows: [{ pg_advisory_unlock: true }] },
+    query: async (sql: string, params: unknown[] = []) => {
+      if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
+      if (sql.includes('pg_advisory_unlock')) return { rows: [{ pg_advisory_unlock: true }] };
+      if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
+      if (sql.includes('UPDATE gateways SET product_model')) {
+        if (sql.includes('product_model = NULL')) {
+          assert.deepEqual(params, [41, COMPANY_A]);
+          return { rows: [{ id: 41 }] };
+        }
+        assert.deepEqual(params, [41, 'MKGW3', 'V2.4', 'inspection:ticket-12345678', COMPANY_A]);
+        return { rows: [{ id: 41, product_model: 'MKGW3', firmware_version: 'V2.4',
+          firmware_evidence: 'inspection:ticket-12345678', firmware_recorded_at: new Date().toISOString() }] };
+      }
+      if (sql.includes('INSERT INTO technical_audit_log')) return { rows: [] };
+      throw new Error(`Unexpected transaction query: ${sql}`);
+    },
     release: () => undefined
   });
   (pool as any).query = async (sql: string, params: unknown[] = []) => {
@@ -72,9 +85,18 @@ function fakeDatabase() {
       assert.match(sql, /g\.company_id = ANY/);
       const scopedCompanies = params[1];
       const allowed = Array.isArray(scopedCompanies) && scopedCompanies.includes(COMPANY_A) && Number(params[0]) === 41;
-      return { rows: allowed ? [{ id: 41, mac_address: '2805a55efb68', company_id: COMPANY_A, rssi_threshold: -70 }] : [] };
+      return { rows: allowed ? [{ id: 41, mac_address: '2805a55efb68', company_id: COMPANY_A, rssi_threshold: -70,
+        product_model: verifiedFirmware ? 'MKGW3' : null,
+        firmware_version: verifiedFirmware ? 'V2.4' : null,
+        firmware_evidence: verifiedFirmware ? 'inspection:ticket-12345678' : null }] : [] };
     }
     if (sql.includes('AS ambiguous')) return { rows: [{ ambiguous: false }] };
+    if (sql.includes('UPDATE gateways SET product_model')) {
+      assert.deepEqual(params.slice(0, 4), [41, 'MKGW3', 'V2.4', 'inspection:ticket-12345678']);
+      assert.equal(params[4], COMPANY_A);
+      return { rows: [{ id: 41, product_model: 'MKGW3', firmware_version: 'V2.4',
+        firmware_evidence: 'inspection:ticket-12345678', firmware_recorded_at: new Date().toISOString() }] };
+    }
     if (sql.includes('INSERT INTO hardware_gateway_commands')) {
       observations.commandInserts += 1;
       return { rows: [{ id: '11111111-1111-4111-8111-111111111111' }] };
@@ -130,6 +152,42 @@ test('authorized technician validates payload and publishes only an exact simula
     topic: 'gw/2805a55efb68/subscribe',
     payload: { msg_id: 1040, device_info: { mac: '2805A55EFB68' }, data: { scan_switch: 1 } }
   }]);
+});
+
+test('V2-only Bluetooth writes are blocked for unknown firmware and permitted after verified inventory', async () => {
+  const unknown = fakeDatabase();
+  for (const [operation, payload] of [
+    ['report-interval', { interval: 0 }], ['scan-mode', { scan_mode: 1 }],
+    ['filter-relation', { relation: 8 }], ['phy', { phy_filter: 4 }]
+  ] as const) {
+    const response = await api(`/api/gateways/41/bluetooth/${operation}`, 2, 'hardware_technician', {
+      method: 'POST', body: JSON.stringify(payload)
+    });
+    assert.equal(response.status, 409);
+  }
+  assert.equal(unknown.published.length, 0);
+  const verified = fakeDatabase(true);
+  const response = await api('/api/gateways/41/bluetooth/report-interval', 2, 'hardware_technician', {
+    method: 'POST', body: JSON.stringify({ interval: 0 })
+  });
+  assert.equal(response.status, 200);
+  assert.equal(verified.published[0].payload.msg_id, 1063);
+});
+
+test('firmware registration is technician-only, company-scoped and audit-backed without MQTT publication', async () => {
+  const observed = fakeDatabase();
+  const path = '/api/gateways/41/firmware';
+  const body = JSON.stringify({ productModel: 'MKGW3', firmwareVersion: 'V2.4', evidence: 'inspection:ticket-12345678' });
+  assert.equal((await api(path, 1, 'hardware_readonly', { method: 'PUT', body })).status, 403);
+  assert.equal((await api(path, 3, 'hardware_technician', { method: 'PUT', body })).status, 404);
+  assert.equal((await api(path, 2, 'hardware_technician', {
+    method: 'PUT', body: JSON.stringify({ productModel: 'MKGW3', firmwareVersion: 'V2.4', evidence: 'secret password' })
+  })).status, 400);
+  const response = await api(path, 2, 'hardware_technician', { method: 'PUT', body });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).firmware_version, 'V2.4');
+  assert.equal((await api(path, 2, 'hardware_technician', { method: 'DELETE' })).status, 200);
+  assert.equal(observed.published.length, 0);
 });
 
 test('audit metadata is scoped to the gateway company', async () => {

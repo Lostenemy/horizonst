@@ -17,6 +17,7 @@ import {
   GatewayCommandBusyError
 } from '../services/gatewayCommands';
 import { buildBluetoothGatewayCommand, isBluetoothOperation } from '../services/gatewayBluetoothCommands';
+import { hasVerifiedMkgw3V2, parseGatewayFirmwareRecord, requiresMkgw3V2 } from '../services/gatewayCapabilities';
 
 const router = Router();
 
@@ -27,7 +28,8 @@ const companyIdValue = (value: unknown): string | null | undefined => {
 };
 
 const gatewaySelect = `SELECT g.id, g.name, g.mac_address, g.description, g.owner_id, g.company_id,
-                              g.rssi_threshold, g.active, gp.place_id, p.name AS place_name, c.code AS company_code,
+                              g.rssi_threshold, g.active, g.product_model, g.firmware_version, g.firmware_evidence,
+                              g.firmware_recorded_at, gp.place_id, p.name AS place_name, c.code AS company_code,
                               c.name AS company_name, g.created_at, g.updated_at
                        FROM gateways g
                        LEFT JOIN gateway_places gp ON gp.gateway_id = g.id AND gp.active = true
@@ -104,8 +106,12 @@ async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number) {
     mac_address: string;
     company_id: string;
     rssi_threshold: number;
+    product_model: string | null;
+    firmware_version: string | null;
+    firmware_evidence: string | null;
   }>(
-    `SELECT g.id, g.mac_address, g.company_id, g.rssi_threshold
+    `SELECT g.id, g.mac_address, g.company_id, g.rssi_threshold,
+            g.product_model, g.firmware_version, g.firmware_evidence
      FROM gateways g
      WHERE g.id = $1 AND g.active = TRUE AND g.company_id IS NOT NULL AND ${predicate}`,
     values
@@ -123,7 +129,8 @@ router.get('/:gatewayId/commands', authenticate, async (req: AuthenticatedReques
     const result = await pool.query(
       `SELECT c.id, c.gateway_id, c.company_id, c.msg_id, c.command_type, c.status,
               c.actor_type, c.actor_code, c.request_id, c.created_at, c.sent_at, c.ack_at,
-              c.ack_msg_id, c.result_code, c.result_message, c.timeout_ms
+              c.ack_msg_id, c.result_code, c.result_message, c.timeout_ms,
+              c.connection_state, c.connection_report_at
        FROM hardware_gateway_commands c
        JOIN gateways g ON g.id = c.gateway_id
        WHERE g.id = $1 AND ${predicate}
@@ -166,6 +173,7 @@ router.post('/:gatewayId/configure-emergency-button', authenticate, authorizeHar
   try {
     const gateway = await gatewayForCommand(req, gatewayId);
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    if (!hasVerifiedMkgw3V2(gateway)) return res.status(409).json({ message: 'Verified MKGW3 V2 firmware is required for B5 configuration' });
     const configuration = await configureB5Gateway({
       gatewayId,
       companyId: gateway.company_id,
@@ -250,6 +258,10 @@ router.post('/:gatewayId/bluetooth/:operation', authenticate, authorizeHardware(
   try {
     const gateway = await gatewayForCommand(req, gatewayId);
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const requestedValue = req.body?.[({ 'filter-relation': 'relation', phy: 'phy_filter' } as Record<string, string>)[req.params.operation]];
+    if (requiresMkgw3V2(req.params.operation, requestedValue) && !hasVerifiedMkgw3V2(gateway)) {
+      return res.status(409).json({ message: 'Verified MKGW3 V2 firmware is required for this Bluetooth operation' });
+    }
     let command;
     try {
       command = buildBluetoothGatewayCommand(gateway.mac_address, req.params.operation, req.body);
@@ -283,6 +295,78 @@ router.post('/:gatewayId/bluetooth/:operation', authenticate, authorizeHardware(
     }
     console.error('Failed to configure gateway Bluetooth', error);
     return res.status(500).json({ message: 'Failed to configure gateway Bluetooth' });
+  }
+});
+
+router.put('/:gatewayId/firmware', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  const record = parseGatewayFirmwareRecord(req.body);
+  if (!record) return res.status(400).json({ message: 'Invalid firmware record or evidence reference' });
+  const client = await pool.connect();
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE gateways SET product_model = $2, firmware_version = $3, firmware_evidence = $4,
+                           firmware_recorded_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND company_id = $5 AND active = TRUE
+       RETURNING id, product_model, firmware_version, firmware_evidence, firmware_recorded_at`,
+      [gatewayId, record.productModel, record.firmwareVersion, record.evidence, gateway.company_id]
+    );
+    if (!result.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Gateway not found' });
+    }
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id, action: 'gateway.firmware.record', entityType: 'gateway', entityId: gatewayId,
+      companyId: gateway.company_id, requestId: req.requestId, result: 'success',
+      before: { product_model: gateway.product_model, firmware_version: gateway.firmware_version, firmware_evidence: gateway.firmware_evidence },
+      after: result.rows[0]
+    }, client);
+    await client.query('COMMIT');
+    return res.json(result.rows[0]);
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
+    console.error('Failed to record gateway firmware', error);
+    return res.status(500).json({ message: 'Failed to record gateway firmware' });
+  } finally {
+    client.release();
+  }
+});
+
+router.delete('/:gatewayId/firmware', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  const client = await pool.connect();
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE gateways SET product_model = NULL, firmware_version = NULL, firmware_evidence = NULL,
+                           firmware_recorded_at = NULL, updated_at = NOW()
+       WHERE id = $1 AND company_id = $2 AND active = TRUE RETURNING id`,
+      [gatewayId, gateway.company_id]
+    );
+    if (!result.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Gateway not found' });
+    }
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id, action: 'gateway.firmware.clear', entityType: 'gateway', entityId: gatewayId,
+      companyId: gateway.company_id, requestId: req.requestId, result: 'success',
+      before: { product_model: gateway.product_model, firmware_version: gateway.firmware_version, firmware_evidence: gateway.firmware_evidence }
+    }, client);
+    await client.query('COMMIT');
+    return res.json({ id: gatewayId, product_model: null, firmware_version: null, firmware_evidence: null });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
+    console.error('Failed to clear gateway firmware', error);
+    return res.status(500).json({ message: 'Failed to clear gateway firmware' });
+  } finally {
+    client.release();
   }
 });
 

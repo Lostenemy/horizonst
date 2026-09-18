@@ -7,6 +7,7 @@ import {
 } from '../middleware/serviceAuth';
 import { HARDWARE_COMMAND_SCOPE, HARDWARE_READ_SCOPE } from '../services/serviceIdentity';
 import { normalizeGatewayMac, normalizeMacAddress } from '../utils/mac';
+import { hasVerifiedMkgw3V2 } from '../services/gatewayCapabilities';
 import { appendTechnicalAudit } from '../services/technicalAudit';
 import {
   configureB5Gateway,
@@ -20,7 +21,8 @@ import {
 const router = Router();
 
 const gatewaySelect = `SELECT g.id, g.name, g.mac_address, g.description, g.company_id,
-                              g.rssi_threshold, g.active, g.created_at, g.updated_at,
+                              g.rssi_threshold, g.active, g.product_model, g.firmware_version,
+                              g.firmware_evidence, g.firmware_recorded_at, g.created_at, g.updated_at,
                               gp.place_id, p.name AS place_name
                        FROM gateways g
                        LEFT JOIN gateway_places gp ON gp.gateway_id = g.id AND gp.active = TRUE
@@ -189,7 +191,9 @@ function physicalCommandTimeoutMs(command: PhysicalB5Command): number {
   const name = command === 'connect' ? 'B5_CONNECT_TIMEOUT_MS' : 'B5_ACTION_TIMEOUT_MS';
   const fallback = command === 'connect' ? 12000 : 8000;
   const parsed = Number(process.env[name] ?? fallback);
-  return Number.isFinite(parsed) ? Math.min(120000, Math.max(100, Math.floor(parsed))) : fallback;
+  // Horneo espera como máximo 20 s por comando físico; 1150 y 3151 comparten un presupuesto de 15 s.
+  const upperBound = command === 'connect' ? 15000 : 120000;
+  return Number.isFinite(parsed) ? Math.min(upperBound, Math.max(100, Math.floor(parsed))) : fallback;
 }
 
 function managementCommandTimeoutMs(): number {
@@ -198,8 +202,8 @@ function managementCommandTimeoutMs(): number {
 }
 
 async function scopedActiveGateway(gatewayId: number, companyId: string) {
-  const result = await pool.query<{ id: number; mac_address: string; company_id: string }>(
-    `SELECT id, mac_address, company_id FROM gateways
+  const result = await pool.query<{ id: number; mac_address: string; company_id: string; product_model: string | null; firmware_version: string | null; firmware_evidence: string | null }>(
+    `SELECT id, mac_address, company_id, product_model, firmware_version, firmware_evidence FROM gateways
      WHERE id = $1 AND company_id = $2 AND active = TRUE`,
     [gatewayId, companyId]
   );
@@ -271,6 +275,7 @@ router.post('/gateways/:gatewayId/configure-emergency-button', requireCommand, a
   try {
     const gateway = await scopedActiveGateway(gatewayId, principal.companyId);
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    if (!hasVerifiedMkgw3V2(gateway)) return res.status(409).json({ message: 'Verified MKGW3 V2 firmware is required for B5 configuration' });
     const configuration = await configureB5Gateway({
       gatewayId: gateway.id, companyId: gateway.company_id, gatewayMac: gateway.mac_address,
       actor: { type: 'service', serviceId: principal.id, code: principal.code },

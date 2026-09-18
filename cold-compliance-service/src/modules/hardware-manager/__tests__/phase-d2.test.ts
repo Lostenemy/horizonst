@@ -9,7 +9,7 @@ import {
   hardwareManagementTimeoutMs
 } from '../hardware-command.client';
 import { env } from '../../../config/env';
-import { connectTagSession } from '../../tag-control/application/tag-physical-alarm.service';
+import { connectTagSession, executeConnectedTagCommandSequence } from '../../tag-control/application/tag-physical-alarm.service';
 
 test('five active central gateways become five exact publish topics without wildcard', () => {
   const gateways = Array.from({ length: 5 }, (_, index) => ({
@@ -57,7 +57,7 @@ test('Horneo accepts only an explicitly ambiguous 202 and does not turn it into 
   (env as any).HARDWARE_MANAGER_ENABLED = true;
   try {
     const request = { hardwareGatewayId: 41, hardwareDeviceId: 31, command: 'connect' as const };
-    const ambiguous = () => new Response(JSON.stringify({ status: 'ambiguous', ackAmbiguous: true, resultCode: 0 }), {
+    const ambiguous = () => new Response(JSON.stringify({ status: 'ambiguous', ackAmbiguous: true, resultCode: 0, connectionState: 'established' }), {
       status: 202, headers: { 'Content-Type': 'application/json' }
     });
     assert.equal(await executeHardwareB5Command({ ...request, fetchImpl: async () => ambiguous() }), 'ambiguous');
@@ -72,8 +72,40 @@ test('Horneo accepts only an explicitly ambiguous 202 and does not turn it into 
       ...request, fetchImpl: async () => new Response('{}', { status: 202 })
     }), /invalid ambiguous response/);
     await assert.rejects(() => executeHardwareB5Command({
+      ...request, fetchImpl: async () => new Response(JSON.stringify({ status: 'success', resultCode: 0 }), { status: 200 })
+    }), /lacks confirmed 3151 completion/);
+    await assert.rejects(() => executeHardwareB5Command({
       ...request, fetchImpl: async () => new Response(JSON.stringify({ status: 'error', resultCode: 4 }), { status: 502 })
     }), /HTTP 502 result_code=4/);
+  } finally {
+    (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled;
+  }
+});
+
+test('automatic alarm actions are blocked after acceptance-only 1150 and proceed after simulated 3151', async () => {
+  const originalEnabled = env.HARDWARE_MANAGER_ENABLED;
+  (env as any).HARDWARE_MANAGER_ENABLED = true;
+  const candidate = { tagId: 'tag-1', tagUid: 'fd9d4f8ae226', gatewayId: 'gw-1',
+    gatewayMac: '142b2fe271b4', hardwareGatewayId: 41, hardwareDeviceId: 31 };
+  let actions = 0;
+  const run = async (connectionState: string | undefined) => executeConnectedTagCommandSequence({
+    tagId: candidate.tagId, tagUid: candidate.tagUid, candidates: [candidate],
+    deps: {
+      connect: async () => executeHardwareB5Command({
+        hardwareGatewayId: 41, hardwareDeviceId: 31, command: 'connect',
+        fetchImpl: async () => new Response(JSON.stringify({ status: 'success', resultCode: 0, connectionState }), { status: 200 })
+      }),
+      disconnect: async () => 'confirmed',
+      markActive: async () => undefined,
+      markDisconnected: async () => undefined
+    },
+    runActions: async () => { actions += 1; return 'confirmed'; }
+  });
+  try {
+    assert.equal((await run(undefined)).status, 'failed_no_gateway_connected');
+    assert.equal(actions, 0);
+    assert.equal((await run('established')).status, 'success');
+    assert.equal(actions, 1);
   } finally {
     (env as any).HARDWARE_MANAGER_ENABLED = originalEnabled;
   }

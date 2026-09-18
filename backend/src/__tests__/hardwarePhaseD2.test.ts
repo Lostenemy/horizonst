@@ -12,6 +12,7 @@ import {
   executePhysicalB5Command,
   physicalB5HttpStatus
 } from '../services/gatewayCommands';
+import { handleHardwareGatewayAck, resetHardwareGatewayAckWaitersForTests } from '../services/gatewayAck';
 import {
   HARDWARE_COMMAND_SCOPE,
   HARDWARE_READ_SCOPE,
@@ -43,6 +44,7 @@ afterEach(() => {
   (pool as any).query = originalQuery;
   (pool as any).connect = originalConnect;
   resetServiceRateLimitsForTests();
+  resetHardwareGatewayAckWaitersForTests();
 });
 
 test('service scopes accept validated read/command sets and command is never the default', () => {
@@ -116,18 +118,116 @@ test('historical timed_out 1150 on gateway 142b2fe271b4 yields an unverified 202
     deps: {
       publish: async (topic) => assert.equal(topic, 'gw/142b2fe271b4/subscribe'),
       waitForAck: async ({ gatewayMac, msgIds }) => {
-        assert.deepEqual(msgIds, [1150, 3150, 3151]);
-        return { gatewayMac, msgId: 1150, resultCode: 0, payload: { result_code: 0 } };
+        assert.ok(msgIds.length === 1 && [1150, 3151].includes(msgIds[0]));
+        return msgIds[0] === 3151
+          ? { gatewayMac, msgId: 3151, resultCode: 0, resultMessage: 'Connect succeed', payload: {} }
+          : { gatewayMac, msgId: 1150, resultCode: 0, payload: { result_code: 0 } };
       }
     }
   });
   assert.equal(result.status, 'ambiguous');
   assert.equal(result.ackAmbiguous, true);
+  assert.equal(result.connectionState, 'established');
   assert.equal(physicalB5HttpStatus(result), 202);
   assert.ok(updates.some((params) => params[1] === 'ack_ambiguous' && params[3] === 0));
   assert.equal(updates.some((params) => params[1] === 'ack_error'), false);
   assert.doesNotMatch(String(inserts[0]), /simulation-only-secret|passwd/);
   assert.equal(physicalB5HttpStatus({ ...result, resultCode: 4 }), 502);
+});
+
+test('simulated MQTT 1150 acceptance waits for asynchronous 3151 before B5 connection is established', async () => {
+  const { updates } = mockDatabase();
+  let releaseReport!: () => Promise<void>;
+  const reportSent = new Promise<void>((resolve) => {
+    releaseReport = async () => {
+      await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+        msg_id: 3151, device_info: { mac: '142B2FE271B4' }, result_code: 0, result_msg: 'Connect succeed'
+      }));
+      resolve();
+    };
+  });
+  let settled = false;
+  const attempt = executePhysicalB5Command({
+    gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
+    command: 'connect', sessionPassword: 'simulation-only-secret',
+    actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 200,
+    deps: { publish: async () => {
+      await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+        msg_id: 1150, device_info: { mac: '142B2FE271B4' }, result_code: 0, result_msg: 'success'
+      }));
+    } }
+  }).then((result) => { settled = true; return result; });
+  await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  assert.equal(settled, false, '1150 acceptance must not release physical actions');
+  await releaseReport();
+  await reportSent;
+  const result = await attempt;
+  assert.equal(result.status, 'success');
+  assert.equal(result.connectionState, 'established');
+  assert.equal(result.connectionReportMsgId, 3151);
+  assert.ok(updates.some((params) => params[1] === 'established'));
+});
+
+test('1150 acceptance without 3151 times out connection and cannot confirm physical actions', async () => {
+  const { updates } = mockDatabase();
+  const result = await executePhysicalB5Command({
+    gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
+    command: 'connect', sessionPassword: 'simulation-only-secret',
+    actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 30,
+    deps: { publish: async () => {
+      await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+        msg_id: 1150, device_info: { mac: '142B2FE271B4' }, result_code: 0, result_msg: 'success'
+      }));
+    } }
+  });
+  assert.equal(result.status, 'timeout');
+  assert.equal(result.connectionState, 'timed_out');
+  assert.equal(physicalB5HttpStatus(result), 504);
+  assert.ok(updates.some((params) => params[0] === result.commandId));
+});
+
+test('a simulated 3151 rejection or wrong tag MAC never establishes the B5 session', async () => {
+  for (const report of [
+    { gatewayMac: '142b2fe271b4', msgId: 3151, resultCode: 4, resultMessage: 'Connect failed', payload: {} },
+    { gatewayMac: '142b2fe271b4', msgId: 3151, resultCode: 0, resultMessage: 'Connect succeed',
+      payload: { data: { mac: 'FFFFFFFFFFFF' } } }
+  ]) {
+    const { updates } = mockDatabase();
+    const result = await executePhysicalB5Command({
+      gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
+      command: 'connect', sessionPassword: 'simulation-only-secret',
+      actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 100,
+      deps: {
+        publish: async () => undefined,
+        waitForAck: async ({ gatewayMac, msgIds }) => msgIds[0] === 3151
+          ? report
+          : { gatewayMac, msgId: 1150, resultCode: 0, resultMessage: 'success', payload: {} }
+      }
+    });
+    assert.equal(result.status, 'error');
+    assert.equal(result.connectionState, 'rejected');
+    assert.equal(physicalB5HttpStatus(result), 502);
+    assert.ok(updates.some((params) => params[1] === 'rejected'));
+  }
+});
+
+test('a stale simulated 3151 received before 1150 acceptance cannot establish the new connection', async () => {
+  mockDatabase();
+  const result = await executePhysicalB5Command({
+    gatewayId: 41, companyId: COMPANY_ID, gatewayMac: '142b2fe271b4', deviceMac: 'fd9d4f8ae226',
+    command: 'connect', sessionPassword: 'simulation-only-secret',
+    actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 100,
+    deps: { publish: async () => {
+      await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+        msg_id: 3151, device_info: { mac: '142B2FE271B4' }, result_code: 0, result_msg: 'Connect succeed'
+      }));
+      await handleHardwareGatewayAck('gw/142b2fe271b4/publish', JSON.stringify({
+        msg_id: 1150, device_info: { mac: '142B2FE271B4' }, result_code: 0, result_msg: 'success'
+      }));
+    } }
+  });
+  assert.equal(result.status, 'error');
+  assert.equal(result.connectionState, 'rejected');
 });
 
 test('new ACK status migration separates positive ambiguous replies without rewriting historical rows', () => {
@@ -167,7 +267,9 @@ test('historical timeout does not turn a real gateway rejection into ack_ambiguo
     actor: { type: 'service', serviceId: 'service', code: 'horneo' }, timeoutMs: 100,
     deps: {
       publish: async () => undefined,
-      waitForAck: async ({ gatewayMac }) => ({ gatewayMac, msgId: 1150, resultCode: 4, resultMessage: 'no object error', payload: {} })
+      waitForAck: async ({ gatewayMac, msgIds }) => msgIds[0] === 3151
+        ? { gatewayMac, msgId: 3151, resultCode: 0, resultMessage: 'Connect succeed', payload: {} }
+        : { gatewayMac, msgId: 1150, resultCode: 4, resultMessage: 'no object error', payload: {} }
     }
   });
   assert.equal(result.status, 'error');
@@ -230,5 +332,17 @@ test('hardware.read without hardware.command receives 403 on physical commands',
 test('foreign gateway id is hidden with 404 using the Horneo principal company', async () => {
   const queries = mockInternalApi([HARDWARE_READ_SCOPE, HARDWARE_COMMAND_SCOPE]);
   assert.equal((await servicePost()).status, 404);
+  assert.deepEqual(queries[0].params, [99, COMPANY_ID]);
+});
+
+test('internal B5 configuration refuses unknown firmware before any gateway command', async () => {
+  const queries = mockInternalApi([HARDWARE_READ_SCOPE, HARDWARE_COMMAND_SCOPE], [{
+    id: 99, mac_address: '142b2fe271b4', company_id: COMPANY_ID, active: true,
+    product_model: null, firmware_version: null, firmware_evidence: null
+  }]);
+  const response = await fetch(`${baseUrl}/api/internal/v1/hardware/gateways/99/configure-emergency-button`, {
+    method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }, body: '{}'
+  });
+  assert.equal(response.status, 409);
   assert.deepEqual(queries[0].params, [99, COMPANY_ID]);
 });

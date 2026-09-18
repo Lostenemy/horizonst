@@ -17,6 +17,10 @@ test('technical gateway panel uses existing central command endpoints and never 
   assert.match(ui, /confirmAction\(\{ title: 'Aplicar filtro BLE'/);
   assert.match(ui, /\/configure-emergency-button/);
   assert.match(ui, /\/apply-rssi/);
+  assert.match(html, /gatewayRecordFirmware/);
+  assert.match(ui, /refreshFirmwareControls\(gateway\)/);
+  assert.match(ui, /data-ble-command/);
+  assert.match(ui, /\/firmware/);
   assert.doesNotMatch(ui, /mqtt\.publish|gw\/\$\{.*\}\/subscribe/);
 });
 
