@@ -26,6 +26,16 @@ test('technical gateway panel uses existing central command endpoints and never 
   assert.match(ui, /\/firmware/);
   assert.match(ui, /\/read-identity/);
   assert.match(ui, /renderReportedIdentity/);
+  for (const readType of ['led_state', 'ble_scan_switch', 'filter_relation', 'duplicate_rule']) {
+    assert.match(html, new RegExp(`data-config-read="${readType}"`));
+  }
+  assert.match(html, /gatewayObservedSettingsTable/);
+  assert.match(ui, /\/read-configuration\/\$\{readType\}/);
+  const observedRenderer = ui.split('renderHistory\(observedSettingsBody')[1].split('\]\);')[0];
+  assert.doesNotMatch(observedRenderer, /innerHTML|insertAdjacentHTML/);
+  assert.match(ui, /cell\.textContent/);
+  assert.doesNotMatch(ui, /innerHTML\s*=\s*`[^`]*\$\{/);
+  assert.doesNotMatch(ui, /read-configuration\/all|Promise\.all\([^)]*read-configuration/);
   const renderer = ui.split('const renderReportedIdentity')[1].split('const selectGateway')[0];
   assert.match(renderer, /textContent/);
   assert.doesNotMatch(renderer, /innerHTML|insertAdjacentHTML/);

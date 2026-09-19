@@ -20,11 +20,11 @@ Administración (`horizonst`) conserva `gateways` y `devices`, sus nombres, MAC,
 
 ## MQTT y comandos
 
-Se reutilizan `hardware_gateway_commands`, el publicador central, el listener ACK y `technical_audit_log`. Backend escucha solo `devices/MK4` y `gw/+/publish`; Horneo mantiene topics exactos dinámicos y receive-only. La lectura dedicada `2002` persiste identidad reportada y su diario propio sin confundirse con ACK ni usar `mqtt_messages`. Los comandos BLE incorporados en esta rama son 1040, 1041, 1057, 1060, 1063 y 1066. RSSI 1042 y la secuencia B5 1045/1053/1059/1063 ya estaban implementados. No se ha enviado ningún comando a hardware real.
+Se reutilizan `hardware_gateway_commands`, el publicador central, el listener ACK y `technical_audit_log`. Backend escucha solo `devices/MK4` y `gw/+/publish`; Horneo mantiene topics exactos dinámicos y receive-only. Las lecturas dedicadas `2002`, `2011`, `2040`, `2041` y `2057` usan un diario propio sin confundirse con ACK ni usar `mqtt_messages`. `2002` persiste la identidad reportada; las otras cuatro conservan el último valor observado en una tabla tipada y aislada por empresa. Los comandos BLE incorporados en esta rama son 1040, 1041, 1057, 1060, 1063 y 1066. RSSI 1042 y la secuencia B5 1045/1053/1059/1063 ya estaban implementados. No se ha enviado ningún comando a hardware real.
 
 La migración `007_gateway_model_firmware_connection.sql` añade inventario de modelo, versión y evidencia auditada. Las opciones `1063`, `1066`, `1041.relation=8`, `1060.phy_filter=4` y la secuencia B5 que incluye 1063 quedan bloqueadas si la versión MKGW3 V2 no está registrada. Hay una discrepancia de firmware: la secuencia B5 probada en MKGW3 V2.4 usa `parse_adv_data: 1` en 1059, mientras que la guía de septiembre de 2026 dice que `parse_adv_data` fue eliminado en V2.X y menciona 1065 para parseo dedicado. No se cambia ese payload hasta verificar el comportamiento real. Detalles y límites en `docs/hardware-manager-firmware-b5-async.md`.
 
-La guía canónica actualizada de 24 páginas documenta `2002`, `2201`, filtros, notificaciones y varios comandos de tags. Esta fase implementa únicamente la lectura segura `2002`; no habilita automáticamente el resto. En B5, `1150` aceptado permite el intento físico operativo, pero se registra como `attempted_unverified`: no se afirma conexión BLE ni entrega física confirmada. `3151` no se atribuye al intento y el uso de `2201` queda reservado para una fase validada por separado.
+La guía canónica actualizada de 24 páginas documenta `2002`, `2201`, filtros, notificaciones y varios comandos de tags. Además de `2002`, esta fase acepta exclusivamente `2011`, `2040`, `2041` y `2057` con los esquemas observados en una MKGW3 V2.0.12/function V2.4. La guía muestra sus escrituras y ACK, pero no formaliza esas respuestas de lectura, por lo que no se generalizan a otros firmwares ni habilitan capacidades. En B5, `1150` aceptado permite el intento físico operativo, pero se registra como `attempted_unverified`: no se afirma conexión BLE ni entrega física confirmada. `3151` no se atribuye al intento y el uso de `2201` queda reservado para una fase validada por separado.
 
 ### Límite de correlación de ACK
 
@@ -35,7 +35,7 @@ Esto **no proporciona correlación inequívoca general**: un ACK duplicado de un
 ## Trabajo aún necesario para completar el objetivo
 
 - Protocolo detallado del fabricante o capturas verificadas de payloads y respuestas por modelo/firmware.
-- Consultas 2XXX y notificaciones 3XXX persistidas y presentadas sin exponer secretos.
+- Resto de consultas 2XXX y notificaciones 3XXX con contrato verificable; permanecen bloqueadas y no se infieren desde las escrituras.
 - Estado BLE asíncrono, timeout y correlación de eventos antes de habilitar controles de tags.
 - Capacidades por modelo y formularios tipados para red, MQTT, filtros avanzados, tags, firmware y OTA.
 - Pruebas de permisos, aislamiento multiempresa, concurrencia y respuestas fuera de orden de los flujos nuevos; pruebas sin hardware real.

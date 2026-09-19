@@ -6,8 +6,9 @@ import { pool } from '../db/pool';
 import { OFFICIAL_TOPICS, processMqttMessage } from '../services/mqttService';
 
 const originalQuery = pool.query.bind(pool);
+const originalConnect = pool.connect.bind(pool);
 
-afterEach(() => { (pool as any).query = originalQuery; });
+afterEach(() => { (pool as any).query = originalQuery; (pool as any).connect = originalConnect; });
 
 test('backend subscriptions are exactly MK4 and the canonical MKGW3 publish wildcard', () => {
   assert.deepEqual(OFFICIAL_TOPICS, ['devices/MK4', 'gw/+/publish']);
@@ -31,6 +32,22 @@ test('app persistence stores MK4 raw input but never raw gw traffic including 30
     msg_id: 3070, device_info: { mac: '2805a55efb68' }, data: []
   })), { qos: 1, retain: false } as any);
   assert.equal(inserts.length, 0);
+  (pool as any).connect = async () => ({
+    query: async (sql: string) => {
+      if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
+      if (sql.includes('SELECT id, company_id FROM gateways')) {
+        return { rows: [{ id: 41, company_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }] };
+      }
+      if (sql.includes('INSERT INTO hardware_gateway_observed_settings')) return { rows: [], rowCount: 1 };
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    release: () => undefined
+  });
+  await processMqttMessage('gw/2805a55efb68/publish', Buffer.from(JSON.stringify({
+    msg_id: 2011, device_info: { mac: '2805a55efb68' },
+    data: { net_led: 1, sys_led: 1, server_led: 1 }
+  })), { qos: 1, retain: false } as any);
+  assert.equal(inserts.length, 0);
 });
 
 test('MK4 remains decoded while retired model decoders are not wired into MQTT ingestion', () => {
@@ -38,5 +55,6 @@ test('MK4 remains decoded while retired model decoders are not wired into MQTT i
   assert.match(source, /topic === 'devices\/MK4'[\s\S]*decodeMk2\(messageBuffer\)/);
   assert.doesNotMatch(source, /decodeMk1|decodeMk3|topic === 'devices\/MK[123]'/);
   assert.match(source, /handleGatewayIdentityReport\(topic, payloadText\)/);
+  assert.match(source, /handleGatewayConfigurationReport\(topic, payloadText\)/);
   assert.match(source, /handleHardwareGatewayAck\(topic, payloadText\)/);
 });

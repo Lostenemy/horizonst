@@ -23,6 +23,10 @@ import {
   GatewayIdentityBusyError,
   GatewayIdentityOperationTimeoutError
 } from '../services/gatewayIdentity';
+import {
+  executeGatewayConfigurationRead,
+  isGatewayConfigurationReadType
+} from '../services/gatewayObservedReads';
 
 const router = Router();
 
@@ -182,6 +186,30 @@ router.get('/:gatewayId/reads', authenticate, async (req: AuthenticatedRequest, 
   }
 });
 
+router.get('/:gatewayId/observed-settings', authenticate, async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const scope = await resolveHardwareAccess(req.user!, 'read');
+    const values: unknown[] = [gatewayId];
+    const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
+    const gateway = await pool.query(`SELECT g.id, g.company_id FROM gateways g WHERE g.id = $1 AND ${predicate}`, values);
+    if (!gateway.rows[0]) return res.status(404).json({ message: 'Gateway not found' });
+    const result = await pool.query(
+      `SELECT s.read_type, s.msg_id, s.observed_value, s.observed_at
+       FROM hardware_gateway_observed_settings s
+       JOIN gateways g ON g.id = s.gateway_id AND g.company_id = s.company_id
+       WHERE g.id = $1 AND s.company_id = $2
+       ORDER BY s.msg_id`,
+      [gatewayId, gateway.rows[0].company_id]
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    console.error('Failed to list observed gateway settings', error);
+    return res.status(500).json({ message: 'Failed to list observed gateway settings' });
+  }
+});
+
 router.get('/:gatewayId/audit', authenticate, async (req: AuthenticatedRequest, res) => {
   const gatewayId = Number(req.params.gatewayId);
   if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
@@ -236,6 +264,45 @@ router.post('/:gatewayId/read-identity', authenticate, authorizeHardware('techni
     }
     console.error('Failed to read gateway identity', error);
     return res.status(500).json({ message: 'Failed to read gateway identity' });
+  }
+});
+
+router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  const readType = req.params.readType;
+  if (!Number.isInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  if (!isGatewayConfigurationReadType(readType)) {
+    return res.status(400).json({ message: 'Unsupported gateway configuration read' });
+  }
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const result = await executeGatewayConfigurationRead({
+      gatewayId, companyId: gateway.company_id, gatewayMac: gateway.mac_address, readType,
+      actorUserId: req.user!.id, requestId: req.requestId, timeoutMs: commandTimeoutMs()
+    });
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id, action: `gateway.configuration.read.${readType}`,
+      entityType: 'gateway', entityId: gatewayId, companyId: gateway.company_id, requestId: req.requestId,
+      result: result.status === 'response_observed' ? 'unverified' : 'failure',
+      after: { readId: result.readId, msgId: result.msgId, status: result.status, message: result.message }
+    });
+    const status = result.status === 'response_observed' ? 200
+      : result.status === 'invalid_response' ? 422
+        : result.status === 'timed_out' ? 504 : 502;
+    return res.status(status).json(result);
+  } catch (error) {
+    if (error instanceof GatewayIdentityOperationTimeoutError) {
+      return res.status(504).json({
+        status: 'timed_out', message: 'Gateway configuration read exceeded its timeout',
+        ...(error.readId ? { readId: error.readId } : {})
+      });
+    }
+    if (error instanceof GatewayIdentityBusyError || (error as any)?.code === '23505') {
+      return res.status(409).json({ message: 'Gateway already has an active operation' });
+    }
+    console.error('Failed to read gateway configuration', error);
+    return res.status(500).json({ message: 'Failed to read gateway configuration' });
   }
 });
 

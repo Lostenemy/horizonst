@@ -31,6 +31,7 @@ const reportedIdentity = document.getElementById('gatewayReportedIdentity');
 const gatewayRssi = document.getElementById('gatewayRssi');
 const commandsBody = document.querySelector('#gatewayCommandsTable tbody');
 const readsBody = document.querySelector('#gatewayReadsTable tbody');
+const observedSettingsBody = document.querySelector('#gatewayObservedSettingsTable tbody');
 const auditBody = document.querySelector('#gatewayAuditTable tbody');
 const devicesBody = document.querySelector('#gatewayDevicesTable tbody');
 
@@ -212,10 +213,11 @@ const refreshTechnicalHistory = async () => {
   if (!selectedGateway || document.hidden) return;
   const gatewayId = selectedGateway.id;
   try {
-    const [commands, reads, audit] = await Promise.all([
+    const [commands, reads, audit, observedSettings] = await Promise.all([
       apiGet(`/gateways/${gatewayId}/commands`),
       apiGet(`/gateways/${gatewayId}/reads`),
-      apiGet(`/gateways/${gatewayId}/audit`)
+      apiGet(`/gateways/${gatewayId}/audit`),
+      apiGet(`/gateways/${gatewayId}/observed-settings`)
     ]);
     if (selectedGateway?.id !== gatewayId) return;
     renderHistory(commandsBody, commands, [
@@ -236,6 +238,11 @@ const refreshTechnicalHistory = async () => {
       (item) => item.action,
       (item) => item.result,
       (item) => item.actor_user_id ?? item.actor_code
+    ]);
+    renderHistory(observedSettingsBody, observedSettings, [
+      (item) => `${item.read_type} (${item.msg_id})`,
+      (item) => JSON.stringify(item.observed_value),
+      (item) => new Date(item.observed_at).toLocaleString('es-ES')
     ]);
   } catch (error) {
     technicalFeedback.textContent = `No se pudo actualizar el historial: ${error.message}`;
@@ -316,6 +323,26 @@ identityReadButton.addEventListener('click', async () => {
     await refreshTechnicalHistory();
   }
 });
+
+for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
+  button.addEventListener('click', async () => {
+    if (!selectedGateway || !canEditHardware) return;
+    const readType = button.dataset.configRead;
+    if (!await confirmAction({
+      title: 'Consultar configuración observada',
+      message: `Solicitar ${readType} a ${selectedGateway.mac_address}? La respuesta se registrará como observada, no como ACK correlacionado.`,
+      confirmText: 'Consultar'
+    })) return;
+    try {
+      technicalFeedback.textContent = `Esperando respuesta para ${readType}…`;
+      const result = await apiPost(`/gateways/${selectedGateway.id}/read-configuration/${readType}`, {});
+      technicalFeedback.textContent = result.message;
+    } catch (error) {
+      technicalFeedback.textContent = `Lectura ${readType} no confirmada: ${error.message}`;
+    }
+    await refreshTechnicalHistory();
+  });
+}
 
 firmwareClearButton.addEventListener('click', async () => {
   if (!selectedGateway || !canEditHardware) return;
@@ -502,7 +529,12 @@ const init = async () => {
     await loadOwners();
     await loadGateways();
   } catch (error) {
-    gatewaysTableBody.innerHTML = `<tr><td colspan="6">${error.message}</td></tr>`;
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.textContent = error.message;
+    row.appendChild(cell);
+    gatewaysTableBody.replaceChildren(row);
   }
 };
 

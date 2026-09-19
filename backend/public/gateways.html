@@ -90,14 +90,17 @@
             <label>Escaneo
               <select data-ble-input="scan"><option value="1">Activado</option><option value="0">Apagado</option></select>
               <button type="button" data-ble-command="scan">Aplicar</button>
+              <button type="button" data-config-read="ble_scan_switch">Consultar estado (2040)</button>
             </label>
             <label>Relación entre filtros
               <select data-ble-input="filter-relation"><option value="0">Ninguna</option><option value="1">MAC</option><option value="2">Nombre</option><option value="3">Datos raw</option><option value="4">Nombre y raw</option><option value="5">MAC, nombre y raw</option><option value="6">Nombre o raw</option><option value="7">Nombre y MAC</option><option value="8">Combinado V2.X</option></select>
               <button type="button" data-ble-command="filter-relation">Aplicar</button>
+              <button type="button" data-config-read="filter_relation">Consultar relación (2041)</button>
             </label>
             <label>Filtro de duplicados
               <select data-ble-input="duplicates"><option value="0">Desactivado</option><option value="1">Por MAC</option><option value="2">MAC y tipo</option><option value="3">MAC y raw</option></select>
               <button type="button" data-ble-command="duplicates">Aplicar</button>
+              <button type="button" data-config-read="duplicate_rule">Consultar regla (2057)</button>
             </label>
             <label>PHY
               <select data-ble-input="phy"><option value="0">1M V4.2</option><option value="1">1M V5.0</option><option value="2">1M V4.2/V5.0</option><option value="3">Coded PHY V5.0</option><option value="4">Todos V2.X</option></select>
@@ -111,12 +114,20 @@
               <select data-ble-input="scan-mode"><option value="0">Activo</option><option value="1">Pasivo</option></select>
               <button type="button" data-ble-command="scan-mode">Aplicar</button>
             </label>
+            <label>Indicadores LED
+              <button type="button" data-config-read="led_state">Consultar LEDs (2011)</button>
+            </label>
           </div>
         </div>
         <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>
         <h3>Identidad reportada automáticamente</h3>
         <p>Datos observados en una respuesta MQTT 2002 válida; separados del registro manual.</p>
         <dl id="gatewayReportedIdentity"></dl>
+        <h3>Última configuración observada</h3>
+        <p>Valores observados; no son ACK correlacionados ni habilitan capacidades de escritura.</p>
+        <div class="table-wrapper"><table id="gatewayObservedSettingsTable">
+          <thead><tr><th>Lectura</th><th>Valor observado</th><th>Fecha</th></tr></thead><tbody></tbody>
+        </table></div>
         <h3>Lecturas técnicas recientes</h3>
         <div class="table-wrapper"><table id="gatewayReadsTable">
           <thead><tr><th>Fecha</th><th>Lectura</th><th>Estado</th><th>Respuesta observada</th></tr></thead><tbody></tbody>

@@ -5,6 +5,7 @@ import app from '../app';
 import { pool } from '../db/pool';
 import { handleHardwareGatewayAck, resetHardwareGatewayAckWaitersForTests } from '../services/gatewayAck';
 import { handleGatewayIdentityReport, resetGatewayIdentityWaitersForTests } from '../services/gatewayIdentity';
+import { handleGatewayConfigurationReport, resetGatewayConfigurationWaitersForTests } from '../services/gatewayObservedReads';
 import { credentialVersion, signToken } from '../utils/jwt';
 
 const COMPANY_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -30,6 +31,7 @@ beforeEach(() => {
   (mqttService as any).publishMqttJson = originalPublish;
   resetHardwareGatewayAckWaitersForTests();
   resetGatewayIdentityWaitersForTests();
+  resetGatewayConfigurationWaitersForTests();
 });
 
 after(async () => {
@@ -38,6 +40,7 @@ after(async () => {
   (mqttService as any).publishMqttJson = originalPublish;
   resetHardwareGatewayAckWaitersForTests();
   resetGatewayIdentityWaitersForTests();
+  resetGatewayConfigurationWaitersForTests();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
@@ -55,13 +58,15 @@ const api = (path: string, id?: number, role?: Parameters<typeof signToken>[0]['
   });
 
 function fakeDatabase(verifiedFirmware = false) {
-  const observations = { published: [] as Array<{ topic: string; payload: any }>, auditQueries: 0, readQueries: 0, commandInserts: 0, readInserts: 0 };
+  const observations = { published: [] as Array<{ topic: string; payload: any }>, auditQueries: 0, readQueries: 0, observedQueries: 0, commandInserts: 0, readInserts: 0 };
   (pool as any).connect = async () => ({
     query: async (sql: string, params: unknown[] = []) => {
       if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
       if (sql.includes('pg_advisory_unlock')) return { rows: [{ pg_advisory_unlock: true }] };
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
       if (sql.includes('UPDATE gateways SET') && sql.includes('reported_device_name')) return { rows: [{ id: 41 }] };
+      if (sql.includes('SELECT id, company_id FROM gateways')) return { rows: [{ id: 41, company_id: COMPANY_A }] };
+      if (sql.includes('INSERT INTO hardware_gateway_observed_settings')) return { rows: [], rowCount: 1 };
       if (sql.includes('UPDATE hardware_gateway_reads')) return { rows: [], rowCount: 1 };
       if (sql.includes('INSERT INTO hardware_gateway_reads')) {
         observations.readInserts += 1;
@@ -120,6 +125,11 @@ function fakeDatabase(verifiedFirmware = false) {
       observations.readQueries += 1;
       return { rows: [{ id: 'read-1', msg_id: 2002, read_type: 'gateway_identity', status: 'response_observed' }] };
     }
+    if (sql.includes('FROM hardware_gateway_observed_settings s')) {
+      observations.observedQueries += 1;
+      return { rows: [{ read_type: 'led_state', msg_id: 2011,
+        observed_value: { net_led: 1, sys_led: 1, server_led: 1 }, observed_at: new Date().toISOString() }] };
+    }
     if (sql.includes('UPDATE hardware_gateway_commands')) return { rows: [], rowCount: 0 };
     if (sql.includes('INSERT INTO technical_audit_log')) return { rows: [] };
     if (sql.includes('FROM technical_audit_log')) {
@@ -139,6 +149,16 @@ function fakeDatabase(verifiedFirmware = false) {
           software_version: 'V4.4.4', firmware_version: 'V2.0.12', function_version: 'V2.4', sl_ble_version: 'V1.0.6'
         }
       })); });
+      return;
+    }
+    const configurationReports: Record<number, Record<string, number>> = {
+      2011: { net_led: 1, sys_led: 1, server_led: 1 }, 2040: { scan_switch: 1 },
+      2041: { relation: 3 }, 2057: { rule: 0 }
+    };
+    if (configurationReports[payload.msg_id]) {
+      await handleGatewayConfigurationReport('gw/2805a55efb68/publish', JSON.stringify({
+        msg_id: payload.msg_id, device_info: { mac: '2805a55efb68' }, data: configurationReports[payload.msg_id]
+      }));
       return;
     }
     await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
@@ -297,6 +317,47 @@ test('identity history is readable only inside the caller hardware scope', async
   const foreign = fakeDatabase();
   assert.equal((await api('/api/gateways/41/reads', 3, 'hardware_technician')).status, 404);
   assert.equal(foreign.readQueries, 0);
+});
+
+test('configuration reads are technician-only, company-scoped and publish the four exact requests', async () => {
+  const definitions = [
+    ['led_state', 2011], ['ble_scan_switch', 2040], ['filter_relation', 2041], ['duplicate_rule', 2057]
+  ] as const;
+  for (const [readType, msgId] of definitions) {
+    const path = `/api/gateways/41/read-configuration/${readType}`;
+    const anonymous = fakeDatabase();
+    assert.equal((await api(path, undefined, undefined, { method: 'POST', body: '{}' })).status, 401);
+    assert.equal(anonymous.published.length, 0);
+    const readonly = fakeDatabase();
+    assert.equal((await api(path, 1, 'hardware_readonly', { method: 'POST', body: '{}' })).status, 403);
+    assert.equal(readonly.published.length, 0);
+    const foreign = fakeDatabase();
+    assert.equal((await api(path, 3, 'hardware_technician', { method: 'POST', body: '{}' })).status, 404);
+    assert.equal(foreign.published.length, 0);
+    const own = fakeDatabase();
+    const response = await api(path, 2, 'hardware_technician', { method: 'POST', body: '{}' });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, 'response_observed');
+    assert.deepEqual(own.published, [{
+      topic: 'gw/2805a55efb68/subscribe', payload: { msg_id: msgId, device_info: { mac: '2805A55EFB68' } }
+    }]);
+  }
+  const unsupported = fakeDatabase();
+  assert.equal((await api('/api/gateways/41/read-configuration/other', 2, 'hardware_technician', {
+    method: 'POST', body: '{}'
+  })).status, 400);
+  assert.equal(unsupported.published.length, 0);
+});
+
+test('latest observed settings are readable only within the gateway company', async () => {
+  const own = fakeDatabase();
+  const response = await api('/api/gateways/41/observed-settings', 1, 'hardware_readonly');
+  assert.equal(response.status, 200);
+  assert.equal((await response.json())[0].msg_id, 2011);
+  assert.equal(own.observedQueries, 1);
+  const foreign = fakeDatabase();
+  assert.equal((await api('/api/gateways/41/observed-settings', 3, 'hardware_technician')).status, 404);
+  assert.equal(foreign.observedQueries, 0);
 });
 
 test('audit metadata is scoped to the gateway company', async () => {

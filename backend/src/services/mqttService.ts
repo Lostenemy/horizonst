@@ -6,6 +6,7 @@ import { pool } from '../db/pool';
 import { ProcessedDeviceRecord } from '../types';
 import { handleHardwareGatewayAck } from './gatewayAck';
 import { handleGatewayIdentityReport } from './gatewayIdentity';
+import { handleGatewayConfigurationReport } from './gatewayObservedReads';
 
 let client: MqttClient | null = null;
 let mqttConnected = false;
@@ -77,6 +78,7 @@ export const processMqttMessage = async (
 
   const gatewayMac = records[0]?.gatewayMac || parseGatewayMacFromTopic(topic) || null;
   await handleGatewayIdentityReport(topic, payloadText);
+  await handleGatewayConfigurationReport(topic, payloadText);
   await handleHardwareGatewayAck(topic, payloadText);
   try {
     // MKGW3 dispone de diarios específicos para ACK y lecturas; su tráfico frecuente

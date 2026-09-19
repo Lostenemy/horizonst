@@ -339,12 +339,18 @@ export async function executeGatewayIdentityRead(params: {
         return { readId: readId!, status: 'response_observed' as const, identity: outcome.identity.data,
           message: 'Gateway identity response observed; protocol does not uniquely correlate it to this request' };
       }
-      await queryUntil(
-        managed!,
-        `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'response not observed before timeout'
-         WHERE id = $1 AND status IN ('pending', 'published')`,
-        [readId], operationDeadline, 'timeout_journal', readId
-      );
+      try {
+        await queryUntil(
+          managed!,
+          `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'response not observed before timeout'
+           WHERE id = $1 AND status IN ('pending', 'published')`,
+          [readId], operationDeadline, 'timeout_journal', readId
+        );
+      } catch (error) {
+        if (!(error instanceof GatewayIdentityOperationTimeoutError)) throw error;
+        // El resultado público respeta el plazo absoluto. Destruir la conexión
+        // libera el advisory lock y la recuperación posterior cierra la fila pendiente.
+      }
       return { readId: readId!, status: 'timed_out' as const,
         message: 'Gateway identity response was not observed before timeout' };
     };
