@@ -63,18 +63,29 @@ test('parser rejects contradictory MAC, missing/extra fields, wrong types, inval
   assert.equal(parseGatewayIdentityReport('gw/2805a55efb68/publish/extra', REPORT), null);
 });
 
-function mockIdentityDatabase(options: { busy?: boolean; gatewayExists?: boolean } = {}) {
+function mockIdentityDatabase(options: {
+  busy?: boolean;
+  gatewayExists?: boolean;
+  gatewayUpdateGate?: Promise<void>;
+  gatewayUpdateError?: Error;
+} = {}) {
   const operations: Array<{ sql: string; params: unknown[] }> = [];
   const client = {
     query: async (sql: string, params: unknown[] = []) => {
       operations.push({ sql, params });
       if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: !options.busy }] };
       if (sql.includes('pg_advisory_unlock') || ['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
-      if (sql.includes('UPDATE gateways SET')) return { rows: options.gatewayExists === false ? [] : [{ id: 41 }] };
+      if (sql.includes('UPDATE gateways SET')) {
+        if (options.gatewayUpdateGate) await options.gatewayUpdateGate;
+        if (options.gatewayUpdateError) throw options.gatewayUpdateError;
+        return { rows: options.gatewayExists === false ? [] : [{ id: 41 }] };
+      }
       if (sql.includes('UPDATE hardware_gateway_reads')) return { rows: [], rowCount: 1 };
       throw new Error(`Unexpected client query: ${sql}`);
     },
-    release: () => undefined
+    release: (destroy?: boolean) => {
+      operations.push({ sql: 'CLIENT_RELEASE', params: [destroy ?? false] });
+    }
   };
   (pool as any).connect = async () => client;
   (pool as any).query = async (sql: string, params: unknown[] = []) => {
@@ -125,6 +136,44 @@ test('identity read observes a response delivered before publish resolves', asyn
     } }
   });
   assert.equal(result.status, 'response_observed');
+});
+
+test('identity read times out within its absolute budget when response persistence stalls', async () => {
+  let releasePersistence!: () => void;
+  const persistenceGate = new Promise<void>((resolve) => { releasePersistence = resolve; });
+  const operations = mockIdentityDatabase({ gatewayUpdateGate: persistenceGate });
+  const operation = executeGatewayIdentityRead({
+    gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+    actorUserId: 2, timeoutMs: 20,
+    deps: { publish: async () => {
+      await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
+    } }
+  });
+  try {
+    const result = await Promise.race([
+      operation,
+      new Promise<{ status: 'still_pending' }>((resolve) => setTimeout(() => resolve({ status: 'still_pending' }), 80))
+    ]);
+    assert.equal(result.status, 'timed_out');
+  } finally {
+    releasePersistence();
+    await operation.catch(() => undefined);
+  }
+  assert.equal(operations.some((operation) => operation.sql.includes("status = 'response_observed'")), false);
+  assert.ok(operations.some((operation) => operation.sql === 'CLIENT_RELEASE' && operation.params[0] === true),
+    'the advisory-lock connection must be destroyed when the absolute budget is exhausted');
+});
+
+test('failed response persistence cannot resolve the read and expires cleanly', async () => {
+  mockIdentityDatabase({ gatewayUpdateError: new Error('simulated persistence failure') });
+  const result = await executeGatewayIdentityRead({
+    gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+    actorUserId: 2, timeoutMs: 20,
+    deps: { publish: async () => {
+      await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
+    } }
+  });
+  assert.equal(result.status, 'timed_out');
 });
 
 test('identity read handles timeout, publish failure and a busy gateway without stale waiters', async () => {

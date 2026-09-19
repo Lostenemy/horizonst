@@ -51,7 +51,7 @@ const removeCurrentWaiter = (gatewayMac: string, waiter: IdentityWaiter): void =
 const scheduleIdentityTimeout = (gatewayMac: string, waiter: IdentityWaiter): void => {
   clearTimeout(waiter.timer);
   waiter.timer = setTimeout(() => {
-    if (waiter.state !== 'waiting' || waiters.get(gatewayMac) !== waiter) return;
+    if (!['waiting', 'observing'].includes(waiter.state) || waiters.get(gatewayMac) !== waiter) return;
     waiter.state = 'timed_out';
     waiters.delete(gatewayMac);
     waiter.reject(new Error('timeout waiting observed gateway identity'));
@@ -104,7 +104,6 @@ export async function handleGatewayIdentityReport(topic: string, payloadText: st
   const claimedWaiter = waiter?.state === 'waiting' ? waiter : undefined;
   if (claimedWaiter) {
     claimedWaiter.state = 'observing';
-    clearTimeout(claimedWaiter.timer);
   }
   let client: PoolClient;
   try {
@@ -112,7 +111,6 @@ export async function handleGatewayIdentityReport(topic: string, payloadText: st
   } catch (error) {
     if (claimedWaiter?.state === 'observing' && waiters.get(identity.gatewayMac) === claimedWaiter) {
       claimedWaiter.state = 'waiting';
-      scheduleIdentityTimeout(identity.gatewayMac, claimedWaiter);
     }
     console.error('Failed to acquire database connection for observed gateway identity', error);
     return false;
@@ -136,13 +134,19 @@ export async function handleGatewayIdentityReport(topic: string, payloadText: st
         identity.data.slBleVersion]
     );
     updated = Boolean(gateway.rows[0]);
-    if (updated && claimedWaiter) {
+    if (updated && claimedWaiter?.state === 'observing'
+        && waiters.get(identity.gatewayMac) === claimedWaiter) {
       const journal = await client.query(
         `UPDATE hardware_gateway_reads SET status = 'response_observed', response_observed_at = NOW(),
            response_payload = $2::jsonb WHERE id = $1 AND status IN ('pending', 'published')`,
         [claimedWaiter.readId, JSON.stringify(redactHardwarePayload(identity.payload))]
       );
       journalUpdated = Boolean(journal.rowCount);
+    }
+    if (journalUpdated && (claimedWaiter?.state !== 'observing'
+        || waiters.get(identity.gatewayMac) !== claimedWaiter)) {
+      await client.query('ROLLBACK');
+      return false;
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -153,7 +157,6 @@ export async function handleGatewayIdentityReport(topic: string, payloadText: st
     }
     if (claimedWaiter?.state === 'observing' && waiters.get(identity.gatewayMac) === claimedWaiter) {
       claimedWaiter.state = 'waiting';
-      scheduleIdentityTimeout(identity.gatewayMac, claimedWaiter);
     }
     console.error('Failed to persist observed gateway identity', error);
     return false;
@@ -163,16 +166,22 @@ export async function handleGatewayIdentityReport(topic: string, payloadText: st
   if (updated && journalUpdated && claimedWaiter?.state === 'observing'
       && waiters.get(identity.gatewayMac) === claimedWaiter) {
     claimedWaiter.state = 'response_observed';
+    clearTimeout(claimedWaiter.timer);
     removeCurrentWaiter(identity.gatewayMac, claimedWaiter);
     claimedWaiter.resolve(identity);
   } else if (claimedWaiter?.state === 'observing' && waiters.get(identity.gatewayMac) === claimedWaiter) {
     claimedWaiter.state = 'waiting';
-    scheduleIdentityTimeout(identity.gatewayMac, claimedWaiter);
   }
   return updated;
 }
 
 export class GatewayIdentityBusyError extends Error {}
+
+const persistReadTerminalState = (sql: string, params: unknown[]): void => {
+  void pool.query(sql, params).catch((error) => {
+    console.error('Failed to persist terminal gateway identity read state', error);
+  });
+};
 
 export async function executeGatewayIdentityRead(params: {
   gatewayId: number;
@@ -185,11 +194,14 @@ export async function executeGatewayIdentityRead(params: {
 }): Promise<{ readId: string; status: 'response_observed' | 'timed_out' | 'publish_error'; identity?: GatewayIdentityData; message: string }> {
   const gatewayMac = normalizeGatewayMac(params.gatewayMac);
   if (!gatewayMac) throw new Error('Invalid gateway MAC');
+  const operationDeadline = Date.now() + params.timeoutMs;
   const lockClient = await pool.connect();
   let readId: string | undefined;
+  let lockAcquired = false;
   try {
     const locked = await lockClient.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1, $2) AS locked', [7246, params.gatewayId]);
     if (!locked.rows[0]?.locked) throw new GatewayIdentityBusyError('Gateway already has an active operation');
+    lockAcquired = true;
     await pool.query(
       `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'read timeout recovered before a new request'
        WHERE gateway_id = $1 AND status IN ('pending', 'published')
@@ -208,28 +220,54 @@ export async function executeGatewayIdentityRead(params: {
     let waiter!: IdentityWaiter;
     const observed = new Promise<ObservedGatewayIdentity>((resolve, reject) => {
       waiter = {
-        readId: readId!, state: 'waiting', deadline: Date.now() + params.timeoutMs,
+        readId: readId!, state: 'waiting', deadline: operationDeadline,
         resolve, reject, timer: setTimeout(() => undefined, params.timeoutMs)
       };
       waiters.set(gatewayMac, waiter);
       scheduleIdentityTimeout(gatewayMac, waiter);
     });
     void observed.catch(() => undefined);
-    try {
-      const publish = params.deps?.publish ?? (await import('./mqttService')).publishMqttJson;
-      await publish(`gw/${gatewayMac}/subscribe`, request);
-      await pool.query(
-        `UPDATE hardware_gateway_reads SET status = 'published', sent_at = NOW()
-         WHERE id = $1 AND status = 'pending'`,
+    const observedOutcome = observed.then(
+      (identity) => ({ kind: 'response_observed' as const, identity }),
+      () => ({ kind: 'timed_out' as const })
+    );
+    const publicationOutcome = (async () => {
+      try {
+        const publish = params.deps?.publish ?? (await import('./mqttService')).publishMqttJson;
+        await publish(`gw/${gatewayMac}/subscribe`, request);
+        if (waiter.state === 'waiting' || waiter.state === 'observing') {
+          await pool.query(
+            `UPDATE hardware_gateway_reads SET status = 'published', sent_at = NOW()
+             WHERE id = $1 AND status = 'pending'`,
+            [readId]
+          );
+        }
+        return { kind: 'published' as const };
+      } catch (error) {
+        return { kind: 'publish_error' as const, error };
+      }
+    })();
+    const toReadResult = (outcome: Awaited<typeof observedOutcome>) => {
+      if (outcome.kind === 'response_observed') {
+        return { readId: readId!, status: 'response_observed' as const, identity: outcome.identity.data,
+          message: 'Gateway identity response observed; protocol does not uniquely correlate it to this request' };
+      }
+      persistReadTerminalState(
+        `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'response not observed before timeout'
+         WHERE id = $1 AND status IN ('pending', 'published')`,
         [readId]
       );
-    } catch (error) {
+      return { readId: readId!, status: 'timed_out' as const,
+        message: 'Gateway identity response was not observed before timeout' };
+    };
+
+    const firstOutcome = await Promise.race([observedOutcome, publicationOutcome]);
+    if (firstOutcome.kind === 'response_observed' || firstOutcome.kind === 'timed_out') {
+      return toReadResult(firstOutcome);
+    }
+    if (firstOutcome.kind === 'publish_error') {
       if (waiter.state === 'observing' || waiter.state === 'response_observed') {
-        try {
-          const identity = await observed;
-          return { readId, status: 'response_observed', identity: identity.data,
-            message: 'Gateway identity response observed; protocol does not uniquely correlate it to this request' };
-        } catch { /* the observation did not become durable */ }
+        return toReadResult(await observedOutcome);
       }
       if (waiter.state === 'waiting') {
         waiter.state = 'publish_error';
@@ -238,36 +276,44 @@ export async function executeGatewayIdentityRead(params: {
         waiter.reject(new Error('gateway identity publication failed'));
       }
       if (waiter.state === 'timed_out') {
-        await pool.query(
+        persistReadTerminalState(
           `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'response not observed before timeout'
            WHERE id = $1 AND status IN ('pending', 'published')`,
           [readId]
         );
         return { readId, status: 'timed_out', message: 'Gateway identity response was not observed before timeout' };
       }
-      const message = String((error as Error).message ?? error);
-      await pool.query(
+      const message = String((firstOutcome.error as Error).message ?? firstOutcome.error);
+      persistReadTerminalState(
         `UPDATE hardware_gateway_reads SET status = 'publish_error', error_message = $2
          WHERE id = $1 AND status IN ('pending', 'published')`,
         [readId, message]
       );
       return { readId, status: 'publish_error', message: 'Gateway identity request could not be published' };
     }
-    try {
-      const identity = await observed;
-      return { readId, status: 'response_observed', identity: identity.data,
-        message: 'Gateway identity response observed; protocol does not uniquely correlate it to this request' };
-    } catch {
-      await pool.query(
-        `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'response not observed before timeout'
-         WHERE id = $1 AND status IN ('pending', 'published')`,
-        [readId]
-      );
-      return { readId, status: 'timed_out', message: 'Gateway identity response was not observed before timeout' };
-    }
+    return toReadResult(await observedOutcome);
   } finally {
-    try { await lockClient.query('SELECT pg_advisory_unlock($1, $2)', [7246, params.gatewayId]); } catch { /* release connection below */ }
-    lockClient.release();
+    if (!lockAcquired) {
+      lockClient.release();
+    } else {
+      const remainingMs = operationDeadline - Date.now();
+      if (remainingMs <= 0) {
+        lockClient.release(true);
+      } else {
+        let cleanupTimer: NodeJS.Timeout | undefined;
+        const unlockAttempt = lockClient.query('SELECT pg_advisory_unlock($1, $2)', [7246, params.gatewayId])
+          .then(() => true, (error) => {
+            console.error('Failed to release gateway identity advisory lock', error);
+            return false;
+          });
+        const cleanupDeadline = new Promise<boolean>((resolve) => {
+          cleanupTimer = setTimeout(() => resolve(false), remainingMs);
+        });
+        const unlocked = await Promise.race([unlockAttempt, cleanupDeadline]);
+        if (cleanupTimer) clearTimeout(cleanupTimer);
+        lockClient.release(unlocked ? undefined : true);
+      }
+    }
   }
 }
 
