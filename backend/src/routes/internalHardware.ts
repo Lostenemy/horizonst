@@ -22,7 +22,8 @@ const router = Router();
 
 const gatewaySelect = `SELECT g.id, g.name, g.mac_address, g.description, g.company_id,
                               g.rssi_threshold, g.active, g.product_model, g.firmware_version,
-                              g.firmware_evidence, g.firmware_recorded_at, g.created_at, g.updated_at,
+                              g.firmware_evidence, g.firmware_recorded_at, g.reported_product_model,
+                              g.reported_firmware_version, g.identity_observed_at, g.created_at, g.updated_at,
                               gp.place_id, p.name AS place_name
                        FROM gateways g
                        LEFT JOIN gateway_places gp ON gp.gateway_id = g.id AND gp.active = TRUE
@@ -202,8 +203,9 @@ function managementCommandTimeoutMs(): number {
 }
 
 async function scopedActiveGateway(gatewayId: number, companyId: string) {
-  const result = await pool.query<{ id: number; mac_address: string; company_id: string; product_model: string | null; firmware_version: string | null; firmware_evidence: string | null }>(
-    `SELECT id, mac_address, company_id, product_model, firmware_version, firmware_evidence FROM gateways
+  const result = await pool.query<{ id: number; mac_address: string; company_id: string; product_model: string | null; firmware_version: string | null; firmware_evidence: string | null; reported_product_model: string | null; reported_firmware_version: string | null; identity_observed_at: Date | null }>(
+    `SELECT id, mac_address, company_id, product_model, firmware_version, firmware_evidence,
+            reported_product_model, reported_firmware_version, identity_observed_at FROM gateways
      WHERE id = $1 AND company_id = $2 AND active = TRUE`,
     [gatewayId, companyId]
   );

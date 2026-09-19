@@ -2,7 +2,7 @@
 
 ## Resultado
 
-Hardware Manager mantiene la suscripción global `gw/+/publish`, la persistencia MQTT y la correlación de ACK. Horneo deja de usar esa suscripción global: obtiene del endpoint interno `GET /api/internal/v1/hardware/gateways` el inventario limitado por la empresa de su principal de servicio y mantiene únicamente suscripciones exactas `gw/{gatewayMac}/publish` para gateways activas.
+Hardware Manager mantiene la suscripción global `gw/+/publish` y la correlación específica de ACK/lecturas, pero no duplica de forma cruda ese tráfico en `mqtt_messages`. Horneo deja de usar esa suscripción global: obtiene del endpoint interno `GET /api/internal/v1/hardware/gateways` el inventario limitado por la empresa de su principal de servicio y mantiene únicamente suscripciones exactas `gw/{gatewayMac}/publish` para gateways activas.
 
 Esta es la transición previa al canal interno normalizado. La ausencia temporal de Hardware Manager conserva las suscripciones exactas ya instaladas, pero nunca habilita de nuevo un comodín. El inventario se refresca cada 30 segundos por defecto; por tanto, una emisión BLE cada 10 segundos no genera consultas centrales por evento.
 

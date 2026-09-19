@@ -6,6 +6,10 @@ import { hasVerifiedMkgw3V2, parseGatewayFirmwareRecord, requiresMkgw3V2 } from 
 
 test('MKGW3 V2 capabilities require model, parseable version and traceable evidence', () => {
   assert.equal(hasVerifiedMkgw3V2({ product_model: 'MKGW3', firmware_version: 'V2.4', firmware_evidence: 'inspection:ticket-12345678' }), true);
+  assert.equal(hasVerifiedMkgw3V2({
+    reported_product_model: 'MKGW3', reported_firmware_version: 'V2.0.12', identity_observed_at: new Date()
+  }), true);
+  assert.equal(hasVerifiedMkgw3V2({ reported_product_model: 'MKGW3', reported_firmware_version: 'V2.0.12' }), false);
   for (const record of [
     {},
     { product_model: 'MKGW3', firmware_version: 'V2.4' },

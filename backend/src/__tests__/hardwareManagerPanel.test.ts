@@ -18,9 +18,17 @@ test('technical gateway panel uses existing central command endpoints and never 
   assert.match(ui, /\/configure-emergency-button/);
   assert.match(ui, /\/apply-rssi/);
   assert.match(html, /gatewayRecordFirmware/);
+  assert.match(html, /gatewayReadIdentity/);
+  assert.match(html, /gatewayReportedIdentity/);
+  assert.match(html, /gatewayReadsTable/);
   assert.match(ui, /refreshFirmwareControls\(gateway\)/);
   assert.match(ui, /data-ble-command/);
   assert.match(ui, /\/firmware/);
+  assert.match(ui, /\/read-identity/);
+  assert.match(ui, /renderReportedIdentity/);
+  const renderer = ui.split('const renderReportedIdentity')[1].split('const selectGateway')[0];
+  assert.match(renderer, /textContent/);
+  assert.doesNotMatch(renderer, /innerHTML|insertAdjacentHTML/);
   assert.doesNotMatch(ui, /mqtt\.publish|gw\/\$\{.*\}\/subscribe/);
 });
 

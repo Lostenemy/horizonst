@@ -1,19 +1,18 @@
 import mqtt, { type IPublishPacket, IClientOptions, MqttClient } from 'mqtt';
 import { config } from '../config';
-import { decodeMk1 } from './decoders/mk1Decoder';
 import { decodeMk2 } from './decoders/mk2Decoder';
-import { decodeMk3 } from './decoders/mk3Decoder';
 import { handleDeviceRecord } from './deviceProcessor';
 import { pool } from '../db/pool';
 import { ProcessedDeviceRecord } from '../types';
 import { handleHardwareGatewayAck } from './gatewayAck';
+import { handleGatewayIdentityReport } from './gatewayIdentity';
 
 let client: MqttClient | null = null;
 let mqttConnected = false;
 let mqttLastError: string | null = null;
 let reconnectDelay = config.mqtt.reconnectPeriod;
 
-export const OFFICIAL_TOPICS = ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK3/+/send', 'devices/MK4', 'gw/+/publish'];
+export const OFFICIAL_TOPICS = ['devices/MK4', 'gw/+/publish'];
 
 
 const parseGatewayMacFromTopic = (topic: string): string | null => {
@@ -42,6 +41,40 @@ export const publishMqttJson = async (topic: string, payload: Record<string, unk
       else resolve();
     });
   });
+};
+
+export const processMqttMessage = async (
+  topic: string,
+  messageBuffer: Buffer,
+  packet: Pick<IPublishPacket, 'qos' | 'retain'> = { qos: 0, retain: false }
+): Promise<void> => {
+  const payloadText = messageBuffer.toString();
+  const payloadBase64 = messageBuffer.toString('base64');
+  let records: ProcessedDeviceRecord[] = [];
+  try {
+    if (topic === 'devices/MK4') records = decodeMk2(messageBuffer);
+  } catch (error) {
+    console.error('Failed to decode payload', error);
+  }
+
+  const gatewayMac = records[0]?.gatewayMac || parseGatewayMacFromTopic(topic) || null;
+  await handleGatewayIdentityReport(topic, payloadText);
+  await handleHardwareGatewayAck(topic, payloadText);
+  try {
+    // MKGW3 dispone de diarios específicos para ACK y lecturas; su tráfico frecuente
+    // (incluido 3070) no se duplica de forma cruda en mqtt_messages.
+    if (config.mqtt.persistenceMode === 'app' && topic === 'devices/MK4') {
+      await pool.query(
+        `INSERT INTO mqtt_messages (topic, payload, payload_raw, payload_encoding, client_id, qos, retain, gateway_mac, received_at)
+         VALUES ($1, $2, $3, 'utf8', $4, $5, $6, $7, NOW())`,
+        [topic, payloadText, payloadBase64, null, packet?.qos ?? 0, packet?.retain ?? false, gatewayMac]
+      );
+    }
+  } catch (error) {
+    console.error('Failed to persist MQTT message', error);
+  }
+
+  for (const record of records) await handleDeviceRecord(record);
 };
 
 export const initMqtt = async (): Promise<void> => {
@@ -144,54 +177,11 @@ export const initMqtt = async (): Promise<void> => {
       }, Math.max(config.mqtt.connectTimeout, 5000));
     }
 
-    const shouldPersistLocally = config.mqtt.persistenceMode === 'app';
-
     client.on('message', async (topic: string, messageBuffer: Buffer, packet: IPublishPacket) => {
-      const payloadText = messageBuffer.toString();
-      const payloadHex = messageBuffer.toString('hex');
-      const payloadBase64 = messageBuffer.toString('base64');
-      const payloadEncoding = topic === 'devices/MK2' ? 'hex' : 'utf8';
-      const storedPayload = topic === 'devices/MK2' ? payloadHex : payloadText;
-      let records: ProcessedDeviceRecord[] = [];
       try {
-        if (topic === 'devices/MK1') {
-          records = decodeMk1(payloadText);
-        } else if (topic === 'devices/MK2') {
-          records = decodeMk2(messageBuffer);
-        } else if (topic === 'devices/MK3' || /^devices\/MK3\/[^/]+\/send$/i.test(topic)) {
-          records = decodeMk3(payloadText).map((record) => ({ ...record, topic }));
-        } else if (topic === 'devices/MK4') {
-          records = decodeMk2(messageBuffer);
-        }
+        await processMqttMessage(topic, messageBuffer, packet);
       } catch (error) {
-        console.error('Failed to decode payload', error);
-      }
-
-      const gatewayMac = records[0]?.gatewayMac || parseGatewayMacFromTopic(topic) || null;
-      await handleHardwareGatewayAck(topic, payloadText);
-      try {
-        if (shouldPersistLocally) {
-          await pool.query(
-            `INSERT INTO mqtt_messages (topic, payload, payload_raw, payload_encoding, client_id, qos, retain, gateway_mac, received_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
-            [
-              topic,
-              storedPayload,
-              payloadBase64,
-              payloadEncoding,
-              null,
-              packet?.qos ?? 0,
-              packet?.retain ?? false,
-              gatewayMac
-            ]
-          );
-        }
-      } catch (error) {
-        console.error('Failed to persist MQTT message', error);
-      }
-
-      for (const record of records) {
-        await handleDeviceRecord(record);
+        console.error('Failed to process MQTT message', error);
       }
     });
   });

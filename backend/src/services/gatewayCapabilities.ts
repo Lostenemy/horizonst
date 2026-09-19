@@ -2,14 +2,21 @@ export interface GatewayFirmwareIdentity {
   product_model?: string | null;
   firmware_version?: string | null;
   firmware_evidence?: string | null;
+  reported_product_model?: string | null;
+  reported_firmware_version?: string | null;
+  identity_observed_at?: string | Date | null;
 }
 
 const EVIDENCE_REFERENCE = /^(?:inspection|device-info-2002):[A-Za-z0-9._/-]{8,120}$/;
 
 export function hasVerifiedMkgw3V2(gateway: GatewayFirmwareIdentity): boolean {
-  return gateway.product_model?.trim().toUpperCase() === 'MKGW3'
+  const manual = gateway.product_model?.trim().toUpperCase() === 'MKGW3'
     && /^V?2\.\d+(?:\.\d+)?$/i.test(gateway.firmware_version?.trim() ?? '')
     && EVIDENCE_REFERENCE.test(gateway.firmware_evidence?.trim() ?? '');
+  const observed = gateway.reported_product_model?.trim().toUpperCase() === 'MKGW3'
+    && /^V?2\.\d+(?:\.\d+)?$/i.test(gateway.reported_firmware_version?.trim() ?? '')
+    && Boolean(gateway.identity_observed_at);
+  return manual || observed;
 }
 
 export function requiresMkgw3V2(operation: string, value: unknown): boolean {

@@ -117,9 +117,9 @@ También contiene tablas de fotografías y alarmas generales. Estas no deben tra
 
 ### 2.5 MQTT
 
-El backend se conecta al broker y se suscribe a topics legacy (`devices/MK1`, `MK2`, `MK3`, `MK4`, etc.) y al topic real `gw/+/publish`. Puede persistir mensajes crudos en `mqtt_messages`, según `MQTT_PERSISTENCE_MODE`, con una retención configurada actualmente a 48 horas en la composición.
+El backend se conecta al broker y se suscribe exclusivamente a `devices/MK4` y `gw/+/publish`. MK1/MK2 están retirados y MK3 utiliza los topics canónicos `gw/{mac}/publish` y `gw/{mac}/subscribe`. En modo `app`, solo el tráfico MK4 conserva persistencia cruda en `mqtt_messages`; el tráfico `gw/...`, incluido `3070`, se procesa mediante persistencias específicas sin duplicarlo de forma indiscriminada.
 
-Los decodificadores legacy alimentan `device_records` y actualizan la última telemetría de dispositivos previamente registrados. El flujo `gw/+/publish` se persiste, pero no existe en `app` un parser general de MKGW3 equivalente al de Horneo. Tampoco hay descubrimiento/provisioning controlado de hardware desconocido: el procesador descarta gateways o dispositivos no registrados/inactivos.
+El decodificador MK4 alimenta `device_records`. Para MKGW3, los ACK se conservan en `hardware_gateway_commands` y la lectura de identidad `2002` en `hardware_gateway_reads` y las columnas `reported_*` de una gateway activa conocida. `mqtt_messages` no es fuente de verdad del inventario.
 
 ### 2.6 Autenticación y roles
 

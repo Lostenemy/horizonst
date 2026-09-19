@@ -26,8 +26,11 @@ const bluetoothPanel = document.getElementById('gatewayBluetoothPanel');
 const technicalFeedback = document.getElementById('gatewayTechnicalFeedback');
 const firmwareRecordButton = document.getElementById('gatewayRecordFirmware');
 const firmwareClearButton = document.getElementById('gatewayClearFirmware');
+const identityReadButton = document.getElementById('gatewayReadIdentity');
+const reportedIdentity = document.getElementById('gatewayReportedIdentity');
 const gatewayRssi = document.getElementById('gatewayRssi');
 const commandsBody = document.querySelector('#gatewayCommandsTable tbody');
+const readsBody = document.querySelector('#gatewayReadsTable tbody');
 const auditBody = document.querySelector('#gatewayAuditTable tbody');
 const devicesBody = document.querySelector('#gatewayDevicesTable tbody');
 
@@ -42,9 +45,15 @@ const normalizeMac = (value) => {
 };
 
 const validateMac = (value) => /^[0-9A-F]{12}$/.test(normalizeMac(value));
-const hasVerifiedMkgw3V2 = (gateway) => gateway?.product_model?.toUpperCase() === 'MKGW3'
+const hasVerifiedMkgw3V2 = (gateway) => (
+  gateway?.product_model?.toUpperCase() === 'MKGW3'
   && /^V?2\.\d+(?:\.\d+)?$/i.test(gateway.firmware_version || '')
-  && /^(?:inspection|device-info-2002):[A-Za-z0-9._/-]{8,120}$/.test(gateway.firmware_evidence || '');
+  && /^(?:inspection|device-info-2002):[A-Za-z0-9._/-]{8,120}$/.test(gateway.firmware_evidence || '')
+) || (
+  gateway?.reported_product_model?.toUpperCase() === 'MKGW3'
+  && /^V?2\.\d+(?:\.\d+)?$/i.test(gateway.reported_firmware_version || '')
+  && Boolean(gateway.identity_observed_at)
+);
 
 const refreshFirmwareControls = (gateway) => {
   const v2 = hasVerifiedMkgw3V2(gateway);
@@ -203,8 +212,9 @@ const refreshTechnicalHistory = async () => {
   if (!selectedGateway || document.hidden) return;
   const gatewayId = selectedGateway.id;
   try {
-    const [commands, audit] = await Promise.all([
+    const [commands, reads, audit] = await Promise.all([
       apiGet(`/gateways/${gatewayId}/commands`),
+      apiGet(`/gateways/${gatewayId}/reads`),
       apiGet(`/gateways/${gatewayId}/audit`)
     ]);
     if (selectedGateway?.id !== gatewayId) return;
@@ -214,6 +224,12 @@ const refreshTechnicalHistory = async () => {
       (item) => item.msg_id,
       (item) => item.connection_state ? `${item.status} · BLE ${item.connection_state}` : item.status,
       (item) => item.result_code == null ? item.result_message : `${item.result_code}: ${item.result_message || ''}`
+    ]);
+    renderHistory(readsBody, reads, [
+      (item) => new Date(item.created_at).toLocaleString('es-ES'),
+      (item) => `${item.read_type} (${item.msg_id})`,
+      (item) => item.status,
+      (item) => item.response_observed_at ? new Date(item.response_observed_at).toLocaleString('es-ES') : item.error_message
     ]);
     renderHistory(auditBody, audit, [
       (item) => new Date(item.created_at).toLocaleString('es-ES'),
@@ -226,14 +242,34 @@ const refreshTechnicalHistory = async () => {
   }
 };
 
+const renderReportedIdentity = (gateway) => {
+  reportedIdentity.replaceChildren();
+  const values = [
+    ['Nombre del dispositivo', gateway.reported_device_name], ['Modelo', gateway.reported_product_model],
+    ['MAC BLE', gateway.reported_ble_mac], ['MAC Ethernet', gateway.reported_eth_mac],
+    ['Fabricante', gateway.reported_company_name], ['Hardware', gateway.reported_hardware_version],
+    ['Software', gateway.reported_software_version], ['Firmware', gateway.reported_firmware_version],
+    ['Función', gateway.reported_function_version], ['SL BLE', gateway.reported_sl_ble_version],
+    ['Observada', gateway.identity_observed_at ? new Date(gateway.identity_observed_at).toLocaleString('es-ES') : null]
+  ];
+  for (const [label, value] of values) {
+    const term = document.createElement('dt');
+    const detail = document.createElement('dd');
+    term.textContent = label;
+    detail.textContent = value || '—';
+    reportedIdentity.append(term, detail);
+  }
+};
+
 const selectGateway = async (gateway) => {
   selectedGateway = gateway;
   technicalPanel.hidden = false;
   technicalTitle.textContent = gateway.name || gateway.mac_address;
-  technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin empresa'} · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'} · ${gateway.product_model || 'Modelo desconocido'} ${gateway.firmware_version || 'firmware desconocido'}${gateway.firmware_evidence ? ` · evidencia ${gateway.firmware_evidence}` : ''}`;
+  technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin empresa'} · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'} · registro manual: ${gateway.product_model || 'modelo desconocido'} ${gateway.firmware_version || 'firmware desconocido'}${gateway.firmware_evidence ? ` · evidencia ${gateway.firmware_evidence}` : ''}`;
   technicalActions.hidden = !canEditHardware || !gateway.active || !gateway.company_id;
   bluetoothPanel.hidden = technicalActions.hidden;
   refreshFirmwareControls(gateway);
+  renderReportedIdentity(gateway);
   gatewayRssi.value = gateway.rssi_threshold ?? -127;
   technicalFeedback.textContent = '';
   await Promise.all([refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
@@ -261,6 +297,24 @@ firmwareRecordButton.addEventListener('click', async () => {
       await loadGateways();
     }
   });
+});
+
+identityReadButton.addEventListener('click', async () => {
+  if (!selectedGateway || !canEditHardware) return;
+  if (!await confirmAction({
+    title: 'Consultar identidad de la gateway',
+    message: `Publicar la lectura 2002 para ${selectedGateway.mac_address}?`,
+    confirmText: 'Consultar'
+  })) return;
+  try {
+    technicalFeedback.textContent = 'Esperando una respuesta 2002 observada…';
+    const result = await apiPost(`/gateways/${selectedGateway.id}/read-identity`, {});
+    technicalFeedback.textContent = result.message;
+    await loadGateways();
+  } catch (error) {
+    technicalFeedback.textContent = `No se pudo consultar la identidad: ${error.message}`;
+    await refreshTechnicalHistory();
+  }
 });
 
 firmwareClearButton.addEventListener('click', async () => {

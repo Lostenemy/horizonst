@@ -18,6 +18,7 @@ import {
 } from '../services/gatewayCommands';
 import { buildBluetoothGatewayCommand, isBluetoothOperation } from '../services/gatewayBluetoothCommands';
 import { hasVerifiedMkgw3V2, parseGatewayFirmwareRecord, requiresMkgw3V2 } from '../services/gatewayCapabilities';
+import { executeGatewayIdentityRead, GatewayIdentityBusyError } from '../services/gatewayIdentity';
 
 const router = Router();
 
@@ -29,7 +30,12 @@ const companyIdValue = (value: unknown): string | null | undefined => {
 
 const gatewaySelect = `SELECT g.id, g.name, g.mac_address, g.description, g.owner_id, g.company_id,
                               g.rssi_threshold, g.active, g.product_model, g.firmware_version, g.firmware_evidence,
-                              g.firmware_recorded_at, gp.place_id, p.name AS place_name, c.code AS company_code,
+                              g.firmware_recorded_at, g.reported_device_name, g.reported_product_model,
+                              g.reported_ble_mac, g.reported_eth_mac, g.reported_company_name,
+                              g.reported_hardware_version, g.reported_software_version,
+                              g.reported_firmware_version, g.reported_function_version,
+                              g.reported_sl_ble_version, g.identity_observed_at,
+                              gp.place_id, p.name AS place_name, c.code AS company_code,
                               c.name AS company_name, g.created_at, g.updated_at
                        FROM gateways g
                        LEFT JOIN gateway_places gp ON gp.gateway_id = g.id AND gp.active = true
@@ -109,9 +115,13 @@ async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number) {
     product_model: string | null;
     firmware_version: string | null;
     firmware_evidence: string | null;
+    reported_product_model: string | null;
+    reported_firmware_version: string | null;
+    identity_observed_at: Date | null;
   }>(
     `SELECT g.id, g.mac_address, g.company_id, g.rssi_threshold,
-            g.product_model, g.firmware_version, g.firmware_evidence
+            g.product_model, g.firmware_version, g.firmware_evidence,
+            g.reported_product_model, g.reported_firmware_version, g.identity_observed_at
      FROM gateways g
      WHERE g.id = $1 AND g.active = TRUE AND g.company_id IS NOT NULL AND ${predicate}`,
     values
@@ -144,6 +154,30 @@ router.get('/:gatewayId/commands', authenticate, async (req: AuthenticatedReques
   }
 });
 
+router.get('/:gatewayId/reads', authenticate, async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const scope = await resolveHardwareAccess(req.user!, 'read');
+    const values: unknown[] = [gatewayId];
+    const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
+    const gateway = await pool.query(`SELECT g.id, g.company_id FROM gateways g WHERE g.id = $1 AND ${predicate}`, values);
+    if (!gateway.rows[0]) return res.status(404).json({ message: 'Gateway not found' });
+    const result = await pool.query(
+      `SELECT r.id, r.msg_id, r.read_type, r.status, r.request_id, r.created_at, r.sent_at,
+              r.response_observed_at, r.error_message
+       FROM hardware_gateway_reads r JOIN gateways g ON g.id = r.gateway_id
+       WHERE g.id = $1 AND g.company_id IS NOT DISTINCT FROM $2::uuid
+       ORDER BY r.created_at DESC LIMIT 200`,
+      [gatewayId, gateway.rows[0].company_id]
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    console.error('Failed to list gateway reads', error);
+    return res.status(500).json({ message: 'Failed to list gateway reads' });
+  }
+});
+
 router.get('/:gatewayId/audit', authenticate, async (req: AuthenticatedRequest, res) => {
   const gatewayId = Number(req.params.gatewayId);
   if (!Number.isInteger(gatewayId)) return res.status(400).json({ message: 'Invalid gateway id' });
@@ -164,6 +198,33 @@ router.get('/:gatewayId/audit', authenticate, async (req: AuthenticatedRequest, 
   } catch (error) {
     console.error('Failed to list gateway audit', error);
     return res.status(500).json({ message: 'Failed to list gateway audit' });
+  }
+});
+
+router.post('/:gatewayId/read-identity', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const result = await executeGatewayIdentityRead({
+      gatewayId, companyId: gateway.company_id, gatewayMac: gateway.mac_address,
+      actorUserId: req.user!.id, requestId: req.requestId, timeoutMs: commandTimeoutMs()
+    });
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id, action: 'gateway.identity.read', entityType: 'gateway', entityId: gatewayId,
+      companyId: gateway.company_id, requestId: req.requestId,
+      result: result.status === 'response_observed' ? 'unverified' : 'failure',
+      after: { readId: result.readId, status: result.status, message: result.message }
+    });
+    const status = result.status === 'response_observed' ? 200 : result.status === 'timed_out' ? 504 : 502;
+    return res.status(status).json(result);
+  } catch (error) {
+    if (error instanceof GatewayIdentityBusyError || (error as any)?.code === '23505') {
+      return res.status(409).json({ message: 'Gateway already has an active operation' });
+    }
+    console.error('Failed to read gateway identity', error);
+    return res.status(500).json({ message: 'Failed to read gateway identity' });
   }
 });
 

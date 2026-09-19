@@ -79,6 +79,7 @@
           <input id="gatewayRssi" type="number" min="-127" max="0" step="1" />
           <button type="button" id="gatewayApplyRssi">Aplicar RSSI</button>
           <button type="button" id="gatewayConfigureB5">Configurar doble pulsación B5</button>
+          <button type="button" id="gatewayReadIdentity">Consultar identidad de la gateway</button>
           <button type="button" id="gatewayRecordFirmware">Registrar modelo y firmware verificados</button>
           <button type="button" id="gatewayClearFirmware">Marcar firmware como desconocido</button>
         </div>
@@ -113,6 +114,13 @@
           </div>
         </div>
         <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>
+        <h3>Identidad reportada automáticamente</h3>
+        <p>Datos observados en una respuesta MQTT 2002 válida; separados del registro manual.</p>
+        <dl id="gatewayReportedIdentity"></dl>
+        <h3>Lecturas técnicas recientes</h3>
+        <div class="table-wrapper"><table id="gatewayReadsTable">
+          <thead><tr><th>Fecha</th><th>Lectura</th><th>Estado</th><th>Respuesta observada</th></tr></thead><tbody></tbody>
+        </table></div>
         <h3>Comandos recientes</h3>
         <div class="table-wrapper"><table id="gatewayCommandsTable">
           <thead><tr><th>Fecha</th><th>Comando</th><th>msg_id</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
