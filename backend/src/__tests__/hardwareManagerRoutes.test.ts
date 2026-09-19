@@ -63,6 +63,10 @@ function fakeDatabase(verifiedFirmware = false) {
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
       if (sql.includes('UPDATE gateways SET') && sql.includes('reported_device_name')) return { rows: [{ id: 41 }] };
       if (sql.includes('UPDATE hardware_gateway_reads')) return { rows: [], rowCount: 1 };
+      if (sql.includes('INSERT INTO hardware_gateway_reads')) {
+        observations.readInserts += 1;
+        return { rows: [{ id: '22222222-2222-4222-8222-222222222222' }] };
+      }
       if (sql.includes('UPDATE gateways SET product_model')) {
         if (sql.includes('product_model = NULL')) {
           assert.deepEqual(params, [41, COMPANY_A]);
@@ -236,6 +240,52 @@ test('identity read is technician-only, company-scoped and publishes exact 2002 
     topic: 'gw/2805a55efb68/subscribe',
     payload: { msg_id: 2002, device_info: { mac: '2805A55EFB68' } }
   }]);
+});
+
+test('identity read HTTP distinguishes operational timeout, busy gateway and publication error', async () => {
+  const path = '/api/gateways/41/read-identity';
+  const request = { method: 'POST', body: '{}' };
+  const previousTimeout = process.env.GATEWAY_COMMAND_TIMEOUT_MS;
+  process.env.GATEWAY_COMMAND_TIMEOUT_MS = '20';
+  try {
+    fakeDatabase();
+    let resolveConnection!: (client: unknown) => void;
+    const lateReleases: unknown[] = [];
+    (pool as any).connect = () => new Promise((resolve) => { resolveConnection = resolve; });
+    const timeoutResponse = await api(path, 2, 'hardware_technician', request);
+    assert.equal(timeoutResponse.status, 504);
+    assert.deepEqual(await timeoutResponse.json(), {
+      status: 'timed_out', message: 'Gateway identity operation exceeded its timeout'
+    });
+    resolveConnection({
+      query: async () => { throw new Error('late connection must not be queried'); },
+      release: (destroy?: boolean) => { lateReleases.push(destroy); }
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(lateReleases, [true]);
+
+    fakeDatabase();
+    let busyReleases = 0;
+    (pool as any).connect = async () => ({
+      query: async (sql: string) => {
+        if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: false }] };
+        throw new Error(`Unexpected busy query: ${sql}`);
+      },
+      release: () => { busyReleases += 1; }
+    });
+    const busyResponse = await api(path, 2, 'hardware_technician', request);
+    assert.equal(busyResponse.status, 409);
+    assert.equal(busyReleases, 1);
+
+    fakeDatabase();
+    (mqttService as any).publishMqttJson = async () => { throw new Error('simulated offline broker'); };
+    const publishResponse = await api(path, 2, 'hardware_technician', request);
+    assert.equal(publishResponse.status, 502);
+    assert.equal((await publishResponse.json()).status, 'publish_error');
+  } finally {
+    if (previousTimeout === undefined) delete process.env.GATEWAY_COMMAND_TIMEOUT_MS;
+    else process.env.GATEWAY_COMMAND_TIMEOUT_MS = previousTimeout;
+  }
 });
 
 test('identity history is readable only inside the caller hardware scope', async () => {

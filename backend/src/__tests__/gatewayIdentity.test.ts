@@ -8,6 +8,7 @@ import {
   buildGatewayIdentityRequest,
   executeGatewayIdentityRead,
   GatewayIdentityBusyError,
+  GatewayIdentityOperationTimeoutError,
   handleGatewayIdentityReport,
   parseGatewayIdentityReport,
   resetGatewayIdentityWaitersForTests
@@ -66,36 +67,88 @@ test('parser rejects contradictory MAC, missing/extra fields, wrong types, inval
 function mockIdentityDatabase(options: {
   busy?: boolean;
   gatewayExists?: boolean;
+  connectGate?: Promise<void>;
+  lockGate?: Promise<void>;
+  recoveryGate?: Promise<void>;
+  insertGate?: Promise<void>;
+  unlockGate?: Promise<void>;
+  publishedJournalGate?: Promise<void>;
   gatewayUpdateGate?: Promise<void>;
   gatewayUpdateError?: Error;
 } = {}) {
   const operations: Array<{ sql: string; params: unknown[] }> = [];
-  const client = {
-    query: async (sql: string, params: unknown[] = []) => {
-      operations.push({ sql, params });
-      if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: !options.busy }] };
-      if (sql.includes('pg_advisory_unlock') || ['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
-      if (sql.includes('UPDATE gateways SET')) {
-        if (options.gatewayUpdateGate) await options.gatewayUpdateGate;
-        if (options.gatewayUpdateError) throw options.gatewayUpdateError;
-        return { rows: options.gatewayExists === false ? [] : [{ id: 41 }] };
+  let nextClientId = 0;
+  const createClient = () => {
+    const clientId = ++nextClientId;
+    return {
+      query: async (sql: string, params: unknown[] = []) => {
+        operations.push({ sql, params });
+        if (sql.includes('pg_try_advisory_lock')) {
+          if (options.lockGate) await options.lockGate;
+          return { rows: [{ locked: !options.busy }] };
+        }
+        if (sql.includes('pg_advisory_unlock')) {
+          if (options.unlockGate) await options.unlockGate;
+          return { rows: [] };
+        }
+        if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
+        if (sql.includes('UPDATE gateways SET')) {
+          if (options.gatewayUpdateGate) await options.gatewayUpdateGate;
+          if (options.gatewayUpdateError) throw options.gatewayUpdateError;
+          return { rows: options.gatewayExists === false ? [] : [{ id: 41 }] };
+        }
+        if (sql.includes('UPDATE hardware_gateway_reads')) {
+          if (sql.includes('read timeout recovered') && options.recoveryGate) await options.recoveryGate;
+          if (sql.includes("status = 'published'") && options.publishedJournalGate) await options.publishedJournalGate;
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes('INSERT INTO hardware_gateway_reads')) {
+          if (options.insertGate) await options.insertGate;
+          return { rows: [{ id: '11111111-1111-4111-8111-111111111111' }] };
+        }
+        throw new Error(`Unexpected client query: ${sql}`);
+      },
+      release: (destroy?: boolean) => {
+        operations.push({ sql: 'CLIENT_RELEASE', params: [destroy ?? false, clientId] });
       }
-      if (sql.includes('UPDATE hardware_gateway_reads')) return { rows: [], rowCount: 1 };
-      throw new Error(`Unexpected client query: ${sql}`);
-    },
-    release: (destroy?: boolean) => {
-      operations.push({ sql: 'CLIENT_RELEASE', params: [destroy ?? false] });
-    }
+    };
   };
-  (pool as any).connect = async () => client;
+  (pool as any).connect = async () => {
+    if (options.connectGate) await options.connectGate;
+    return createClient();
+  };
   (pool as any).query = async (sql: string, params: unknown[] = []) => {
     operations.push({ sql, params });
-    if (sql.includes('INSERT INTO hardware_gateway_reads')) return { rows: [{ id: '11111111-1111-4111-8111-111111111111' }] };
-    if (sql.includes('UPDATE hardware_gateway_reads')) return { rows: [], rowCount: 1 };
+    if (sql.includes('INSERT INTO hardware_gateway_reads')) {
+      if (options.insertGate) await options.insertGate;
+      return { rows: [{ id: '11111111-1111-4111-8111-111111111111' }] };
+    }
+    if (sql.includes('UPDATE hardware_gateway_reads')) {
+      if (sql.includes('read timeout recovered') && options.recoveryGate) await options.recoveryGate;
+      return { rows: [], rowCount: 1 };
+    }
     throw new Error(`Unexpected pool query: ${sql}`);
   };
   return operations;
 }
+
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
+const settleWithin = async <T>(operation: Promise<T>, milliseconds = 60) => Promise.race([
+  operation.then((value) => ({ kind: 'resolved' as const, value }), (error) => ({ kind: 'rejected' as const, error })),
+  new Promise<{ kind: 'still_pending' }>((resolve) => setTimeout(() => resolve({ kind: 'still_pending' }), milliseconds))
+]);
+
+const assertClientsReleasedOnce = (operations: Array<{ sql: string; params: unknown[] }>) => {
+  const releases = operations.filter((item) => item.sql === 'CLIENT_RELEASE');
+  const connectionIds = releases.map((item) => item.params[1]);
+  assert.equal(new Set(connectionIds).size, connectionIds.length, 'a borrowed connection must never be released twice');
+  return releases;
+};
 
 test('valid observed identity updates only an active gateway with the topic MAC', async () => {
   const operations = mockIdentityDatabase();
@@ -127,15 +180,110 @@ test('identity read journals publication and an observed response without ACK se
 });
 
 test('identity read observes a response delivered before publish resolves', async () => {
-  mockIdentityDatabase();
+  const operations = mockIdentityDatabase();
   const result = await executeGatewayIdentityRead({
     gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
-    actorUserId: 2, timeoutMs: 20,
+    actorUserId: 2, timeoutMs: 40,
     deps: { publish: async () => {
       await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
     } }
   });
   assert.equal(result.status, 'response_observed');
+  const releases = assertClientsReleasedOnce(operations);
+  assert.ok(releases.length >= 2);
+  assert.equal(releases.some((item) => item.params[0] === true), false,
+    'normally returned connections must not later be destroyed');
+});
+
+for (const stage of ['connect', 'lock', 'recovery', 'insert'] as const) {
+  test(`identity read is bounded when ${stage} does not resolve before timeout`, async () => {
+    const gate = deferred();
+    const operations = mockIdentityDatabase({ [`${stage}Gate`]: gate.promise });
+    const operation = executeGatewayIdentityRead({
+      gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+      actorUserId: 2, timeoutMs: 15, deps: { publish: async () => undefined }
+    });
+    try {
+      const outcome = await settleWithin(operation);
+      assert.equal(outcome.kind, 'rejected');
+      if (outcome.kind === 'rejected') {
+        assert.ok(outcome.error instanceof GatewayIdentityOperationTimeoutError);
+        assert.equal(outcome.error.readId, undefined);
+      }
+    } finally {
+      gate.resolve();
+      await operation.catch(() => undefined);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const releases = operations.filter((item) => item.sql === 'CLIENT_RELEASE');
+    assert.equal(releases.length, 1, 'the borrowed or late connection must be released exactly once');
+    assert.equal(releases[0].params[0], true, 'a connection involved in a timed-out phase must be destroyed');
+  });
+}
+
+test('identity read is bounded when normal advisory unlock does not resolve', async () => {
+  const unlock = deferred();
+  const operations = mockIdentityDatabase({ unlockGate: unlock.promise });
+  const operation = executeGatewayIdentityRead({
+    gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+    actorUserId: 2, timeoutMs: 30,
+    deps: { publish: async () => { await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT)); } }
+  });
+  try {
+    const outcome = await settleWithin(operation, 70);
+    assert.equal(outcome.kind, 'resolved');
+    if (outcome.kind === 'resolved') assert.equal(outcome.value.status, 'response_observed');
+  } finally {
+    unlock.resolve();
+    await operation.catch(() => undefined);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  const releases = assertClientsReleasedOnce(operations);
+  assert.ok(releases.some((item) => item.params[0] === true), 'the connection holding the lock must be destroyed');
+});
+
+test('identity read is bounded when MQTT publication never resolves', async () => {
+  const publication = deferred();
+  const operations = mockIdentityDatabase();
+  const operation = executeGatewayIdentityRead({
+    gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+    actorUserId: 2, timeoutMs: 20, deps: { publish: async () => publication.promise }
+  });
+  try {
+    const outcome = await settleWithin(operation);
+    assert.equal(outcome.kind, 'resolved');
+    if (outcome.kind === 'resolved') assert.equal(outcome.value.status, 'timed_out');
+  } finally {
+    publication.resolve();
+    await operation.catch(() => undefined);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assertClientsReleasedOnce(operations);
+});
+
+test('database timeout after journal creation is not misreported as publish_error', async () => {
+  const journal = deferred();
+  const operations = mockIdentityDatabase({ publishedJournalGate: journal.promise });
+  const operation = executeGatewayIdentityRead({
+    gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+    actorUserId: 2, timeoutMs: 25, deps: { publish: async () => undefined }
+  });
+  try {
+    const outcome = await settleWithin(operation);
+    assert.equal(outcome.kind, 'rejected');
+    if (outcome.kind === 'rejected') {
+      assert.ok(outcome.error instanceof GatewayIdentityOperationTimeoutError);
+      assert.equal(outcome.error.stage, 'published_journal');
+      assert.equal(outcome.error.readId, '11111111-1111-4111-8111-111111111111');
+    }
+  } finally {
+    journal.resolve();
+    await operation.catch(() => undefined);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.equal(operations.some((item) => item.sql.includes("status = 'publish_error'")), false);
+  const releases = assertClientsReleasedOnce(operations);
+  assert.deepEqual(releases.map((item) => item.params[0]), [true]);
 });
 
 test('identity read times out within its absolute budget when response persistence stalls', async () => {
@@ -152,23 +300,25 @@ test('identity read times out within its absolute budget when response persisten
   try {
     const result = await Promise.race([
       operation,
-      new Promise<{ status: 'still_pending' }>((resolve) => setTimeout(() => resolve({ status: 'still_pending' }), 80))
+      new Promise<{ status: 'still_pending' }>((resolve) => setTimeout(() => resolve({ status: 'still_pending' }), 90))
     ]);
     assert.equal(result.status, 'timed_out');
   } finally {
     releasePersistence();
     await operation.catch(() => undefined);
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
   assert.equal(operations.some((operation) => operation.sql.includes("status = 'response_observed'")), false);
   assert.ok(operations.some((operation) => operation.sql === 'CLIENT_RELEASE' && operation.params[0] === true),
-    'the advisory-lock connection must be destroyed when the absolute budget is exhausted');
+    'the connection with stalled persistence must be destroyed when the absolute budget is exhausted');
+  assertClientsReleasedOnce(operations);
 });
 
 test('failed response persistence cannot resolve the read and expires cleanly', async () => {
   mockIdentityDatabase({ gatewayUpdateError: new Error('simulated persistence failure') });
   const result = await executeGatewayIdentityRead({
     gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
-    actorUserId: 2, timeoutMs: 20,
+    actorUserId: 2, timeoutMs: 40,
     deps: { publish: async () => {
       await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
     } }
@@ -179,7 +329,7 @@ test('failed response persistence cannot resolve the read and expires cleanly', 
 test('identity read handles timeout, publish failure and a busy gateway without stale waiters', async () => {
   const timedOutOperations = mockIdentityDatabase();
   const common = { gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    gatewayMac: '2805a55efb68', actorUserId: 2, timeoutMs: 20 };
+    gatewayMac: '2805a55efb68', actorUserId: 2, timeoutMs: 40 };
   assert.equal((await executeGatewayIdentityRead({ ...common, deps: { publish: async () => undefined } })).status, 'timed_out');
   await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
   assert.equal(timedOutOperations.some((operation) => operation.sql.includes("status = 'response_observed'")), false,

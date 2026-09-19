@@ -18,7 +18,11 @@ import {
 } from '../services/gatewayCommands';
 import { buildBluetoothGatewayCommand, isBluetoothOperation } from '../services/gatewayBluetoothCommands';
 import { hasVerifiedMkgw3V2, parseGatewayFirmwareRecord, requiresMkgw3V2 } from '../services/gatewayCapabilities';
-import { executeGatewayIdentityRead, GatewayIdentityBusyError } from '../services/gatewayIdentity';
+import {
+  executeGatewayIdentityRead,
+  GatewayIdentityBusyError,
+  GatewayIdentityOperationTimeoutError
+} from '../services/gatewayIdentity';
 
 const router = Router();
 
@@ -220,6 +224,13 @@ router.post('/:gatewayId/read-identity', authenticate, authorizeHardware('techni
     const status = result.status === 'response_observed' ? 200 : result.status === 'timed_out' ? 504 : 502;
     return res.status(status).json(result);
   } catch (error) {
+    if (error instanceof GatewayIdentityOperationTimeoutError) {
+      return res.status(504).json({
+        status: 'timed_out',
+        message: 'Gateway identity operation exceeded its timeout',
+        ...(error.readId ? { readId: error.readId } : {})
+      });
+    }
     if (error instanceof GatewayIdentityBusyError || (error as any)?.code === '23505') {
       return res.status(409).json({ message: 'Gateway already has an active operation' });
     }
