@@ -115,20 +115,51 @@ test('identity read journals publication and an observed response without ACK se
   assert.equal(operations.some((item) => /hardware_gateway_commands|ack_success/.test(item.sql)), false);
 });
 
-test('identity read handles timeout, publish failure, busy gateway and pre-publication response', async () => {
+test('identity read observes a response delivered before publish resolves', async () => {
   mockIdentityDatabase();
+  const result = await executeGatewayIdentityRead({
+    gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+    actorUserId: 2, timeoutMs: 20,
+    deps: { publish: async () => {
+      await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
+    } }
+  });
+  assert.equal(result.status, 'response_observed');
+});
+
+test('identity read handles timeout, publish failure and a busy gateway without stale waiters', async () => {
+  const timedOutOperations = mockIdentityDatabase();
   const common = { gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     gatewayMac: '2805a55efb68', actorUserId: 2, timeoutMs: 20 };
   assert.equal((await executeGatewayIdentityRead({ ...common, deps: { publish: async () => undefined } })).status, 'timed_out');
+  await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
+  assert.equal(timedOutOperations.some((operation) => operation.sql.includes("status = 'response_observed'")), false,
+    'a late report may refresh inventory but cannot overwrite the timed-out read');
   mockIdentityDatabase();
   assert.equal((await executeGatewayIdentityRead({ ...common, deps: { publish: async () => { throw new Error('offline'); } } })).status, 'publish_error');
   mockIdentityDatabase({ busy: true });
   await assert.rejects(() => executeGatewayIdentityRead({ ...common, deps: { publish: async () => undefined } }), GatewayIdentityBusyError);
+});
+
+test('an observed response remains final when publish later reports an error', async () => {
   mockIdentityDatabase();
-  const outOfOrder = await executeGatewayIdentityRead({ ...common, deps: { publish: async () => {
+  const result = await executeGatewayIdentityRead({
+    gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gatewayMac: '2805a55efb68',
+    actorUserId: 2, timeoutMs: 50,
+    deps: { publish: async () => {
     await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT));
+    throw new Error('publish callback failed after delivery');
   } } });
-  assert.equal(outOfOrder.status, 'timed_out', 'a response seen before publication cannot resolve the request');
+  assert.equal(result.status, 'response_observed');
+});
+
+test('two consecutive identity reads on the same gateway complete independently', async () => {
+  mockIdentityDatabase();
+  const common = { gatewayId: 41, companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    gatewayMac: '2805a55efb68', actorUserId: 2, timeoutMs: 50 };
+  const publish = async () => { await handleGatewayIdentityReport(TOPIC, JSON.stringify(REPORT)); };
+  assert.equal((await executeGatewayIdentityRead({ ...common, deps: { publish } })).status, 'response_observed');
+  assert.equal((await executeGatewayIdentityRead({ ...common, deps: { publish } })).status, 'response_observed');
 });
 
 test('migration 009 is additive and never rewrites historical rows', () => {
