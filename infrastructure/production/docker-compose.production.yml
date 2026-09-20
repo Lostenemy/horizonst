@@ -1,0 +1,257 @@
+name: horizonst-production
+
+x-common: &common
+  env_file:
+    - /opt/horizonst-production/config/.env
+  restart: unless-stopped
+  networks:
+    - horizonst-production
+
+x-logging-50m: &logging-50m
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
+x-logging-10m: &logging-10m
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    <<: *common
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER must be set}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      POSTGRES_DB: ${DB_NAME:-horizonst}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /opt/horizonst/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - /opt/horizonst/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - /opt/horizonst/db/mqtt.sql:/docker-entrypoint-initdb.d/03-mqtt.sql:ro
+      - /opt/horizonst/db/mqtt-init.sh:/docker-entrypoint-initdb.d/04-mqtt-init.sh:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    logging: *logging-50m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  vernemq:
+    <<: *common
+    build:
+      context: /opt/horizonst
+      dockerfile: vernemq/Dockerfile
+    hostname: vernemq.local
+    tty: true
+    stdin_open: true
+    environment:
+      DOCKER_VERNEMQ_ACCEPT_EULA: "yes"
+      DOCKER_VERNEMQ_ALLOW_ANONYMOUS: "off"
+      DOCKER_VERNEMQ_NODENAME: vernemq.local
+      DOCKER_VERNEMQ_LISTENER__TCP__DEFAULT: 0.0.0.0:1883
+      DOCKER_VERNEMQ_PLUGINS__VMQ_PASSWD: "off"
+      DOCKER_VERNEMQ_PLUGINS__VMQ_ACL: "off"
+      DOCKER_VERNEMQ_PLUGINS__VMQ_DIVERSITY: "on"
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__AUTH_POSTGRES__SCRIPT: /vernemq/share/lua/auth/postgres.lua
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__HOST: postgres
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PORT: "5432"
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__DATABASE: ${DB_NAME:?DB_NAME must be set}
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__USER: ${DB_USER:?DB_USER must be set}
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__POSTGRES__PASSWORD_HASH_METHOD: bcrypt
+      DOCKER_VERNEMQ_VMQ_DIVERSITY__AUTH_POSTGRES__ENABLED: "on"
+    volumes:
+      - vernemq_data:/vernemq/data
+      - vernemq_log:/vernemq/log
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "127.0.0.1:1887:1883"
+    logging: *logging-50m
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/validate-vernemq-runtime"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    <<: *common
+    build:
+      context: /opt/horizonst/backend
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      TRUSTED_PROXY_IP: ${TRUSTED_PROXY_IP:?TRUSTED_PROXY_IP must be the exact Docker bridge gateway}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:?DB_USER must be set}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DB_NAME: ${DB_NAME:-horizonst}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      MQTT_HOST: vernemq
+      MQTT_PORT: "1883"
+      MQTT_USER: ${MQTT_USER:?MQTT_USER must be set}
+      MQTT_PASS: ${MQTT_PASS:?MQTT_PASS must be set}
+      MQTT_CLIENT_ID: acces_control_server_backend
+      MQTT_REQUIRED: "true"
+      MQTT_PERSISTENCE_MODE: app
+      MQTT_RAW_RETENTION_HOURS: ${MQTT_RAW_RETENTION_HOURS:-48}
+      MQTT_MAINTENANCE_INTERVAL_MS: ${MQTT_MAINTENANCE_INTERVAL_MS:-60000}
+      MQTT_MAINTENANCE_BATCH_SIZE: ${MQTT_MAINTENANCE_BATCH_SIZE:-10000}
+      INTERNAL_SERVICE_RATE_LIMIT_PER_MINUTE: ${INTERNAL_SERVICE_RATE_LIMIT_PER_MINUTE:-120}
+      GATEWAY_COMMAND_TIMEOUT_MS: ${GATEWAY_COMMAND_TIMEOUT_MS:-8000}
+      GATEWAY_COMMAND_SWEEP_INTERVAL_MS: ${GATEWAY_COMMAND_SWEEP_INTERVAL_MS:-5000}
+      B5_SESSION_PASSWORD: ${B5_SESSION_PASSWORD:?B5_SESSION_PASSWORD must be set}
+      B5_CONNECT_TIMEOUT_MS: ${B5_CONNECT_TIMEOUT_MS:-12000}
+      B5_ACTION_TIMEOUT_MS: ${B5_ACTION_TIMEOUT_MS:-8000}
+      MAIL_ENABLED: ${BACKEND_MAIL_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vernemq:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${HARDWARE_MANAGER_PORT:-3000}:3000"
+    logging: *logging-50m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  cold_compliance_service:
+    <<: *common
+    build:
+      context: /opt/horizonst/cold-compliance-service
+    environment:
+      NODE_ENV: production
+      PORT: "3100"
+      TRUSTED_PROXY_IP: ${TRUSTED_PROXY_IP:?TRUSTED_PROXY_IP must be the exact Docker bridge gateway}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:?DB_USER must be set}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DB_NAME: ${COLD_COMPLIANCE_DB_NAME:-cold_compliance}
+      MQTT_URL: mqtt://vernemq:1883
+      MQTT_USERNAME: ${MQTT_USER:?MQTT_USER must be set}
+      MQTT_PASSWORD: ${MQTT_PASS:?MQTT_PASS must be set}
+      MQTT_CLIENT_ID: cold-compliance-service-production
+      MQTT_SUB_TOPICS: ${COLD_MQTT_SUB_TOPICS:-}
+      HARDWARE_MANAGER_ENABLED: ${HARDWARE_MANAGER_ENABLED:-false}
+      HARDWARE_MANAGER_BASE_URL: http://app:3000
+      HARDWARE_MANAGER_SERVICE_TOKEN: ${HARDWARE_MANAGER_SERVICE_TOKEN:-}
+      HARDWARE_MANAGER_TIMEOUT_MS: ${HARDWARE_MANAGER_TIMEOUT_MS:-3000}
+      HARDWARE_MANAGER_COMMAND_TIMEOUT_MS: ${HARDWARE_MANAGER_COMMAND_TIMEOUT_MS:-20000}
+      HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS: ${HARDWARE_MANAGER_B5_CONFIGURATION_TIMEOUT_MS:-45000}
+      HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS: ${HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS:-30000}
+      HARDWARE_MANAGER_CACHE_TTL_MS: ${HARDWARE_MANAGER_CACHE_TTL_MS:-30000}
+      HARDWARE_MANAGER_CACHE_ERROR_TTL_MS: ${HARDWARE_MANAGER_CACHE_ERROR_TTL_MS:-5000}
+      PRESENCE_RSSI_ENTRY_MARGIN_DB: ${PRESENCE_RSSI_ENTRY_MARGIN_DB:-5}
+      PRESENCE_HEARTBEAT_RETENTION_DAYS: ${PRESENCE_HEARTBEAT_RETENTION_DAYS:-7}
+      PRESENCE_MAINTENANCE_INTERVAL_MS: ${PRESENCE_MAINTENANCE_INTERVAL_MS:-60000}
+      PRESENCE_MAINTENANCE_BATCH_SIZE: ${PRESENCE_MAINTENANCE_BATCH_SIZE:-10000}
+      SYNC_QUEUE_ENABLED: "false"
+      SYNC_QUEUE_SYNCED_RETENTION_HOURS: ${SYNC_QUEUE_SYNCED_RETENTION_HOURS:-24}
+      TAG_ALARM_BLE_SESSION_TTL_MS: ${TAG_ALARM_BLE_SESSION_TTL_MS:-120000}
+      TAG_CONTROL_GATEWAY_STRATEGY: ${TAG_CONTROL_GATEWAY_STRATEGY:-hybrid}
+      MAIL_ENABLED: ${COLD_MAIL_ENABLED:-true}
+      MAIL_HOST: ${COLD_MAIL_HOST:-mail.horizonst.es}
+      MAIL_PORT: ${COLD_MAIL_PORT:-465}
+      MAIL_SECURE: ${COLD_MAIL_SECURE:-true}
+      MAIL_USER: ${COLD_MAIL_USER:-}
+      MAIL_PASSWORD: ${COLD_MAIL_PASSWORD:-}
+      MAIL_FROM: ${COLD_MAIL_FROM:-no_reply@horizonst.es}
+      MAIL_EHLO_DOMAIN: ${COLD_MAIL_EHLO_DOMAIN:-horizonst.es}
+      MAIL_TLS_REJECT_UNAUTHORIZED: ${COLD_MAIL_TLS_REJECT_UNAUTHORIZED:-true}
+      APP_BASE_URL: ${COLD_APP_BASE_URL:-https://horneo.horizonst.es}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vernemq:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3100:3100"
+    logging: *logging-50m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/health || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+
+  horizonst_store:
+    <<: *common
+    build:
+      context: /opt/horizonst/horizonst-store
+    environment:
+      NODE_ENV: production
+      PORT: "4020"
+      TRUSTED_PROXY_IP: ${TRUSTED_PROXY_IP:?TRUSTED_PROXY_IP must be the exact Docker bridge gateway}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:?DB_USER must be set}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DB_NAME: ${DB_NAME:-horizonst}
+      STORE_DOCUMENTS_PATH: /opt/horizonst/store-data/documents
+      STORE_CORS_ORIGIN: ${STORE_CORS_ORIGIN:?STORE_CORS_ORIGIN must be set}
+      STORE_PUBLIC_BASE_URL: ${STORE_PUBLIC_BASE_URL:?STORE_PUBLIC_BASE_URL must be set}
+      STORE_JWT_SECRET: ${STORE_JWT_SECRET:?STORE_JWT_SECRET must be set}
+      STORE_ACCESS_TOKEN_TTL: ${STORE_ACCESS_TOKEN_TTL:-15m}
+      STORE_REFRESH_TOKEN_TTL: ${STORE_REFRESH_TOKEN_TTL:-30d}
+      STORE_PASSWORD_RESET_TTL: ${STORE_PASSWORD_RESET_TTL:-1h}
+      STORE_EMAIL_VERIFICATION_TTL: ${STORE_EMAIL_VERIFICATION_TTL:-24h}
+      STORE_MAIL_ENABLED: ${STORE_MAIL_ENABLED:-false}
+      STORE_MAIL_HOST: ${STORE_MAIL_HOST:-mail.horizonst.es}
+      STORE_MAIL_PORT: ${STORE_MAIL_PORT:-465}
+      STORE_MAIL_SECURE: ${STORE_MAIL_SECURE:-true}
+      STORE_MAIL_USER: ${STORE_MAIL_USER:-}
+      STORE_MAIL_PASSWORD: ${STORE_MAIL_PASSWORD:-}
+      STORE_MAIL_FROM: ${STORE_MAIL_FROM:-no_reply@horizonst.es}
+      STORE_MAIL_EHLO_DOMAIN: ${STORE_MAIL_EHLO_DOMAIN:-horizonst.es}
+      STORE_MAIL_TLS_REJECT_UNAUTHORIZED: ${STORE_MAIL_TLS_REJECT_UNAUTHORIZED:-true}
+      STORE_MAIL_COMMERCIAL_TO: ${STORE_MAIL_COMMERCIAL_TO:-comercial@horizonst.es}
+      STORE_APPCC_GUIDE_URL: ${STORE_APPCC_GUIDE_URL:-https://horizonst.es/recursos/guia-appcc-2026.pdf}
+    volumes:
+      - /opt/horizonst/store-data/documents:/opt/horizonst/store-data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4020:4020"
+    logging: *logging-10m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4020/health || exit 1"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+
+networks:
+  horizonst-production:
+    external: true
+    name: horizonst-production
+
+volumes:
+  postgres_data:
+    external: true
+    name: horizonst-production-postgres-data
+  vernemq_data:
+    external: true
+    name: horizonst-production-vernemq-data
+  vernemq_log:
+    external: true
+    name: horizonst-production-vernemq-log
