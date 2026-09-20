@@ -3,7 +3,11 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { cleanupOwnedContainer, startIsolatedPostgres } from './postgres-container-lifecycle.mjs';
+import {
+  cleanupOwnedContainer,
+  startIsolatedPostgres,
+  waitForStablePostgres
+} from './postgres-container-lifecycle.mjs';
 
 const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const base = '9f5754d378491772b2730a9adc1fe88edc86dd31';
@@ -38,12 +42,23 @@ let hostPort;
 try {
   assert.equal(execFileSync('git', ['rev-parse', `${base}^{commit}`], { cwd: root, encoding: 'utf8' }).trim(), base);
   hostPort = startIsolatedPostgres({ docker, state: containerState });
-  for (let i = 0; i < 60; i += 1) {
-    const ready = spawnSync('docker', ['exec', name, 'pg_isready', '-U', 'fixture', '-d', 'horizonst']);
-    if (ready.status === 0) break;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
-    if (i === 59) throw new Error('isolated PostgreSQL 15 did not become ready');
-  }
+  waitForStablePostgres({
+    readLogs: () => {
+      const result = spawnSync('docker', ['logs', '--tail', '80', name], {
+        cwd: root, encoding: 'utf8', timeout: 2000
+      });
+      return `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    },
+    probeSql: () => {
+      const result = spawnSync('docker', [
+        'exec', '-i', name, 'psql', '-X', '-v', 'ON_ERROR_STOP=1',
+        '-U', 'fixture', '-d', 'horizonst', '-tAc', 'SELECT 1'
+      ], { cwd: root, encoding: 'utf8', timeout: 2000 });
+      return result.status === 0 && result.stdout.trim() === '1';
+    },
+    timeoutMs: 60_000,
+    redactValues: [password]
+  });
   const version = scalar('horizonst', "SELECT current_setting('server_version')");
   assert.match(version, /^15\./);
 
