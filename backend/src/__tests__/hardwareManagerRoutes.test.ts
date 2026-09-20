@@ -58,7 +58,7 @@ const api = (path: string, id?: number, role?: Parameters<typeof signToken>[0]['
   });
 
 function fakeDatabase(verifiedFirmware = false) {
-  const observations = { published: [] as Array<{ topic: string; payload: any }>, auditQueries: 0, readQueries: 0, observedQueries: 0, commandInserts: 0, readInserts: 0 };
+  const observations = { published: [] as Array<{ topic: string; payload: any }>, auditQueries: 0, readQueries: 0, observedQueries: 0, snapshotQueries: 0, commandInserts: 0, readInserts: 0 };
   (pool as any).connect = async () => ({
     query: async (sql: string, params: unknown[] = []) => {
       if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
@@ -67,6 +67,9 @@ function fakeDatabase(verifiedFirmware = false) {
       if (sql.includes('UPDATE gateways SET') && sql.includes('reported_device_name')) return { rows: [{ id: 41 }] };
       if (sql.includes('SELECT id, company_id FROM gateways')) return { rows: [{ id: 41, company_id: COMPANY_A }] };
       if (sql.includes('INSERT INTO hardware_gateway_observed_settings')) return { rows: [], rowCount: 1 };
+      if (sql.includes('INSERT INTO hardware_gateway_ble_snapshots')) return { rows: [], rowCount: 1 };
+      if (sql.includes('DELETE FROM hardware_gateway_ble_snapshot_items')) return { rows: [], rowCount: 1 };
+      if (sql.includes('INSERT INTO hardware_gateway_ble_snapshot_items')) return { rows: [], rowCount: 1 };
       if (sql.includes('UPDATE hardware_gateway_reads')) return { rows: [], rowCount: 1 };
       if (sql.includes('INSERT INTO hardware_gateway_reads')) {
         observations.readInserts += 1;
@@ -130,6 +133,11 @@ function fakeDatabase(verifiedFirmware = false) {
       return { rows: [{ read_type: 'led_state', msg_id: 2011,
         observed_value: { net_led: 1, sys_led: 1, server_led: 1 }, observed_at: new Date().toISOString() }] };
     }
+    if (sql.includes('FROM hardware_gateway_ble_snapshots s')) {
+      observations.snapshotQueries += 1;
+      return { rows: [{ msg_id: 2201, device_count: 1, observed_at: new Date().toISOString(),
+        devices: [{ mac: 'fd9d4f8ae226', type: 2 }] }] };
+    }
     if (sql.includes('UPDATE hardware_gateway_commands')) return { rows: [], rowCount: 0 };
     if (sql.includes('INSERT INTO technical_audit_log')) return { rows: [] };
     if (sql.includes('FROM technical_audit_log')) {
@@ -158,6 +166,13 @@ function fakeDatabase(verifiedFirmware = false) {
     if (configurationReports[payload.msg_id]) {
       await handleGatewayConfigurationReport('gw/2805a55efb68/publish', JSON.stringify({
         msg_id: payload.msg_id, device_info: { mac: '2805a55efb68' }, data: configurationReports[payload.msg_id]
+      }));
+      return;
+    }
+    if (payload.msg_id === 2201) {
+      await handleGatewayConfigurationReport('gw/2805a55efb68/publish', JSON.stringify({
+        msg_id: 2201, device_info: { mac: '2805a55efb68' },
+        data: { ble_conn_list: [{ mac: 'fd9d4f8ae226', type: 2 }] }
       }));
       return;
     }
@@ -358,6 +373,32 @@ test('latest observed settings are readable only within the gateway company', as
   const foreign = fakeDatabase();
   assert.equal((await api('/api/gateways/41/observed-settings', 3, 'hardware_technician')).status, 404);
   assert.equal(foreign.observedQueries, 0);
+});
+
+test('BLE connected snapshot read is technician-only and latest snapshot is company-scoped', async () => {
+  const path = '/api/gateways/41/read-ble-connected-devices';
+  for (const [id, role, expected] of [
+    [undefined, undefined, 401], [1, 'hardware_readonly', 403], [3, 'hardware_technician', 404]
+  ] as const) {
+    const observed = fakeDatabase();
+    assert.equal((await api(path, id, role as any, { method: 'POST', body: '{}' })).status, expected);
+    assert.equal(observed.published.length, 0);
+  }
+  const own = fakeDatabase();
+  const response = await api(path, 2, 'hardware_technician', { method: 'POST', body: '{}' });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, 'response_observed');
+  assert.deepEqual(own.published, [{ topic: 'gw/2805a55efb68/subscribe',
+    payload: { msg_id: 2201, device_info: { mac: '2805A55EFB68' } } }]);
+
+  const visible = fakeDatabase();
+  const latest = await api('/api/gateways/41/ble-connected-devices', 1, 'hardware_readonly');
+  assert.equal(latest.status, 200);
+  assert.deepEqual((await latest.json()).devices, [{ mac: 'fd9d4f8ae226', type: 2 }]);
+  assert.equal(visible.snapshotQueries, 1);
+  const foreign = fakeDatabase();
+  assert.equal((await api('/api/gateways/41/ble-connected-devices', 3, 'hardware_technician')).status, 404);
+  assert.equal(foreign.snapshotQueries, 0);
 });
 
 test('audit metadata is scoped to the gateway company', async () => {

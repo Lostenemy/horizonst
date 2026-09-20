@@ -30,10 +30,18 @@ test('technical gateway panel uses existing central command endpoints and never 
     assert.match(html, new RegExp(`data-config-read="${readType}"`));
   }
   assert.match(html, /gatewayObservedSettingsTable/);
+  assert.match(html, /gatewayReadBleConnections/);
+  assert.match(html, /gatewayBleSnapshotTable/);
+  assert.match(html, /No confirma una conexión B5/);
   assert.match(ui, /\/read-configuration\/\$\{readType\}/);
+  assert.match(ui, /\/read-ble-connected-devices/);
+  assert.match(ui, /\/ble-connected-devices/);
   const observedRenderer = ui.split('renderHistory\(observedSettingsBody')[1].split('\]\);')[0];
   assert.doesNotMatch(observedRenderer, /innerHTML|insertAdjacentHTML/);
   assert.match(ui, /cell\.textContent/);
+  const bleRenderer = ui.split('bleSnapshotBody.replaceChildren')[1].split("} catch (error)")[0];
+  assert.doesNotMatch(bleRenderer, /innerHTML|insertAdjacentHTML/);
+  assert.match(bleRenderer, /textContent|renderHistory/);
   assert.doesNotMatch(ui, /innerHTML\s*=\s*`[^`]*\$\{/);
   assert.doesNotMatch(ui, /read-configuration\/all|Promise\.all\([^)]*read-configuration/);
   const renderer = ui.split('const renderReportedIdentity')[1].split('const selectGateway')[0];

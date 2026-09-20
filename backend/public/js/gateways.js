@@ -27,11 +27,15 @@ const technicalFeedback = document.getElementById('gatewayTechnicalFeedback');
 const firmwareRecordButton = document.getElementById('gatewayRecordFirmware');
 const firmwareClearButton = document.getElementById('gatewayClearFirmware');
 const identityReadButton = document.getElementById('gatewayReadIdentity');
+const bleConnectionsReadButton = document.getElementById('gatewayReadBleConnections');
 const reportedIdentity = document.getElementById('gatewayReportedIdentity');
 const gatewayRssi = document.getElementById('gatewayRssi');
 const commandsBody = document.querySelector('#gatewayCommandsTable tbody');
 const readsBody = document.querySelector('#gatewayReadsTable tbody');
 const observedSettingsBody = document.querySelector('#gatewayObservedSettingsTable tbody');
+const bleSnapshotBody = document.querySelector('#gatewayBleSnapshotTable tbody');
+const bleSnapshotObservedAt = document.getElementById('gatewayBleSnapshotObservedAt');
+const bleSnapshotEmpty = document.getElementById('gatewayBleSnapshotEmpty');
 const auditBody = document.querySelector('#gatewayAuditTable tbody');
 const devicesBody = document.querySelector('#gatewayDevicesTable tbody');
 
@@ -198,11 +202,11 @@ const handleDeleteGateway = async (gateway) => {
 
 const renderHistory = (body, items, columns) => {
   body.replaceChildren();
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     const row = document.createElement('tr');
     for (const column of columns) {
       const cell = document.createElement('td');
-      cell.textContent = String(column(item) ?? '—');
+      cell.textContent = String(column(item, index) ?? '—');
       row.appendChild(cell);
     }
     body.appendChild(row);
@@ -213,11 +217,12 @@ const refreshTechnicalHistory = async () => {
   if (!selectedGateway || document.hidden) return;
   const gatewayId = selectedGateway.id;
   try {
-    const [commands, reads, audit, observedSettings] = await Promise.all([
+    const [commands, reads, audit, observedSettings, bleSnapshot] = await Promise.all([
       apiGet(`/gateways/${gatewayId}/commands`),
       apiGet(`/gateways/${gatewayId}/reads`),
       apiGet(`/gateways/${gatewayId}/audit`),
-      apiGet(`/gateways/${gatewayId}/observed-settings`)
+      apiGet(`/gateways/${gatewayId}/observed-settings`),
+      apiGet(`/gateways/${gatewayId}/ble-connected-devices`)
     ]);
     if (selectedGateway?.id !== gatewayId) return;
     renderHistory(commandsBody, commands, [
@@ -244,6 +249,20 @@ const refreshTechnicalHistory = async () => {
       (item) => JSON.stringify(item.observed_value),
       (item) => new Date(item.observed_at).toLocaleString('es-ES')
     ]);
+    bleSnapshotBody.replaceChildren();
+    bleSnapshotEmpty.hidden = true;
+    if (!bleSnapshot) {
+      bleSnapshotObservedAt.textContent = 'Sin fotografía observada.';
+    } else {
+      bleSnapshotObservedAt.textContent = `Observada: ${new Date(bleSnapshot.observed_at).toLocaleString('es-ES')}`;
+      const devices = Array.isArray(bleSnapshot.devices) ? bleSnapshot.devices : [];
+      bleSnapshotEmpty.hidden = devices.length !== 0;
+      renderHistory(bleSnapshotBody, devices, [
+        (_item, index) => index + 1,
+        (item) => item.mac,
+        (item) => item.type
+      ]);
+    }
   } catch (error) {
     technicalFeedback.textContent = `No se pudo actualizar el historial: ${error.message}`;
   }
@@ -322,6 +341,23 @@ identityReadButton.addEventListener('click', async () => {
     technicalFeedback.textContent = `No se pudo consultar la identidad: ${error.message}`;
     await refreshTechnicalHistory();
   }
+});
+
+bleConnectionsReadButton.addEventListener('click', async () => {
+  if (!selectedGateway || !canEditHardware) return;
+  if (!await confirmAction({
+    title: 'Consultar dispositivos BLE conectados',
+    message: `Publicar la lectura 2201 para ${selectedGateway.mac_address}? Se guardará una fotografía observada, no una confirmación B5.`,
+    confirmText: 'Consultar'
+  })) return;
+  try {
+    technicalFeedback.textContent = 'Esperando una respuesta 2201 observada…';
+    const result = await apiPost(`/gateways/${selectedGateway.id}/read-ble-connected-devices`, {});
+    technicalFeedback.textContent = result.message;
+  } catch (error) {
+    technicalFeedback.textContent = `No se pudo observar la lista BLE conectada: ${error.message}`;
+  }
+  await refreshTechnicalHistory();
 });
 
 for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {

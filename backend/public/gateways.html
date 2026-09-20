@@ -80,6 +80,7 @@
           <button type="button" id="gatewayApplyRssi">Aplicar RSSI</button>
           <button type="button" id="gatewayConfigureB5">Configurar doble pulsación B5</button>
           <button type="button" id="gatewayReadIdentity">Consultar identidad de la gateway</button>
+          <button type="button" id="gatewayReadBleConnections">Consultar dispositivos BLE conectados (2201)</button>
           <button type="button" id="gatewayRecordFirmware">Registrar modelo y firmware verificados</button>
           <button type="button" id="gatewayClearFirmware">Marcar firmware como desconocido</button>
         </div>
@@ -128,6 +129,13 @@
         <div class="table-wrapper"><table id="gatewayObservedSettingsTable">
           <thead><tr><th>Lectura</th><th>Valor observado</th><th>Fecha</th></tr></thead><tbody></tbody>
         </table></div>
+        <h3>Última lista BLE conectada observada</h3>
+        <p>Fotografía 2201 no correlacionada. No confirma una conexión B5 ni habilita acciones físicas.</p>
+        <p id="gatewayBleSnapshotObservedAt">Sin fotografía observada.</p>
+        <div class="table-wrapper"><table id="gatewayBleSnapshotTable">
+          <thead><tr><th>Posición</th><th>MAC</th><th>Código type del firmware</th></tr></thead><tbody></tbody>
+        </table></div>
+        <p id="gatewayBleSnapshotEmpty" hidden>La gateway observó una lista BLE conectada vacía.</p>
         <h3>Lecturas técnicas recientes</h3>
         <div class="table-wrapper"><table id="gatewayReadsTable">
           <thead><tr><th>Fecha</th><th>Lectura</th><th>Estado</th><th>Respuesta observada</th></tr></thead><tbody></tbody>

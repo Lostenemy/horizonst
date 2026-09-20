@@ -1,5 +1,7 @@
 # Hardware Manager: inventario y límites del protocolo
 
+La lectura observada de dispositivos BLE conectados (`2201`) se documenta en `hardware-manager-ble-connected-devices-2201.md`. Se conserva como fotografía no correlacionada y no interviene en B5 ni en acciones físicas.
+
 Estado de esta rama: implementación parcial; **no apta aún para desplegar como Hardware Manager completo**.
 
 ## Fuente de verdad y Horneo

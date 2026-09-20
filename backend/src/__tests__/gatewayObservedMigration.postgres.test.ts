@@ -51,7 +51,7 @@ const assertRejectedValue = async (
   );
 };
 
-test('migration 010 applies on PostgreSQL 15, enforces exact values and is runner-idempotent', {
+test('migrations 010 and 011 apply on PostgreSQL 15, preserve 009 and are runner-idempotent', {
   skip: enabled ? false : 'requires an explicit isolated PostgreSQL 15 database'
 }, async () => {
   const client = new Client(connectionConfig);
@@ -59,6 +59,10 @@ test('migration 010 applies on PostgreSQL 15, enforces exact values and is runne
   await copyFile(
     path.resolve(process.cwd(), 'migrations', '010_gateway_observed_configuration_reads.sql'),
     path.join(migrationsDir, '010_gateway_observed_configuration_reads.sql')
+  );
+  await copyFile(
+    path.resolve(process.cwd(), 'migrations', '011_gateway_ble_connected_devices.sql'),
+    path.join(migrationsDir, '011_gateway_ble_connected_devices.sql')
   );
   await client.connect();
   try {
@@ -77,9 +81,13 @@ test('migration 010 applies on PostgreSQL 15, enforces exact values and is runne
       CREATE TABLE device_categories (id INTEGER PRIMARY KEY);
       CREATE TABLE places (id INTEGER PRIMARY KEY);
       CREATE TABLE mqtt_messages (id BIGSERIAL PRIMARY KEY);
-      INSERT INTO companies(id) VALUES ('11111111-1111-4111-8111-111111111111');
+      INSERT INTO companies(id) VALUES
+        ('11111111-1111-4111-8111-111111111111'),
+        ('22222222-2222-4222-8222-222222222222');
       INSERT INTO users(id) VALUES (1);
-      INSERT INTO gateways(id, company_id) VALUES (1, '11111111-1111-4111-8111-111111111111');
+      INSERT INTO gateways(id, company_id) VALUES
+        (1, '11111111-1111-4111-8111-111111111111'),
+        (2, '11111111-1111-4111-8111-111111111111');
     `);
     await client.query(
       await import('node:fs/promises').then((fs) => fs.readFile(
@@ -112,6 +120,10 @@ test('migration 010 applies on PostgreSQL 15, enforces exact values and is runne
        WHERE name = '010_gateway_observed_configuration_reads.sql'`
     );
     assert.equal(migrationRows.rowCount, 1);
+    assert.equal((await client.query(
+      `SELECT count(*)::int AS count FROM app_schema_migrations
+       WHERE name IN ('010_gateway_observed_configuration_reads.sql', '011_gateway_ble_connected_devices.sql')`
+    )).rows[0].count, 2);
     assert.deepEqual(
       (await client.query(
         `SELECT id::text, gateway_id, company_id::text, msg_id, read_type,
@@ -199,6 +211,66 @@ test('migration 010 applies on PostgreSQL 15, enforces exact values and is runne
       await assertRejectedValue(client, readType, msgId, value);
     }
 
+    await client.query(
+      `INSERT INTO hardware_gateway_reads
+         (gateway_id, company_id, msg_id, read_type, request_payload, status, actor_user_id, timeout_ms)
+       VALUES (1, '11111111-1111-4111-8111-111111111111', 2201, 'ble_connected_devices',
+               '{"msg_id":2201}'::jsonb, 'response_observed', 1, 1000)`
+    );
+    await client.query(
+      `INSERT INTO hardware_gateway_ble_snapshots(gateway_id, company_id, device_count)
+       VALUES (1, '11111111-1111-4111-8111-111111111111', 0)`
+    );
+    assert.deepEqual((await client.query(
+      `SELECT device_count, (SELECT count(*)::int FROM hardware_gateway_ble_snapshot_items i
+                             WHERE i.gateway_id = s.gateway_id) AS item_count
+       FROM hardware_gateway_ble_snapshots s WHERE gateway_id = 1`
+    )).rows, [{ device_count: 0, item_count: 0 }]);
+    await client.query(
+      `UPDATE hardware_gateway_ble_snapshots SET device_count = 2 WHERE gateway_id = 1;
+       INSERT INTO hardware_gateway_ble_snapshot_items
+         (gateway_id, company_id, position, device_mac, firmware_type)
+       VALUES
+         (1, '11111111-1111-4111-8111-111111111111', 0, 'fd9d4f8ae226', 2),
+         (1, '11111111-1111-4111-8111-111111111111', 1, 'f074bff07dc9', -7)`
+    );
+    assert.deepEqual((await client.query(
+      `SELECT position, device_mac::text, firmware_type
+       FROM hardware_gateway_ble_snapshot_items WHERE gateway_id = 1 ORDER BY position`
+    )).rows, [
+      { position: 0, device_mac: 'fd9d4f8ae226', firmware_type: 2 },
+      { position: 1, device_mac: 'f074bff07dc9', firmware_type: -7 }
+    ]);
+    await assert.rejects(client.query(
+      `INSERT INTO hardware_gateway_ble_snapshots(gateway_id, company_id, device_count)
+       VALUES (2, '22222222-2222-4222-8222-222222222222', 0)`
+    ), { code: '23503' });
+    await assert.rejects(client.query(
+      `INSERT INTO hardware_gateway_ble_snapshot_items
+         (gateway_id, company_id, position, device_mac, firmware_type)
+       VALUES (1, '22222222-2222-4222-8222-222222222222', 2, 'aaaaaaaaaaaa', 1)`
+    ), { code: '23503' });
+    await assert.rejects(client.query(
+      `INSERT INTO hardware_gateway_ble_snapshot_items
+         (gateway_id, company_id, position, device_mac, firmware_type)
+       VALUES (1, '11111111-1111-4111-8111-111111111111', 2, 'INVALID-MAC!', 1)`
+    ), { code: '23514' });
+    await assert.rejects(client.query(
+      `INSERT INTO hardware_gateway_ble_snapshot_items
+         (gateway_id, company_id, position, device_mac, firmware_type)
+       VALUES (1, '11111111-1111-4111-8111-111111111111', 2, 'fd9d4f8ae226', 3)`
+    ), { code: '23505' });
+    await assert.rejects(client.query(
+      `INSERT INTO hardware_gateway_ble_snapshot_items
+         (gateway_id, company_id, position, device_mac, firmware_type)
+       VALUES (1, '11111111-1111-4111-8111-111111111111', -1, 'bbbbbbbbbbbb', 1)`
+    ), { code: '23514' });
+    await assert.rejects(client.query(
+      `INSERT INTO hardware_gateway_ble_snapshot_items
+         (gateway_id, company_id, position, device_mac, firmware_type)
+       VALUES (1, '11111111-1111-4111-8111-111111111111', 2, 'bbbbbbbbbbbb', 2147483648)`
+    ), { code: '22003' });
+
     runMigrationExecutor(migrationsDir);
     assert.equal(
       (await client.query(
@@ -209,8 +281,12 @@ test('migration 010 applies on PostgreSQL 15, enforces exact values and is runne
     );
     assert.equal(
       (await client.query('SELECT count(*)::int AS count FROM hardware_gateway_reads')).rows[0].count,
-      1
+      2
     );
+    assert.equal((await client.query(
+      `SELECT count(*)::int AS count FROM app_schema_migrations
+       WHERE name = '011_gateway_ble_connected_devices.sql'`
+    )).rows[0].count, 1);
   } finally {
     await client.end();
     await rm(migrationsDir, { recursive: true, force: true });

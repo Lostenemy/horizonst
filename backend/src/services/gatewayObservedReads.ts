@@ -10,9 +10,11 @@ export type GatewayConfigurationReadType =
   | 'led_state'
   | 'ble_scan_switch'
   | 'filter_relation'
-  | 'duplicate_rule';
+  | 'duplicate_rule'
+  | 'ble_connected_devices';
 
-export type GatewayConfigurationData = Record<string, number>;
+export type GatewayConnectedDevice = { mac: string; type: number };
+export type GatewayConfigurationData = Record<string, number> | { ble_conn_list: GatewayConnectedDevice[] };
 
 export interface ObservedGatewayConfiguration {
   gatewayMac: string;
@@ -25,14 +27,16 @@ export interface ObservedGatewayConfiguration {
 type ReadDefinition = {
   msgId: number;
   readType: GatewayConfigurationReadType;
-  ranges: Record<string, readonly [number, number]>;
+  ranges?: Record<string, readonly [number, number]>;
+  snapshot?: true;
 };
 
 const READ_DEFINITIONS: readonly ReadDefinition[] = [
   { msgId: 2011, readType: 'led_state', ranges: { net_led: [0, 1], sys_led: [0, 1], server_led: [0, 1] } },
   { msgId: 2040, readType: 'ble_scan_switch', ranges: { scan_switch: [0, 1] } },
   { msgId: 2041, readType: 'filter_relation', ranges: { relation: [0, 8] } },
-  { msgId: 2057, readType: 'duplicate_rule', ranges: { rule: [0, 3] } }
+  { msgId: 2057, readType: 'duplicate_rule', ranges: { rule: [0, 3] } },
+  { msgId: 2201, readType: 'ble_connected_devices', snapshot: true }
 ];
 const definitionByMsgId = new Map(READ_DEFINITIONS.map((item) => [item.msgId, item]));
 const definitionByReadType = new Map(READ_DEFINITIONS.map((item) => [item.readType, item]));
@@ -148,6 +152,25 @@ const exactIntegerData = (
   return Object.fromEntries(keys.map((key) => [key, Number(data[key])]));
 };
 
+const exactConnectedDevicesData = (value: unknown): { ble_conn_list: GatewayConnectedDevice[] } | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const data = value as Record<string, unknown>;
+  if (Object.keys(data).join(',') !== 'ble_conn_list' || !Array.isArray(data.ble_conn_list)) return null;
+  const seen = new Set<string>();
+  const devices: GatewayConnectedDevice[] = [];
+  for (const value of data.ble_conn_list) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const item = value as Record<string, unknown>;
+    if (Object.keys(item).sort().join(',') !== 'mac,type') return null;
+    const mac = typeof item.mac === 'string' && /^[0-9a-f]{12}$/.test(item.mac) ? item.mac : null;
+    if (!mac || seen.has(mac) || !Number.isInteger(item.type)
+        || Number(item.type) < -2147483648 || Number(item.type) > 2147483647) return null;
+    seen.add(mac);
+    devices.push({ mac, type: Number(item.type) });
+  }
+  return { ble_conn_list: devices };
+};
+
 const inspectGatewayConfigurationReport = (topic: string, payload: unknown): ReportInspection | null => {
   const topicMatch = topic.match(/^gw\/([0-9a-f]{12})\/publish$/i);
   if (!topicMatch || !payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
@@ -163,7 +186,9 @@ const inspectGatewayConfigurationReport = (topic: string, payload: unknown): Rep
       || Object.keys(root.device_info).join(',') !== 'mac') return invalid();
   const payloadMac = normalizeGatewayMac((root.device_info as Record<string, unknown>).mac);
   if (payloadMac !== topicMac) return invalid();
-  const data = exactIntegerData(root.data, definition.ranges);
+  const data = definition.snapshot
+    ? exactConnectedDevicesData(root.data)
+    : exactIntegerData(root.data, definition.ranges!);
   if (!data) return invalid();
   return {
     kind: 'valid',
@@ -203,6 +228,29 @@ const persistLatestValue = async (
     deadline, 'response_gateway_scope', waiter?.readId);
   const row = gateway.rows[0];
   if (!row) return false;
+  if (report.readType === 'ble_connected_devices') {
+    const devices = (report.data as { ble_conn_list: GatewayConnectedDevice[] }).ble_conn_list;
+    await queryUntil(managed,
+      `INSERT INTO hardware_gateway_ble_snapshots
+         (gateway_id, company_id, msg_id, device_count, observed_at)
+       VALUES($1,$2,2201,$3,NOW())
+       ON CONFLICT (gateway_id) DO UPDATE SET
+         company_id = EXCLUDED.company_id, msg_id = EXCLUDED.msg_id,
+         device_count = EXCLUDED.device_count, observed_at = EXCLUDED.observed_at`,
+      [row.id, row.company_id, devices.length], deadline, 'response_snapshot_header', waiter?.readId);
+    await queryUntil(managed,
+      'DELETE FROM hardware_gateway_ble_snapshot_items WHERE gateway_id = $1 AND company_id = $2',
+      [row.id, row.company_id], deadline, 'response_snapshot_replace', waiter?.readId);
+    for (const [position, device] of devices.entries()) {
+      await queryUntil(managed,
+        `INSERT INTO hardware_gateway_ble_snapshot_items
+           (gateway_id, company_id, position, device_mac, firmware_type)
+         VALUES($1,$2,$3,$4,$5)`,
+        [row.id, row.company_id, position, device.mac, device.type],
+        deadline, 'response_snapshot_item', waiter?.readId);
+    }
+    return true;
+  }
   await queryUntil(managed,
     `INSERT INTO hardware_gateway_observed_settings
        (gateway_id, company_id, read_type, msg_id, observed_value, observed_at)

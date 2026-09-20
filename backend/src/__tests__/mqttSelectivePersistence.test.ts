@@ -39,6 +39,9 @@ test('app persistence stores MK4 raw input but never raw gw traffic including 30
         return { rows: [{ id: 41, company_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }] };
       }
       if (sql.includes('INSERT INTO hardware_gateway_observed_settings')) return { rows: [], rowCount: 1 };
+      if (sql.includes('INSERT INTO hardware_gateway_ble_snapshots')) return { rows: [], rowCount: 1 };
+      if (sql.includes('DELETE FROM hardware_gateway_ble_snapshot_items')) return { rows: [], rowCount: 1 };
+      if (sql.includes('INSERT INTO hardware_gateway_ble_snapshot_items')) return { rows: [], rowCount: 1 };
       throw new Error(`Unexpected query: ${sql}`);
     },
     release: () => undefined
@@ -48,6 +51,11 @@ test('app persistence stores MK4 raw input but never raw gw traffic including 30
     data: { net_led: 1, sys_led: 1, server_led: 1 }
   })), { qos: 1, retain: false } as any);
   assert.equal(inserts.length, 0);
+  await processMqttMessage('gw/2805a55efb68/publish', Buffer.from(JSON.stringify({
+    msg_id: 2201, device_info: { mac: '2805a55efb68' },
+    data: { ble_conn_list: [{ mac: 'fd9d4f8ae226', type: 2 }] }
+  })), { qos: 1, retain: false } as any);
+  assert.equal(inserts.length, 0, '2201 is normalized but never persisted as raw MQTT');
 });
 
 test('MK4 remains decoded while retired model decoders are not wired into MQTT ingestion', () => {
