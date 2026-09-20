@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   cleanupOwnedContainer,
   parseLoopbackBinding,
+  redactSensitiveText,
   startIsolatedPostgres,
   waitForStablePostgres
 } from './postgres-container-lifecycle.mjs';
@@ -86,6 +87,34 @@ test('stable-server wait has a bounded timeout and redacts technical logs', () =
     return true;
   });
   assert.equal(elapsed, 30);
+});
+
+test('migration runners receive only explicit isolated configuration and ephemeral secrets', () => {
+  assert.match(source, /const backendJwtSecret = randomBytes\(48\)\.toString\('base64url'\)/);
+  assert.match(source, /const storeJwtSecret = randomBytes\(48\)\.toString\('base64url'\)/);
+  assert.match(source, /extraEnv: \{ JWT_SECRET: backendJwtSecret, MAIL_ENABLED: 'false' \}/);
+  assert.match(source, /extraEnv: \{ STORE_JWT_SECRET: storeJwtSecret \}/);
+  assert.match(source, /DB_PASSWORD: password/);
+  assert.match(source, /cwd: runnerCwd, encoding: 'utf8', env: runnerEnv/);
+  assert.match(source, /mkdtempSync\(path\.join\(tmpdir\(\), 'horizonst-production-parity-runners-'\)\)/);
+  assert.match(source, /rmSync\(runnerCwd\)/);
+  assert.doesNotMatch(source, /rmSync\(runnerCwd,\s*\{[^}]*recursive:\s*true/);
+  assert.doesNotMatch(source, /\.\.\.process\.env/);
+  assert.doesNotMatch(source, /readFileSync\([^\n]*(?:\.env|config\/\.env)/i);
+  assert.doesNotMatch(source, /dotenv(?:\.config)?/);
+});
+
+test('runner failures redact PostgreSQL and application secrets', () => {
+  const databasePassword = 'ephemeral-database-password';
+  const jwtSecret = 'ephemeral-jwt-secret-with-more-than-32-characters';
+  const output = redactSensitiveText(
+    `DB_PASSWORD=${databasePassword}\nJWT_SECRET=${jwtSecret}\ntechnical failure`,
+    [databasePassword, jwtSecret]
+  );
+  assert.match(output, /technical failure/);
+  assert.doesNotMatch(output, new RegExp(databasePassword));
+  assert.doesNotMatch(output, new RegExp(jwtSecret));
+  assert.equal((output.match(/\[REDACTED\]/g) ?? []).length, 2);
 });
 
 test('a simulated name collision never removes the pre-existing container', () => {

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   cleanupOwnedContainer,
+  redactSensitiveText,
   startIsolatedPostgres,
   waitForStablePostgres
 } from './postgres-container-lifecycle.mjs';
@@ -13,7 +16,10 @@ const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const base = '9f5754d378491772b2730a9adc1fe88edc86dd31';
 const name = `horizonst-production-parity-${randomUUID().replaceAll('-', '')}`;
 const password = randomBytes(32).toString('base64url');
+const backendJwtSecret = randomBytes(48).toString('base64url');
+const storeJwtSecret = randomBytes(48).toString('base64url');
 const containerState = { name, password, containerCreated: false };
+const runnerCwd = mkdtempSync(path.join(tmpdir(), 'horizonst-production-parity-runners-'));
 
 const docker = (args, options = {}) => execFileSync('docker', args, {
   cwd: root, encoding: 'utf8', stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'], ...options
@@ -28,14 +34,26 @@ const psql = (database, sql) => {
   return result.stdout;
 };
 const scalar = (database, query) => psql(database, `COPY (${query}) TO STDOUT;`).trim();
-const runNode = (cwd, code, database) => {
+const runNode = ({ serviceName, code, database, extraEnv = {} }) => {
+  const runnerEnv = {
+    NODE_ENV: 'test',
+    DB_HOST: '127.0.0.1',
+    DB_PORT: String(hostPort),
+    DB_USER: 'fixture',
+    DB_PASSWORD: password,
+    DB_NAME: database,
+    ...extraEnv
+  };
   const result = spawnSync(process.execPath, ['-e', code], {
-    cwd, encoding: 'utf8', env: {
-      ...process.env, DB_HOST: '127.0.0.1', DB_PORT: String(hostPort), DB_USER: 'fixture',
-      DB_PASSWORD: password, DB_NAME: database, NODE_ENV: 'test'
-    }
+    cwd: runnerCwd, encoding: 'utf8', env: runnerEnv
   });
-  assert.equal(result.status, 0, `node runner failed in ${cwd}:\n${result.stdout}\n${result.stderr}`);
+  if (result.status !== 0) {
+    const output = redactSensitiveText(
+      `${result.stdout ?? ''}\n${result.stderr ?? ''}`,
+      [password, backendJwtSecret, storeJwtSecret]
+    );
+    throw new Error(`node migration runner failed for ${serviceName}:\n${output}`);
+  }
 };
 
 let hostPort;
@@ -80,17 +98,27 @@ try {
     (SELECT count(*) FROM gateways),(SELECT count(*) FROM devices),(SELECT count(*) FROM device_records),
     (SELECT count(*) FROM mqtt_messages),(SELECT count(*) FROM vmq_auth_acl))`);
   const backendRunner = [
-    "const { runMigrations } = require('./dist/db/migrations.js');",
-    "const { pool } = require('./dist/db/pool.js');",
+    `const { runMigrations } = require(${JSON.stringify(path.join(root, 'backend', 'dist', 'db', 'migrations.js'))});`,
+    `const { pool } = require(${JSON.stringify(path.join(root, 'backend', 'dist', 'db', 'pool.js'))});`,
     "runMigrations().then(() => pool.end()).catch(async e => { console.error(e); await pool.end(); process.exit(1); });"
   ].join('');
-  runNode(path.join(root, 'backend'), backendRunner, 'horizonst');
+  runNode({
+    serviceName: 'backend',
+    code: backendRunner,
+    database: 'horizonst',
+    extraEnv: { JWT_SECRET: backendJwtSecret, MAIL_ENABLED: 'false' }
+  });
   assert.equal(scalar('horizonst', 'SELECT count(*) FROM app_schema_migrations'), '11');
   assert.equal(scalar('horizonst', `SELECT concat_ws(',',
     (SELECT count(*) FROM gateways),(SELECT count(*) FROM devices),(SELECT count(*) FROM device_records),
     (SELECT count(*) FROM mqtt_messages),(SELECT count(*) FROM vmq_auth_acl))`), backendBefore);
   assert.equal(scalar('horizonst', `SELECT count(*) FROM pg_indexes WHERE indexname='vmq_auth_acl_mount_client_unique'`), '1');
-  runNode(path.join(root, 'backend'), backendRunner, 'horizonst');
+  runNode({
+    serviceName: 'backend',
+    code: backendRunner,
+    database: 'horizonst',
+    extraEnv: { JWT_SECRET: backendJwtSecret, MAIL_ENABLED: 'false' }
+  });
   assert.equal(scalar('horizonst', 'SELECT count(*) FROM app_schema_migrations'), '11');
   psql('horizonst', `UPDATE gateways SET company_id=(SELECT id FROM companies WHERE code='horneo') WHERE id=1;
     UPDATE devices SET company_id=(SELECT id FROM companies WHERE code='horneo'), device_type='b5', status='active' WHERE id=1;`);
@@ -130,11 +158,11 @@ try {
   psql('cold_compliance', `UPDATE tags SET hardware_device_id=1 WHERE tag_uid='fd9d4f8ae226';
     UPDATE gateways SET hardware_gateway_id=1 WHERE gateway_mac='142b2fe271b4';`);
   const coldRunner = [
-    "const { runMigrations } = require('./dist/db/migrate.js');",
-    "const { db } = require('./dist/db/pool.js');",
+    `const { runMigrations } = require(${JSON.stringify(path.join(root, 'cold-compliance-service', 'dist', 'db', 'migrate.js'))});`,
+    `const { db } = require(${JSON.stringify(path.join(root, 'cold-compliance-service', 'dist', 'db', 'pool.js'))});`,
     "runMigrations().then(() => db.end()).catch(async e => { console.error(e); await db.end(); process.exit(1); });"
   ].join('');
-  runNode(path.join(root, 'cold-compliance-service'), coldRunner, 'cold_compliance');
+  runNode({ serviceName: 'cold-compliance-service', code: coldRunner, database: 'cold_compliance' });
   assert.equal(scalar('cold_compliance', 'SELECT count(*) FROM cold_compliance_migrations'), '21');
   assert.equal(scalar('cold_compliance', `SELECT concat_ws(',',
     (SELECT count(*) FROM tags),(SELECT count(*) FROM gateways),(SELECT count(*) FROM worker_tag_assignments),
@@ -144,7 +172,7 @@ try {
     ('presence_operational_state_tag_id_fkey','ble_alarm_sessions_tag_id_fkey') AND confdeltype='r'`), '2');
   assert.equal(scalar('cold_compliance', `SELECT count(*) FROM tags WHERE hardware_device_id IS NULL`) ,'0');
   assert.equal(scalar('cold_compliance', `SELECT count(*) FROM gateways WHERE hardware_gateway_id IS NULL`) ,'0');
-  runNode(path.join(root, 'cold-compliance-service'), coldRunner, 'cold_compliance');
+  runNode({ serviceName: 'cold-compliance-service', code: coldRunner, database: 'cold_compliance' });
   assert.equal(scalar('cold_compliance', 'SELECT count(*) FROM cold_compliance_migrations'), '21');
 
   // Store: reproduce 001-010 registered and apply only the isolated security migration 016.
@@ -154,14 +182,27 @@ try {
   psql('horizonst', `CREATE TABLE IF NOT EXISTS store.schema_migrations(filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     ${readdirSync(path.join(root, 'horizonst-store', 'migrations')).filter((f) => /^0(?:0[1-9]|10)_.*\.sql$/.test(f)).sort()
       .map((file) => `INSERT INTO store.schema_migrations(filename) VALUES('${file}') ON CONFLICT DO NOTHING;`).join('\n')}`);
-  const storeRunner = "import('./dist/db/migrate-security.js').then(async m => { await m.runSecurityMigration(); const p=await import('./dist/db/pool.js'); await p.closePool(); }).catch(e => { console.error(e); process.exit(1); });";
-  runNode(path.join(root, 'horizonst-store'), storeRunner, 'horizonst');
+  const storeMigrationUrl = pathToFileURL(path.join(root, 'horizonst-store', 'dist', 'db', 'migrate-security.js')).href;
+  const storePoolUrl = pathToFileURL(path.join(root, 'horizonst-store', 'dist', 'db', 'pool.js')).href;
+  const storeRunner = `import(${JSON.stringify(storeMigrationUrl)}).then(async m => { await m.runSecurityMigration(); const p=await import(${JSON.stringify(storePoolUrl)}); await p.closePool(); }).catch(e => { console.error(e); process.exit(1); });`;
+  runNode({
+    serviceName: 'horizonst-store',
+    code: storeRunner,
+    database: 'horizonst',
+    extraEnv: { STORE_JWT_SECRET: storeJwtSecret }
+  });
   assert.equal(scalar('horizonst', `SELECT count(*) FROM store.schema_migrations WHERE filename ~ '^01[1-5]_'`), '0');
   assert.equal(scalar('horizonst', `SELECT count(*) FROM store.security_migrations WHERE filename='016_auth_rate_limits.sql'`), '1');
-  runNode(path.join(root, 'horizonst-store'), storeRunner, 'horizonst');
+  runNode({
+    serviceName: 'horizonst-store',
+    code: storeRunner,
+    database: 'horizonst',
+    extraEnv: { STORE_JWT_SECRET: storeJwtSecret }
+  });
   assert.equal(scalar('horizonst', `SELECT count(*) FROM store.security_migrations`), '1');
 
   console.log('PostgreSQL 15 production-like migration checks: 24 assertions passed');
 } finally {
   cleanupOwnedContainer({ spawn: spawnSync, state: containerState, cwd: root });
+  rmSync(runnerCwd);
 }

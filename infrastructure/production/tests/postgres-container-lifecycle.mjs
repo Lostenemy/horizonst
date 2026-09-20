@@ -5,15 +5,15 @@ const defaultSleep = (milliseconds) => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 };
 
-function redactTechnicalLogs(logs, redactValues) {
-  let redacted = String(logs);
+export function redactSensitiveText(text, redactValues, maxLength = 8000) {
+  let redacted = String(text);
   for (const value of redactValues) {
     if (value) redacted = redacted.replaceAll(String(value), '[REDACTED]');
   }
   return redacted
     .replace(/(POSTGRES_PASSWORD\s*=\s*)\S+/gi, '$1[REDACTED]')
     .replace(/(password\s*[=:]\s*)\S+/gi, '$1[REDACTED]')
-    .slice(-8000);
+    .slice(-maxLength);
 }
 
 export function waitForStablePostgres({
@@ -51,7 +51,7 @@ export function waitForStablePostgres({
     sleep(initComplete && successfulProbes === 1 ? stableProbeIntervalMs : pollIntervalMs);
   }
 
-  const technicalLogs = redactTechnicalLogs(lastLogs, redactValues);
+  const technicalLogs = redactSensitiveText(lastLogs, redactValues);
   throw new Error(
     `isolated PostgreSQL 15 did not reach a stable final server within ${timeoutMs}ms` +
     `\nLast technical container logs:\n${technicalLogs || '<none>'}`
