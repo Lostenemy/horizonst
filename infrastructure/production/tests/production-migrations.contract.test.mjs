@@ -1,9 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmdirSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import path from 'node:path';
 import {
   cleanupOwnedContainer,
+  cleanupOwnedEmptyDirectory,
   parseLoopbackBinding,
   redactSensitiveText,
   startIsolatedPostgres,
@@ -97,11 +109,90 @@ test('migration runners receive only explicit isolated configuration and ephemer
   assert.match(source, /DB_PASSWORD: password/);
   assert.match(source, /cwd: runnerCwd, encoding: 'utf8', env: runnerEnv/);
   assert.match(source, /mkdtempSync\(path\.join\(tmpdir\(\), 'horizonst-production-parity-runners-'\)\)/);
-  assert.match(source, /rmSync\(runnerCwd\)/);
-  assert.doesNotMatch(source, /rmSync\(runnerCwd,\s*\{[^}]*recursive:\s*true/);
+  assert.match(source, /cleanupOwnedEmptyDirectory\(\{ directoryPath: runnerCwd \}\)/);
+  assert.doesNotMatch(`${source}\n${lifecycleSource}`, /rmSync\([^\n]*recursive:\s*true/);
   assert.doesNotMatch(source, /\.\.\.process\.env/);
   assert.doesNotMatch(source, /readFileSync\([^\n]*(?:\.env|config\/\.env)/i);
   assert.doesNotMatch(source, /dotenv(?:\.config)?/);
+});
+
+test('safe runner cleanup removes an owned empty directory', () => {
+  const parent = mkdtempSync(path.join(tmpdir(), 'horizonst-cleanup-empty-'));
+  const owned = mkdtempSync(path.join(parent, 'owned-'));
+  try {
+    assert.deepEqual(cleanupOwnedEmptyDirectory({ directoryPath: owned }), { status: 'removed' });
+    assert.equal(existsSync(owned), false);
+  } finally {
+    if (existsSync(owned)) rmdirSync(owned);
+    rmdirSync(parent);
+  }
+});
+
+test('safe runner cleanup preserves a non-empty directory', () => {
+  const parent = mkdtempSync(path.join(tmpdir(), 'horizonst-cleanup-nonempty-'));
+  const owned = mkdtempSync(path.join(parent, 'owned-'));
+  const fixture = path.join(owned, 'unexpected.txt');
+  writeFileSync(fixture, 'fixture');
+  try {
+    assert.deepEqual(cleanupOwnedEmptyDirectory({ directoryPath: owned }), {
+      status: 'preserved', reason: 'enotempty'
+    });
+    assert.equal(readFileSync(fixture, 'utf8'), 'fixture');
+  } finally {
+    unlinkSync(fixture);
+    rmdirSync(owned);
+    rmdirSync(parent);
+  }
+});
+
+test('safe runner cleanup preserves a symbolic link', () => {
+  const parent = mkdtempSync(path.join(tmpdir(), 'horizonst-cleanup-link-'));
+  const target = path.join(parent, 'target');
+  const link = path.join(parent, 'owned-link');
+  mkdirSync(target);
+  symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+  try {
+    assert.deepEqual(cleanupOwnedEmptyDirectory({ directoryPath: link }), {
+      status: 'preserved', reason: 'not_real_directory'
+    });
+    assert.equal(lstatSync(link).isSymbolicLink(), true);
+  } finally {
+    unlinkSync(link);
+    rmdirSync(target);
+    rmdirSync(parent);
+  }
+});
+
+test('safe runner cleanup tolerates an already missing path', () => {
+  const parent = mkdtempSync(path.join(tmpdir(), 'horizonst-cleanup-missing-'));
+  try {
+    assert.deepEqual(cleanupOwnedEmptyDirectory({ directoryPath: path.join(parent, 'missing') }), {
+      status: 'missing'
+    });
+  } finally {
+    rmdirSync(parent);
+  }
+});
+
+test('safe runner cleanup preserves a directory that becomes non-empty during removal', () => {
+  const parent = mkdtempSync(path.join(tmpdir(), 'horizonst-cleanup-race-'));
+  const owned = mkdtempSync(path.join(parent, 'owned-'));
+  const raced = path.join(owned, 'raced.txt');
+  try {
+    const result = cleanupOwnedEmptyDirectory({
+      directoryPath: owned,
+      rmdir: (directoryPath) => {
+        writeFileSync(raced, 'created during cleanup');
+        rmdirSync(directoryPath);
+      }
+    });
+    assert.deepEqual(result, { status: 'preserved', reason: 'enotempty' });
+    assert.equal(readFileSync(raced, 'utf8'), 'created during cleanup');
+  } finally {
+    unlinkSync(raced);
+    rmdirSync(owned);
+    rmdirSync(parent);
+  }
 });
 
 test('runner failures redact PostgreSQL and application secrets', () => {

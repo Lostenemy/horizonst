@@ -1,3 +1,5 @@
+import { lstatSync, rmdirSync } from 'node:fs';
+
 const LOOPBACK_BINDING = /^127\.0\.0\.1:(\d+)$/;
 const INIT_COMPLETE_MARKER = 'PostgreSQL init process complete; ready for start up.';
 
@@ -86,4 +88,33 @@ export function startIsolatedPostgres({ docker, state }) {
 export function cleanupOwnedContainer({ spawn, state, cwd }) {
   if (!state.containerCreated) return;
   spawn('docker', ['rm', '-f', state.name], { cwd, stdio: 'ignore' });
+}
+
+export function cleanupOwnedEmptyDirectory({
+  directoryPath,
+  lstat = lstatSync,
+  rmdir = rmdirSync
+}) {
+  let stats;
+  try {
+    stats = lstat(directoryPath);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { status: 'missing' };
+    return { status: 'preserved', reason: `lstat_${error?.code ?? 'error'}` };
+  }
+
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    return { status: 'preserved', reason: 'not_real_directory' };
+  }
+
+  try {
+    rmdir(directoryPath);
+    return { status: 'removed' };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { status: 'missing' };
+    if (['ENOTEMPTY', 'EEXIST', 'ENOTDIR'].includes(error?.code)) {
+      return { status: 'preserved', reason: error.code.toLowerCase() };
+    }
+    return { status: 'preserved', reason: `rmdir_${error?.code ?? 'error'}` };
+  }
 }

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   cleanupOwnedContainer,
+  cleanupOwnedEmptyDirectory,
   redactSensitiveText,
   startIsolatedPostgres,
   waitForStablePostgres
@@ -204,5 +205,8 @@ try {
   console.log('PostgreSQL 15 production-like migration checks: 24 assertions passed');
 } finally {
   cleanupOwnedContainer({ spawn: spawnSync, state: containerState, cwd: root });
-  rmSync(runnerCwd);
+  const runnerCleanup = cleanupOwnedEmptyDirectory({ directoryPath: runnerCwd });
+  if (runnerCleanup.status === 'preserved') {
+    console.warn(`Runner directory preserved after safe cleanup: ${runnerCleanup.reason}`);
+  }
 }
