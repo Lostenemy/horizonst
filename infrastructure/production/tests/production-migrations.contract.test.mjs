@@ -24,6 +24,15 @@ test('production migration harness uses random identity, loopback-only publicati
   assert.match(source, /cleanupOwnedContainer\(\{ spawn: spawnSync, state: containerState/);
 });
 
+test('scalar helpers only receive valid SELECT subqueries', () => {
+  assert.match(
+    source,
+    /const version = scalar\('horizonst', "SELECT current_setting\('server_version'\)"\);/,
+  );
+  assert.doesNotMatch(source, /\bscalar\(\s*[^,]+,\s*(['"`])\s*(?!SELECT\b)/i);
+  assert.doesNotMatch(source, /\bscalar\([^,\n]+,\s*['"`]\s*SHOW\b/i);
+});
+
 test('a simulated name collision never removes the pre-existing container', () => {
   const state = { name: 'already-owned', password: 'random-test-value', containerCreated: false };
   const cleanupCalls = [];

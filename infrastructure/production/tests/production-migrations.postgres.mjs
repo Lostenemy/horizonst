@@ -44,7 +44,7 @@ try {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
     if (i === 59) throw new Error('isolated PostgreSQL 15 did not become ready');
   }
-  const version = scalar('horizonst', 'SHOW server_version');
+  const version = scalar('horizonst', "SELECT current_setting('server_version')");
   assert.match(version, /^15\./);
 
   // Backend: esquema y filas representativas exactos de la base productiva.
