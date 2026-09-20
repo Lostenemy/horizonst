@@ -67,7 +67,12 @@ const tracked = [
   composeFile,
   path.join(root, 'infrastructure', 'production', 'production.env.example'),
   path.join(root, 'infrastructure', 'production', 'provision-hardware-manager.sql'),
-  path.join(root, 'infrastructure', 'production', 'nginx-hardware-manager.options.conf')
+  path.join(root, 'infrastructure', 'production', 'nginx-hardware-manager.options.conf'),
+  path.join(root, 'infrastructure', 'production', 'bootstrap-horneo-inventory.sh'),
+  path.join(root, 'infrastructure', 'production', 'sql', 'horneo-inventory-preflight.sql'),
+  path.join(root, 'infrastructure', 'production', 'sql', 'central-inventory-bootstrap.sql'),
+  path.join(root, 'infrastructure', 'production', 'sql', 'horneo-inventory-reconcile.sql'),
+  path.join(root, 'infrastructure', 'production', 'runbook.md')
 ];
 const combined = tracked.map((file) => readFileSync(file, 'utf8')).join('\n');
 assert.doesNotMatch(combined, /gho_[A-Za-z0-9]+|BEGIN (?:RSA |OPENSSH )?PRIVATE KEY|hst_svc_[A-Za-z0-9_-]{20,}/);
@@ -82,4 +87,21 @@ assert.match(provisioning, /\[\{"pattern":"devices\/MK4"\},\{"pattern":"gw\/\+\/
 assert.doesNotMatch(provisioning, /"qos"|DELETE\s+FROM\s+vmq_auth_acl/i);
 assert.match(provisioning, /ARRAY\['hardware\.read', 'hardware\.command'\]/);
 
-console.log('production artifact checks: 39 assertions passed');
+const bootstrap = readFileSync(path.join(root, 'infrastructure', 'production', 'bootstrap-horneo-inventory.sh'), 'utf8');
+const centralBootstrap = readFileSync(path.join(root, 'infrastructure', 'production', 'sql', 'central-inventory-bootstrap.sql'), 'utf8');
+const horneoReconcile = readFileSync(path.join(root, 'infrastructure', 'production', 'sql', 'horneo-inventory-reconcile.sql'), 'utf8');
+const runbook = readFileSync(path.join(root, 'infrastructure', 'production', 'runbook.md'), 'utf8');
+assert.match(bootstrap, /umask 077/);
+assert.match(bootstrap, /chmod 0600/);
+assert.doesNotMatch(bootstrap, /rm\s+-[A-Za-z]*r|rm\s+--recursive/);
+assert.match(centralBootstrap, /WHERE code = 'horneo'/);
+assert.match(centralBootstrap, /device_type, active, status/);
+assert.doesNotMatch(centralBootstrap, /owner_id|category_id/);
+assert.match(horneoReconcile, /hardware_gateway_id = mapping\.central_id/);
+assert.match(horneoReconcile, /hardware_device_id = mapping\.central_id/);
+assert.match(runbook, /Store normal debe tener exactamente 001–015/);
+assert.match(runbook, /Las dos bases no comparten una transacción/);
+assert.match(runbook, /modo explícito `0600`/);
+assert.match(runbook, /No ejecutar `npm run migrate`/);
+
+console.log('production artifact checks: 51 assertions passed');

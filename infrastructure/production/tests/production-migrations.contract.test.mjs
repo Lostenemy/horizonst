@@ -25,6 +25,10 @@ import {
 const scriptPath = path.resolve(import.meta.dirname, 'production-migrations.postgres.mjs');
 const source = readFileSync(scriptPath, 'utf8');
 const lifecycleSource = readFileSync(path.resolve(import.meta.dirname, 'postgres-container-lifecycle.mjs'), 'utf8');
+const productionDir = path.resolve(import.meta.dirname, '..');
+const bootstrapSource = readFileSync(path.join(productionDir, 'bootstrap-horneo-inventory.sh'), 'utf8');
+const centralBootstrapSql = readFileSync(path.join(productionDir, 'sql', 'central-inventory-bootstrap.sql'), 'utf8');
+const horneoReconcileSql = readFileSync(path.join(productionDir, 'sql', 'horneo-inventory-reconcile.sql'), 'utf8');
 
 test('production migration harness uses random identity, loopback-only publication and conditional cleanup', () => {
   assert.match(source, /import \{ randomBytes, randomUUID \} from 'node:crypto'/);
@@ -43,12 +47,12 @@ test('production migration harness uses random identity, loopback-only publicati
   assert.match(source, /timeoutMs: 60_000/);
 });
 
-test('scalar helpers only receive valid SELECT subqueries', () => {
+test('scalar helpers only receive valid SELECT or WITH subqueries', () => {
   assert.match(
     source,
     /const version = scalar\('horizonst', "SELECT current_setting\('server_version'\)"\);/,
   );
-  assert.doesNotMatch(source, /\bscalar\(\s*[^,]+,\s*(['"`])\s*(?!SELECT\b)/i);
+  assert.doesNotMatch(source, /\bscalar\(\s*[^,]+,\s*(['"`])\s*(?!(?:SELECT|WITH)\b)/i);
   assert.doesNotMatch(source, /\bscalar\([^,\n]+,\s*['"`]\s*SHOW\b/i);
 });
 
@@ -206,6 +210,30 @@ test('runner failures redact PostgreSQL and application secrets', () => {
   assert.doesNotMatch(output, new RegExp(databasePassword));
   assert.doesNotMatch(output, new RegExp(jwtSecret));
   assert.equal((output.match(/\[REDACTED\]/g) ?? []).length, 2);
+});
+
+test('production bootstrap uses exact identities, protected exchange files and explicit checkpoints', () => {
+  assert.match(bootstrapSource, /umask 077/);
+  assert.match(bootstrapSource, /chmod 0600 "\$inventory_file" "\$mapping_file"/);
+  assert.doesNotMatch(bootstrapSource, /rm\s+-[A-Za-z]*r|rm\s+--recursive/);
+  assert.match(bootstrapSource, /012_presence_storage_hardening\.sql[\s\S]*016_presence_hardware_references\.sql/);
+  assert.match(bootstrapSource, /6\/8 Verifying the mandatory checkpoint before Horneo 017/);
+  assert.match(bootstrapSource, /017_operational_hardware_device_id\.sql[\s\S]*021_auth_rate_limits\.sql/);
+  assert.match(centralBootstrapSql, /WHERE code = 'horneo'/);
+  assert.match(centralBootstrapSql, /'tag',[\s\S]*source\.source_active/);
+  assert.doesNotMatch(centralBootstrapSql, /owner_id|category_id/);
+  assert.match(horneoReconcileSql, /mapping\.normalized_mac = regexp_replace\(lower\(overlay\.(?:gateway_mac|tag_uid)\), '\[-:\]', '', 'g'\)/);
+  assert.doesNotMatch(`${centralBootstrapSql}\n${horneoReconcileSql}`, /levenshtein|similarity|ILIKE|ORDER BY[\s\S]*LIMIT 1/i);
+});
+
+test('isolated PostgreSQL harness covers empty central inventory, 5/13 bootstrap and conflict rollback', () => {
+  assert.match(source, /assert\.equal\(scalar\('horizonst', 'SELECT count\(\*\) FROM gateways'\), '0'\)/);
+  assert.match(source, /Array\.from\(\{ length: 5 \}/);
+  assert.match(source, /Array\.from\(\{ length: 13 \}/);
+  assert.match(source, /assert\.notEqual\(conflictResult\.status, 0/);
+  assert.match(source, /assert\.equal\(mappingValues\.length, 18\)/);
+  assert.match(source, /idempotent central bootstrap failed/);
+  assert.match(source, /idempotent Horneo reconciliation failed/);
 });
 
 test('a simulated name collision never removes the pre-existing container', () => {

@@ -41,8 +41,8 @@ Objetivo: fast-forward controlado desde `9f5754d378491772b2730a9adc1fe88edc86dd3
    SELECT filename, sha256 FROM store.security_migrations ORDER BY filename;
    ```
 
-   La primera debe devolver cero filas; Horneo debe tener 001–011; Store normal 001–010. La ausencia de `store.security_migrations` antes del primer uso es válida.
-8. Comparar inventario sin escribir. Exportar solo IDs y MAC normalizadas desde `horizonst.gateways/devices` y compararlas con `cold_compliance.gateways.gateway_mac` y `tags.tag_uid`. Deben cumplirse: cobertura 100 %, una sola coincidencia por overlay, ninguna MAC central duplicada, ninguna identidad inactiva/retirada asignada.
+   La primera debe devolver cero filas; Horneo debe tener 001–011; Store normal debe tener exactamente 001–015. La ausencia de `store.security_migrations` antes del primer uso es válida. No ejecutar el migrador normal de Store durante esta promoción.
+8. Comparar inventario sin escribir. Es válido que `horizonst.gateways/devices` esté vacío mientras Horneo contiene overlays. En ese caso debe usarse el bootstrap de la sección 4; no se pueden ejecutar Horneo 017–021 directamente. Antes de escribir deben cumplirse: MAC/UID normalizadas válidas, ausencia de duplicados y colisiones, y una única empresa `companies.code='horneo'` creada por Backend 002.
 
 Si falla cualquier preflight, detener la ventana. No rellenar firmware, company IDs o hardware IDs por suposición.
 
@@ -70,22 +70,38 @@ No ejecutar `config` sin `-q` en una sesión registrada: el render contiene secr
 5. Verificar 005 y el índice `vmq_auth_acl_mount_client_unique`. Un duplicado bloquea, nunca se resuelve eliminando automáticamente.
 6. Ejecutar una segunda vez el runner y verificar que no crea filas ni reaplica SQL.
 
-## 4. Migraciones Horneo 012–021 con reconciliación
+## 4. Bootstrap central y migraciones Horneo 012–021
 
-No arrancar directamente la imagen nueva si producción solo registra 001–011: su runner aplicaría todo sin pausa.
+No arrancar directamente la imagen nueva si producción solo registra 001–011: su runner aplicaría todo sin el punto de control obligatorio anterior a 017.
 
-1. Aplicar 012–016 individualmente, cada una dentro de transacción, y registrar el nombre en `cold_compliance_migrations` en la misma transacción.
-2. Importar a tablas temporales los pares centrales `(id, mac)` de gateways y dispositivos. Actualizar únicamente:
-   - `cold_compliance.gateways.hardware_gateway_id` por MAC normalizada exacta;
-   - `cold_compliance.tags.hardware_device_id` por MAC normalizada exacta.
-3. Antes de confirmar, exigir cobertura completa y unicidad. Comparar conteos y tomar una nueva copia lógica de las tablas afectadas. No usar coincidencias aproximadas.
-4. Ejecutar 017–021 en orden. Cada migración tiene preflights que deben abortar ante NULL, duplicados u overlays incompatibles.
-5. Segundo arranque del runner: cero migraciones aplicadas.
-6. Verificar conteos históricos de asignaciones, sesiones, alertas, incidentes, estados y sesiones BLE; cero huérfanos; FKs 020 en `RESTRICT`; `auth_rate_limits` 021 compatible.
+El procedimiento versionado es `infrastructure/production/bootstrap-horneo-inventory.sh`. Debe ejecutarse desde el checkout aprobado, con `COMPOSE_FILE` y `ENV_FILE` apuntando a los artefactos externos ya revisados. No activar trazas de shell:
+
+```sh
+cd /opt/horizonst
+set +x
+umask 077
+COMPOSE_FILE=/opt/horizonst-production/docker-compose.production.yml \
+ENV_FILE=/opt/horizonst-production/config/.env \
+  sh infrastructure/production/bootstrap-horneo-inventory.sh
+```
+
+El procedimiento realiza y verifica, en este orden:
+
+1. Backend 001–011 mediante su runner, seguido de verificación de 11 checksums y una única empresa `horneo` resuelta por código, nunca por UUID supuesto.
+2. Preflight Horneo 001–011 y exportación completa de IDs locales, MAC/UID normalizadas y estado activo de tags. La única normalización permitida elimina `:`/`-` y convierte a minúsculas; cualquier valor que no sea hexadecimal de 12 caracteres, duplicado o colisión aborta.
+3. Una transacción `SERIALIZABLE` en `horizonst`, protegida con advisory lock, importa el inventario a una tabla temporal. Inserta únicamente identidades ausentes, deja propietario/categoría a `NULL`, usa `device_type='tag'`, conserva `active/status` y obtiene los IDs asignados realmente por PostgreSQL. Una fila central contradictoria aborta; nunca se actualiza o elimina para forzar compatibilidad.
+4. Horneo 012–016, cada migración y su registro dentro de su propia transacción.
+5. Una transacción `SERIALIZABLE` independiente en `cold_compliance` importa el mapa central y reconcilia solo por UUID local más igualdad exacta de MAC/UID normalizada. Las referencias existentes se conservan si coinciden y abortan si contradicen el mapa.
+6. Punto de control obligatorio: cobertura 100 %, cardinalidad idéntica y relación uno-a-uno. Solo entonces aplica 017–021.
+7. Postflight de conteos históricos, referencias nulas y duplicados. Una segunda ejecución no inserta identidades ni cambia IDs reconciliados.
+
+Las dos bases no comparten una transacción. El commit central es el primer límite durable; el commit de reconciliación Horneo es el segundo. Si falla antes del commit central, no hay cambios centrales. Si falla después, conservar las filas centrales ya verificadas y reanudar idempotentemente; no borrarlas. Si falla Horneo 012–016 o la reconciliación, detenerse antes de 017 y restaurar `cold_compliance` desde la copia aprobada solo si se exige revertir sus commits. No presentar nunca la secuencia completa como atómica.
+
+Los dos TSV de intercambio se crean en un directorio `mktemp` con `umask 077`, modo explícito `0600`, sin nombres, DNI, secretos ni payloads. El trap elimina únicamente los dos archivos conocidos y usa `rmdir` no recursivo; cualquier contenido inesperado preserva el directorio para revisión.
 
 ## 5. Store
 
-No ejecutar `npm run migrate`. Ejecutar exclusivamente:
+Producción ya registra Store normal 001–015. No ejecutar `npm run migrate`: el único cambio pendiente es la infraestructura de seguridad 016 y debe quedar en el registro separado. Ejecutar exclusivamente:
 
 ```sh
 docker compose --env-file /opt/horizonst-production/config/.env \
@@ -93,7 +109,7 @@ docker compose --env-file /opt/horizonst-production/config/.env \
   run --rm --no-deps horizonst_store node dist/db/migrate-security.js
 ```
 
-Verificar una fila checksumada `016_auth_rate_limits.sql` en `store.security_migrations`, estructura/índice de `store.auth_rate_limits` y ausencia de nuevas filas 011–015 en `store.schema_migrations`. Repetir el comando para comprobar idempotencia.
+Verificar una fila checksumada `016_auth_rate_limits.sql` en `store.security_migrations`, estructura/índice de `store.auth_rate_limits` y que `store.schema_migrations` sigue conteniendo exactamente las mismas 15 filas 001–015, sin registrar 016. Repetir únicamente el runner de seguridad para comprobar idempotencia.
 
 ## 6. Identidades técnicas
 
@@ -134,9 +150,10 @@ Verificar una fila checksumada `016_auth_rate_limits.sql` en `store.security_mig
 1. Detener la promoción y conservar todos los logs/diarios. No borrar timeouts históricos ni filas de migración.
 2. Restaurar el Compose externo guardado y el checkout/imagen anterior validada. Para Horneo D.2, restaurar el artefacto D.1 `a451caafe5bb708e78899fbe84360a7a0ab7c4d0`, su secreto local sin imprimirlo, ACL y suscripción anteriores. `HARDWARE_MANAGER_ENABLED=false` por sí solo no es rollback.
 3. Recrear primero Backend anterior/retirarlo del Compose, luego Horneo anterior. Verificar recepción de presencia antes de declarar recuperación. No enviar comandos físicos.
-4. Store puede volver a imagen anterior; la tabla 016 es aditiva y puede permanecer. No marcar 011–015.
-5. Las migraciones Backend/Horneo no tienen down automático. Restaurar las bases desde las copias verificadas si la aprobación de rollback exige revertir esquema/datos. No intentar DDL manual bajo presión.
-6. VerneMQ/PostgreSQL no se recrean salvo restauración de volumen expresamente aprobada. Correo/webmail nunca participan.
+4. Store puede volver a imagen anterior; la tabla de seguridad 016 es aditiva y puede permanecer. Store normal 001–015 ya estaba aplicado y no debe alterarse ni marcar 016 en `store.schema_migrations`.
+5. Si el bootstrap central ya confirmó y Horneo aún no, conservar las identidades centrales: son idempotentes y no contienen propietarios/categorías inventados. No eliminarlas bajo presión. Reanudar tras corregir el conflicto o restaurar ambas bases desde copias coordinadas si se exige una reversión total.
+6. Las migraciones Backend/Horneo no tienen down automático. Restaurar las bases desde las copias verificadas si la aprobación de rollback exige revertir esquema/datos. No intentar DDL manual bajo presión.
+7. VerneMQ/PostgreSQL no se recrean salvo restauración de volumen expresamente aprobada. Correo/webmail nunca participan.
 
 ## 10. Mantenimiento del host
 

@@ -52,8 +52,8 @@ El archivo `production.env.example` enumera también las variables existentes qu
 
 1. Comparar el Compose versionado con el Compose activo externo. No se puede certificar desde el repositorio que sus healthchecks/logging/restart sean idénticos sin esa revisión humana.
 2. Consultar duplicados en `vmq_auth_acl` antes de Backend 005. Si existen, detenerse y decidir fila por fila; no borrarlos automáticamente.
-3. Inventariar todas las MAC de overlays Horneo y su correspondencia central. Las migraciones 017/019 fallan deliberadamente si falta alguna identidad.
-4. Verificar que Store tiene 001–010 registrados. Ejecutar únicamente `npm run migrate:security`; el runner normal intentaría 011–015 y modificaría catálogo/precios.
+3. Inventariar todas las MAC de overlays Horneo. Si el inventario central está vacío, ejecutar el bootstrap versionado descrito en `runbook.md`; nunca saltar directamente a 017/019.
+4. Verificar que Store normal tiene exactamente 001–015 registrados. Ejecutar únicamente `npm run migrate:security`; 016 debe registrarse en `store.security_migrations`, no en el historial normal.
 5. Obtener la IP exacta del proxy con `docker network inspect horizonst-production --format '{{(index .IPAM.Config 0).Gateway}}'` y confirmar con una petición de diagnóstico. No mostrar cabeceras de autorización.
 
 ## Aprovisionamiento sin exponer secretos
