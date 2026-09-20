@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { cleanupOwnedContainer, startIsolatedPostgres } from './postgres-container-lifecycle.mjs';
 
 const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const base = '9f5754d378491772b2730a9adc1fe88edc86dd31';
-const name = `horizonst-production-parity-${process.pid}`;
-const password = `isolated-${process.pid}`;
+const name = `horizonst-production-parity-${randomUUID().replaceAll('-', '')}`;
+const password = randomBytes(32).toString('base64url');
+const containerState = { name, password, containerCreated: false };
 
 const docker = (args, options = {}) => execFileSync('docker', args, {
   cwd: root, encoding: 'utf8', stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'], ...options
@@ -34,8 +37,7 @@ const runNode = (cwd, code, database) => {
 let hostPort;
 try {
   assert.equal(execFileSync('git', ['rev-parse', `${base}^{commit}`], { cwd: root, encoding: 'utf8' }).trim(), base);
-  docker(['run', '--rm', '-d', '--name', name, '-e', 'POSTGRES_USER=fixture', '-e', `POSTGRES_PASSWORD=${password}`,
-    '-e', 'POSTGRES_DB=horizonst', '-P', 'postgres:15-alpine']);
+  hostPort = startIsolatedPostgres({ docker, state: containerState });
   for (let i = 0; i < 60; i += 1) {
     const ready = spawnSync('docker', ['exec', name, 'pg_isready', '-U', 'fixture', '-d', 'horizonst']);
     if (ready.status === 0) break;
@@ -44,9 +46,6 @@ try {
   }
   const version = scalar('horizonst', 'SHOW server_version');
   assert.match(version, /^15\./);
-  const portText = docker(['port', name, '5432/tcp']).trim();
-  hostPort = Number(portText.match(/:(\d+)$/)?.[1]);
-  assert.ok(hostPort > 0);
 
   // Backend: esquema y filas representativas exactos de la base productiva.
   psql('horizonst', gitShow('db/schema.sql'));
@@ -149,5 +148,5 @@ try {
 
   console.log('PostgreSQL 15 production-like migration checks: 24 assertions passed');
 } finally {
-  spawnSync('docker', ['rm', '-f', name], { cwd: root, stdio: 'ignore' });
+  cleanupOwnedContainer({ spawn: spawnSync, state: containerState, cwd: root });
 }
