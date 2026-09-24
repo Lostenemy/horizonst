@@ -12,10 +12,20 @@ let client: MqttClient | null = null;
 let mqttConnected = false;
 let mqttLastError: string | null = null;
 let reconnectDelay = config.mqtt.reconnectPeriod;
+let subscriptionRetryTimer: NodeJS.Timeout | undefined;
+let connectionGeneration = 0;
+let subscriptionAttempt = 0;
 
 export const OFFICIAL_TOPICS = ['devices/MK4', 'gw/+/publish'];
 
 type SubscriptionAssessment = { ok: true } | { ok: false; error: Error; rejectedTopics: string[] };
+
+const clearSubscriptionRetry = (): void => {
+  if (subscriptionRetryTimer) {
+    clearTimeout(subscriptionRetryTimer);
+    subscriptionRetryTimer = undefined;
+  }
+};
 
 export const assessOfficialTopicSubscriptions = (
   error: Error | null | undefined,
@@ -114,6 +124,10 @@ export const initMqtt = async (): Promise<void> => {
       protocolVersion: config.mqtt.protocolVersion,
       clean: config.mqtt.clean,
       connectTimeout: config.mqtt.connectTimeout,
+      // MQTT.js 4.3.8 resubscribes before user `connect` listeners and may then
+      // answer a repeated subscribe call with an empty grant list. Backend owns
+      // the subscription lifecycle so every connection is verified explicitly.
+      resubscribe: false,
       clientId
     };
 
@@ -145,46 +159,86 @@ export const initMqtt = async (): Promise<void> => {
     };
 
     client = mqtt.connect(url, options);
+    const activeClient = client;
 
-    client.on('connect', () => {
-      mqttConnected = false;
-      reconnectDelay = config.mqtt.reconnectPeriod;
-      if (client) {
-        client.options.reconnectPeriod = reconnectDelay;
-      }
-      console.log('Connected to MQTT broker');
-      client?.subscribe(OFFICIAL_TOPICS, (error, granted) => {
+    const scheduleSubscriptionRetry = (generation: number): void => {
+      if (subscriptionRetryTimer || client !== activeClient || generation !== connectionGeneration) return;
+      const delay = Math.max(1, Math.min(reconnectDelay, config.mqtt.reconnectMaxPeriod));
+      reconnectDelay = Math.min(
+        config.mqtt.reconnectMaxPeriod,
+        Math.max(config.mqtt.reconnectPeriod, delay * 2)
+      );
+      subscriptionRetryTimer = setTimeout(() => {
+        subscriptionRetryTimer = undefined;
+        if (client === activeClient && generation === connectionGeneration) {
+          subscribeToOfficialTopics(generation);
+        }
+      }, delay);
+    };
+
+    const subscribeToOfficialTopics = (generation: number): void => {
+      if (client !== activeClient || generation !== connectionGeneration) return;
+      const attempt = ++subscriptionAttempt;
+      activeClient.subscribe(OFFICIAL_TOPICS, (error, granted) => {
+        if (
+          client !== activeClient ||
+          generation !== connectionGeneration ||
+          attempt !== subscriptionAttempt
+        ) return;
+
         const assessment = assessOfficialTopicSubscriptions(error, granted);
         if (!assessment.ok) {
           mqttConnected = false;
           mqttLastError = assessment.error.message;
           console.error('Failed to subscribe to all official MQTT topics', assessment.error);
-          if (config.mqtt.required) {
-            settleReject(assessment.error);
-          }
-        } else {
-          mqttConnected = true;
-          mqttLastError = null;
-          console.log('Subscribed to all official MQTT topics');
-          settleResolve();
+          scheduleSubscriptionRetry(generation);
+          if (config.mqtt.required) settleReject(assessment.error);
+          return;
         }
+
+        clearSubscriptionRetry();
+        mqttConnected = true;
+        mqttLastError = null;
+        reconnectDelay = config.mqtt.reconnectPeriod;
+        activeClient.options.reconnectPeriod = reconnectDelay;
+        console.log('Subscribed to all official MQTT topics');
+        settleResolve();
       });
+    };
+
+    activeClient.on('connect', () => {
+      clearSubscriptionRetry();
+      const generation = ++connectionGeneration;
+      subscriptionAttempt += 1;
+      mqttConnected = false;
+      reconnectDelay = config.mqtt.reconnectPeriod;
+      activeClient.options.reconnectPeriod = reconnectDelay;
+      console.log('Connected to MQTT broker');
+      subscribeToOfficialTopics(generation);
     });
 
-    client.on('close', () => {
+    activeClient.on('close', () => {
+      clearSubscriptionRetry();
+      connectionGeneration += 1;
+      subscriptionAttempt += 1;
       mqttConnected = false;
     });
 
-    client.on('reconnect', () => {
+    activeClient.on('reconnect', () => {
+      clearSubscriptionRetry();
+      connectionGeneration += 1;
+      subscriptionAttempt += 1;
       mqttConnected = false;
       reconnectDelay = Math.min(config.mqtt.reconnectMaxPeriod, reconnectDelay * 2);
-      if (client) {
-        client.options.reconnectPeriod = reconnectDelay;
-      }
+      activeClient.options.reconnectPeriod = reconnectDelay;
       console.warn(`MQTT reconnect scheduled in ${reconnectDelay}ms`);
     });
 
-    client.on('error', (error: Error) => {
+    activeClient.on('error', (error: Error) => {
+      clearSubscriptionRetry();
+      connectionGeneration += 1;
+      subscriptionAttempt += 1;
+      mqttConnected = false;
       mqttLastError = error.message;
       console.error('MQTT error', error);
       if (config.mqtt.required && isBadCredentialsError(error)) {
@@ -203,7 +257,7 @@ export const initMqtt = async (): Promise<void> => {
       }, Math.max(config.mqtt.connectTimeout, 5000));
     }
 
-    client.on('message', async (topic: string, messageBuffer: Buffer, packet: IPublishPacket) => {
+    activeClient.on('message', async (topic: string, messageBuffer: Buffer, packet: IPublishPacket) => {
       try {
         await processMqttMessage(topic, messageBuffer, packet);
       } catch (error) {
@@ -214,6 +268,9 @@ export const initMqtt = async (): Promise<void> => {
 };
 
 export const resetMqttStateForTests = (): void => {
+  clearSubscriptionRetry();
+  connectionGeneration += 1;
+  subscriptionAttempt += 1;
   client?.removeAllListeners();
   client = null;
   mqttConnected = false;
