@@ -47,7 +47,25 @@ test('technical gateway panel uses existing central command endpoints and never 
   const renderer = ui.split('const renderReportedIdentity')[1].split('const selectGateway')[0];
   assert.match(renderer, /textContent/);
   assert.doesNotMatch(renderer, /innerHTML|insertAdjacentHTML/);
-  assert.doesNotMatch(ui, /mqtt\.publish|gw\/\$\{.*\}\/subscribe/);
+  assert.doesNotMatch(ui, /mqtt\.publish/);
+});
+
+test('MQTT 1030 UI keeps the secret ephemeral, restores the preset and explains unverified connectivity', () => {
+  const html = source('public/gateways.html');
+  const ui = source('public/js/gateways.js');
+  assert.match(html, /Configurar conexión MQTT \(1030\)/);
+  assert.match(html, /name="passwd" type="password"[^>]*autocomplete="new-password"/);
+  assert.match(html, /no existe rollback remoto garantizado/);
+  assert.match(html, /gatewayMqttRestorePreset/);
+  assert.match(html, /gatewayMqttHistoryTable/);
+  assert.match(ui, /horizonstMqttPreset/);
+  assert.match(ui, /confirmationMac.*!== mac/);
+  assert.match(ui, /passwordInput\.value = ''/);
+  assert.match(ui, /\/configure-mqtt/);
+  assert.doesNotMatch(ui, /localStorage|sessionStorage/);
+  const mqttUi = ui.split('const mqttIntegerFields')[1].split('const normalizeMac')[0];
+  assert.doesNotMatch(mqttUi, /innerHTML|insertAdjacentHTML/);
+  assert.match(ui, /result\.message/);
 });
 
 test('gateway audit endpoint checks the scoped gateway before returning metadata', () => {

@@ -27,6 +27,7 @@ import {
   executeGatewayConfigurationRead,
   isGatewayConfigurationReadType
 } from '../services/gatewayObservedReads';
+import { buildGatewayMqttConfiguration } from '../services/gatewayMqttConfiguration';
 
 const router = Router();
 
@@ -146,11 +147,15 @@ router.get('/:gatewayId/commands', authenticate, async (req: AuthenticatedReques
     const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
     const result = await pool.query(
       `SELECT c.id, c.gateway_id, c.company_id, c.msg_id, c.command_type, c.status,
-              c.actor_type, c.actor_code, c.request_id, c.created_at, c.sent_at, c.ack_at,
+              c.actor_type, c.actor_code, c.actor_user_id, u.display_name AS actor_name,
+              c.request_id, c.created_at, c.sent_at, c.ack_at,
               c.ack_msg_id, c.result_code, c.result_message, c.timeout_ms,
-              c.connection_state, c.connection_report_at
+              c.connection_state, c.connection_report_at,
+              CASE WHEN c.msg_id = 1030 THEN c.payload->'data'->>'host' END AS destination_host,
+              CASE WHEN c.msg_id = 1030 THEN c.payload->'data'->>'port' END AS destination_port
        FROM hardware_gateway_commands c
        JOIN gateways g ON g.id = c.gateway_id
+       LEFT JOIN users u ON u.id = c.actor_user_id
        WHERE g.id = $1 AND ${predicate}
        ORDER BY c.created_at DESC LIMIT 200`,
       values
@@ -410,6 +415,83 @@ router.post('/:gatewayId/configure-emergency-button', authenticate, authorizeHar
     }
     console.error('Failed to configure B5 gateway', error);
     return res.status(500).json({ message: 'Failed to configure B5 gateway' });
+  }
+});
+
+router.post('/:gatewayId/configure-mqtt', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+      || Object.keys(body).sort().join(',') !== 'confirmationMac,data') {
+    return res.status(400).json({ message: 'Invalid MQTT configuration request' });
+  }
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const gatewayMac = normalizeGatewayMac(gateway.mac_address);
+    if (!gatewayMac || body.confirmationMac !== gatewayMac) {
+      return res.status(400).json({ message: 'The exact normalized gateway MAC is required for confirmation' });
+    }
+    let payloads;
+    try {
+      payloads = buildGatewayMqttConfiguration(gatewayMac, body.data);
+    } catch {
+      return res.status(400).json({ message: 'Invalid MQTT configuration' });
+    }
+    const result = await executeManagedGatewayCommand({
+      gatewayId,
+      companyId: gateway.company_id,
+      gatewayMac,
+      commandType: 'mqtt_connection_1030',
+      command: payloads.wirePayload,
+      journalPayload: payloads.persistedPayload,
+      ackMsgIds: [1030],
+      sensitiveCommand: true,
+      actor: { type: 'user', userId: req.user!.id },
+      requestId: req.requestId,
+      timeoutMs: commandTimeoutMs()
+    });
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id,
+      action: 'gateway.mqtt.configure',
+      entityType: 'gateway',
+      entityId: gatewayId,
+      companyId: gateway.company_id,
+      requestId: req.requestId,
+      result: result.status === 'success' ? 'success' : result.status === 'ambiguous' ? 'unverified' : 'failure',
+      after: {
+        commandId: result.commandId,
+        status: result.status,
+        resultCode: result.resultCode,
+        resultMessage: result.resultMessage,
+        destination: { host: payloads.wirePayload.data.host, port: payloads.wirePayload.data.port }
+      }
+    });
+    const message = result.status === 'success'
+      ? 'La gateway aceptó la configuración MQTT. La conexión al nuevo broker todavía no está verificada.'
+      : result.status === 'timeout'
+        ? 'No se recibió confirmación. La gateway podría haber aplicado la configuración y haberse desconectado.'
+        : result.status === 'ambiguous'
+          ? 'Se observó un ACK positivo, pero no puede atribuirse inequívocamente a esta orden. La conexión al nuevo broker no está verificada.'
+          : 'La gateway no aceptó la configuración MQTT o no pudo publicarse.';
+    const httpStatus = result.status === 'success' ? 200
+      : result.status === 'ambiguous' ? 202
+        : result.status === 'timeout' ? 504 : 502;
+    return res.status(httpStatus).json({
+      commandId: result.commandId,
+      msgId: 1030,
+      status: result.status,
+      resultCode: result.resultCode,
+      resultMessage: result.resultMessage,
+      message
+    });
+  } catch (error) {
+    if (error instanceof GatewayCommandBusyError || (error as any)?.code === '23505') {
+      return res.status(409).json({ message: 'Gateway already has an active command or this request was already submitted' });
+    }
+    console.error('Failed to configure gateway MQTT connection', error);
+    return res.status(500).json({ message: 'Failed to configure gateway MQTT connection' });
   }
 });
 

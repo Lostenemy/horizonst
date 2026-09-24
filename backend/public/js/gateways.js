@@ -23,6 +23,11 @@ const technicalTitle = document.getElementById('gatewayTechnicalTitle');
 const technicalSummary = document.getElementById('gatewayTechnicalSummary');
 const technicalActions = document.getElementById('gatewayTechnicalActions');
 const bluetoothPanel = document.getElementById('gatewayBluetoothPanel');
+const mqttPanel = document.getElementById('gatewayMqttPanel');
+const mqttForm = document.getElementById('gatewayMqttForm');
+const mqttFeedback = document.getElementById('gatewayMqttFeedback');
+const mqttHistoryBody = document.querySelector('#gatewayMqttHistoryTable tbody');
+const mqttConfirmationMac = document.getElementById('gatewayMqttConfirmationMac');
 const technicalFeedback = document.getElementById('gatewayTechnicalFeedback');
 const firmwareRecordButton = document.getElementById('gatewayRecordFirmware');
 const firmwareClearButton = document.getElementById('gatewayClearFirmware');
@@ -43,6 +48,65 @@ let gateways = [];
 let owners = [];
 let companies = [];
 let selectedGateway = null;
+
+const mqttIntegerFields = [
+  'security_type', 'port', 'qos', 'clean_session', 'keepalive', 'lwt_en', 'lwt_qos', 'lwt_retain'
+];
+
+const normalizedCentralMac = (gateway) => String(gateway?.mac_address || '').replace(/[^0-9a-fA-F]/g, '').toLowerCase();
+
+const horizonstMqttPreset = (gateway) => {
+  const mac = normalizedCentralMac(gateway);
+  return {
+    security_type: 1, host: 'mqtt.horizonst.com.es', port: 8883, client_id: mac, username: mac, passwd: '',
+    sub_topic: `gw/${mac}/subscribe`, pub_topic: `gw/${mac}/publish`, qos: 0, clean_session: 1,
+    keepalive: 60, lwt_en: 1, lwt_qos: 1, lwt_retain: 0, lwt_topic: `gw/${mac}/publish`,
+    lwt_payload: JSON.stringify({ msg_id: 3999, device_info: { mac }, data: {} })
+  };
+};
+
+const applyMqttPreset = () => {
+  if (!selectedGateway) return;
+  const preset = horizonstMqttPreset(selectedGateway);
+  for (const [name, value] of Object.entries(preset)) mqttForm.elements.namedItem(name).value = String(value);
+  mqttForm.elements.namedItem('confirmationMac').value = '';
+};
+
+const mqttFormData = () => Object.fromEntries([
+  'security_type', 'host', 'port', 'client_id', 'username', 'passwd', 'sub_topic', 'pub_topic', 'qos',
+  'clean_session', 'keepalive', 'lwt_en', 'lwt_qos', 'lwt_retain', 'lwt_topic', 'lwt_payload'
+].map((name) => {
+  const value = mqttForm.elements.namedItem(name).value;
+  return [name, mqttIntegerFields.includes(name) ? Number(value) : value];
+}));
+
+const validateMqttForm = (data, mac) => {
+  const byteLength = (value) => new TextEncoder().encode(value).length;
+  if (!Number.isInteger(data.port) || data.port < 1 || data.port > 65535
+      || !Number.isInteger(data.keepalive) || data.keepalive < 0 || data.keepalive > 65535) return false;
+  if (![data.security_type, data.qos, data.clean_session, data.lwt_en, data.lwt_qos, data.lwt_retain]
+    .every((value) => Number.isInteger(value))) return false;
+  if (![0, 1].includes(data.security_type) || ![0, 1].includes(data.qos) || ![0, 1].includes(data.lwt_qos)
+      || ![data.clean_session, data.lwt_en, data.lwt_retain].every((value) => value === 0 || value === 1)) return false;
+  if (!data.passwd || byteLength(data.passwd) > 256
+      || !data.host.trim() || byteLength(data.host) > 253 || /[\u0000-\u001f\u007f]/.test(data.host)
+      || data.host.includes('://') || data.host.includes('/') || /\s/.test(data.host)) return false;
+  if ([data.client_id, data.username].some((value) => !value.trim() || byteLength(value) > 256)) return false;
+  if ([data.sub_topic, data.pub_topic, data.lwt_topic].some((topic) => !topic.trim() || byteLength(topic) > 1024
+      || /[\u0000-\u001f\u007f]/.test(topic))) return false;
+  if ([data.pub_topic, data.lwt_topic].some((topic) => topic.includes('#') || topic.includes('+'))) return false;
+  if (byteLength(data.lwt_payload) > 4096) return false;
+  try {
+    const lwt = JSON.parse(data.lwt_payload);
+    return Object.keys(lwt).sort().join(',') === 'data,device_info,msg_id'
+      && lwt.msg_id === 3999
+      && Object.keys(lwt.device_info || {}).join(',') === 'mac'
+      && normalizedCentralMac({ mac_address: lwt.device_info.mac }) === mac
+      && lwt.data && !Array.isArray(lwt.data) && Object.keys(lwt.data).length === 0;
+  } catch {
+    return false;
+  }
+};
 
 const normalizeMac = (value) => {
   if (!value) return '';
@@ -225,12 +289,18 @@ const refreshTechnicalHistory = async () => {
       apiGet(`/gateways/${gatewayId}/ble-connected-devices`)
     ]);
     if (selectedGateway?.id !== gatewayId) return;
-    renderHistory(commandsBody, commands, [
+    const commandColumns = [
       (item) => new Date(item.created_at).toLocaleString('es-ES'),
       (item) => item.command_type,
       (item) => item.msg_id,
+      (item) => item.actor_name || item.actor_code || item.actor_type,
+      (item) => item.destination_host ? `${item.destination_host}:${item.destination_port}` : '—',
       (item) => item.connection_state ? `${item.status} · BLE ${item.connection_state}` : item.status,
       (item) => item.result_code == null ? item.result_message : `${item.result_code}: ${item.result_message || ''}`
+    ];
+    renderHistory(commandsBody, commands, commandColumns);
+    renderHistory(mqttHistoryBody, commands.filter((item) => item.msg_id === 1030), [
+      commandColumns[0], commandColumns[3], commandColumns[4], commandColumns[5], commandColumns[6]
     ]);
     renderHistory(readsBody, reads, [
       (item) => new Date(item.created_at).toLocaleString('es-ES'),
@@ -294,6 +364,9 @@ const selectGateway = async (gateway) => {
   technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin empresa'} · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'} · registro manual: ${gateway.product_model || 'modelo desconocido'} ${gateway.firmware_version || 'firmware desconocido'}${gateway.firmware_evidence ? ` · evidencia ${gateway.firmware_evidence}` : ''}`;
   technicalActions.hidden = !canEditHardware || !gateway.active || !gateway.company_id;
   bluetoothPanel.hidden = technicalActions.hidden;
+  mqttPanel.hidden = technicalActions.hidden;
+  mqttConfirmationMac.textContent = normalizedCentralMac(gateway);
+  applyMqttPreset();
   refreshFirmwareControls(gateway);
   renderReportedIdentity(gateway);
   gatewayRssi.value = gateway.rssi_threshold ?? -127;
@@ -435,6 +508,41 @@ document.getElementById('gatewayConfigureB5').addEventListener('click', async ()
     await refreshTechnicalHistory();
   } catch (error) {
     technicalFeedback.textContent = `No se pudo configurar B5: ${error.message}`;
+  }
+});
+
+document.getElementById('gatewayMqttRestorePreset').addEventListener('click', applyMqttPreset);
+
+mqttForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!selectedGateway || !canEditHardware) return;
+  const passwordInput = mqttForm.elements.namedItem('passwd');
+  const mac = normalizedCentralMac(selectedGateway);
+  const data = mqttFormData();
+  if (mqttForm.elements.namedItem('confirmationMac').value !== mac) {
+    mqttFeedback.textContent = `Escribe exactamente ${mac} para confirmar.`;
+    passwordInput.value = '';
+    return;
+  }
+  if (!validateMqttForm(data, mac)) {
+    mqttFeedback.textContent = 'La configuración MQTT no es válida. Revisa tipos, rangos, topics y payload LWT.';
+    passwordInput.value = '';
+    return;
+  }
+  try {
+    mqttFeedback.textContent = 'Enviando una única orden 1030 y esperando su ACK…';
+    const request = apiPost(`/gateways/${selectedGateway.id}/configure-mqtt`, {
+      confirmationMac: mac,
+      data
+    });
+    passwordInput.value = '';
+    const result = await request;
+    mqttFeedback.textContent = result.message;
+  } catch (error) {
+    mqttFeedback.textContent = error.message;
+  } finally {
+    passwordInput.value = '';
+    await refreshTechnicalHistory();
   }
 });
 

@@ -190,6 +190,7 @@ async function executeCommand(params: {
   idempotencyKey?: string;
   journalPayload?: GatewayCommandPayload;
   ackMsgIds?: number[];
+  sensitiveCommand?: boolean;
   deps?: {
     publish?: typeof publishMqttJson;
     waitForAck?: typeof waitForHardwareGatewayAck;
@@ -269,8 +270,9 @@ async function executeCommand(params: {
       ...(status === 'ambiguous' ? { ackAmbiguous: true } : {})
     };
   } catch (error: any) {
-    const message = String(error?.message ?? error);
-    const timedOut = published && message.includes('timeout waiting gateway reply');
+    const rawMessage = String(error?.message ?? error);
+    const timedOut = published && rawMessage.includes('timeout waiting gateway reply');
+    const message = params.sensitiveCommand && !timedOut ? 'Gateway command publication failed' : rawMessage;
     await pool.query(
       `UPDATE hardware_gateway_commands
        SET status = $2, result_message = $3
@@ -417,6 +419,9 @@ export async function executeManagedGatewayCommand(params: {
   actor: GatewayCommandActor;
   requestId?: string;
   timeoutMs: number;
+  journalPayload?: GatewayCommandPayload;
+  ackMsgIds?: number[];
+  sensitiveCommand?: boolean;
   deps?: Parameters<typeof executeCommand>[0]['deps'];
 }): Promise<GatewayCommandResult> {
   const lockClient = await pool.connect();

@@ -120,6 +120,76 @@
             </label>
           </div>
         </div>
+        <section id="gatewayMqttPanel" hidden aria-labelledby="gatewayMqttTitle">
+          <h3 id="gatewayMqttTitle">Configurar conexión MQTT (1030)</h3>
+          <div class="alert warning">
+            <strong>Operación de riesgo.</strong> La gateway cambiará su conexión MQTT y puede desconectarse del broker actual.
+            Un ACK 1030 solo confirma que aceptó la orden, no que conectó al nuevo broker. Una configuración incorrecta
+            puede exigir recuperación local y no existe rollback remoto garantizado.
+          </div>
+          <form id="gatewayMqttForm" class="form-grid" autocomplete="off">
+            <label>security_type
+              <select name="security_type" required><option value="0">0</option><option value="1">1</option></select>
+            </label>
+            <label>Host
+              <input name="host" type="text" maxlength="253" required />
+            </label>
+            <label>Puerto
+              <input name="port" type="number" min="1" max="65535" step="1" required />
+            </label>
+            <label>Client ID
+              <input name="client_id" type="text" maxlength="256" required />
+            </label>
+            <label>Usuario
+              <input name="username" type="text" maxlength="256" required />
+            </label>
+            <label>Contraseña
+              <input name="passwd" type="password" maxlength="256" autocomplete="new-password" required />
+            </label>
+            <label>Topic de suscripción
+              <input name="sub_topic" type="text" maxlength="1024" required />
+            </label>
+            <label>Topic de publicación
+              <input name="pub_topic" type="text" maxlength="1024" required />
+            </label>
+            <label>QoS
+              <select name="qos" required><option value="0">0</option><option value="1">1</option></select>
+            </label>
+            <label>Clean session
+              <select name="clean_session" required><option value="0">0</option><option value="1">1</option></select>
+            </label>
+            <label>Keepalive
+              <input name="keepalive" type="number" min="0" max="65535" step="1" required />
+            </label>
+            <label>LWT habilitado
+              <select name="lwt_en" required><option value="0">0</option><option value="1">1</option></select>
+            </label>
+            <label>LWT QoS
+              <select name="lwt_qos" required><option value="0">0</option><option value="1">1</option></select>
+            </label>
+            <label>LWT retain
+              <select name="lwt_retain" required><option value="0">0</option><option value="1">1</option></select>
+            </label>
+            <label>LWT topic
+              <input name="lwt_topic" type="text" maxlength="1024" required />
+            </label>
+            <label>LWT payload 3999
+              <textarea name="lwt_payload" maxlength="4096" required></textarea>
+            </label>
+            <label>Confirmación reforzada: escribe la MAC exacta <span id="gatewayMqttConfirmationMac"></span>
+              <input name="confirmationMac" type="text" required spellcheck="false" autocomplete="off" />
+            </label>
+            <div class="actions">
+              <button type="button" id="gatewayMqttRestorePreset">Restaurar preset HorizonST</button>
+              <button type="submit">Enviar configuración MQTT</button>
+            </div>
+          </form>
+          <p id="gatewayMqttFeedback" role="status" aria-live="polite"></p>
+          <h4>Historial de órdenes MQTT 1030</h4>
+          <div class="table-wrapper"><table id="gatewayMqttHistoryTable">
+            <thead><tr><th>Fecha</th><th>Actor</th><th>Destino</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
+          </table></div>
+        </section>
         <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>
         <h3>Identidad reportada automáticamente</h3>
         <p>Datos observados en una respuesta MQTT 2002 válida; separados del registro manual.</p>
@@ -142,7 +212,7 @@
         </table></div>
         <h3>Comandos recientes</h3>
         <div class="table-wrapper"><table id="gatewayCommandsTable">
-          <thead><tr><th>Fecha</th><th>Comando</th><th>msg_id</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
+          <thead><tr><th>Fecha</th><th>Comando</th><th>msg_id</th><th>Actor</th><th>Destino</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
         </table></div>
         <h3>Auditoría técnica</h3>
         <div class="table-wrapper"><table id="gatewayAuditTable">

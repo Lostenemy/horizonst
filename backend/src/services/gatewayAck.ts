@@ -77,11 +77,17 @@ export function normalizeHardwareGatewayAck(
   if (!topicMac) return null;
   const payloadMacValue = data.device_info?.mac;
   if (payloadMacValue !== undefined && normalizeGatewayMac(payloadMacValue) !== topicMac) return null;
+  const rawResultMessage = data.result_msg ?? data.data?.result_msg;
+  if (msgId === 1030) {
+    if (payloadMacValue === undefined || !Number.isInteger(data.result_code) || data.result_code !== resultCode
+        || resultCode < 0 || resultCode > 4
+        || typeof rawResultMessage !== 'string' || rawResultMessage !== resultMessages[resultCode]) return null;
+  }
   return {
     gatewayMac: topicMac,
     msgId,
     resultCode,
-    resultMessage: String(data.result_msg ?? data.data?.result_msg ?? resultMessages[resultCode] ?? ''),
+    resultMessage: String(rawResultMessage ?? resultMessages[resultCode] ?? ''),
     payload: data
   };
 }
