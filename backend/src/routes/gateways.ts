@@ -30,12 +30,15 @@ import {
 } from '../services/gatewayObservedReads';
 import { buildGatewayMqttConfiguration } from '../services/gatewayMqttConfiguration';
 import {
-  GatewayOnboardingCompanyError,
   GatewayOnboardingConflictError,
   onboardGateway,
-  normalizeGatewayOnboardingMac,
-  resolveGatewayOnboardingCompany
+  normalizeGatewayOnboardingMac
 } from '../services/gatewayOnboarding';
+import {
+  assignGatewayCompany,
+  GatewayAssignmentConflictError,
+  GatewayAssignmentNotFoundError
+} from '../services/gatewayCompanyAssignment';
 
 const router = Router();
 
@@ -53,7 +56,10 @@ const gatewaySelect = `SELECT g.id, g.name, g.mac_address, g.description, g.owne
                               g.reported_firmware_version, g.reported_function_version,
                               g.reported_sl_ble_version, g.identity_observed_at,
                               gp.place_id, p.name AS place_name, c.code AS company_code,
-                              c.name AS company_name, g.created_at, g.updated_at
+                              c.name AS company_name, g.created_at, g.updated_at,
+                              EXISTS (SELECT 1 FROM vmq_auth_acl a
+                                      WHERE a.mountpoint = '' AND a.client_id =
+                                        regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g')) AS broker_prepared
                        FROM gateways g
                        LEFT JOIN gateway_places gp ON gp.gateway_id = g.id AND gp.active = true
                        LEFT JOIN places p ON p.id = gp.place_id
@@ -115,7 +121,21 @@ const commandTimeoutMs = (): number => {
   return Number.isFinite(parsed) ? Math.min(120000, Math.max(100, Math.floor(parsed))) : 8000;
 };
 
-async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number) {
+type CommandGateway = {
+  id: number;
+  mac_address: string;
+  company_id: string | null;
+  rssi_threshold: number;
+  product_model: string | null;
+  firmware_version: string | null;
+  firmware_evidence: string | null;
+  reported_product_model: string | null;
+  reported_firmware_version: string | null;
+  identity_observed_at: Date | null;
+};
+async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number): Promise<(CommandGateway & { company_id: string }) | null>;
+async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number, allowUnassigned: true): Promise<CommandGateway | null>;
+async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number, allowUnassigned = false): Promise<CommandGateway | null> {
   const scope = await resolveHardwareAccess(req.user!, 'technician');
   const values: unknown[] = [gatewayId];
   const predicate = scopedHardwarePredicate({
@@ -124,24 +144,15 @@ async function gatewayForCommand(req: AuthenticatedRequest, gatewayId: number) {
     companyColumn: 'g.company_id',
     ownerColumn: 'g.owner_id'
   });
-  const result = await pool.query<{
-    id: number;
-    mac_address: string;
-    company_id: string;
-    rssi_threshold: number;
-    product_model: string | null;
-    firmware_version: string | null;
-    firmware_evidence: string | null;
-    reported_product_model: string | null;
-    reported_firmware_version: string | null;
-    identity_observed_at: Date | null;
-  }>(
+  const result = await pool.query<CommandGateway>(
     `SELECT g.id, g.mac_address, g.company_id, g.rssi_threshold,
             g.product_model, g.firmware_version, g.firmware_evidence,
             g.reported_product_model, g.reported_firmware_version, g.identity_observed_at
      FROM gateways g
-     WHERE g.id = $1 AND g.active = TRUE AND g.company_id IS NOT NULL AND ${predicate}`,
-    values
+     WHERE g.id = $1 AND g.active = TRUE
+       AND (g.company_id IS NOT NULL OR $${values.length + 1}::boolean)
+       AND ${predicate}`,
+    [...values, allowUnassigned && scope.global]
   );
   return result.rows[0] ?? null;
 }
@@ -165,8 +176,9 @@ router.get('/:gatewayId/commands', authenticate, async (req: AuthenticatedReques
        JOIN gateways g ON g.id = c.gateway_id
        LEFT JOIN users u ON u.id = c.actor_user_id
        WHERE g.id = $1 AND ${predicate}
+         AND ($${values.length + 1}::boolean OR c.company_id = g.company_id)
        ORDER BY c.created_at DESC LIMIT 200`,
-      values
+      [...values, scope.global]
     );
     return res.json(result.rows);
   } catch (error) {
@@ -262,9 +274,10 @@ router.get('/:gatewayId/audit', authenticate, async (req: AuthenticatedRequest, 
     const result = await pool.query(
       `SELECT id, actor_user_id, actor_type, actor_code, action, result, request_id, created_at
        FROM technical_audit_log
-       WHERE entity_type = 'gateway' AND entity_id = $1 AND company_id IS NOT DISTINCT FROM $2::uuid
+       WHERE entity_type = 'gateway' AND entity_id = $1
+         AND ($3::boolean OR company_id = $2::uuid)
        ORDER BY created_at DESC LIMIT 200`,
-      [String(gatewayId), gateway.rows[0].company_id]
+      [String(gatewayId), gateway.rows[0].company_id, scope.global]
     );
     return res.json(result.rows);
   } catch (error) {
@@ -435,8 +448,11 @@ router.post('/:gatewayId/configure-mqtt', authenticate, authorizeHardware('techn
     return res.status(400).json({ message: 'Invalid MQTT configuration request' });
   }
   try {
-    const gateway = await gatewayForCommand(req, gatewayId);
+    const gateway = await gatewayForCommand(req, gatewayId, true);
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    if (gateway.company_id === null && !isHardwareSuperadmin(req.user!.role)) {
+      return res.status(404).json({ message: 'Gateway not found' });
+    }
     const gatewayMac = normalizeGatewayMac(gateway.mac_address);
     if (!gatewayMac || body.confirmationMac !== gatewayMac) {
       return res.status(400).json({ message: 'The exact normalized gateway MAC is required for confirmation' });
@@ -660,7 +676,7 @@ router.delete('/:gatewayId/firmware', authenticate, authorizeHardware('technicia
   }
 });
 
-router.post('/onboard', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+router.post('/onboard', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
       || Object.keys(req.body).join(',') !== 'macAddress') {
     return res.status(400).json({ message: 'Only macAddress is accepted' });
@@ -668,26 +684,19 @@ router.post('/onboard', authenticate, authorizeHardware('technician'), async (re
   const normalizedMac = normalizeGatewayOnboardingMac(req.body.macAddress);
   if (!normalizedMac) return res.status(400).json({ message: 'MAC address is invalid' });
   try {
-    const scope = await resolveHardwareAccess(req.user!, 'technician');
-    const companyId = await resolveGatewayOnboardingCompany({
-      userId: req.user!.id,
-      scopedCompanyIds: scope.companyIds,
-      globalAccess: scope.global
-    });
     const result = await onboardGateway({
       macAddress: normalizedMac,
-      companyId,
       actorUserId: req.user!.id,
       requestId: req.requestId
     });
     return res.status(201).json({
       ...result,
-      message: 'Gateway registrada y preparada en el broker. Su conexión todavía no está verificada.'
+      companyAssignment: 'unassigned',
+      connection: 'unverified',
+      connected: null,
+      message: 'Gateway registrada y preparada en el broker, sin compañía. Su conexión todavía no está verificada.'
     });
   } catch (error: any) {
-    if (error instanceof GatewayOnboardingCompanyError) {
-      return res.status(409).json({ message: error.message });
-    }
     if (error instanceof GatewayOnboardingConflictError) {
       return res.status(409).json({ message: error.message });
     }
@@ -696,6 +705,27 @@ router.post('/onboard', authenticate, authorizeHardware('technician'), async (re
     }
     console.error('Failed to onboard gateway');
     return res.status(500).json({ message: 'Failed to onboard gateway' });
+  }
+});
+
+router.post('/:gatewayId/assign-company', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isSafeInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+      || Object.keys(req.body).join(',') !== 'companyId') {
+    return res.status(400).json({ message: 'Only companyId is accepted' });
+  }
+  const companyId = companyIdValue(req.body.companyId);
+  if (!companyId) return res.status(400).json({ message: 'A valid companyId is required' });
+  try {
+    return res.json(await assignGatewayCompany({
+      gatewayId, companyId, actorUserId: req.user!.id, requestId: req.requestId
+    }));
+  } catch (error) {
+    if (error instanceof GatewayAssignmentConflictError) return res.status(409).json({ message: error.message });
+    if (error instanceof GatewayAssignmentNotFoundError) return res.status(404).json({ message: error.message });
+    console.error('Failed to assign gateway company');
+    return res.status(500).json({ message: 'Failed to assign gateway company' });
   }
 });
 
@@ -787,6 +817,9 @@ router.put('/:gatewayId', authenticate, async (req: AuthenticatedRequest, res) =
   if (!isHardwareSuperadmin(req.user!.role) && req.user!.role !== 'hardware_technician' && req.user!.role !== 'USER') {
     return res.status(403).json({ message: 'Forbidden' });
   }
+  if (req.body?.companyId !== undefined) {
+    return res.status(400).json({ message: 'Use the audited company assignment operation' });
+  }
   const scope = await resolveHardwareAccess(req.user!, 'technician');
   const accessValues: unknown[] = [gatewayId];
   const predicate = scopedHardwarePredicate({ scope, values: accessValues, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
@@ -815,22 +848,7 @@ router.put('/:gatewayId', authenticate, async (req: AuthenticatedRequest, res) =
         }
         values.push(req.body.active); fields.push(`active = $${values.length}`);
       }
-      if (req.body?.companyId !== undefined) {
-        const parsed = companyIdValue(req.body.companyId);
-        if (parsed === undefined) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ message: 'companyId is invalid' });
-        }
-        if (parsed) {
-          const company = await client.query('SELECT id FROM companies WHERE id = $1 AND active = TRUE', [parsed]);
-          if (!company.rows[0]) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ message: 'Company not found' });
-          }
-        }
-        values.push(parsed); fields.push(`company_id = $${values.length}`);
-      }
-    } else if (req.body?.active !== undefined || req.body?.companyId !== undefined || req.body?.ownerId !== undefined) {
+    } else if (req.body?.active !== undefined || req.body?.ownerId !== undefined) {
       await client.query('ROLLBACK');
       return res.status(403).json({ message: 'Forbidden' });
     }

@@ -16,6 +16,7 @@
         <a href="users.html" class="admin-only">Usuarios</a>
         <a href="categories.html">Categorías</a>
         <a href="gateways.html" class="active">Gateways</a>
+        <a href="companies.html" class="admin-only">Compañías</a>
         <a href="messages.html">Mensajes</a>
         <a href="history.html">Históricos</a>
         <a href="alarms.html">Alarmas</a>
@@ -25,8 +26,8 @@
     <main>
       <section class="card" id="adminGatewaySection" style="display:none">
         <h2>Dar de alta gateway</h2>
-        <p>La empresa se obtiene de tu contexto autorizado. El alta registra la gateway y prepara su cuenta en el broker,
-          pero no demuestra que esté conectada.</p>
+        <p>El alta registra la gateway sin compañía y prepara su cuenta en el broker.
+          La conexión se verifica por separado. Después podrás asignar una compañía activa.</p>
         <div class="alert warning">La credencial inicial sigue la convención técnica MAC=contraseña y es predecible.
           Debe considerarse una credencial de puesta en marcha, no una credencial robusta.</div>
         <form id="gatewayForm" class="form-grid">

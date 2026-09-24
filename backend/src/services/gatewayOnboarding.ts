@@ -4,7 +4,6 @@ import { normalizeGatewayMac } from '../utils/mac';
 import { appendTechnicalAudit } from './technicalAudit';
 
 export class GatewayOnboardingConflictError extends Error {}
-export class GatewayOnboardingCompanyError extends Error {}
 
 export interface GatewayOnboardingResult {
   gateway: {
@@ -13,7 +12,7 @@ export interface GatewayOnboardingResult {
     mac_address: string;
     description: string | null;
     owner_id: number | null;
-    company_id: string;
+    company_id: string | null;
     active: boolean;
     created_at: string;
     updated_at: string;
@@ -43,7 +42,6 @@ export function normalizeGatewayOnboardingMac(input: unknown): string | null {
 
 export async function onboardGateway(params: {
   macAddress: string;
-  companyId: string;
   actorUserId: number;
   requestId?: string;
 }, deps: { database?: ConnectablePool } = {}): Promise<GatewayOnboardingResult> {
@@ -54,16 +52,6 @@ export async function onboardGateway(params: {
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 7247))', [mac]);
-
-    const company = await client.query(
-      `SELECT c.id
-       FROM companies c
-       JOIN company_user_memberships m ON m.company_id = c.id
-       WHERE c.id = $1 AND c.active = TRUE AND m.user_id = $2 AND m.role = 'hardware_technician'
-       FOR SHARE OF c, m`,
-      [params.companyId, params.actorUserId]
-    );
-    if (!company.rows[0]) throw new GatewayOnboardingCompanyError('Active company not found');
 
     const gatewayCollision = await client.query(
       `SELECT id, company_id
@@ -85,9 +73,9 @@ export async function onboardGateway(params: {
 
     const inserted = await client.query<GatewayOnboardingResult['gateway']>(
       `INSERT INTO gateways(name, mac_address, description, owner_id, company_id)
-       VALUES(NULL, $1, NULL, NULL, $2)
+       VALUES(NULL, $1, NULL, NULL, NULL)
        RETURNING id, name, mac_address, description, owner_id, company_id, active, created_at, updated_at`,
-      [mac, params.companyId]
+      [mac]
     );
     const gateway = inserted.rows[0];
     const publishTopic = `gw/${mac}/publish`;
@@ -110,7 +98,7 @@ export async function onboardGateway(params: {
       action: 'gateway.onboard',
       entityType: 'gateway',
       entityId: gateway.id,
-      companyId: params.companyId,
+      companyId: null,
       requestId: params.requestId,
       result: 'success',
       after: { gateway, broker }
@@ -123,29 +111,4 @@ export async function onboardGateway(params: {
   } finally {
     client.release();
   }
-}
-
-export async function resolveGatewayOnboardingCompany(params: {
-  userId: number;
-  scopedCompanyIds: string[];
-  globalAccess: boolean;
-}): Promise<string> {
-  let companyIds = [...new Set(params.scopedCompanyIds)];
-  if (params.globalAccess) {
-    const memberships = await pool.query<{ company_id: string }>(
-      `SELECT m.company_id
-       FROM company_user_memberships m
-       JOIN companies c ON c.id = m.company_id AND c.active = TRUE
-       WHERE m.user_id = $1 AND m.role = 'hardware_technician'
-       ORDER BY m.company_id`,
-      [params.userId]
-    );
-    companyIds = [...new Set(memberships.rows.map((row) => row.company_id))];
-  }
-  if (companyIds.length !== 1) {
-    throw new GatewayOnboardingCompanyError(
-      companyIds.length ? 'A single active company context is required' : 'No active technician company context is available'
-    );
-  }
-  return companyIds[0];
 }

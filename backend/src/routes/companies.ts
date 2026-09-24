@@ -48,7 +48,7 @@ router.get('/', authorizeHardware('read'), async (req: AuthenticatedRequest, res
 router.post('/', authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   const code = normalizeCode(req.body?.code);
   const name = normalizeName(req.body?.name);
-  if (!COMPANY_CODE_PATTERN.test(code) || !name) {
+  if (!COMPANY_CODE_PATTERN.test(code) || !name || name.length > 160) {
     return res.status(400).json({ message: 'Invalid company code or name' });
   }
 
@@ -115,7 +115,7 @@ router.patch('/:id', authorizeHardware('superadmin'), async (req: AuthenticatedR
   }
   if (req.body?.name !== undefined) {
     const name = normalizeName(req.body.name);
-    if (!name) return res.status(400).json({ message: 'Invalid company name' });
+    if (!name || name.length > 160) return res.status(400).json({ message: 'Invalid company name' });
     values.push(name);
     fields.push(`name = $${values.length}`);
   }
@@ -161,6 +161,41 @@ router.patch('/:id', authorizeHardware('superadmin'), async (req: AuthenticatedR
     if (error?.code === '23505') return res.status(409).json({ message: 'Company code already exists' });
     console.error('Failed to update company', error);
     return res.status(500).json({ message: 'Failed to update company' });
+  } finally {
+    client.release();
+  }
+});
+
+// Baja lógica: conserva gateways, membresías y diarios, incluso si hay referencias.
+router.delete('/:id', authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
+  if (!validateUuid(req.params.id)) return res.status(400).json({ message: 'Invalid company id' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const before = await client.query('SELECT id, code, name, active FROM companies WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (!before.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    if (!before.rows[0].active) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Company is already inactive' });
+    }
+    const after = await client.query(
+      `UPDATE companies SET active = FALSE, updated_at = NOW() WHERE id = $1
+       RETURNING id, code, name, active, created_at, updated_at`, [req.params.id]
+    );
+    await appendTechnicalAudit({
+      actorUserId: req.user!.id, action: 'company.deactivate', entityType: 'company',
+      entityId: req.params.id, companyId: req.params.id, requestId: req.requestId,
+      result: 'success', before: before.rows[0], after: after.rows[0]
+    }, client);
+    await client.query('COMMIT');
+    return res.json(after.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Failed to deactivate company', error);
+    return res.status(500).json({ message: 'Failed to deactivate company' });
   } finally {
     client.release();
   }

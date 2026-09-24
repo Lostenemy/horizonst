@@ -187,7 +187,7 @@ const AMBIGUOUS_ACK_MESSAGE = 'ACK correlation ambiguous after previous timeout 
 
 async function executeCommand(params: {
   gatewayId: number;
-  companyId: string;
+  companyId: string | null;
   gatewayMac: string;
   commandType: string;
   command: GatewayCommandPayload;
@@ -205,6 +205,20 @@ async function executeCommand(params: {
 }): Promise<GatewayCommandResult> {
   const gatewayMac = normalizeGatewayMac(params.gatewayMac);
   if (!gatewayMac) throw new Error('Invalid gateway MAC');
+  if (params.companyId === null &&
+      (params.actor.type !== 'user' || !['mqtt_connection_1030', 'gateway_restart_1000'].includes(params.commandType))) {
+    throw new Error('Unassigned gateway only permits supervised MQTT bootstrap');
+  }
+  // La asignación toma el mismo advisory lock que la secuencia. Revalidamos
+  // el estado tras adquirirlo para no escribir un comando con compañía obsoleta.
+  if (params.companyId === null) {
+    const current = await pool.query<{ company_id: string | null }>(
+      'SELECT company_id FROM gateways WHERE id = $1 AND active = TRUE', [params.gatewayId]
+    );
+    if (!current.rows[0] || current.rows[0].company_id !== null) {
+      throw new Error('Gateway company changed before command publication');
+    }
+  }
   // El firmware no ofrece identificador por solicitud: tras un timeout, un ACK tardío
   // puede corresponder a cualquiera de los siguientes comandos del mismo tipo.
   const priorTimeout = await pool.query<{ ambiguous: boolean }>(
@@ -453,7 +467,7 @@ export async function executeManagedGatewayCommand(params: {
 
 export async function executeGatewayMqttConfigurationSequence(params: {
   gatewayId: number;
-  companyId: string;
+  companyId: string | null;
   gatewayMac: string;
   configuration: GatewayCommandPayload;
   persistedConfiguration: GatewayCommandPayload;

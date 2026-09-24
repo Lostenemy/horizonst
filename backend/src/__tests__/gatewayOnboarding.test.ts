@@ -12,6 +12,7 @@ import {
   normalizeGatewayOnboardingMac,
   onboardGateway
 } from '../services/gatewayOnboarding';
+import { assignGatewayCompany, GatewayAssignmentConflictError } from '../services/gatewayCompanyAssignment';
 import { credentialVersion, signToken } from '../utils/jwt';
 
 const COMPANY_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -60,7 +61,7 @@ test('gateway onboarding uses the repository-proven VerneMQ bcrypt contract', ()
   assert.doesNotMatch(implementation, /password\s*=\s*\$1/);
 });
 
-function fakeOnboardingDatabase(memberships: Record<number, string[]> = { 2: [COMPANY_A] }) {
+function fakeOnboardingDatabase() {
   const observed = {
     connected: 0,
     transaction: [] as string[],
@@ -74,9 +75,6 @@ function fakeOnboardingDatabase(memberships: Record<number, string[]> = { 2: [CO
       const role = id === 1 ? 'hardware_readonly' : id === 5 ? 'hardware_superadmin' : 'hardware_technician';
       return { rows: [{ id, role, password_hash: 'fixture-hash' }] };
     }
-    if (sql.includes('FROM company_user_memberships')) {
-      return { rows: (memberships[Number(params[0])] ?? []).map((company_id) => ({ company_id })) };
-    }
     throw new Error(`Unexpected pool query: ${sql}`);
   };
   (pool as any).connect = async () => {
@@ -88,15 +86,12 @@ function fakeOnboardingDatabase(memberships: Record<number, string[]> = { 2: [CO
           return { rows: [] };
         }
         if (sql.includes('pg_advisory_xact_lock')) return { rows: [{ pg_advisory_xact_lock: null }] };
-        if (sql.includes('FROM companies c') && sql.includes('company_user_memberships')) {
-          return { rows: [{ id: params[0] }] };
-        }
         if (sql.includes('FROM gateways') && sql.includes('regexp_replace')) return { rows: [] };
         if (sql.includes('FROM vmq_auth_acl')) return { rows: [] };
         if (sql.includes('INSERT INTO gateways')) {
           observed.gatewayParams = params;
           return { rows: [{ id: 41, name: null, mac_address: params[0], description: null, owner_id: null,
-            company_id: params[1], active: true, created_at: '2026-01-01', updated_at: '2026-01-01' }] };
+            company_id: null, active: true, created_at: '2026-01-01', updated_at: '2026-01-01' }] };
         }
         if (sql.includes('INSERT INTO vmq_auth_acl')) {
           observed.brokerParams = params;
@@ -114,30 +109,34 @@ function fakeOnboardingDatabase(memberships: Record<number, string[]> = { 2: [CO
   return observed;
 }
 
-test('gateway onboarding requires technician authorization and accepts only the MAC', async () => {
+test('gateway onboarding requires global hardware authorization and accepts only the MAC', async () => {
   const observed = fakeOnboardingDatabase();
   assert.equal((await request({ macAddress: '2805A55EFB68' })).status, 401);
   assert.equal((await request({ macAddress: '2805A55EFB68' }, 1, 'hardware_readonly')).status, 403);
-  assert.equal((await request({ macAddress: '2805A55EFB68', companyId: COMPANY_B }, 2, 'hardware_technician')).status, 400);
-  assert.equal((await request({ macAddress: 'not-a-mac' }, 2, 'hardware_technician')).status, 400);
-  assert.equal((await request({ macAddress: 'prefix-2805A55EFB68' }, 2, 'hardware_technician')).status, 400);
+  assert.equal((await request({ macAddress: '2805A55EFB68' }, 2, 'hardware_technician')).status, 403);
+  assert.equal((await request({ macAddress: '2805A55EFB68', companyId: COMPANY_B }, 5, 'hardware_superadmin')).status, 400);
+  assert.equal((await request({ macAddress: 'not-a-mac' }, 5, 'hardware_superadmin')).status, 400);
+  assert.equal((await request({ macAddress: 'prefix-2805A55EFB68' }, 5, 'hardware_superadmin')).status, 400);
   assert.equal(observed.connected, 0);
   assert.equal(normalizeGatewayOnboardingMac('28:05:A5:5E:FB:68'), '2805a55efb68');
   assert.equal(normalizeGatewayOnboardingMac('28-05-A5-5E-FB-68'), '2805a55efb68');
   assert.equal(normalizeGatewayOnboardingMac('28:05-A5:5E-FB:68'), null);
 });
 
-test('gateway onboarding derives one company and returns only prepared, never connected', async () => {
+test('global gateway onboarding returns broker prepared and unassigned, never connected', async () => {
   const observed = fakeOnboardingDatabase();
-  const response = await request({ macAddress: '28:05:A5:5E:FB:68' }, 2, 'hardware_technician');
+  const response = await request({ macAddress: '28:05:A5:5E:FB:68' }, 5, 'hardware_superadmin');
   assert.equal(response.status, 201);
   const body = await response.json();
-  assert.equal(body.gateway.company_id, COMPANY_A);
+  assert.equal(body.gateway.company_id, null);
   assert.equal(body.gateway.mac_address, '2805a55efb68');
   assert.equal(body.broker.status, 'prepared');
+  assert.equal(body.companyAssignment, 'unassigned');
+  assert.equal(body.connection, 'unverified');
+  assert.equal(body.connected, null);
   assert.match(body.message, /registrada y preparada en el broker/);
   assert.match(body.message, /conexión todavía no está verificada/);
-  assert.deepEqual(observed.gatewayParams, ['2805a55efb68', COMPANY_A]);
+  assert.deepEqual(observed.gatewayParams, ['2805a55efb68']);
   assert.equal(observed.brokerParams[0], '2805a55efb68');
   assert.deepEqual(JSON.parse(String(observed.brokerParams[1])), [{ pattern: 'gw/2805a55efb68/publish' }]);
   assert.deepEqual(JSON.parse(String(observed.brokerParams[2])), [{ pattern: 'gw/2805a55efb68/subscribe' }]);
@@ -146,44 +145,10 @@ test('gateway onboarding derives one company and returns only prepared, never co
   assert.deepEqual(observed.transaction, ['BEGIN', 'COMMIT']);
 });
 
-test('gateway onboarding rejects an absent or ambiguous company context before mutation', async () => {
-  const none = fakeOnboardingDatabase({ 2: [] });
-  assert.equal((await request({ macAddress: '2805A55EFB68' }, 2, 'hardware_technician')).status, 409);
-  assert.equal(none.connected, 0);
-  const multiple = fakeOnboardingDatabase({ 2: [COMPANY_A, COMPANY_B] });
-  assert.equal((await request({ macAddress: '2805A55EFB68' }, 2, 'hardware_technician')).status, 409);
-  assert.equal(multiple.connected, 0);
-  const globalWithContext = fakeOnboardingDatabase({ 5: [COMPANY_B] });
-  const response = await request({ macAddress: '2805A55EFB68' }, 5, 'hardware_superadmin');
-  assert.equal(response.status, 201);
-  assert.deepEqual(globalWithContext.gatewayParams, ['2805a55efb68', COMPANY_B]);
-});
-
-test('gateway onboarding keeps company isolation and never accepts an editable company id', async () => {
-  const observed = fakeOnboardingDatabase({ 3: [COMPANY_B] });
-  const response = await request({ macAddress: '142B2FE271B4' }, 3, 'hardware_technician');
-  assert.equal(response.status, 201);
-  assert.deepEqual(observed.gatewayParams, ['142b2fe271b4', COMPANY_B]);
-  assert.notEqual(observed.gatewayParams[1], COMPANY_A);
-});
-
-test('gateway onboarding revalidates the technician membership inside the transaction', async () => {
+test('global ADMIN can onboard without a company membership', async () => {
   const observed = fakeOnboardingDatabase();
-  const baseConnect = (pool as any).connect;
-  (pool as any).connect = async () => {
-    const client = await baseConnect();
-    const query = client.query.bind(client);
-    client.query = async (sql: string, params: unknown[] = []) => {
-      if (sql.includes('FROM companies c') && sql.includes('company_user_memberships')) return { rows: [] };
-      return query(sql, params);
-    };
-    return client;
-  };
-  const response = await request({ macAddress: '2805A55EFB68' }, 2, 'hardware_technician');
-  assert.equal(response.status, 409);
-  assert.deepEqual(observed.transaction, ['BEGIN', 'ROLLBACK']);
-  assert.deepEqual(observed.gatewayParams, []);
-  assert.deepEqual(observed.brokerParams, []);
+  assert.equal((await request({ macAddress: '142B2FE271B4' }, 5, 'ADMIN')).status, 201);
+  assert.deepEqual(observed.gatewayParams, ['142b2fe271b4']);
 });
 
 test('gateway onboarding reports inventory and broker collisions without overwriting either record', async () => {
@@ -204,7 +169,7 @@ test('gateway onboarding reports inventory and broker collisions without overwri
       };
       return client;
     };
-    const response = await request({ macAddress: '2805A55EFB68' }, 2, 'hardware_technician');
+    const response = await request({ macAddress: '2805A55EFB68' }, 5, 'hardware_superadmin');
     assert.equal(response.status, 409);
     assert.deepEqual(await response.json(), {
       message: collision === 'gateway' ? 'Gateway MAC is already registered' : 'Gateway broker identity is already registered'
@@ -231,7 +196,7 @@ test('gateway onboarding rolls back and returns a redacted error when broker pro
     return client;
   };
   try {
-    const response = await request({ macAddress: '2805A55EFB68' }, 2, 'hardware_technician');
+    const response = await request({ macAddress: '2805A55EFB68' }, 5, 'hardware_superadmin');
     assert.equal(response.status, 500);
     assert.deepEqual(await response.json(), { message: 'Failed to onboard gateway' });
     assert.deepEqual(observed.transaction, ['BEGIN', 'ROLLBACK']);
@@ -260,9 +225,21 @@ test('PostgreSQL onboarding creates bcrypt identity and exact ACL atomically und
         );
         CREATE TABLE ${schema}.gateways(
           id serial PRIMARY KEY, name varchar(160), mac_address varchar(32) NOT NULL UNIQUE,
-          description text, owner_id integer, company_id uuid NOT NULL, active boolean NOT NULL DEFAULT true,
+          description text, owner_id integer, company_id uuid, active boolean NOT NULL DEFAULT true,
           created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
         );
+        CREATE TABLE ${schema}.hardware_gateway_commands(
+          gateway_id integer NOT NULL REFERENCES ${schema}.gateways(id), company_id uuid NOT NULL,
+          msg_id integer NOT NULL,
+          command_type varchar(64) NOT NULL, actor_type varchar(16) NOT NULL,
+          idempotency_key varchar(128)
+        );
+        CREATE TABLE ${schema}.hardware_gateway_reads(gateway_id integer);
+        CREATE TABLE ${schema}.hardware_gateway_observed_settings(gateway_id integer);
+        CREATE TABLE ${schema}.hardware_gateway_ble_snapshots(gateway_id integer);
+        CREATE TABLE ${schema}.gateway_places(gateway_id integer);
+        CREATE TABLE ${schema}.devices(last_gateway_id integer);
+        CREATE TABLE ${schema}.device_records(gateway_id integer);
         CREATE TABLE ${schema}.vmq_auth_acl(
           mountpoint text NOT NULL DEFAULT '', client_id text NOT NULL, username text NOT NULL, password text NOT NULL,
           publish_acl jsonb NOT NULL, subscribe_acl jsonb NOT NULL,
@@ -279,9 +256,11 @@ test('PostgreSQL onboarding creates bcrypt identity and exact ACL atomically und
         INSERT INTO ${schema}.company_user_memberships(user_id, company_id, role) VALUES
           (2, '${COMPANY_A}', 'hardware_technician'), (3, '${COMPANY_B}', 'hardware_technician');
       `);
+      assert.match((await database.query("SELECT current_setting('server_version') AS version")).rows[0].version, /^15\./);
+      await database.query(readFileSync(resolve(process.cwd(), 'migrations', '012_unassigned_gateway_commands.sql'), 'utf8'));
 
       const firstMac = '2805a55efb68';
-      const first = await onboardGateway({ macAddress: firstMac, companyId: COMPANY_A, actorUserId: 2 }, { database });
+      const first = await onboardGateway({ macAddress: firstMac, actorUserId: 2 }, { database });
       assert.equal(first.broker.status, 'prepared');
       const auth = await database.query(
         'SELECT *, password = crypt($1, password) AS password_matches FROM vmq_auth_acl WHERE client_id = $1',
@@ -298,22 +277,73 @@ test('PostgreSQL onboarding creates bcrypt identity and exact ACL atomically und
       const audit = await database.query("SELECT after_state::text FROM technical_audit_log WHERE action='gateway.onboard'");
       assert.equal(audit.rows[0].after_state.includes(auth.rows[0].password), false);
       assert.equal(audit.rows[0].after_state.includes('password'), false);
+      await database.query(
+        `INSERT INTO hardware_gateway_commands(gateway_id, company_id, msg_id, command_type, actor_type, idempotency_key)
+         VALUES($1, NULL, 1030, 'mqtt_connection_1030', 'user', 'test-1030'),
+               ($1, NULL, 1000, 'gateway_restart_1000', 'user', 'test-1000')`, [first.gateway.id]
+      );
+      await assert.rejects(database.query(
+        `INSERT INTO hardware_gateway_commands(gateway_id, company_id, msg_id, command_type, actor_type)
+         VALUES($1, NULL, 1150, 'b5_physical_connect', 'user')`, [first.gateway.id]
+      ), /hardware_gateway_commands_unassigned_check/);
+      await assert.rejects(database.query(
+        `INSERT INTO hardware_gateway_commands(gateway_id, company_id, msg_id, command_type, actor_type)
+         VALUES($1, NULL, 1150, 'mqtt_connection_1030', 'user')`, [first.gateway.id]
+      ), /hardware_gateway_commands_unassigned_check/);
+      await assert.rejects(database.query(
+        `INSERT INTO hardware_gateway_commands(gateway_id, company_id, msg_id, command_type, actor_type, idempotency_key)
+         VALUES($1, NULL, 1030, 'mqtt_connection_1030', 'user', 'test-1030')`, [first.gateway.id]
+      ), /uq_hardware_gateway_commands_unassigned_idempotency/);
+      const assigned = await assignGatewayCompany({ gatewayId: first.gateway.id, companyId: COMPANY_A,
+        actorUserId: 2 }, { database });
+      assert.equal(assigned.gateway.company_id, COMPANY_A);
+      assert.equal((await database.query('SELECT count(*)::int AS n FROM hardware_gateway_commands WHERE company_id IS NULL')).rows[0].n, 2);
+      assert.equal((await database.query('SELECT password FROM vmq_auth_acl WHERE client_id=$1', [firstMac])).rows[0].password,
+        auth.rows[0].password);
+      await assert.rejects(assignGatewayCompany({ gatewayId: first.gateway.id, companyId: COMPANY_B,
+        actorUserId: 2 }, { database }), GatewayAssignmentConflictError);
 
       await assert.rejects(
-        onboardGateway({ macAddress: firstMac, companyId: COMPANY_B, actorUserId: 3 }, { database }),
+        onboardGateway({ macAddress: firstMac, actorUserId: 3 }, { database }),
         GatewayOnboardingConflictError
       );
       assert.equal((await database.query('SELECT company_id FROM gateways WHERE mac_address=$1', [firstMac])).rows[0].company_id, COMPANY_A);
 
       const concurrentMac = '142b2fe271b4';
       const concurrent = await Promise.allSettled([
-        onboardGateway({ macAddress: concurrentMac, companyId: COMPANY_A, actorUserId: 2 }, { database }),
-        onboardGateway({ macAddress: concurrentMac, companyId: COMPANY_A, actorUserId: 2 }, { database })
+        onboardGateway({ macAddress: concurrentMac, actorUserId: 2 }, { database }),
+        onboardGateway({ macAddress: concurrentMac, actorUserId: 2 }, { database })
       ]);
       assert.equal(concurrent.filter((item) => item.status === 'fulfilled').length, 1);
       assert.equal(concurrent.filter((item) => item.status === 'rejected').length, 1);
       assert.equal((await database.query('SELECT count(*)::int AS count FROM gateways WHERE mac_address=$1', [concurrentMac])).rows[0].count, 1);
       assert.equal((await database.query('SELECT count(*)::int AS count FROM vmq_auth_acl WHERE client_id=$1', [concurrentMac])).rows[0].count, 1);
+      const concurrentGateway = (await database.query('SELECT id FROM gateways WHERE mac_address=$1', [concurrentMac])).rows[0].id;
+      const competingAssignments = await Promise.allSettled([
+        assignGatewayCompany({ gatewayId: concurrentGateway, companyId: COMPANY_A, actorUserId: 2 }, { database }),
+        assignGatewayCompany({ gatewayId: concurrentGateway, companyId: COMPANY_B, actorUserId: 3 }, { database })
+      ]);
+      assert.equal(competingAssignments.filter((item) => item.status === 'fulfilled').length, 1);
+      assert.equal(competingAssignments.filter((item) => item.status === 'rejected').length, 1);
+      assert.equal((await database.query('SELECT count(*)::int AS n FROM gateways WHERE id=$1 AND company_id IS NOT NULL',
+        [concurrentGateway])).rows[0].n, 1);
+
+      const auditRollbackMac = 'abcdef123456';
+      const auditRollbackGateway = await onboardGateway({ macAddress: auditRollbackMac, actorUserId: 2 }, { database });
+      await database.query(`
+        CREATE FUNCTION reject_test_assignment_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.action = 'gateway.company.assign' AND NEW.entity_id = '${auditRollbackGateway.gateway.id}'
+          THEN RAISE EXCEPTION 'simulated assignment audit failure'; END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER reject_test_assignment_audit BEFORE INSERT ON technical_audit_log
+        FOR EACH ROW EXECUTE FUNCTION reject_test_assignment_audit();
+      `);
+      await assert.rejects(assignGatewayCompany({ gatewayId: auditRollbackGateway.gateway.id,
+        companyId: COMPANY_A, actorUserId: 2 }, { database }), /simulated assignment audit failure/);
+      assert.equal((await database.query('SELECT company_id FROM gateways WHERE id=$1',
+        [auditRollbackGateway.gateway.id])).rows[0].company_id, null);
 
       const rollbackMac = '007007e0c804';
       await database.query(`
@@ -326,7 +356,7 @@ test('PostgreSQL onboarding creates bcrypt identity and exact ACL atomically und
         FOR EACH ROW EXECUTE FUNCTION reject_test_broker_identity();
       `);
       await assert.rejects(onboardGateway({
-        macAddress: rollbackMac, companyId: COMPANY_A, actorUserId: 2, requestId: 'rollback-test'
+        macAddress: rollbackMac, actorUserId: 2, requestId: 'rollback-test'
       }, { database }), /simulated broker rejection/);
       assert.equal((await database.query('SELECT count(*)::int AS count FROM gateways WHERE mac_address=$1', [rollbackMac])).rows[0].count, 0);
       assert.equal((await database.query("SELECT count(*)::int AS count FROM technical_audit_log WHERE request_id='rollback-test'")).rows[0].count, 0);

@@ -79,14 +79,35 @@ test('gateway onboarding asks only for MAC and describes broker preparation with
   const docs = source('../docs/hardware-manager-mqtt-1030.md');
   const routes = source('src/routes/gateways.ts');
   assert.match(html, /Dar de alta gateway/);
-  assert.match(html, /registra la gateway y prepara su cuenta en el broker/);
+  assert.match(html, /registra la gateway sin compañía y prepara su cuenta en el broker/);
   assert.match(html, /credencial inicial.*predecible/s);
   assert.doesNotMatch(html, /id="gateway(?:Name|Description|Owner|Company)"/);
   assert.match(ui, /apiPost\('\/gateways\/onboard', \{ macAddress \}\)/);
   assert.match(ui, /onboardingMacPattern/);
-  assert.match(routes, /router\.post\('\/onboard'.*authorizeHardware\('technician'\)/s);
+  assert.match(routes, /router\.post\('\/onboard'.*authorizeHardware\('superadmin'\)/s);
+  assert.match(html, /Compañías/);
+  assert.match(ui, /\/assign-company/);
   assert.match(docs, /predecible y no robusta/);
   assert.match(docs, /configurarse primero localmente/);
+});
+
+test('company management UI exposes safe CRUD and gateway assignment to global users', () => {
+  const html = source('public/companies.html');
+  const ui = source('public/js/companies.js');
+  const gatewayUi = source('public/js/gateways.js');
+  assert.match(html, /companiesTable/);
+  assert.match(html, /createCompany/);
+  assert.match(ui, /createButton\.hidden = !isAdmin/);
+  assert.match(ui, /apiGet\('\/companies'\)/);
+  assert.match(ui, /apiPost\('\/companies'/);
+  assert.match(ui, /apiPatch\(`\/companies\/\$\{company\.id\}`/);
+  assert.match(ui, /apiDelete\(`\/companies\/\$\{company\.id\}`\)/);
+  assert.match(ui, /\{ active: true \}/);
+  assert.match(ui, /cell\.textContent = value/);
+  assert.doesNotMatch(ui, /innerHTML|insertAdjacentHTML/);
+  assert.match(gatewayUi, /companies\.filter\(\(company\) => company\.active\)/);
+  assert.match(gatewayUi, /apiPost\(`\/gateways\/\$\{gateway\.id\}\/assign-company`/);
+  assert.match(gatewayUi, /mqttPanel\.hidden = !gateway\.active/);
 });
 
 test('gateway audit endpoint checks the scoped gateway before returning metadata', () => {

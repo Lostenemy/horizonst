@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="./" />
+    <title>Compañías | HorizonST Hardware Manager</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>HorizonST · Compañías</h1>
+      <nav>
+        <a href="dashboard.html">Resumen</a>
+        <a href="devices.html">Dispositivos</a>
+        <a href="gateways.html">Gateways</a>
+        <a href="companies.html" class="active admin-only">Compañías</a>
+        <a href="#" id="logoutLink">Salir</a>
+      </nav>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Gestión de compañías</h2>
+        <p>Las compañías desactivadas conservan sus gateways y su historial. Solo una compañía activa puede recibir gateways nuevas.</p>
+        <div class="actions"><button type="button" id="createCompany">Crear compañía</button></div>
+        <p id="companyFeedback" role="status" aria-live="polite"></p>
+        <div class="table-wrapper"><table id="companiesTable">
+          <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </section>
+    </main>
+    <footer>&copy; <span id="year"></span> HorizonST</footer>
+    <script src="./js/base.js"></script>
+    <script type="module" src="./js/companies.js"></script>
+  </body>
+</html>

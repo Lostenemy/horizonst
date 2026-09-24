@@ -121,6 +121,20 @@ export const apiPut = async (path, body) => {
   return response.json();
 };
 
+export const apiPatch = async (path, body) => {
+  const response = await callApi(path, {
+    method: 'PATCH',
+    headers: defaultHeaders(),
+    body: JSON.stringify(body)
+  });
+  if (response.status === 401) await handleUnauthorized(response);
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `Request failed with status ${response.status}`);
+  }
+  return response.json();
+};
+
 export const apiDelete = async (path) => {
   const response = await callApi(path, {
     method: 'DELETE',

@@ -9,13 +9,12 @@ if (!user) {
 
 const adminSection = document.getElementById('adminGatewaySection');
 if (adminSection) {
-  adminSection.style.display = canEditHardware ? 'block' : 'none';
+  adminSection.style.display = isAdmin ? 'block' : 'none';
 }
 
 const gatewayForm = document.getElementById('gatewayForm');
 const gatewayMessage = document.getElementById('gatewayMessage');
 const gatewayOwnerSelect = document.getElementById('gatewayOwner');
-const gatewayCompanySelect = document.getElementById('gatewayCompany');
 const gatewaysTableBody = document.querySelector('#gatewaysTable tbody');
 const gatewaysEmpty = document.getElementById('gatewaysEmpty');
 const technicalPanel = document.getElementById('gatewayTechnicalPanel');
@@ -208,22 +207,8 @@ const handleEditGateway = async (gateway) => {
       ]
     });
   }
-  if (gatewayCompanySelect) {
-    gatewayCompanySelect.innerHTML = '<option value="">Sin empresa (legacy)</option>';
-    companies.forEach((company) => {
-      const option = document.createElement('option');
-      option.value = company.id;
-      option.textContent = company.name;
-      gatewayCompanySelect.appendChild(option);
-    });
-  }
-
   if (isAdmin) {
     fields.push({ name: 'ownerId', label: 'Propietario', type: 'select', options: buildOwnerOptions() });
-    fields.push({ name: 'companyId', label: 'Empresa', type: 'select', options: [
-      { value: '', label: 'Sin empresa (legacy)' },
-      ...companies.map((company) => ({ value: company.id, label: company.name }))
-    ] });
   }
 
   await openFormModal({
@@ -235,7 +220,6 @@ const handleEditGateway = async (gateway) => {
       description: gateway.description || '',
       active: gateway.active ? 'true' : 'false',
       ownerId: gateway.owner_id ?? '',
-      companyId: gateway.company_id ?? ''
     },
     onSubmit: async (values) => {
       const payload = {
@@ -245,7 +229,6 @@ const handleEditGateway = async (gateway) => {
       };
       if (isAdmin) {
         payload.ownerId = values.ownerId ? Number(values.ownerId) : null;
-        payload.companyId = values.companyId || null;
       }
       await apiPut(`/gateways/${gateway.id}`, payload);
       await loadGateways();
@@ -262,6 +245,27 @@ const handleDeleteGateway = async (gateway) => {
   if (!confirmed) return;
   await apiDelete(`/gateways/${gateway.id}`);
   await loadGateways();
+};
+
+const handleAssignCompany = async (gateway) => {
+  companies = await apiGet('/companies');
+  const activeCompanies = companies.filter((company) => company.active);
+  if (!activeCompanies.length) {
+    gatewayMessage.textContent = 'Primero crea una compañía activa en la pantalla Compañías.';
+    gatewayMessage.className = 'alert error';
+    gatewayMessage.style.display = 'block';
+    return;
+  }
+  await openFormModal({
+    title: `Asignar compañía a ${gateway.mac_address}`,
+    submitText: 'Asignar definitivamente',
+    fields: [{ name: 'companyId', label: 'Compañía activa', type: 'select',
+      options: activeCompanies.map((company) => ({ value: company.id, label: `${company.code} · ${company.name}` })) }],
+    onSubmit: async ({ companyId }) => {
+      await apiPost(`/gateways/${gateway.id}/assign-company`, { companyId });
+      await loadGateways();
+    }
+  });
 };
 
 const renderHistory = (body, items, columns) => {
@@ -362,10 +366,10 @@ const selectGateway = async (gateway) => {
   selectedGateway = gateway;
   technicalPanel.hidden = false;
   technicalTitle.textContent = gateway.name || gateway.mac_address;
-  technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin empresa'} · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'} · registro manual: ${gateway.product_model || 'modelo desconocido'} ${gateway.firmware_version || 'firmware desconocido'}${gateway.firmware_evidence ? ` · evidencia ${gateway.firmware_evidence}` : ''}`;
+  technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin compañía'} · ${gateway.broker_prepared ? 'Preparada en el broker' : 'Cuenta del broker no verificada'} · conexión no verificada · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'} · registro manual: ${gateway.product_model || 'modelo desconocido'} ${gateway.firmware_version || 'firmware desconocido'}${gateway.firmware_evidence ? ` · evidencia ${gateway.firmware_evidence}` : ''}`;
   technicalActions.hidden = !canEditHardware || !gateway.active || !gateway.company_id;
   bluetoothPanel.hidden = technicalActions.hidden;
-  mqttPanel.hidden = technicalActions.hidden;
+  mqttPanel.hidden = !gateway.active || !canEditHardware || (!gateway.company_id && !isAdmin);
   mqttConfirmationMac.textContent = normalizedCentralMac(gateway);
   applyMqttPreset();
   refreshFirmwareControls(gateway);
@@ -596,7 +600,7 @@ const renderGateways = () => {
 
     gateways.forEach((gateway) => {
     const row = document.createElement('tr');
-    for (const value of [gateway.name || 'Sin nombre', gateway.mac_address, gateway.company_name || 'Sin empresa (legacy)', ownerLabel(gateway), gateway.active ? 'Activa' : 'Inactiva', '']) {
+    for (const value of [gateway.name || 'Sin nombre', gateway.mac_address, gateway.company_name || 'Sin compañía', ownerLabel(gateway), gateway.active ? 'Activa' : 'Inactiva', '']) {
       const cell = document.createElement('td');
       cell.textContent = value;
       row.appendChild(cell);
@@ -619,6 +623,13 @@ const renderGateways = () => {
     }
 
     if (isAdmin) {
+      if (gateway.active && !gateway.company_id) {
+        const assignButton = document.createElement('button');
+        assignButton.type = 'button';
+        assignButton.textContent = 'Asignar compañía';
+        assignButton.addEventListener('click', () => handleAssignCompany(gateway));
+        container.appendChild(assignButton);
+      }
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
       deleteButton.textContent = 'Desactivar';
@@ -632,7 +643,7 @@ const renderGateways = () => {
   });
 };
 
-if (canEditHardware && gatewayForm) {
+if (isAdmin && gatewayForm) {
   gatewayForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     gatewayMessage.style.display = 'none';

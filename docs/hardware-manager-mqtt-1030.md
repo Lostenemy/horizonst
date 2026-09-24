@@ -47,7 +47,7 @@ secretos. El campo de contraseña es `type=password`, no usa almacenamiento web 
 también en errores de validación.
 
 El bloqueo asesor existente serializa la operación completa por gateway. Las claves de idempotencia independientes
-`request_id:1030` y `request_id:1000` permanecen limitadas por empresa. Después de un timeout histórico del mismo
+`request_id:1030` y `request_id:1000` quedan limitadas por empresa tras asignar y por gateway antes de asignar. Después de un timeout histórico del mismo
 `msg_id`, un ACK positivo se conserva como `ack_ambiguous`, nunca como confirmación inequívoca. Los ACK tardíos no
 reviven estados terminales. El diario y la UI muestran por separado configuración y reinicio.
 
@@ -62,16 +62,43 @@ registra en claro.
 
 Esta convención hace que la contraseña inicial sea **predecible y no robusta**. El alta no debe presentarse como una
 protección criptográfica fuerte ni aplicarse retroactivamente a cuentas existentes. La acción **Dar de alta gateway**
-solo acepta la MAC; deriva una única empresa activa del contexto técnico del usuario y crea en una transacción el
+solo acepta la MAC de un `ADMIN` o `hardware_superadmin`; crea una gateway sin compañía en una transacción junto con el
 inventario, la identidad bcrypt, las ACL exactas y la auditoría redactada. Un bloqueo asesor transaccional por MAC,
 las constraints y las comprobaciones previas impiden altas concurrentes, reasignaciones y sobrescritura de cuentas.
 
-El resultado «registrada y preparada en el broker» no significa «conectada». No existe una tabla central fiable de
+El resultado distingue «preparada en el broker», «sin compañía» y «conexión no verificada». No existe una tabla central fiable de
 sesiones online y no se inventa una. Una gateway nueva que todavía no pueda recibir órdenes en el broker actual debe
 configurarse primero localmente con la herramienta/interfaz del fabricante: endpoint del broker vigente, MAC
 normalizada como `client_id` y `username`, credencial inicial acordada y los topics exactos
 `gw/{mac}/publish`/`gw/{mac}/subscribe`. Solo después de comprobar por separado que publica en el topic central debe
 enviarse `1030`; la conexión al broker de destino se vuelve a verificar tras el reinicio `1000`.
+
+## Gateways sin compañía y asignación posterior
+
+La migración `012_unassigned_gateway_commands.sql` hace nullable exclusivamente el `company_id` del diario de
+comandos. Una constraint permite ese valor nulo solo para `mqtt_connection_1030` y `gateway_restart_1000` con
+actor usuario. Un índice único parcial conserva la idempotencia de estos comandos antes de asignar. No modifica
+filas históricas ni introduce una empresa ficticia. Las demás lecturas, configuraciones BLE y comandos físicos
+siguen exigiendo compañía.
+
+Solo un administrador global puede dar de alta, configurar por `1030` y asignar una gateway aún sin compañía.
+El mismo bloqueo por gateway serializa la asignación y la secuencia `1030`→ACK→`1000`. La asignación comprueba
+que la empresa está activa, que la gateway todavía no pertenece a ninguna compañía y que no tiene referencias
+heredadas incompatibles. Registra el cambio en auditoría y no altera la cuenta VerneMQ. Los comandos anteriores
+conservan `company_id=NULL`; solo el administrador global ve ese historial previo. Los usuarios con alcance por
+empresa ven la gateway únicamente después de la asignación y no reciben el historial global previo.
+
+La pantalla **Compañías** permite crear, consultar, editar, desactivar y reactivar. La baja es lógica y conserva
+referencias. Al desactivar una compañía, sus usuarios con alcance limitado dejan de ver y operar sus gateways;
+debe coordinarse antes con operaciones. Las compañías inactivas no se ofrecen para asignar nuevas gateways.
+
+Orden de despliegue: aplicar primero la migración 012 en una ventana controlada; desplegar después Backend y el
+panel; verificar el alta sin compañía, el diario 1030/1000 y la asignación con una gateway simulada o de prueba
+autorizada. No enviar comandos a hardware durante la comprobación de migración. Para volver al artefacto anterior,
+desactivar primero el alta y la configuración de gateways sin compañía; el código anterior no podrá procesar esos
+casos. Conservar la migración y los diarios durante ese rollback operativo. La reversión del `NOT NULL` solo es
+segura tras revisar y resolver todas las filas con `company_id=NULL`; no borrar ni reasignar historial de forma
+automática.
 
 ## Prueba posterior y recuperación
 

@@ -57,7 +57,7 @@ const api = (path: string, id?: number, role?: Parameters<typeof signToken>[0]['
     }
   });
 
-function fakeDatabase(verifiedFirmware = false, priorTimeout = false) {
+function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned = false) {
   const idempotencyKeys = new Set<string>();
   const observations = { published: [] as Array<{ topic: string; payload: any }>, persisted: [] as string[],
     auditPayloads: [] as string[], auditQueries: 0, readQueries: 0, observedQueries: 0,
@@ -98,23 +98,27 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false) {
   (pool as any).query = async (sql: string, params: unknown[] = []) => {
     if (sql === 'SELECT id, role, password_hash FROM users WHERE id = $1') {
       const id = Number(params[0]);
-      const role = id === 1 ? 'hardware_readonly' : 'hardware_technician';
+      const role = id === 1 ? 'hardware_readonly' : id === 5 ? 'hardware_superadmin' : 'hardware_technician';
       return { rows: [{ id, role, password_hash: 'fixture-hash' }] };
     }
     if (sql.includes('company_user_memberships')) {
       return { rows: [{ company_id: Number(params[0]) === 3 ? COMPANY_B : COMPANY_A }] };
     }
     if (sql.includes('FROM gateways g') && sql.includes('WHERE g.id = $1') && !sql.includes('hardware_gateway_reads')) {
-      assert.match(sql, /g\.company_id = ANY/);
       const scopedCompanies = params[1];
-      const allowed = Array.isArray(scopedCompanies) && scopedCompanies.includes(COMPANY_A) && Number(params[0]) === 41;
-      return { rows: allowed ? [{ id: 41, mac_address: '2805a55efb68', company_id: COMPANY_A, rssi_threshold: -70,
+      const allowed = Number(params[0]) === 41 && (sql.includes('g.company_id = ANY')
+        ? Array.isArray(scopedCompanies) && scopedCompanies.includes(COMPANY_A) && !unassigned
+        : sql.includes('AND TRUE') && (!unassigned || params[1] === true));
+      return { rows: allowed ? [{ id: 41, mac_address: '2805a55efb68', company_id: unassigned ? null : COMPANY_A, rssi_threshold: -70,
         product_model: verifiedFirmware ? 'MKGW3' : null,
         firmware_version: verifiedFirmware ? 'V2.4' : null,
         firmware_evidence: verifiedFirmware ? 'inspection:ticket-12345678' : null,
         reported_product_model: null, reported_firmware_version: null, identity_observed_at: null }] : [] };
     }
     if (sql.includes('AS ambiguous')) return { rows: [{ ambiguous: priorTimeout }] };
+    if (sql === 'SELECT company_id FROM gateways WHERE id = $1 AND active = TRUE') {
+      return { rows: [{ company_id: unassigned ? null : COMPANY_A }] };
+    }
     if (sql.includes('UPDATE gateways SET product_model')) {
       assert.deepEqual(params.slice(0, 4), [41, 'MKGW3', 'V2.4', 'inspection:ticket-12345678']);
       assert.equal(params[4], COMPANY_A);
@@ -167,7 +171,7 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false) {
     }
     if (sql.includes('FROM technical_audit_log')) {
       observations.auditQueries += 1;
-      assert.deepEqual(params, ['41', COMPANY_A]);
+      assert.deepEqual(params, ['41', COMPANY_A, false]);
       return { rows: [{ id: 1, action: 'gateway.ble.scan', result: 'success' }] };
     }
     throw new Error(`Unexpected query: ${sql}`);
@@ -266,6 +270,23 @@ const mqttConfigurationData = () => ({
 const mqttRequest = (overrides: Record<string, unknown> = {}) => ({
   method: 'POST',
   body: JSON.stringify({ confirmationMac: '2805a55efb68', data: { ...mqttConfigurationData(), ...overrides } })
+});
+
+test('unassigned gateway permits only global 1030 then ACK-gated 1000 with a null-company journal', async () => {
+  const observed = fakeDatabase(false, false, true);
+  const path = '/api/gateways/41/configure-mqtt';
+  assert.equal((await api(path, 2, 'hardware_technician', mqttRequest())).status, 404);
+  assert.equal((await api('/api/gateways/41/bluetooth/scan', 5, 'hardware_superadmin', validCommand)).status, 404);
+  assert.equal(observed.published.length, 0);
+  const response = await api(path, 5, 'hardware_superadmin', mqttRequest());
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, 'configuration_accepted_restart_accepted');
+  assert.deepEqual(observed.published.map((entry) => entry.payload.msg_id), [1030, 1000]);
+  assert.deepEqual(observed.published.map((entry) => entry.topic), [
+    'gw/2805a55efb68/subscribe', 'gw/2805a55efb68/subscribe'
+  ]);
+  assert.equal(observed.commandInserts, 2);
+  assert.equal(observed.auditPayloads.some((value) => value.includes('test-only-secret-not-real')), false);
 });
 
 test('MQTT 1030 is technician-only and company-scoped, with its envelope and topic controlled by Backend', async () => {
