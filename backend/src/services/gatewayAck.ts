@@ -78,7 +78,7 @@ export function normalizeHardwareGatewayAck(
   const payloadMacValue = data.device_info?.mac;
   if (payloadMacValue !== undefined && normalizeGatewayMac(payloadMacValue) !== topicMac) return null;
   const rawResultMessage = data.result_msg ?? data.data?.result_msg;
-  if (msgId === 1030) {
+  if (msgId === 1000 || msgId === 1030) {
     if (payloadMacValue === undefined || !Number.isInteger(data.result_code) || data.result_code !== resultCode
         || resultCode < 0 || resultCode > 4
         || typeof rawResultMessage !== 'string' || rawResultMessage !== resultMessages[resultCode]) return null;

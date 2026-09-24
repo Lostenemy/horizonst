@@ -56,16 +56,30 @@ test('MQTT 1030 UI keeps the secret ephemeral, restores the preset and explains 
   assert.match(html, /Configurar conexión MQTT \(1030\)/);
   assert.match(html, /name="passwd" type="password"[^>]*autocomplete="new-password"/);
   assert.match(html, /no existe rollback remoto garantizado/);
+  assert.match(html, /recibirá una orden de reinicio/);
+  assert.match(html, /Enviar configuración y reiniciar/);
+  assert.match(html, /<th>Paso<\/th>/);
+  assert.doesNotMatch(html, /name="reset"/);
   assert.match(html, /gatewayMqttRestorePreset/);
   assert.match(html, /gatewayMqttHistoryTable/);
   assert.match(ui, /horizonstMqttPreset/);
   assert.match(ui, /confirmationMac.*!== mac/);
   assert.match(ui, /passwordInput\.value = ''/);
   assert.match(ui, /\/configure-mqtt/);
+  assert.match(ui, /item\.msg_id === 1030 \|\| item\.msg_id === 1000/);
   assert.doesNotMatch(ui, /localStorage|sessionStorage/);
   const mqttUi = ui.split('const mqttIntegerFields')[1].split('const normalizeMac')[0];
   assert.doesNotMatch(mqttUi, /innerHTML|insertAdjacentHTML/);
   assert.match(ui, /result\.message/);
+});
+
+test('gateway onboarding remains fail-closed until an initial credential policy is authorized', () => {
+  const docs = source('../docs/hardware-manager-mqtt-1030.md');
+  const routes = source('src/routes/gateways.ts');
+  assert.match(docs, /decisión pendiente/i);
+  assert.match(docs, /no añade\s+la acción \*\*Dar de alta gateway\*\*/);
+  assert.match(docs, /no aprovisiona credenciales\/ACL/);
+  assert.doesNotMatch(routes, /INSERT INTO vmq_auth_acl/);
 });
 
 test('gateway audit endpoint checks the scoped gateway before returning metadata', () => {

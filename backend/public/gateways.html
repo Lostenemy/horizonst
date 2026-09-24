@@ -123,7 +123,8 @@
         <section id="gatewayMqttPanel" hidden aria-labelledby="gatewayMqttTitle">
           <h3 id="gatewayMqttTitle">Configurar conexión MQTT (1030)</h3>
           <div class="alert warning">
-            <strong>Operación de riesgo.</strong> La gateway cambiará su conexión MQTT y puede desconectarse del broker actual.
+            <strong>Operación de riesgo.</strong> La gateway cambiará su conexión MQTT, recibirá una orden de reinicio
+            y puede desconectarse temporalmente del broker actual.
             Un ACK 1030 solo confirma que aceptó la orden, no que conectó al nuevo broker. Una configuración incorrecta
             puede exigir recuperación local y no existe rollback remoto garantizado.
           </div>
@@ -181,13 +182,13 @@
             </label>
             <div class="actions">
               <button type="button" id="gatewayMqttRestorePreset">Restaurar preset HorizonST</button>
-              <button type="submit">Enviar configuración MQTT</button>
+              <button type="submit">Enviar configuración y reiniciar</button>
             </div>
           </form>
           <p id="gatewayMqttFeedback" role="status" aria-live="polite"></p>
-          <h4>Historial de órdenes MQTT 1030</h4>
+          <h4>Historial de configuración MQTT 1030 y reinicio 1000</h4>
           <div class="table-wrapper"><table id="gatewayMqttHistoryTable">
-            <thead><tr><th>Fecha</th><th>Actor</th><th>Destino</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
+            <thead><tr><th>Fecha</th><th>Paso</th><th>Actor</th><th>Destino</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
           </table></div>
         </section>
         <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>

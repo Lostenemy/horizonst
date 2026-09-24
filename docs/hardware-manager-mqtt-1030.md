@@ -4,13 +4,18 @@
 
 La guía MQTT MKGW3 documenta la orden `1030`, publicada en `gw/{mac}/subscribe`, y su ACK `1030` en
 `gw/{mac}/publish`. El Backend controla `msg_id`, `device_info.mac` y el topic real; el navegador solo aporta el
-objeto `data`. La guía indica que el cambio necesita el reinicio `1000` para aplicarse. Esta implementación **no**
-envía ese reinicio ni reintenta automáticamente la orden.
+objeto `data`. La guía indica que el cambio necesita el reinicio `1000` para aplicarse. La página 2 define el
+reinicio físico exactamente como `msg_id=1000` y `data={"reset":0}`; coincide con el contrato observado, sin
+discrepancia. Su ACK usa `msg_id=1000`, la misma MAC y los códigos globales de resultado.
+
+El Backend mantiene un único bloqueo asesor durante los dos pasos. Solo después de un ACK `1030` inequívoco con
+`result_code=0` publica una vez el `1000`. Un rechazo, timeout o ACK ambiguo de `1030` impide el reinicio. Ninguno
+de los dos comandos se reintenta automáticamente.
 
 Los códigos globales documentados son: `0 success`, `1 length error`, `2 type error`, `3 range error` y
 `4 no object error`. Para `1030` se exige MAC coincidente entre topic y payload, uno de esos códigos y el mensaje
-documentado correspondiente. Un ACK positivo acredita únicamente que la gateway aceptó la orden; no acredita
-que haya conectado al broker de destino.
+documentado correspondiente. Un ACK positivo de `1030` acredita únicamente que la gateway aceptó la configuración.
+El ACK `1000` acredita únicamente que aceptó el reinicio. Ninguno acredita que haya conectado al broker de destino.
 
 ## Preset HorizonST y edición controlada
 
@@ -41,9 +46,26 @@ destino `host:port`, nunca la contraseña. Las respuestas HTTP y el historial ex
 secretos. El campo de contraseña es `type=password`, no usa almacenamiento web y se vacía al iniciar la petición,
 también en errores de validación.
 
-El bloqueo asesor existente serializa operaciones por gateway. La clave de idempotencia permanece limitada por
-empresa y `request_id`. Después de un timeout histórico del mismo `msg_id`, un ACK positivo se conserva como
-`ack_ambiguous`, nunca como confirmación inequívoca. Los ACK tardíos no reviven estados terminales.
+El bloqueo asesor existente serializa la operación completa por gateway. Las claves de idempotencia independientes
+`request_id:1030` y `request_id:1000` permanecen limitadas por empresa. Después de un timeout histórico del mismo
+`msg_id`, un ACK positivo se conserva como `ack_ambiguous`, nunca como confirmación inequívoca. Los ACK tardíos no
+reviven estados terminales. El diario y la UI muestran por separado configuración y reinicio.
+
+## Alta previa de gateways: decisión pendiente
+
+El repositorio acredita que VerneMQ usa `mountpoint=''`, contraseña bcrypt producida por PostgreSQL
+`crypt(..., gen_salt('bf'))`, unicidad `(mountpoint, client_id)` y ACL JSON por patrón. Las ACL requeridas no deben
+incluir la propiedad `qos`. Sin embargo, no existe un contrato versionado que establezca qué secreto inicial debe
+derivarse o asignarse a una gateway nueva. El ejemplo observado muestra una MAC como contraseña, pero el código de
+aprovisionamiento actual no acredita que esa sea la política de credenciales de gateways.
+
+Como el alta solicitada solo puede pedir la MAC y no puede inventar ni mostrar una credencial, este cambio no añade
+la acción **Dar de alta gateway** ni un flujo que escriba conjuntamente en `gateways` y `vmq_auth_acl`. Hace falta
+decidir y documentar una de estas políticas antes de continuar: secreto aleatorio entregado por canal seguro y
+configurable localmente, secreto de fábrica acreditado, o derivación explícita autorizada. También falta una fuente
+central verificable de estado online por gateway; registrar inventario y ACL no demuestra conectividad ni permite
+habilitar `1030` de forma segura para una unidad recién incorporada. El formulario de registro de inventario existente
+no aprovisiona credenciales/ACL y no debe confundirse con la futura alta atómica.
 
 ## Prueba posterior y recuperación
 
@@ -52,7 +74,7 @@ La validación en staging requiere autorización operativa y una gateway recuper
 1. Guardar por un canal seguro la configuración vigente, sin copiar contraseñas a tickets o logs.
 2. Confirmar acceso físico/local a la gateway antes de enviar `1030`.
 3. Enviar una única orden y comprobar el ACK y el historial redactado.
-4. Aplicar el reinicio requerido por el fabricante solo mediante el procedimiento autorizado de staging.
+4. Confirmar en el historial el ACK independiente de `1000` o clasificar su ausencia como resultado incierto.
 5. Verificar por separado que la gateway abre sesión en el broker nuevo y publica en el topic central esperado.
 6. Si no reconecta, restaurar localmente la configuración anterior desde la interfaz/herramienta del fabricante.
 

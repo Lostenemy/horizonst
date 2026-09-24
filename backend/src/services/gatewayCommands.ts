@@ -40,6 +40,13 @@ export interface GatewayCommandResult {
   connectionReportMsgId?: number;
 }
 
+export interface GatewayMqttConfigurationSequenceResult {
+  status: 'configuration_accepted_restart_accepted' | 'configuration_failed' | 'configuration_uncertain'
+    | 'restart_failed' | 'restart_uncertain';
+  configuration: GatewayCommandResult;
+  restart?: GatewayCommandResult;
+}
+
 export class GatewayCommandBusyError extends Error {}
 
 export async function expireStaleGatewayCommands(gatewayId?: number): Promise<number> {
@@ -403,6 +410,12 @@ export async function configureGatewayRssi(params: {
   }
 }
 
+export function buildGatewayResetCommand(gatewayMacInput: string): GatewayCommandPayload {
+  const normalized = normalizeGatewayMac(gatewayMacInput);
+  if (!normalized) throw new Error('Invalid gateway MAC');
+  return { msg_id: 1000, device_info: { mac: normalized }, data: { reset: 0 } };
+}
+
 export function physicalB5HttpStatus(result: GatewayCommandResult): number {
   if (result.status === 'success') return 200;
   if (result.status === 'accepted_unverified' && result.resultCode === 0) return 202;
@@ -432,6 +445,70 @@ export async function executeManagedGatewayCommand(params: {
       ...params,
       idempotencyKey: params.requestId ? `${params.requestId}:${params.command.msg_id}` : undefined
     });
+  } finally {
+    try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
+    lockClient.release();
+  }
+}
+
+export async function executeGatewayMqttConfigurationSequence(params: {
+  gatewayId: number;
+  companyId: string;
+  gatewayMac: string;
+  configuration: GatewayCommandPayload;
+  persistedConfiguration: GatewayCommandPayload;
+  actor: GatewayCommandActor;
+  requestId?: string;
+  timeoutMs: number;
+  deps?: Parameters<typeof executeCommand>[0]['deps'];
+}): Promise<GatewayMqttConfigurationSequenceResult> {
+  const lockClient = await pool.connect();
+  try {
+    await expireStaleGatewayCommands(params.gatewayId);
+    await acquireGatewayLock(lockClient, params.gatewayId);
+    const configuration = await executeCommand({
+      gatewayId: params.gatewayId,
+      companyId: params.companyId,
+      gatewayMac: params.gatewayMac,
+      commandType: 'mqtt_connection_1030',
+      command: params.configuration,
+      journalPayload: params.persistedConfiguration,
+      ackMsgIds: [1030],
+      sensitiveCommand: true,
+      actor: params.actor,
+      requestId: params.requestId,
+      timeoutMs: params.timeoutMs,
+      idempotencyKey: params.requestId ? `${params.requestId}:1030` : undefined,
+      deps: params.deps
+    });
+    if (configuration.status !== 'success') {
+      return {
+        status: configuration.status === 'timeout' || configuration.status === 'ambiguous'
+          ? 'configuration_uncertain' : 'configuration_failed',
+        configuration
+      };
+    }
+
+    const restart = await executeCommand({
+      gatewayId: params.gatewayId,
+      companyId: params.companyId,
+      gatewayMac: params.gatewayMac,
+      commandType: 'gateway_restart_1000',
+      command: buildGatewayResetCommand(params.gatewayMac),
+      ackMsgIds: [1000],
+      sensitiveCommand: true,
+      actor: params.actor,
+      requestId: params.requestId,
+      timeoutMs: params.timeoutMs,
+      idempotencyKey: params.requestId ? `${params.requestId}:1000` : undefined,
+      deps: params.deps
+    });
+    return {
+      status: restart.status === 'success' ? 'configuration_accepted_restart_accepted'
+        : restart.status === 'timeout' || restart.status === 'ambiguous' ? 'restart_uncertain' : 'restart_failed',
+      configuration,
+      restart
+    };
   } finally {
     try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
     lockClient.release();

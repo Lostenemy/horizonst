@@ -6,6 +6,7 @@ import {
   MQTT_CONFIGURATION_KEYS
 } from '../services/gatewayMqttConfiguration';
 import { normalizeHardwareGatewayAck } from '../services/gatewayAck';
+import { buildGatewayResetCommand } from '../services/gatewayCommands';
 
 const MAC = '2805a55efb68';
 const TEST_PASSWORD = 'test-only-secret-not-real';
@@ -67,17 +68,33 @@ test('1030 validation rejects missing/extra keys, coercions, invalid ranges, hos
   assert.deepEqual(Object.keys(validData()), [...MQTT_CONFIGURATION_KEYS]);
 });
 
-test('1030 ACK requires exact topic MAC, payload MAC, known result code and documented result message', () => {
-  const ack = (overrides: Record<string, unknown> = {}) => ({
-    msg_id: 1030, device_info: { mac: MAC }, result_code: 0, result_msg: 'success', ...overrides
+test('1000 reset payload is server-owned and exactly matches the observed manufacturer contract', () => {
+  assert.deepEqual(buildGatewayResetCommand('28:05:A5:5E:FB:68'), {
+    msg_id: 1000,
+    device_info: { mac: MAC },
+    data: { reset: 0 }
   });
-  assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack())?.resultCode, 0);
-  assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack({ result_code: 4, result_msg: 'no object error' }))?.resultCode, 4);
-  assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack({ result_msg: 'accepted' })), null);
+});
+
+test('1000 and 1030 ACKs require exact topic MAC, payload MAC, known result code and documented result message', () => {
+  const ack = (msgId: 1000 | 1030, overrides: Record<string, unknown> = {}) => ({
+    msg_id: msgId, device_info: { mac: MAC }, result_code: 0, result_msg: 'success', ...overrides
+  });
+  for (const msgId of [1000, 1030] as const) {
+    assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack(msgId))?.resultCode, 0);
+    assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack(msgId, {
+      result_code: 4, result_msg: 'no object error'
+    }))?.resultCode, 4);
+    assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack(msgId, { result_msg: 'accepted' })), null);
+    assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack(msgId, {
+      result_code: 5, result_msg: 'unknown'
+    })), null);
+    assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack(msgId, {
+      device_info: { mac: 'ffffffffffff' }
+    })), null);
+    assert.equal(normalizeHardwareGatewayAck('gw/ffffffffffff/publish', ack(msgId)), null);
+  }
   assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, {
     msg_id: 1030, device_info: { mac: MAC }, data: { result_code: 0, result_msg: 'success' }
   }), null);
-  assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack({ result_code: 5, result_msg: 'unknown' })), null);
-  assert.equal(normalizeHardwareGatewayAck(`gw/${MAC}/publish`, ack({ device_info: { mac: 'ffffffffffff' } })), null);
-  assert.equal(normalizeHardwareGatewayAck('gw/ffffffffffff/publish', ack()), null);
 });

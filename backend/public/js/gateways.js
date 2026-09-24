@@ -299,8 +299,9 @@ const refreshTechnicalHistory = async () => {
       (item) => item.result_code == null ? item.result_message : `${item.result_code}: ${item.result_message || ''}`
     ];
     renderHistory(commandsBody, commands, commandColumns);
-    renderHistory(mqttHistoryBody, commands.filter((item) => item.msg_id === 1030), [
-      commandColumns[0], commandColumns[3], commandColumns[4], commandColumns[5], commandColumns[6]
+    renderHistory(mqttHistoryBody, commands.filter((item) => item.msg_id === 1030 || item.msg_id === 1000), [
+      commandColumns[0], (item) => `${item.command_type} (${item.msg_id})`,
+      commandColumns[3], commandColumns[4], commandColumns[5], commandColumns[6]
     ]);
     renderHistory(readsBody, reads, [
       (item) => new Date(item.created_at).toLocaleString('es-ES'),

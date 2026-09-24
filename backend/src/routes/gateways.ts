@@ -13,6 +13,7 @@ import { appendTechnicalAudit } from '../services/technicalAudit';
 import {
   configureB5Gateway,
   configureGatewayRssi,
+  executeGatewayMqttConfigurationSequence,
   executeManagedGatewayCommand,
   GatewayCommandBusyError
 } from '../services/gatewayCommands';
@@ -439,15 +440,12 @@ router.post('/:gatewayId/configure-mqtt', authenticate, authorizeHardware('techn
     } catch {
       return res.status(400).json({ message: 'Invalid MQTT configuration' });
     }
-    const result = await executeManagedGatewayCommand({
+    const operation = await executeGatewayMqttConfigurationSequence({
       gatewayId,
       companyId: gateway.company_id,
       gatewayMac,
-      commandType: 'mqtt_connection_1030',
-      command: payloads.wirePayload,
-      journalPayload: payloads.persistedPayload,
-      ackMsgIds: [1030],
-      sensitiveCommand: true,
+      configuration: payloads.wirePayload,
+      persistedConfiguration: payloads.persistedPayload,
       actor: { type: 'user', userId: req.user!.id },
       requestId: req.requestId,
       timeoutMs: commandTimeoutMs()
@@ -459,31 +457,32 @@ router.post('/:gatewayId/configure-mqtt', authenticate, authorizeHardware('techn
       entityId: gatewayId,
       companyId: gateway.company_id,
       requestId: req.requestId,
-      result: result.status === 'success' ? 'success' : result.status === 'ambiguous' ? 'unverified' : 'failure',
+      result: operation.status === 'configuration_accepted_restart_accepted' ? 'success'
+        : operation.status.endsWith('_uncertain') ? 'unverified' : 'failure',
       after: {
-        commandId: result.commandId,
-        status: result.status,
-        resultCode: result.resultCode,
-        resultMessage: result.resultMessage,
+        status: operation.status,
+        configuration: operation.configuration,
+        restart: operation.restart,
         destination: { host: payloads.wirePayload.data.host, port: payloads.wirePayload.data.port }
       }
     });
-    const message = result.status === 'success'
-      ? 'La gateway aceptó la configuración MQTT. La conexión al nuevo broker todavía no está verificada.'
-      : result.status === 'timeout'
-        ? 'No se recibió confirmación. La gateway podría haber aplicado la configuración y haberse desconectado.'
-        : result.status === 'ambiguous'
-          ? 'Se observó un ACK positivo, pero no puede atribuirse inequívocamente a esta orden. La conexión al nuevo broker no está verificada.'
-          : 'La gateway no aceptó la configuración MQTT o no pudo publicarse.';
-    const httpStatus = result.status === 'success' ? 200
-      : result.status === 'ambiguous' ? 202
-        : result.status === 'timeout' ? 504 : 502;
+    const message = operation.status === 'configuration_accepted_restart_accepted'
+      ? 'La gateway aceptó la configuración MQTT y el reinicio. La conexión al nuevo broker todavía no está verificada.'
+      : operation.status === 'configuration_uncertain'
+        ? 'No existe confirmación inequívoca de la configuración. No se solicitó el reinicio.'
+        : operation.status === 'configuration_failed'
+          ? 'La configuración MQTT fue rechazada o no pudo publicarse. No se solicitó el reinicio.'
+          : operation.status === 'restart_uncertain'
+            ? 'La configuración MQTT fue aceptada, pero el resultado del reinicio es incierto. La gateway puede estar reiniciándose o desconectada.'
+            : 'La configuración MQTT fue aceptada, pero el reinicio fue rechazado o no pudo publicarse.';
+    const hasAmbiguousAck = operation.configuration.status === 'ambiguous' || operation.restart?.status === 'ambiguous';
+    const httpStatus = operation.status === 'configuration_accepted_restart_accepted' ? 200
+      : hasAmbiguousAck ? 202
+        : operation.status.endsWith('_uncertain') ? 504 : 502;
     return res.status(httpStatus).json({
-      commandId: result.commandId,
-      msgId: 1030,
-      status: result.status,
-      resultCode: result.resultCode,
-      resultMessage: result.resultMessage,
+      status: operation.status,
+      configuration: operation.configuration,
+      restart: operation.restart,
       message
     });
   } catch (error) {

@@ -156,9 +156,14 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false) {
     if (sql.includes('FROM hardware_gateway_commands c')) {
       const scopedCompanies = params[1];
       const allowed = Array.isArray(scopedCompanies) && scopedCompanies.includes(COMPANY_A);
-      return { rows: allowed ? [{ id: 'command-1030', msg_id: 1030, command_type: 'mqtt_connection_1030', status: 'ack_success',
-        actor_type: 'user', actor_name: 'Técnico', destination_host: 'mqtt.horizonst.com.es', destination_port: '8883',
-        result_code: 0, result_message: 'success', created_at: new Date().toISOString() }] : [] };
+      return { rows: allowed ? [
+        { id: 'command-1030', msg_id: 1030, command_type: 'mqtt_connection_1030', status: 'ack_success',
+          actor_type: 'user', actor_name: 'Técnico', destination_host: 'mqtt.horizonst.com.es', destination_port: '8883',
+          result_code: 0, result_message: 'success', created_at: new Date().toISOString() },
+        { id: 'command-1000', msg_id: 1000, command_type: 'gateway_restart_1000', status: 'ack_success',
+          actor_type: 'user', actor_name: 'Técnico', destination_host: null, destination_port: null,
+          result_code: 0, result_message: 'success', created_at: new Date().toISOString() }
+      ] : [] };
     }
     if (sql.includes('FROM technical_audit_log')) {
       observations.auditQueries += 1;
@@ -198,7 +203,7 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false) {
     }
     await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
       msg_id: payload.msg_id, device_info: { mac: '2805A55EFB68' }, result_code: 0,
-      ...(payload.msg_id === 1030 ? { result_msg: 'success' } : {})
+      ...([1000, 1030].includes(payload.msg_id) ? { result_msg: 'success' } : {})
     }));
   };
   return observations;
@@ -282,14 +287,22 @@ test('MQTT 1030 is technician-only and company-scoped, with its envelope and top
   const response = await api(path, 2, 'hardware_technician', mqttRequest());
   assert.equal(response.status, 200);
   const json = await response.json();
-  assert.equal(json.status, 'success');
+  assert.equal(json.status, 'configuration_accepted_restart_accepted');
+  assert.equal(json.configuration.status, 'success');
+  assert.equal(json.restart.status, 'success');
   assert.match(json.message, /todavía no está verificada/);
   assert.equal(JSON.stringify(json).includes('test-only-secret-not-real'), false);
-  assert.deepEqual(observed.published, [{
-    topic: 'gw/2805a55efb68/subscribe',
-    payload: { msg_id: 1030, device_info: { mac: '2805a55efb68' }, data: mqttConfigurationData() }
-  }]);
-  assert.equal(observed.persisted.length, 1);
+  assert.deepEqual(observed.published, [
+    {
+      topic: 'gw/2805a55efb68/subscribe',
+      payload: { msg_id: 1030, device_info: { mac: '2805a55efb68' }, data: mqttConfigurationData() }
+    },
+    {
+      topic: 'gw/2805a55efb68/subscribe',
+      payload: { msg_id: 1000, device_info: { mac: '2805a55efb68' }, data: { reset: 0 } }
+    }
+  ]);
+  assert.equal(observed.persisted.length, 2);
   assert.equal(observed.persisted[0].includes('test-only-secret-not-real'), false);
   assert.match(observed.persisted[0], /\[REDACTED\]/);
   assert.equal(observed.auditPayloads.some((payload) => payload.includes('test-only-secret-not-real')), false);
@@ -306,7 +319,7 @@ test('MQTT 1030 enforces exact confirmation, strict payload and HTTP idempotency
   const headers = { 'X-Request-Id': 'mqtt-1030-idempotency-test' };
   assert.equal((await api(path, 2, 'hardware_technician', { ...mqttRequest(), headers })).status, 200);
   assert.equal((await api(path, 2, 'hardware_technician', { ...mqttRequest(), headers })).status, 409);
-  assert.equal(observed.published.length, 1);
+  assert.equal(observed.published.length, 2);
 });
 
 test('MQTT 1030 timeout is uncertain and never triggers an automatic retry', async () => {
@@ -319,7 +332,10 @@ test('MQTT 1030 timeout is uncertain and never triggers an automatic retry', asy
     };
     const response = await api('/api/gateways/41/configure-mqtt', 2, 'hardware_technician', mqttRequest());
     assert.equal(response.status, 504);
-    assert.equal((await response.json()).status, 'timeout');
+    const body = await response.json();
+    assert.equal(body.status, 'configuration_uncertain');
+    assert.equal(body.configuration.status, 'timeout');
+    assert.equal(body.restart, undefined);
     assert.equal(observed.published.length, 1);
   } finally {
     if (previousTimeout === undefined) delete process.env.GATEWAY_COMMAND_TIMEOUT_MS;
@@ -337,15 +353,118 @@ test('MQTT 1030 distinguishes a real rejection from an ambiguous positive ACK af
   };
   const rejectedResponse = await api('/api/gateways/41/configure-mqtt', 2, 'hardware_technician', mqttRequest());
   assert.equal(rejectedResponse.status, 502);
-  assert.equal((await rejectedResponse.json()).resultCode, 4);
+  const rejectedBody = await rejectedResponse.json();
+  assert.equal(rejectedBody.status, 'configuration_failed');
+  assert.equal(rejectedBody.configuration.resultCode, 4);
+  assert.equal(rejected.published.length, 1);
 
   const ambiguous = fakeDatabase(false, true);
   const ambiguousResponse = await api('/api/gateways/41/configure-mqtt', 2, 'hardware_technician', mqttRequest());
   assert.equal(ambiguousResponse.status, 202);
   const body = await ambiguousResponse.json();
-  assert.equal(body.status, 'ambiguous');
-  assert.match(body.message, /no puede atribuirse inequívocamente/);
+  assert.equal(body.status, 'configuration_uncertain');
+  assert.equal(body.configuration.status, 'ambiguous');
+  assert.match(body.message, /No existe confirmación inequívoca/);
   assert.equal(ambiguous.published.length, 1);
+});
+
+test('MQTT 1000 rejection is journaled separately after a successful 1030 and is not retried', async () => {
+  const observed = fakeDatabase();
+  (mqttService as any).publishMqttJson = async (topic: string, payload: any) => {
+    observed.published.push({ topic, payload });
+    await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
+      msg_id: payload.msg_id,
+      device_info: { mac: '2805a55efb68' },
+      result_code: payload.msg_id === 1030 ? 0 : 4,
+      result_msg: payload.msg_id === 1030 ? 'success' : 'no object error'
+    }));
+  };
+  const response = await api('/api/gateways/41/configure-mqtt', 2, 'hardware_technician', mqttRequest());
+  assert.equal(response.status, 502);
+  const body = await response.json();
+  assert.equal(body.status, 'restart_failed');
+  assert.equal(body.configuration.status, 'success');
+  assert.equal(body.restart.status, 'error');
+  assert.equal(body.restart.resultCode, 4);
+  assert.deepEqual(observed.published.map(({ payload }) => payload.msg_id), [1030, 1000]);
+  assert.equal(observed.commandInserts, 2);
+});
+
+test('MQTT 1000 publication failure preserves the accepted 1030 without exposing its password', async () => {
+  const observed = fakeDatabase();
+  const capturedLogs: string[] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => { capturedLogs.push(args.map(String).join(' ')); };
+  (mqttService as any).publishMqttJson = async (topic: string, payload: any) => {
+    observed.published.push({ topic, payload });
+    if (payload.msg_id === 1000) throw new Error('simulated disconnect during restart');
+    await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
+      msg_id: 1030, device_info: { mac: '2805a55efb68' }, result_code: 0, result_msg: 'success'
+    }));
+  };
+  try {
+    const response = await api('/api/gateways/41/configure-mqtt', 2, 'hardware_technician', mqttRequest());
+    assert.equal(response.status, 502);
+    const body = await response.json();
+    assert.equal(body.status, 'restart_failed');
+    assert.equal(body.configuration.status, 'success');
+    assert.equal(body.restart.status, 'error');
+    assert.deepEqual(observed.published.map(({ payload }) => payload.msg_id), [1030, 1000]);
+    assert.equal(JSON.stringify(body).includes('test-only-secret-not-real'), false);
+    assert.equal(observed.persisted.some((value) => value.includes('test-only-secret-not-real')), false);
+    assert.equal(observed.auditPayloads.some((value) => value.includes('test-only-secret-not-real')), false);
+    assert.equal(capturedLogs.some((value) => value.includes('test-only-secret-not-real')), false);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test('MQTT 1000 absence and a later ACK remain uncertain, bounded and never retried', async () => {
+  const previousTimeout = process.env.GATEWAY_COMMAND_TIMEOUT_MS;
+  process.env.GATEWAY_COMMAND_TIMEOUT_MS = '20';
+  try {
+    const observed = fakeDatabase();
+    (mqttService as any).publishMqttJson = async (topic: string, payload: any) => {
+      observed.published.push({ topic, payload });
+      if (payload.msg_id === 1030) {
+        await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
+          msg_id: 1030, device_info: { mac: '2805a55efb68' }, result_code: 0, result_msg: 'success'
+        }));
+      }
+    };
+    const response = await api('/api/gateways/41/configure-mqtt', 2, 'hardware_technician', mqttRequest());
+    assert.equal(response.status, 504);
+    const body = await response.json();
+    assert.equal(body.status, 'restart_uncertain');
+    assert.equal(body.configuration.status, 'success');
+    assert.equal(body.restart.status, 'timeout');
+    assert.deepEqual(observed.published.map(({ payload }) => payload.msg_id), [1030, 1000]);
+    await handleHardwareGatewayAck('gw/2805a55efb68/publish', JSON.stringify({
+      msg_id: 1000, device_info: { mac: '2805a55efb68' }, result_code: 0, result_msg: 'success'
+    }));
+    assert.equal(body.status, 'restart_uncertain');
+    assert.deepEqual(observed.published.map(({ payload }) => payload.msg_id), [1030, 1000]);
+  } finally {
+    if (previousTimeout === undefined) delete process.env.GATEWAY_COMMAND_TIMEOUT_MS;
+    else process.env.GATEWAY_COMMAND_TIMEOUT_MS = previousTimeout;
+  }
+});
+
+test('a duplicate MQTT 1000 ACK cannot duplicate the command or change the successful result', async () => {
+  const observed = fakeDatabase();
+  (mqttService as any).publishMqttJson = async (topic: string, payload: any) => {
+    observed.published.push({ topic, payload });
+    const ack = JSON.stringify({
+      msg_id: payload.msg_id, device_info: { mac: '2805a55efb68' }, result_code: 0, result_msg: 'success'
+    });
+    await handleHardwareGatewayAck('gw/2805a55efb68/publish', ack);
+    if (payload.msg_id === 1000) await handleHardwareGatewayAck('gw/2805a55efb68/publish', ack);
+  };
+  const response = await api('/api/gateways/41/configure-mqtt', 2, 'hardware_technician', mqttRequest());
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, 'configuration_accepted_restart_accepted');
+  assert.deepEqual(observed.published.map(({ payload }) => payload.msg_id), [1030, 1000]);
+  assert.equal(observed.commandInserts, 2);
 });
 
 test('MQTT 1030 publication errors cannot expose the password in HTTP, journal, audit or captured logs', async () => {
@@ -375,6 +494,7 @@ test('redacted MQTT 1030 history is readable only inside the caller company scop
   assert.equal(response.status, 200);
   const serialized = JSON.stringify(await response.json());
   assert.match(serialized, /mqtt\.horizonst\.com\.es/);
+  assert.match(serialized, /gateway_restart_1000/);
   assert.equal(serialized.includes('passwd'), false);
   assert.equal(serialized.includes('test-only-secret-not-real'), false);
   const foreign = fakeDatabase();
