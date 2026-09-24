@@ -9,7 +9,7 @@ if (!user) {
 
 const adminSection = document.getElementById('adminGatewaySection');
 if (adminSection) {
-  adminSection.style.display = isAdmin ? 'block' : 'none';
+  adminSection.style.display = canEditHardware ? 'block' : 'none';
 }
 
 const gatewayForm = document.getElementById('gatewayForm');
@@ -632,11 +632,18 @@ const renderGateways = () => {
   });
 };
 
-if (isAdmin && gatewayForm) {
+if (canEditHardware && gatewayForm) {
   gatewayForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     gatewayMessage.style.display = 'none';
     const macInput = gatewayForm.gatewayMac.value.trim();
+    const onboardingMacPattern = /^(?:[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|(?:[0-9a-f]{2}-){5}[0-9a-f]{2})$/i;
+    if (!onboardingMacPattern.test(macInput)) {
+      gatewayMessage.textContent = 'La MAC indicada no tiene un formato válido.';
+      gatewayMessage.className = 'alert error';
+      gatewayMessage.style.display = 'block';
+      return;
+    }
     const macAddress = normalizeMac(macInput);
 
     if (!validateMac(macAddress)) {
@@ -646,17 +653,9 @@ if (isAdmin && gatewayForm) {
       return;
     }
 
-    const payload = {
-      name: gatewayForm.gatewayName.value.trim(),
-      macAddress,
-      description: gatewayForm.gatewayDescription.value.trim(),
-      ownerId: gatewayOwnerSelect && gatewayOwnerSelect.value ? Number(gatewayOwnerSelect.value) : null,
-      companyId: gatewayCompanySelect && gatewayCompanySelect.value ? gatewayCompanySelect.value : null
-    };
-
     try {
-      await apiPost('/gateways', payload);
-      gatewayMessage.textContent = 'Gateway registrada correctamente.';
+      const result = await apiPost('/gateways/onboard', { macAddress });
+      gatewayMessage.textContent = result.message;
       gatewayMessage.className = 'alert success';
       gatewayMessage.style.display = 'block';
       gatewayForm.reset();

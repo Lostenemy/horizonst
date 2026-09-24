@@ -29,6 +29,13 @@ import {
   isGatewayConfigurationReadType
 } from '../services/gatewayObservedReads';
 import { buildGatewayMqttConfiguration } from '../services/gatewayMqttConfiguration';
+import {
+  GatewayOnboardingCompanyError,
+  GatewayOnboardingConflictError,
+  onboardGateway,
+  normalizeGatewayOnboardingMac,
+  resolveGatewayOnboardingCompany
+} from '../services/gatewayOnboarding';
 
 const router = Router();
 
@@ -650,6 +657,45 @@ router.delete('/:gatewayId/firmware', authenticate, authorizeHardware('technicia
     return res.status(500).json({ message: 'Failed to clear gateway firmware' });
   } finally {
     client.release();
+  }
+});
+
+router.post('/onboard', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+      || Object.keys(req.body).join(',') !== 'macAddress') {
+    return res.status(400).json({ message: 'Only macAddress is accepted' });
+  }
+  const normalizedMac = normalizeGatewayOnboardingMac(req.body.macAddress);
+  if (!normalizedMac) return res.status(400).json({ message: 'MAC address is invalid' });
+  try {
+    const scope = await resolveHardwareAccess(req.user!, 'technician');
+    const companyId = await resolveGatewayOnboardingCompany({
+      userId: req.user!.id,
+      scopedCompanyIds: scope.companyIds,
+      globalAccess: scope.global
+    });
+    const result = await onboardGateway({
+      macAddress: normalizedMac,
+      companyId,
+      actorUserId: req.user!.id,
+      requestId: req.requestId
+    });
+    return res.status(201).json({
+      ...result,
+      message: 'Gateway registrada y preparada en el broker. Su conexión todavía no está verificada.'
+    });
+  } catch (error: any) {
+    if (error instanceof GatewayOnboardingCompanyError) {
+      return res.status(409).json({ message: error.message });
+    }
+    if (error instanceof GatewayOnboardingConflictError) {
+      return res.status(409).json({ message: error.message });
+    }
+    if (error?.code === '23505') {
+      return res.status(409).json({ message: 'Gateway or broker identity already exists' });
+    }
+    console.error('Failed to onboard gateway');
+    return res.status(500).json({ message: 'Failed to onboard gateway' });
   }
 });
 

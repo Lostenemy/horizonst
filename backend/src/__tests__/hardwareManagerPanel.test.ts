@@ -73,13 +73,20 @@ test('MQTT 1030 UI keeps the secret ephemeral, restores the preset and explains 
   assert.match(ui, /result\.message/);
 });
 
-test('gateway onboarding remains fail-closed until an initial credential policy is authorized', () => {
+test('gateway onboarding asks only for MAC and describes broker preparation without claiming connectivity', () => {
+  const html = source('public/gateways.html');
+  const ui = source('public/js/gateways.js');
   const docs = source('../docs/hardware-manager-mqtt-1030.md');
   const routes = source('src/routes/gateways.ts');
-  assert.match(docs, /decisión pendiente/i);
-  assert.match(docs, /no añade\s+la acción \*\*Dar de alta gateway\*\*/);
-  assert.match(docs, /no aprovisiona credenciales\/ACL/);
-  assert.doesNotMatch(routes, /INSERT INTO vmq_auth_acl/);
+  assert.match(html, /Dar de alta gateway/);
+  assert.match(html, /registra la gateway y prepara su cuenta en el broker/);
+  assert.match(html, /credencial inicial.*predecible/s);
+  assert.doesNotMatch(html, /id="gateway(?:Name|Description|Owner|Company)"/);
+  assert.match(ui, /apiPost\('\/gateways\/onboard', \{ macAddress \}\)/);
+  assert.match(ui, /onboardingMacPattern/);
+  assert.match(routes, /router\.post\('\/onboard'.*authorizeHardware\('technician'\)/s);
+  assert.match(docs, /predecible y no robusta/);
+  assert.match(docs, /configurarse primero localmente/);
 });
 
 test('gateway audit endpoint checks the scoped gateway before returning metadata', () => {

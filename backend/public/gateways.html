@@ -24,30 +24,18 @@
     </header>
     <main>
       <section class="card" id="adminGatewaySection" style="display:none">
-        <h2>Registrar nueva gateway</h2>
+        <h2>Dar de alta gateway</h2>
+        <p>La empresa se obtiene de tu contexto autorizado. El alta registra la gateway y prepara su cuenta en el broker,
+          pero no demuestra que esté conectada.</p>
+        <div class="alert warning">La credencial inicial sigue la convención técnica MAC=contraseña y es predecible.
+          Debe considerarse una credencial de puesta en marcha, no una credencial robusta.</div>
         <form id="gatewayForm" class="form-grid">
           <div>
-            <label for="gatewayName">Nombre</label>
-            <input type="text" id="gatewayName" />
-          </div>
-          <div>
-            <label for="gatewayMac">MAC address</label>
+            <label for="gatewayMac">MAC central</label>
             <input type="text" id="gatewayMac" required placeholder="AA11BB22CC33" />
           </div>
-          <div>
-            <label for="gatewayDescription">Descripción</label>
-            <input type="text" id="gatewayDescription" />
-          </div>
-          <div>
-            <label for="gatewayOwner">Propietario</label>
-            <select id="gatewayOwner"></select>
-          </div>
-          <div>
-            <label for="gatewayCompany">Empresa</label>
-            <select id="gatewayCompany"></select>
-          </div>
           <div class="actions">
-            <button type="submit">Registrar</button>
+            <button type="submit">Registrar y preparar broker</button>
           </div>
         </form>
         <div class="alert info" id="gatewayMessage" style="display:none"></div>

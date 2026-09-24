@@ -51,21 +51,27 @@ El bloqueo asesor existente serializa la operación completa por gateway. Las cl
 `msg_id`, un ACK positivo se conserva como `ack_ambiguous`, nunca como confirmación inequívoca. Los ACK tardíos no
 reviven estados terminales. El diario y la UI muestran por separado configuración y reinicio.
 
-## Alta previa de gateways: decisión pendiente
+## Alta previa de gateways
 
 El repositorio acredita que VerneMQ usa `mountpoint=''`, contraseña bcrypt producida por PostgreSQL
 `crypt(..., gen_salt('bf'))`, unicidad `(mountpoint, client_id)` y ACL JSON por patrón. Las ACL requeridas no deben
-incluir la propiedad `qos`. Sin embargo, no existe un contrato versionado que establezca qué secreto inicial debe
-derivarse o asignarse a una gateway nueva. El ejemplo observado muestra una MAC como contraseña, pero el código de
-aprovisionamiento actual no acredita que esa sea la política de credenciales de gateways.
+incluir la propiedad `qos`. La decisión de producto para esta entrega establece `client_id`, `username` y contraseña
+inicial iguales a la MAC central normalizada. La contraseña se almacena únicamente como bcrypt mediante
+`crypt(mac, gen_salt('bf', 10))`, que coincide con `PASSWORD_HASH_METHOD=bcrypt` de VerneMQ; nunca se persiste ni se
+registra en claro.
 
-Como el alta solicitada solo puede pedir la MAC y no puede inventar ni mostrar una credencial, este cambio no añade
-la acción **Dar de alta gateway** ni un flujo que escriba conjuntamente en `gateways` y `vmq_auth_acl`. Hace falta
-decidir y documentar una de estas políticas antes de continuar: secreto aleatorio entregado por canal seguro y
-configurable localmente, secreto de fábrica acreditado, o derivación explícita autorizada. También falta una fuente
-central verificable de estado online por gateway; registrar inventario y ACL no demuestra conectividad ni permite
-habilitar `1030` de forma segura para una unidad recién incorporada. El formulario de registro de inventario existente
-no aprovisiona credenciales/ACL y no debe confundirse con la futura alta atómica.
+Esta convención hace que la contraseña inicial sea **predecible y no robusta**. El alta no debe presentarse como una
+protección criptográfica fuerte ni aplicarse retroactivamente a cuentas existentes. La acción **Dar de alta gateway**
+solo acepta la MAC; deriva una única empresa activa del contexto técnico del usuario y crea en una transacción el
+inventario, la identidad bcrypt, las ACL exactas y la auditoría redactada. Un bloqueo asesor transaccional por MAC,
+las constraints y las comprobaciones previas impiden altas concurrentes, reasignaciones y sobrescritura de cuentas.
+
+El resultado «registrada y preparada en el broker» no significa «conectada». No existe una tabla central fiable de
+sesiones online y no se inventa una. Una gateway nueva que todavía no pueda recibir órdenes en el broker actual debe
+configurarse primero localmente con la herramienta/interfaz del fabricante: endpoint del broker vigente, MAC
+normalizada como `client_id` y `username`, credencial inicial acordada y los topics exactos
+`gw/{mac}/publish`/`gw/{mac}/subscribe`. Solo después de comprobar por separado que publica en el topic central debe
+enviarse `1030`; la conexión al broker de destino se vuelve a verificar tras el reinicio `1000`.
 
 ## Prueba posterior y recuperación
 
