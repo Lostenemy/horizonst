@@ -1231,33 +1231,39 @@ async function renderReports() {
   const from = q('rFrom')?.value || '';
   const to = q('rTo')?.value || '';
   const worker = q('rWorker')?.value || '';
-  const query = new URLSearchParams();
-  if (from) query.set('from', from);
-  if (to) query.set('to', to);
-  if (worker) query.set('workerDni', worker);
-  const queryText = query.toString() ? `?${query.toString()}` : '';
 
   q('reports').innerHTML = `
-    <p>Genera informes de inspección con el periodo seleccionado. PDF para revisión documental y Excel para análisis operativo.</p>
+    <p>Genera informes de inspección. PDF para revisión documental y Excel para análisis operativo.</p>
     <div class="grid three">
       <div class="field"><label>Desde</label><input id="rFrom" type="date" value="${esc(from)}" /></div>
       <div class="field"><label>Hasta</label><input id="rTo" type="date" value="${esc(to)}" /></div>
       <div class="field"><label>Filtrar por DNI (opcional)</label><input id="rWorker" placeholder="Ej: 12345678A" value="${esc(worker)}" /></div>
     </div>
-    <p class="help mt-12">Periodo seleccionado: ${from || 'inicio'} → ${to || 'hoy'} ${worker ? `· DNI: ${esc(worker)}` : ''}</p>
+    <p class="help mt-12">Cada descarga usa los filtros actuales; si se dejan vacíos, incluye todo el histórico y todos los trabajadores.</p>
     <div class="actions report-actions">
-      <button class="report-btn report-btn-pdf" onclick="downloadReport('/reports/inspection.pdf${queryText}','inspection.pdf', this)">Descargar PDF (auditoría)</button>
-      <button class="report-btn report-btn-excel" onclick="downloadReport('/reports/inspection.xlsx${queryText}','inspection.xlsx', this)">Descargar Excel (análisis)</button>
-      <button class="report-btn report-btn-refresh" onclick="renderReports()">Actualizar filtros</button>
+      <button class="report-btn report-btn-pdf" onclick="downloadReport('inspection.pdf', this)">Descargar PDF (auditoría)</button>
+      <button class="report-btn report-btn-excel" onclick="downloadReport('inspection.xlsx', this)">Descargar Excel (análisis)</button>
     </div>
   `;
 }
 
-async function downloadReport(url, filename, button) {
+function inspectionReportUrl(filename) {
+  const query = new URLSearchParams();
+  const from = q('rFrom')?.value.trim();
+  const to = q('rTo')?.value.trim();
+  const worker = q('rWorker')?.value.trim();
+  if (from) query.set('from', from);
+  if (to) query.set('to', to);
+  if (worker) query.set('workerDni', worker);
+  const queryText = query.toString();
+  return `/reports/${filename}${queryText ? `?${queryText}` : ''}`;
+}
+
+async function downloadReport(filename, button) {
   const previous = button ? button.textContent : '';
   if (button) { button.disabled = true; button.textContent = 'Generando...'; }
   try {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(inspectionReportUrl(filename), { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error('No se pudo descargar el informe');
     const blob = await res.blob();
     const href = URL.createObjectURL(blob);
