@@ -218,14 +218,21 @@ test('PostgreSQL onboarding creates bcrypt identity and exact ACL atomically und
       await admin.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
       await admin.query(`CREATE SCHEMA ${schema}`);
       await admin.query(`
-        CREATE TABLE ${schema}.companies(id uuid PRIMARY KEY, active boolean NOT NULL);
+        CREATE TABLE ${schema}.companies(
+          id uuid PRIMARY KEY, code varchar(64) NOT NULL, name varchar(160) NOT NULL,
+          active boolean NOT NULL DEFAULT true,
+          created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+          CONSTRAINT companies_code_format CHECK (code ~ '^[a-z0-9][a-z0-9_-]{0,63}$'),
+          CONSTRAINT companies_code_unique UNIQUE (code)
+        );
         CREATE TABLE ${schema}.company_user_memberships(
           user_id integer NOT NULL, company_id uuid NOT NULL REFERENCES ${schema}.companies(id), role varchar(32) NOT NULL,
           PRIMARY KEY(user_id, company_id)
         );
         CREATE TABLE ${schema}.gateways(
           id serial PRIMARY KEY, name varchar(160), mac_address varchar(32) NOT NULL UNIQUE,
-          description text, owner_id integer, company_id uuid, active boolean NOT NULL DEFAULT true,
+          description text, owner_id integer, company_id uuid REFERENCES ${schema}.companies(id) ON DELETE RESTRICT,
+          active boolean NOT NULL DEFAULT true,
           created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
         );
         CREATE TABLE ${schema}.hardware_gateway_commands(
@@ -251,8 +258,9 @@ test('PostgreSQL onboarding creates bcrypt identity and exact ACL atomically und
           entity_id text NOT NULL, company_id uuid, request_id varchar(128), result varchar(32) NOT NULL,
           before_state jsonb, after_state jsonb, created_at timestamptz NOT NULL DEFAULT now()
         );
-        INSERT INTO ${schema}.companies(id, active) VALUES
-          ('${COMPANY_A}', true), ('${COMPANY_B}', true);
+        INSERT INTO ${schema}.companies(id, code, name, active) VALUES
+          ('${COMPANY_A}', 'company_a', 'Company A', true),
+          ('${COMPANY_B}', 'company_b', 'Company B', true);
         INSERT INTO ${schema}.company_user_memberships(user_id, company_id, role) VALUES
           (2, '${COMPANY_A}', 'hardware_technician'), (3, '${COMPANY_B}', 'hardware_technician');
       `);
@@ -297,6 +305,8 @@ test('PostgreSQL onboarding creates bcrypt identity and exact ACL atomically und
       const assigned = await assignGatewayCompany({ gatewayId: first.gateway.id, companyId: COMPANY_A,
         actorUserId: 2 }, { database });
       assert.equal(assigned.gateway.company_id, COMPANY_A);
+      assert.equal(assigned.company.code, 'company_a');
+      assert.equal(assigned.company.name, 'Company A');
       assert.equal((await database.query('SELECT count(*)::int AS n FROM hardware_gateway_commands WHERE company_id IS NULL')).rows[0].n, 2);
       assert.equal((await database.query('SELECT password FROM vmq_auth_acl WHERE client_id=$1', [firstMac])).rows[0].password,
         auth.rows[0].password);
