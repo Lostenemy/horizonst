@@ -33,12 +33,31 @@ export function madridWorkdayWindow(now: Date): { start: Date; end: Date } {
   };
 }
 
+export function madridExposureSegments(start: Date | string, end: Date | string): Array<{ date: string; seconds: number }> {
+  const startedMs = new Date(start).getTime();
+  let cursor = startedMs;
+  const endMs = new Date(end).getTime();
+  if (!Number.isFinite(cursor) || !Number.isFinite(endMs) || endMs <= cursor) return [];
+  const segments: Array<{ date: string; seconds: number }> = [];
+  while (cursor < endMs) {
+    const window = madridWorkdayWindow(new Date(cursor));
+    const next = Math.min(endMs, window.end.getTime());
+    const { year, month, day } = localParts(window.start);
+    const seconds = Math.floor((next - startedMs) / 1000) - Math.floor((cursor - startedMs) / 1000);
+    if (seconds > 0) {
+      segments.push({ date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`, seconds });
+    }
+    cursor = next;
+  }
+  return segments;
+}
+
 export interface WorkdaySession {
   worker_id: string;
   full_name: string;
   dni: string;
   started_at: Date | string;
-  ended_at: Date | string | null;
+  exposure_ended_at: Date | string;
 }
 
 export interface WorkerWorkdayTotal {
@@ -59,7 +78,7 @@ export function accumulateWorkerWorkday(sessions: WorkdaySession[], now: Date): 
   for (const session of sessions) {
     if (!session.worker_id) continue;
     const started = new Date(session.started_at).getTime();
-    const ended = session.ended_at === null ? dayEnd : new Date(session.ended_at).getTime();
+    const ended = new Date(session.exposure_ended_at).getTime();
     if (!Number.isFinite(started) || !Number.isFinite(ended)) continue;
     const from = Math.max(started, dayStart);
     const to = Math.min(ended, dayEnd);
@@ -88,7 +107,7 @@ export function accumulateWorkerWorkday(sessions: WorkdaySession[], now: Date): 
       worker_id: workerId, full_name: worker.name, dni: worker.dni,
       accumulated_seconds: accumulatedSeconds,
       limit_seconds: WORKDAY_LIMIT_SECONDS,
-      progress_percent: Math.round(accumulatedSeconds / WORKDAY_LIMIT_SECONDS * 100)
+      progress_percent: Math.floor(accumulatedSeconds / WORKDAY_LIMIT_SECONDS * 1000) / 10
     };
   }).sort((a, b) => b.accumulated_seconds - a.accumulated_seconds || a.full_name.localeCompare(b.full_name));
 }

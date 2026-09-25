@@ -46,6 +46,8 @@ test('incluye exactamente las 17.524 sesiones mediante páginas internas', async
   assert.ok(queries.every(({ sql }) => !sql.includes('s.started_at >=')));
   assert.ok(queries.every(({ sql }) => !sql.includes('s.started_at < (')));
   assert.ok(queries.every(({ sql }) => /ORDER BY s\.started_at DESC, s\.id DESC/.test(sql)));
+  assert.match(queries[0].sql, /THEN COALESCE\(s\.duration_seconds/);
+  assert.match(queries[0].sql, /SELECT MAX\(ps\.last_presence_at\)/);
   assert.doesNotMatch(queries[0].sql, /s\.id\) < /);
   assert.match(queries[1].sql, /\(s\.started_at, s\.id\) < \(\$1::timestamptz, \$2::uuid\)/);
   assert.deepEqual(queries[1].values.slice(0, 2), [databaseRows[999].started_at, databaseRows[999].session_id]);

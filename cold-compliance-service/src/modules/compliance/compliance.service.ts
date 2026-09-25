@@ -8,6 +8,7 @@ import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../prese
 import { shouldClosePresenceSession } from './presence-timeout-policy';
 import { evaluatePresenceSignal } from './presence-signal-policy';
 import { EventTechnicalIdentity, resolveEventTechnicalIdentity } from '../hardware-manager/event-identity.service';
+import { madridExposureSegments } from '../realtime/workday-duration';
 const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
 export function isValidSessionStart(startedAt: string): boolean {
   const startedAtMs = Date.parse(startedAt);
@@ -155,10 +156,14 @@ async function finalizeSession(
   reason: 'event' | 'timeout',
   lastDetectionAt: string | Date
 ): Promise<boolean> {
+  const exposureEndedAt = reason === 'timeout' ? lastDetectionAt : endedAt;
   const updateResult = await db.query(
     `UPDATE cold_room_sessions
      SET ended_at = $1,
-         duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM ($1::timestamptz - started_at)))::int,
+         duration_seconds = CASE WHEN $5::text = 'timeout'
+           THEN FLOOR(GREATEST(0, EXTRACT(EPOCH FROM ($4::timestamptz - started_at))))::int
+           ELSE GREATEST(0, EXTRACT(EPOCH FROM ($1::timestamptz - started_at)))::int
+         END,
          close_event_id = COALESCE($2, close_event_id)
      WHERE id = $3 AND ended_at IS NULL
        AND $1::timestamptz >= started_at
@@ -172,23 +177,28 @@ async function finalizeSession(
                 OR seen_gateway.cold_room_id = cold_room_sessions.cold_room_id)
        )
      RETURNING id, started_at, worker_id, cold_room_id, tag_id, hardware_device_id`,
-    [endedAt, closeEventId, session.id, lastDetectionAt]
+    [endedAt, closeEventId, session.id, exposureEndedAt, reason]
   );
 
   if (!updateResult.rowCount) return false;
 
   const closed = updateResult.rows[0];
   await markPresenceExit(closed.tag_id, closed.hardware_device_id, lastDetectionAt);
-  const durationMinutes = (Date.parse(endedAt) - Date.parse(closed.started_at)) / 60000;
+  const durationMinutes = (new Date(exposureEndedAt).getTime() - new Date(closed.started_at).getTime()) / 60000;
 
-  await db.query(
-    `INSERT INTO workday_accumulators(workday_date, worker_id, cold_room_id, accumulated_seconds)
-     VALUES (DATE($1), $2, $3, GREATEST(0, EXTRACT(EPOCH FROM ($1::timestamptz - $4::timestamptz)))::int)
-     ON CONFLICT (workday_date, worker_id, cold_room_id)
-     DO UPDATE SET accumulated_seconds = workday_accumulators.accumulated_seconds + EXCLUDED.accumulated_seconds,
-                   updated_at = NOW()`,
-    [endedAt, closed.worker_id, closed.cold_room_id, closed.started_at]
-  );
+  const daySegments = madridExposureSegments(closed.started_at, exposureEndedAt);
+  if (daySegments.length) {
+    await db.query(
+      `INSERT INTO workday_accumulators(workday_date, worker_id, cold_room_id, accumulated_seconds)
+       SELECT (segment.value->>'date')::date, $2, $3, (segment.value->>'seconds')::int
+       FROM jsonb_array_elements($1::jsonb) AS segment(value)
+       WHERE TRUE
+       ON CONFLICT (workday_date, worker_id, cold_room_id)
+       DO UPDATE SET accumulated_seconds = workday_accumulators.accumulated_seconds + EXCLUDED.accumulated_seconds,
+                     updated_at = NOW()`,
+      [JSON.stringify(daySegments), closed.worker_id, closed.cold_room_id]
+    );
+  }
 
   if (durationMinutes >= session.pre_alert_minutes) {
     const prelimit = durationMinutes < session.max_continuous_minutes;
@@ -223,8 +233,9 @@ async function finalizeSession(
 
   const dailyTotal = await db.query(
     `SELECT accumulated_seconds FROM workday_accumulators
-     WHERE workday_date = DATE($1) AND worker_id = $2 AND cold_room_id = $3`,
-    [endedAt, closed.worker_id, closed.cold_room_id]
+     WHERE workday_date = $1::date
+       AND worker_id = $2 AND cold_room_id = $3`,
+    [daySegments[daySegments.length - 1]?.date ?? null, closed.worker_id, closed.cold_room_id]
   );
   const dayMinutes = (dailyTotal.rows[0]?.accumulated_seconds ?? 0) / 60;
   if (dayMinutes > session.max_daily_minutes) {
@@ -297,6 +308,8 @@ async function closeStaleSessions(): Promise<void> {
 
     if (!shouldClosePresenceSession({ nowMs, lastPresenceAtMs: referenceTs, timeoutMs })) continue;
 
+    // The timeout controls when absence is confirmed. The stored duration and
+    // daily exposure stop at the last accepted packet, not at this closure.
     const closedAt = new Date(referenceTs + timeoutMs).toISOString();
     const closed = await finalizeSession(session, closedAt, null, 'timeout', session.last_seen_at);
     if (closed) {

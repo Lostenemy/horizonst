@@ -93,7 +93,20 @@ export async function consumeInspectionRows(
               COALESCE(t.tag_uid, '') AS tag_mac,
               s.started_at,
               s.ended_at,
-              COALESCE(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))::int, 0) AS duration_seconds
+              CASE WHEN s.ended_at IS NOT NULL
+                   THEN COALESCE(s.duration_seconds,
+                     FLOOR(GREATEST(0, EXTRACT(EPOCH FROM (s.ended_at - s.started_at))))::int)
+                   ELSE FLOOR(GREATEST(0, EXTRACT(EPOCH FROM (
+                     COALESCE((
+                       SELECT MAX(ps.last_presence_at)
+                       FROM tag_gateway_presence_state ps
+                       LEFT JOIN gateways seen_gateway
+                         ON seen_gateway.hardware_gateway_id = ps.hardware_gateway_id
+                       WHERE ps.hardware_device_id = s.hardware_device_id
+                         AND ps.last_presence_at >= s.started_at
+                         AND (s.cold_room_id IS NULL OR seen_gateway.cold_room_id = s.cold_room_id)
+                     ), s.started_at) - s.started_at))))::int
+              END AS duration_seconds
        FROM cold_room_sessions s
        JOIN workers w ON w.id = s.worker_id
        LEFT JOIN tags t ON t.hardware_device_id = s.hardware_device_id
