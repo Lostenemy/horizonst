@@ -11,6 +11,7 @@ import {
   InspectionRow,
   assertInspectionIntegrity,
   consumeInspectionRows,
+  inspectionDisplayTimes,
   loadInspectionSummary
 } from './inspection-report.service';
 
@@ -79,46 +80,49 @@ reportsRouter.get('/inspection.xlsx', async (req: Request, res: Response, next) 
         { width: 18 },
         { width: 22 },
         { width: 22 },
+        { width: 22 },
         { width: 12 }
       ];
 
-      ws.mergeCells('A1:F1');
+      ws.mergeCells('A1:G1');
       const titleRow = ws.getRow(1);
-      titleRow.getCell(1).value = 'Horneo · Informe de inspección de presencia';
+      titleRow.getCell(1).value = 'Horneo · Informe de inspección de exposición';
       titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: 'FF0F3D5E' } };
       titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
       titleRow.commit();
 
-      ws.mergeCells('A2:F2');
+      ws.mergeCells('A2:G2');
       const generatedRow = ws.getRow(2);
-      generatedRow.getCell(1).value = `Generado: ${formatDateTimeMadrid(new Date())}`;
+      generatedRow.getCell(1).value = `Generado: ${formatDateTimeMadrid(new Date())} · Europe/Madrid · Fin exposición = última detección válida; salida confirmada = cierre operativo`;
       generatedRow.getCell(1).font = { size: 10, color: { argb: 'FF4B5563' } };
       generatedRow.commit();
 
-      const headerRow = ws.addRow(['Trabajador', 'DNI', 'Tag', 'Entrada', 'Salida', 'Minutos']);
+      const headerRow = ws.addRow(['Trabajador', 'DNI', 'Tag', 'Entrada', 'Fin exposición', 'Salida confirmada', 'Min exposición']);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A7AB9' } };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
       applyCellBorder(headerRow);
       headerRow.commit();
-      ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: 6 } };
+      ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: 7 } };
 
       const included = await consumeInspectionRows(
         async (sql, values) => (await client.query<InspectionRow>(sql, values)).rows,
         filters,
         (row) => {
+          const display = inspectionDisplayTimes(row);
           const reportRow = ws.addRow([
             row.worker_name,
             row.worker_dni,
             row.tag_mac,
-            formatDateTimeMadrid(row.started_at),
-            formatDateTimeMadrid(row.ended_at),
-            row.duration_seconds / 60
+            display.entry,
+            display.exposureEnd,
+            display.exitConfirmed,
+            display.exposureMinutes
           ]);
-          reportRow.getCell(6).numFmt = '0.00';
+          reportRow.getCell(7).numFmt = '0.00';
           if (row.duration_seconds >= 45 * 60) {
-            reportRow.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE5E5' } };
-            reportRow.getCell(6).font = { color: { argb: 'FFC62828' }, bold: true };
+            reportRow.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE5E5' } };
+            reportRow.getCell(7).font = { color: { argb: 'FFC62828' }, bold: true };
           }
           applyCellBorder(reportRow);
           reportRow.commit();
@@ -145,13 +149,13 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="inspection.pdf"');
-      const doc = new PDFDocument({ margin: 36, size: 'A4', bufferPages: false });
+      const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape', bufferPages: false });
       doc.pipe(res);
 
       const margin = 36;
       const headerTop = 28;
       const summaryTop = 95;
-      const tableTop = 185;
+      const tableTop = 175;
       const rowHeight = 18;
       const footerHeight = 16;
       const bottomGap = 10;
@@ -167,6 +171,7 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
         }
         doc.fillColor('#0F3D5E').fontSize(18).text('Informe de inspección', 140, 36);
         doc.fillColor('#4B5563').fontSize(10).text(`Generado: ${formatDateTimeMadrid(generatedAt)}`, 140, 58);
+        doc.fontSize(8).text('Europe/Madrid · Fin exposición: última detección válida · Salida confirmada: cierre operativo', 140, 76);
       };
 
       const drawFooter = () => {
@@ -182,14 +187,14 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
         doc.restore();
       };
 
-      const headers = ['Trabajador', 'DNI', 'Tag', 'Entrada', 'Salida', 'Min'];
-      const colX = [36, 185, 250, 320, 410, 525];
+      const headers = ['Trabajador', 'DNI', 'Tag', 'Entrada', 'Fin exposición', 'Salida confirmada', 'Min exposición'];
+      const colX = [36, 180, 250, 320, 435, 550, 680];
       const drawTableHeader = () => {
-        doc.fillColor('#2A7AB9').rect(36, y, 523, 20).fill();
+        doc.fillColor('#2A7AB9').rect(36, y, doc.page.width - 72, 20).fill();
         doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
         headers.forEach((header, index) =>
           doc.text(header, colX[index], y + 6, {
-            width: index === 5 ? 34 : colX[index + 1] - colX[index] - 4
+            width: index === 6 ? 95 : colX[index + 1] - colX[index] - 4
           })
         );
         y += 22;
@@ -197,11 +202,11 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
       };
 
       drawPageHeader();
-      doc.roundedRect(36, summaryTop, 523, 70, 8).fillAndStroke('#EDF4FB', '#D9E7F5');
+      doc.roundedRect(36, summaryTop, doc.page.width - 72, 64, 8).fillAndStroke('#EDF4FB', '#D9E7F5');
       doc.fillColor('#0F3D5E').fontSize(11).text(`Sesiones analizadas: ${summary.totalRows}`, 52, 115);
-      doc.text(`Sesiones >= 45 min: ${summary.criticalRows}`, 240, 115);
-      doc.text(`Promedio: ${formatDurationMmSs(summary.averageSeconds)}`, 400, 115, {
-        width: 145,
+      doc.text(`Sesiones >= 45 min exposición: ${summary.criticalRows}`, 270, 115);
+      doc.text(`Promedio exposición: ${formatDurationMmSs(summary.averageSeconds)}`, 580, 115, {
+        width: 190,
         align: 'right'
       });
       drawTableHeader();
@@ -212,6 +217,7 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
         async (sql, values) => (await client.query<InspectionRow>(sql, values)).rows,
         filters,
         (row) => {
+          const display = inspectionDisplayTimes(row);
           if (y + rowHeight > maxRowY) {
             drawFooter();
             doc.addPage();
@@ -221,17 +227,18 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
             drawTableHeader();
           }
           if (rowIndex % 2 === 0) {
-            doc.fillColor('#F8FAFC').rect(36, y - 2, 523, 18).fill();
+            doc.fillColor('#F8FAFC').rect(36, y - 2, doc.page.width - 72, 18).fill();
           }
           doc.fillColor('#111827').fontSize(8);
-          doc.text(row.worker_name, colX[0], y, { width: 145, ellipsis: true });
-          doc.text(row.worker_dni, colX[1], y, { width: 60 });
+          doc.text(row.worker_name, colX[0], y, { width: 140, ellipsis: true });
+          doc.text(row.worker_dni, colX[1], y, { width: 66 });
           doc.text(row.tag_mac, colX[2], y, { width: 66, ellipsis: true });
-          doc.text(formatDateTimeMadrid(row.started_at), colX[3], y, { width: 86 });
-          doc.text(formatDateTimeMadrid(row.ended_at), colX[4], y, { width: 106 });
+          doc.text(display.entry, colX[3], y, { width: 111 });
+          doc.text(display.exposureEnd, colX[4], y, { width: 111 });
+          doc.text(display.exitConfirmed, colX[5], y, { width: 126 });
           doc
             .fillColor(row.duration_seconds >= 45 * 60 ? '#C62828' : '#111827')
-            .text(formatDurationMmSs(row.duration_seconds), colX[5], y, { width: 34, align: 'right' });
+            .text(formatDurationMmSs(row.duration_seconds), colX[6], y, { width: 95, align: 'right' });
           y += rowHeight;
           rowIndex += 1;
         }

@@ -29,7 +29,7 @@ test('snapshot and SSE source include every known worker session of the Madrid d
     assert.match(workdayQuery?.sql ?? '', /MAX\(ps\.last_presence_at\)/);
     assert.match(workdayQuery?.sql ?? '', /seen_gateway\.cold_room_id = s\.cold_room_id/);
     assert.match(workdayQuery?.sql ?? '', /s\.started_at \+ s\.duration_seconds \* INTERVAL '1 second'/);
-    assert.match(workdayQuery?.sql ?? '', /ELSE COALESCE\(/);
+    assert.match(workdayQuery?.sql ?? '', /ELSE LEAST\(NOW\(\), COALESCE\(/);
     assert.doesNotMatch(workdayQuery?.sql ?? '', /LIMIT\s+\d+/i);
   } finally {
     db.query = originalQuery;

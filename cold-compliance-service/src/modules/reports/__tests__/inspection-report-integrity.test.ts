@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   InspectionRow,
   assertInspectionIntegrity,
-  consumeInspectionRows
+  consumeInspectionRows,
+  inspectionDisplayTimes,
+  loadInspectionSummary
 } from '../inspection-report.service';
+import { sessionExposureEndSql, sessionExposureSecondsSql } from '../../compliance/session-exposure.sql';
 
 function session(index: number): InspectionRow {
   return {
@@ -14,6 +19,7 @@ function session(index: number): InspectionRow {
     tag_mac: `TAG${index % 53}`,
     started_at: new Date(Date.UTC(2026, 0, 1) - index * 1000).toISOString(),
     ended_at: new Date(Date.UTC(2026, 0, 1, 0, 1) - index * 1000).toISOString(),
+    exposure_ended_at: new Date(Date.UTC(2026, 0, 1, 0, 1) - index * 1000).toISOString(),
     duration_seconds: 60
   };
 }
@@ -46,11 +52,46 @@ test('incluye exactamente las 17.524 sesiones mediante páginas internas', async
   assert.ok(queries.every(({ sql }) => !sql.includes('s.started_at >=')));
   assert.ok(queries.every(({ sql }) => !sql.includes('s.started_at < (')));
   assert.ok(queries.every(({ sql }) => /ORDER BY s\.started_at DESC, s\.id DESC/.test(sql)));
-  assert.match(queries[0].sql, /THEN COALESCE\(s\.duration_seconds/);
+  assert.ok(queries[0].sql.includes(`${sessionExposureEndSql('s')} AS exposure_ended_at`));
+  assert.ok(queries[0].sql.includes(`${sessionExposureSecondsSql('s')} AS duration_seconds`));
   assert.match(queries[0].sql, /SELECT MAX\(ps\.last_presence_at\)/);
   assert.doesNotMatch(queries[0].sql, /s\.id\) < /);
   assert.match(queries[1].sql, /\(s\.started_at, s\.id\) < \(\$1::timestamptz, \$2::uuid\)/);
   assert.deepEqual(queries[1].values.slice(0, 2), [databaseRows[999].started_at, databaseRows[999].session_id]);
+});
+
+test('panel, report rows and report summary share the same exposure endpoint', async () => {
+  const panel = readFileSync(join(process.cwd(), 'src/modules/realtime/realtime.routes.ts'), 'utf8');
+  assert.match(panel, /sessionExposureEndSql\('s'\)/);
+  const calls: string[] = [];
+  await loadInspectionSummary(async (sql) => {
+    calls.push(sql);
+    return { total_rows: 2, critical_rows: 1, average_seconds: 1800 };
+  }, {});
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].includes(sessionExposureSecondsSql('s')));
+  assert.doesNotMatch(calls[0], /COALESCE\(s\.ended_at, NOW\(\)\)/);
+  const routes = readFileSync(join(process.cwd(), 'src/modules/reports/reports.routes.ts'), 'utf8');
+  assert.match(routes, /inspection\.xlsx[\s\S]*inspectionDisplayTimes\(row\)/);
+  assert.match(routes, /inspection\.pdf[\s\S]*inspectionDisplayTimes\(row\)/);
+});
+
+test('timeout, explicit exit and open report rows distinguish exposure from exit confirmation', () => {
+  const timeout = inspectionDisplayTimes({
+    ...session(1), started_at: '2026-09-25T08:00:00Z',
+    exposure_ended_at: '2026-09-25T08:10:17Z', ended_at: '2026-09-25T08:10:47Z',
+    duration_seconds: 617
+  });
+  assert.notEqual(timeout.exposureEnd, timeout.exitConfirmed);
+  assert.equal(timeout.exposureMinutes, 617 / 60);
+  const explicit = inspectionDisplayTimes({
+    ...session(2), exposure_ended_at: '2026-09-25T08:10:17Z', ended_at: '2026-09-25T08:10:17Z'
+  });
+  assert.equal(explicit.exposureEnd, explicit.exitConfirmed);
+  const open = inspectionDisplayTimes({
+    ...session(3), exposure_ended_at: '2026-09-25T08:10:17Z', ended_at: null
+  });
+  assert.equal(open.exitConfirmed, 'En curso');
 });
 
 test('aplica únicamente los filtros explícitos y cubre el día to completo', async () => {

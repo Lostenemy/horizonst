@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth } from '../../middleware/auth';
 import { accumulateWorkerWorkday, madridWorkdayWindow, WorkdaySession } from './workday-duration';
+import { sessionExposureEndSql } from '../compliance/session-exposure.sql';
 
 export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
@@ -75,18 +76,7 @@ export async function loadOperationalSnapshot(snapshotAt: Date = new Date()) {
               COALESCE(w.full_name, '(sin nombre)') AS full_name,
               COALESCE(w.dni, '-') AS dni,
               s.started_at,
-              CASE WHEN s.ended_at IS NOT NULL
-                   THEN COALESCE(s.started_at + s.duration_seconds * INTERVAL '1 second', s.ended_at)
-                   ELSE COALESCE((
-                     SELECT MAX(ps.last_presence_at)
-                     FROM tag_gateway_presence_state ps
-                     LEFT JOIN gateways seen_gateway
-                       ON seen_gateway.hardware_gateway_id = ps.hardware_gateway_id
-                     WHERE ps.hardware_device_id = s.hardware_device_id
-                       AND ps.last_presence_at >= s.started_at
-                       AND (s.cold_room_id IS NULL OR seen_gateway.cold_room_id = s.cold_room_id)
-                   ), s.started_at)
-              END AS exposure_ended_at
+              ${sessionExposureEndSql('s')} AS exposure_ended_at
        FROM cold_room_sessions s
        LEFT JOIN workers w ON w.id = s.worker_id
        WHERE s.worker_id IS NOT NULL
