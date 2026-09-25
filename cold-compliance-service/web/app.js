@@ -196,6 +196,11 @@ function formatRemaining(seconds) {
   return `${mm}m ${String(ss).padStart(2, '0')}s`;
 }
 
+function formatAccumulated(seconds) {
+  const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+  return `${Math.floor(safe / 3600)}h ${String(Math.floor(safe % 3600 / 60)).padStart(2, '0')}m ${String(safe % 60).padStart(2, '0')}s`;
+}
+
 function roleLabel(role) {
   return ({ supervisor: 'Supervisor', administrador: 'Administrador', superadministrador: 'Superadministrador', trabajador: 'Trabajador' }[role] || role || '-');
 }
@@ -403,6 +408,10 @@ async function renderDashboard(snapshot) {
   ]);
   const workersRows = (data.workersInside || []).map((w) => [w.full_name, w.dni, Math.floor(w.elapsed_seconds / 60), stateBadge(w.presence_status)]);
   const graceRows = (data.workersInGrace || []).map((w) => [w.full_name, formatRemaining(w.remaining_seconds), htmlCell('<span class="badge info">Gracia</span>')]);
+  const workdayRows = (data.workersWorkday || []).map((w) => [
+    w.full_name, w.dni, formatAccumulated(w.accumulated_seconds),
+    htmlCell(`<progress max="100" value="${Math.min(100, Math.max(0, Number(w.progress_percent) || 0))}"></progress> ${Math.max(0, Number(w.progress_percent) || 0)}% de 6 h${Number(w.accumulated_seconds) > Number(w.limit_seconds) ? ' · Límite superado' : ''}`)
+  ]);
   const systemState = data.systemOnline === false
     ? '<span class="badge alert">Sistema offline</span>'
     : data.totals.workersInside === 0
@@ -425,10 +434,13 @@ async function renderDashboard(snapshot) {
       <div class="dashboard-presence-column">
         <h3>Trabajadores dentro (presencia real)</h3>
         ${workersRows.length ? table(['Trabajador', 'DNI', 'Min dentro', 'Estado'], workersRows, 'dashboard-table') : '<div class="list-empty">No hay trabajadores dentro en este momento.</div>'}
+        <h3 class="mt-12">En estado de gracia</h3>
+        ${graceRows.length ? table(['Trabajador', 'Tiempo restante', 'Estado'], graceRows, 'dashboard-table') : '<div class="list-empty">No hay trabajadores en gracia.</div>'}
       </div>
       <div class="dashboard-presence-column">
-        <h3>En estado de gracia</h3>
-        ${graceRows.length ? table(['Trabajador', 'Tiempo restante', 'Estado'], graceRows, 'dashboard-table') : '<div class="list-empty">No hay trabajadores en gracia.</div>'}
+        <h3>Tiempo acumulado en cámaras hoy (Europe/Madrid)</h3>
+        ${workdayRows.length ? table(['Trabajador', 'DNI', 'Acumulado', 'Progreso'], workdayRows, 'dashboard-table') : '<div class="list-empty">No hay detecciones de trabajadores en esta jornada.</div>'}
+        <small class="help">Referencia visual de 6 horas; no genera bloqueos ni alarmas.</small>
       </div>
     </div>
     <h3 class="mt-12">Alarmas activas (últimas 5)</h3>

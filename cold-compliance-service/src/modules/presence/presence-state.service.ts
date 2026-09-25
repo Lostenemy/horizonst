@@ -2,6 +2,7 @@ import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
 import { triggerPhysicalAlarmSequence } from '../alerts/alerts.service';
+import { graceWindow } from './grace-window';
 
 interface PresenceStateTag {
   id: string;
@@ -165,20 +166,25 @@ export async function markPresenceAlarm(tagId: string, eventTs: string, context:
   );
 }
 
-export async function markPresenceExit(_tagId: string, hardwareDeviceId: number, exitTs: string): Promise<void> {
+export async function markPresenceExit(_tagId: string, hardwareDeviceId: number, lastDetectionAt: string | Date): Promise<void> {
   const graceMinutes = await resolveOperationalGraceMinutes();
-  const intervalExpr = `${graceMinutes} minutes`;
+  const grace = graceWindow(lastDetectionAt, graceMinutes);
   await db.query(
     `UPDATE presence_operational_state
      SET inside = FALSE,
          in_grace = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN TRUE ELSE FALSE END,
          grace_started_at = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $2::timestamptz ELSE grace_started_at END,
-         grace_until = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $2::timestamptz + $3::interval ELSE NULL END,
+         grace_until = CASE WHEN in_alarm OR last_alarm_at IS NOT NULL THEN $3::timestamptz ELSE NULL END,
          in_alarm = FALSE,
          reminder_sent_at = NULL,
          updated_at = NOW()
-     WHERE hardware_device_id = $1`,
-    [hardwareDeviceId, exitTs, intervalExpr]
+     WHERE hardware_device_id = $1
+       AND inside = TRUE
+       AND NOT EXISTS (
+         SELECT 1 FROM cold_room_sessions s
+         WHERE s.hardware_device_id = $1 AND s.ended_at IS NULL
+       )`,
+    [hardwareDeviceId, grace.startedAt, grace.until]
   );
 }
 

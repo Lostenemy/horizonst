@@ -152,7 +152,8 @@ async function finalizeSession(
   session: SessionContext,
   endedAt: string,
   closeEventId: string | null,
-  reason: 'event' | 'timeout'
+  reason: 'event' | 'timeout',
+  lastDetectionAt: string | Date
 ): Promise<boolean> {
   const updateResult = await db.query(
     `UPDATE cold_room_sessions
@@ -160,14 +161,24 @@ async function finalizeSession(
          duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM ($1::timestamptz - started_at)))::int,
          close_event_id = COALESCE($2, close_event_id)
      WHERE id = $3 AND ended_at IS NULL
+       AND $1::timestamptz >= started_at
+       AND NOT EXISTS (
+         SELECT 1 FROM tag_gateway_presence_state ps
+         JOIN gateways seen_gateway ON ps.hardware_gateway_id = seen_gateway.hardware_gateway_id
+         WHERE ps.hardware_device_id = cold_room_sessions.hardware_device_id
+           AND ps.last_presence_at > $4::timestamptz
+           AND ps.last_presence_at >= cold_room_sessions.started_at
+           AND (cold_room_sessions.cold_room_id IS NULL
+                OR seen_gateway.cold_room_id = cold_room_sessions.cold_room_id)
+       )
      RETURNING id, started_at, worker_id, cold_room_id, tag_id, hardware_device_id`,
-    [endedAt, closeEventId, session.id]
+    [endedAt, closeEventId, session.id, lastDetectionAt]
   );
 
   if (!updateResult.rowCount) return false;
 
   const closed = updateResult.rows[0];
-  await markPresenceExit(closed.tag_id, closed.hardware_device_id, endedAt);
+  await markPresenceExit(closed.tag_id, closed.hardware_device_id, lastDetectionAt);
   const durationMinutes = (Date.parse(endedAt) - Date.parse(closed.started_at)) / 60000;
 
   await db.query(
@@ -267,10 +278,10 @@ async function closeStaleSessions(): Promise<void> {
   const nowMs = Date.now();
 
   for (const session of activeSessions.rows) {
-    let referenceTs = Date.parse(session.last_seen_at);
+    let referenceTs = new Date(session.last_seen_at).getTime();
 
     if (!Number.isFinite(referenceTs)) {
-      referenceTs = Date.parse(session.started_at);
+      referenceTs = new Date(session.started_at).getTime();
     }
 
     const elapsedMs = nowMs - referenceTs;
@@ -287,7 +298,7 @@ async function closeStaleSessions(): Promise<void> {
     if (!shouldClosePresenceSession({ nowMs, lastPresenceAtMs: referenceTs, timeoutMs })) continue;
 
     const closedAt = new Date(referenceTs + timeoutMs).toISOString();
-    const closed = await finalizeSession(session, closedAt, null, 'timeout');
+    const closed = await finalizeSession(session, closedAt, null, 'timeout', session.last_seen_at);
     if (closed) {
       logger.info({ sessionId: session.id, tagId: session.tag_id, closedAt, timeoutMs }, 'closed stale session by presence timeout');
     }
@@ -369,6 +380,18 @@ export async function processComplianceRules(event: ParsedPresenceEvent, resolve
       return;
     }
 
+    if (!activeSession.rowCount) {
+      const latestClosed = await db.query<{ ended_at: string }>(
+        `SELECT ended_at FROM cold_room_sessions
+         WHERE hardware_device_id = $1 AND ended_at IS NOT NULL
+         ORDER BY ended_at DESC LIMIT 1`,
+        [tag.hardware_device_id]
+      );
+      if (latestClosed.rowCount && new Date(event.timestamp).getTime() <= new Date(latestClosed.rows[0].ended_at).getTime()) {
+        return;
+      }
+    }
+
     await db.query(
       `UPDATE tag_gateway_presence_state
        SET last_presence_at = GREATEST(COALESCE(last_presence_at, '-infinity'::timestamptz), $1::timestamptz),
@@ -379,6 +402,10 @@ export async function processComplianceRules(event: ParsedPresenceEvent, resolve
          AND hardware_gateway_id = $3`,
       [event.timestamp, tag.hardware_device_id, tag.hardware_gateway_id]
     );
+
+    // Publish the new open session before changing the operational state. A
+    // concurrent timeout close must not clear a worker who has re-entered.
+    await upsertOpenSession(tag, event);
 
     if (event.eventType === 'enter' || event.eventType === 'heartbeat') {
       if (!activeSession.rowCount) {
@@ -421,7 +448,6 @@ export async function processComplianceRules(event: ParsedPresenceEvent, resolve
       }
     }
 
-    await upsertOpenSession(tag, event);
     await evaluateOperationalAlarmRules(tag);
   }
 
@@ -449,7 +475,7 @@ export async function processComplianceRules(event: ParsedPresenceEvent, resolve
     );
     if (!activeSessionRes.rowCount) return;
 
-    await finalizeSession(activeSessionRes.rows[0], event.timestamp, event.eventId, 'event');
+    await finalizeSession(activeSessionRes.rows[0], event.timestamp, event.eventId, 'event', event.timestamp);
   }
 
 }

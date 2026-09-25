@@ -1,14 +1,16 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth } from '../../middleware/auth';
+import { accumulateWorkerWorkday, madridWorkdayWindow, WorkdaySession } from './workday-duration';
 
 export const realtimeRouter = Router();
 realtimeRouter.use(requireAuth);
 const MIN_VALID_STARTED_AT = '2025-01-01T00:00:00.000Z';
 const MAX_VALID_ELAPSED_SECONDS = 60 * 60 * 24 * 3;
 
-async function loadOperationalSnapshot() {
-  const [presence, grace, alerts] = await Promise.all([
+export async function loadOperationalSnapshot(snapshotAt: Date = new Date()) {
+  const workday = madridWorkdayWindow(snapshotAt);
+  const [presence, grace, alerts, workdaySessions] = await Promise.all([
     db.query(
       `SELECT s.id,
               COALESCE(s.worker_id, wta.worker_id) AS worker_id,
@@ -67,19 +69,33 @@ async function loadOperationalSnapshot() {
        WHERE a.acknowledged_at IS NULL
        ORDER BY a.created_at DESC
        LIMIT 200`
+    ),
+    db.query<WorkdaySession>(
+      `SELECT s.worker_id,
+              COALESCE(w.full_name, '(sin nombre)') AS full_name,
+              COALESCE(w.dni, '-') AS dni,
+              s.started_at, s.ended_at
+       FROM cold_room_sessions s
+       LEFT JOIN workers w ON w.id = s.worker_id
+       WHERE s.worker_id IS NOT NULL
+         AND s.started_at < $2::timestamptz
+         AND (s.ended_at IS NULL OR s.ended_at > $1::timestamptz)
+       ORDER BY s.started_at ASC`,
+      [workday.start.toISOString(), workday.end.toISOString()]
     )
   ]);
 
   return {
     workersInside: presence.rows,
     workersInGrace: grace.rows,
+    workersWorkday: accumulateWorkerWorkday(workdaySessions.rows, snapshotAt),
     activeAlerts: alerts.rows,
     totals: {
       workersInside: presence.rowCount,
       workersInGrace: grace.rowCount,
       activeAlerts: alerts.rowCount
     },
-    ts: new Date().toISOString()
+    ts: snapshotAt.toISOString()
   };
 }
 
