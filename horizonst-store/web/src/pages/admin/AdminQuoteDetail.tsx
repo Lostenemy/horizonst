@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { displayLabel, quoteDisplayName } from '../../lib/presentation';
+import { AnnualServiceTerms } from '../../components/AnnualServiceTerms';
 import { useParams } from 'react-router-dom';
 import { downloadFile, patchJson } from '../../lib/api';
 import { money } from '../../lib/money';
@@ -45,6 +46,7 @@ export default function AdminQuoteDetail() {
           <span>{quote.email} · {displayLabel(quote.status)}</span>
           <span>Total: {money(quote.total_cents)}</span>
         </div>
+        <AnnualServiceTerms />
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notas internas" />
         <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comentario para historial (opcional)" />
         <div className="actions">

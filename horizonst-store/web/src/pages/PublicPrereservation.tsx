@@ -3,6 +3,7 @@ import { money } from '../lib/money';
 import { prereservationEndLabel, prereservationSessionKey, type PrereservationCode, type PrereservationOffer } from '../lib/prereservation';
 import { PublicNav } from './PublicLanding';
 import { coverageLabel } from '../lib/coverage';
+import { AnnualServiceTerms, enterpriseTerms } from '../components/AnnualServiceTerms';
 
 type OfferResponse = { campaign: string; endAt: string; offer: PrereservationOffer };
 
@@ -65,6 +66,8 @@ export default function PublicPrereservation({ code }: { code: PrereservationCod
         <div className="total"><span>Total final con IVA</span><strong>{money(offer.totalCents)}</strong></div>
       </div>
       <p>No es una compra y no se realizará ningún cargo. El equipo comercial contactará contigo. El descuento está sujeto a las condiciones de la campaña.</p>
+      <AnnualServiceTerms />
+      <p>{enterpriseTerms}</p>
       <button type="button" onClick={confirm} disabled={status === 'confirming' || status === 'confirmed' || status === 'already-confirmed'}>{status === 'confirming' ? 'Confirmando...' : 'Confirmar prerreserva'}</button>
       {status === 'confirmed' && <p className="success">Prerreserva confirmada. Nos pondremos en contacto contigo.</p>}
       {status === 'already-confirmed' && <p className="success">Esta prerreserva ya estaba confirmada.</p>}

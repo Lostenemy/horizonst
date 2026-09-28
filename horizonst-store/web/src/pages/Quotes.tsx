@@ -3,6 +3,7 @@ import { ApiError, api, downloadFile, postJson } from '../lib/api';
 import { money } from '../lib/money';
 import type { CartItem, Quote } from '../lib/types';
 import { quoteStatusLabels } from '../lib/presentation';
+import { AnnualServiceTerms } from '../components/AnnualServiceTerms';
 
 type QuoteHistory = { id: string; old_status: string; new_status: string; comment: string | null; created_at: string };
 type QuoteDetail = { quote: Quote; items: CartItem[]; history: QuoteHistory[] };
@@ -72,6 +73,7 @@ export default function Quotes() {
   return (
     <section className="panel quotes-page commercial-documents-page">
       <h1>Mis presupuestos</h1>
+      <AnnualServiceTerms />
       {error && <p className="error">{error}</p>}
       {loading ? <p>Cargando presupuestos…</p> : (
         <div className="grid two-columns">

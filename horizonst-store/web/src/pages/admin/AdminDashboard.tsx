@@ -3,15 +3,15 @@ import { AdminShell, AsyncState } from './AdminShell';
 import { useAdminLoad } from './useAdminLoad';
 import type { DashboardResponse } from './types';
 import { Link } from 'react-router-dom';
-import { displayLabel, quoteDisplayName } from '../../lib/presentation';
+import { displayLabel, quoteDisplayName, quoteStatusLabels } from '../../lib/presentation';
 
 const metricLabels: Array<[keyof DashboardResponse['metrics'], string, 'money' | 'count']> = [
   ['customers_registered', 'Clientes registrados', 'count'],
   ['distributors_pending', 'Distribuidores pendientes', 'count'],
   ['distributors_approved', 'Distribuidores aprobados', 'count'],
-  ['quotes_submitted', 'Solicitudes recibidas', 'count'],
-  ['quotes_in_review', 'Presupuestos en revisión', 'count'],
-  ['quotes_sent', 'Propuestas enviadas', 'count'],
+  ['quotes_submitted', quoteStatusLabels.submitted, 'count'],
+  ['quotes_in_review', quoteStatusLabels.in_review, 'count'],
+  ['quotes_sent', quoteStatusLabels.sent, 'count'],
   ['quotes_accepted', 'Presupuestos aceptados', 'count'],
   ['open_value_cents', 'Valor potencial abierto', 'money'],
   ['accepted_value_cents', 'Valor aceptado', 'money']

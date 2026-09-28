@@ -6,6 +6,7 @@ import { api, patchJson } from '../lib/api';
 import { money } from '../lib/money';
 import { displayLabel, itemPresentation } from '../lib/presentation';
 import type { Cart as CartModel } from '../lib/types';
+import { AnnualServiceTerms } from '../components/AnnualServiceTerms';
 
 export default function Cart() {
   const [cart, setCart] = useState<CartModel | null>(null);
@@ -61,6 +62,7 @@ export default function Cart() {
       ) : (
         <>
           <p className="muted">Las líneas incluyen IVA. El subtotal lo excluye. Hardware de pago único; planes web anuales. No se realiza ningún pago desde este carrito.</p>
+          <AnnualServiceTerms />
           {submitted && <p className="success">Presupuesto {cart.quote.quote_number}: {displayLabel(cart.quote.status)}.</p>}
           {cart.items.map((item) => {
             const presentation = itemPresentation(item.description);

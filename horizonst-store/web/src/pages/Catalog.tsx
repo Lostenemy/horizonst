@@ -4,6 +4,7 @@ import Loading from '../components/Loading';
 import { api, postJson } from '../lib/api';
 import { canAutoPricePack, canAutoPriceSaasPlan } from '../lib/commercialPricing';
 import { coverageLabel } from '../lib/coverage';
+import { AnnualServiceTerms, enterpriseTerms } from '../components/AnnualServiceTerms';
 import { money } from '../lib/money';
 import type { Cart, Pack, SaasPlan } from '../lib/types';
 
@@ -36,7 +37,7 @@ export default function Catalog() {
 
   return (
     <section className="catalog-page">
-      <div className="section-heading"><div><small>Soluciones HorizonST</small><h1>Catálogo</h1><p className="muted">Hardware y plataforma web emparejados por nivel. Puedes seleccionar cada elemento por separado para preparar un presupuesto.</p><p>Hardware: pago único. Servicio web: precio anual; las condiciones de renovación y los servicios adicionales se concretan en la propuesta.</p></div></div>
+      <div className="section-heading"><div><small>Soluciones HorizonST</small><h1>Catálogo</h1><p className="muted">Hardware y plataforma web emparejados por nivel. Puedes seleccionar cada elemento por separado para preparar un presupuesto.</p><p>Hardware: pago único. Servicio web: precio anual.</p><AnnualServiceTerms /></div></div>
       {message && <p className="success">{message} <a href="/cart">Ver carrito</a></p>}
       <ErrorMessage message={error} />
       {loading ? <Loading /> : (
@@ -58,7 +59,7 @@ export default function Catalog() {
                   {plan && <article className="catalog-card web-card">
                     <small>Web {tierLabels[tier]}</small><h3>{plan.name}</h3><p>{plan.description || 'Servicio web HorizonST adaptado a este nivel de operación.'}</p>
                       <p className="plan-capacity"><strong>{plan.max_tags ?? '—'} tags · {plan.max_gateways ?? '—'} gateways</strong></p>
-                      <p className="tier-increment">Capacidad total del plan. Consulta las condiciones de ampliación.</p>
+                      <p className="tier-increment">Capacidad total del plan.</p>{tier === 'enterprise' && <p>{enterpriseTerms}</p>}
                     <div className="catalog-card-footer"><strong>{canAutoPriceSaasPlan(plan) ? `${money(plan.annual_price_cents)} + IVA / año` : 'Consultar'}</strong><button type="button" disabled={!canAutoPriceSaasPlan(plan) || addingId === plan.id} onClick={() => addToCart('saas_plan', plan.id)}>{addingId === plan.id ? 'Añadiendo…' : 'Añadir plan web'}</button></div>
                   </article>}
                 </div>
