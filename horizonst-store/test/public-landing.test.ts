@@ -44,7 +44,7 @@ assert.match(String((PublicPlanCards({ plans: [], loading: false, error: true })
 assert.match(String((PublicPlanCards({ plans: [], loading: false, error: false }) as any).props.children), /No hay planes disponibles/, 'missing expected plans remain renderable');
 const campaignCards = JSON.stringify(PublicPlanCards({
   plans: [plan('starter', 1), plan('professional', 2), plan('enterprise', 3, { is_enterprise: false })], loading: false, error: false,
-  campaign: { campaign: 'prereservation_2026', endAt: '2026-09-01T21:59:59.999Z', active: true, codes: ['starter', 'professional', 'enterprise'] },
+  campaign: { campaign: 'prereservation_2026', endAt: '2027-01-01T22:59:59.999Z', active: true, codes: ['starter', 'professional', 'enterprise'] },
   onPrereserve: () => undefined
 }));
 assert.equal(campaignCards.match(/Prerreservar con 5 % de descuento/g)?.length, 3, 'all three commercial levels expose their own prereservation action');
@@ -85,7 +85,7 @@ assert.match(landing, /id="plans-art-title"/);
 assert.match(landing, /landingArtwork\.plans/);
 assert.match(landing, /id="emotional-close-title"/);
 assert.match(landing, /landingArtwork\.closing/);
-assert.match(landing, /href="#guia">Recibir la guía gratuita/);
+assert.match(landing, /href="#guia-solicitud">Recibir la guía gratuita/);
 assert.match(landing, /href="\/info-faqs">Descubrir cómo funciona/);
 assert.match(landing, /href="\/planes">Ver planes/);
 assert.ok(horneoLogo.length > 0, 'the Horneo logo is stored locally');
@@ -99,7 +99,7 @@ assert.match(landing, /coverageSquareMeters: 500/);
 assert.match(landing, /coverageSquareMeters: 1000/);
 assert.match(landing, /coverageSquareMeters: 2000/);
 assert.match(landing, /coverageLabel\(pack\.coverageSquareMeters\)/, 'public pack cards render their coverage');
-assert.doesNotMatch(landing, />Inicio</); assert.match(landing, /className="lp-brand" href="\/">HorizonST/); assert.match(landing, /INFO\/FAQS/); assert.match(landing, /Acceso clientes/);
+assert.doesNotMatch(landing, />Inicio</); assert.match(landing, /className="lp-brand" href="\/">HorizonST/); assert.match(landing, /Cómo funciona/); assert.match(landing, /Tienda B2B/);
 assert.match(landing, /source: 'appcc_guide'/); assert.match(landing, /privacyAccepted/);
 assert.doesNotMatch(landing, /Solicitar demo|source="demo"|\bBLE\b|Gateway BLE|Tag BLE/);
 assert.doesNotMatch(landing, /3\.250 €|6\.500 €|12\.995 €/);

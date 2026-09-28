@@ -4,6 +4,7 @@ import ErrorMessage from '../components/ErrorMessage';
 import Loading from '../components/Loading';
 import { api, patchJson } from '../lib/api';
 import { formDataObject } from '../lib/form';
+import { displayLabel } from '../lib/presentation';
 import type { DistributorProfile as DistributorProfileModel } from '../lib/types';
 
 const fields = ['company_name','tax_id','billing_address','city','province','postal_code','country','website','contact_person'] as const;
@@ -39,7 +40,7 @@ export default function DistributorProfile() {
       <ErrorMessage message={error} />
       {loading ? <Loading /> : profile && (
         <>
-          <div className="summary"><p>Estado homologación: <b>{profile.validation_status}</b></p><p>{profile.company_name} · {profile.tax_id}</p>{profile.discount_percent != null && <p>Descuento API: <b>{profile.discount_percent}%</b></p>}{profile.review_notes && <p>Notas revisión: {profile.review_notes}</p>}</div>
+          <div className="summary"><p>Estado homologación: <b>{displayLabel(profile.validation_status)}</b></p><p>{profile.company_name} · {profile.tax_id}</p>{profile.discount_percent != null && <p>Descuento configurado: <b>{profile.discount_percent}%</b></p>}{profile.review_notes && <p>Notas revisión: {profile.review_notes}</p>}</div>
           <form className="grid" onSubmit={submit}>
             {fields.map((field) => (<label key={field}>{labels[field]}<input name={field} defaultValue={profile[field] ?? ''} /></label>))}
             <button type="submit" disabled={submitting}>{submitting ? 'Guardando…' : 'Guardar'}</button>

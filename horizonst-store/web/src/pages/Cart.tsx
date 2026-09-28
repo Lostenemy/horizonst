@@ -4,6 +4,7 @@ import ErrorMessage from '../components/ErrorMessage';
 import Loading from '../components/Loading';
 import { api, patchJson } from '../lib/api';
 import { money } from '../lib/money';
+import { displayLabel, itemPresentation } from '../lib/presentation';
 import type { Cart as CartModel } from '../lib/types';
 
 export default function Cart() {
@@ -59,15 +60,18 @@ export default function Cart() {
         <div className="empty"><p>Tu carrito está vacío.</p><Link className="btn" to="/catalog">Ir al catálogo</Link></div>
       ) : (
         <>
-          {submitted && <p className="success">Presupuesto {cart.quote.quote_number} enviado con estado {cart.quote.status}.</p>}
-          {cart.items.map((item) => (
+          <p className="muted">Las líneas incluyen IVA. El subtotal lo excluye. Hardware de pago único; planes web anuales. No se realiza ningún pago desde este carrito.</p>
+          {submitted && <p className="success">Presupuesto {cart.quote.quote_number}: {displayLabel(cart.quote.status)}.</p>}
+          {cart.items.map((item) => {
+            const presentation = itemPresentation(item.description);
+            return (
             <div className="line" key={item.id}>
-              <span><b>{item.description}</b><small>{item.item_type === 'saas_plan' ? ' Plan web' : item.item_type === 'pack' ? ' Pack' : ' Producto'}</small></span>
+              <span><b>{presentation.name}</b>{presentation.details && <p>{presentation.details}</p>}<small>{item.item_type === 'saas_plan' ? ' Plan web · anual' : ' Hardware · pago único'}</small></span>
               <input aria-label={`Cantidad de ${item.description}`} type="number" min="1" value={item.quantity} disabled={busy === item.id || submitted} onChange={(event) => updateQuantity(item.id, event)} />
-              <b>{money(item.line_total_cents)}</b>
+              <b>{money(item.line_total_cents)} <span className="muted">IVA incluido ({item.tax_rate} %)</span></b>
               <button type="button" disabled={busy === item.id || submitted} onClick={() => removeItem(item.id)}>Eliminar</button>
             </div>
-          ))}
+          ); })}
           <dl className="totals">
             <div><dt>Subtotal</dt><dd>{money(cart.quote.subtotal_cents)}</dd></div>
             <div><dt>Descuento</dt><dd>-{money(cart.quote.discount_cents)}</dd></div>

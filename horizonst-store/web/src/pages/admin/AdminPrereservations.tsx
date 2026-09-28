@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { displayLabel } from '../../lib/presentation';
 import { Link } from 'react-router-dom';
 import type { AdminPrereservationsResponse } from '../../lib/types';
 import { AdminShell, AsyncState } from './AdminShell';
@@ -25,9 +26,9 @@ export default function AdminPrereservations() {
     <AsyncState loading={loading} error={error} empty={data?.prereservations.length === 0} />
     {data?.prereservations.map((item) => <article className="summary" key={item.id}>
       <b>{item.email}</b>
-      <span>{offerNames[item.offer_code]} · {item.campaign_code} · {item.status}</span>
+      <span>{offerNames[item.offer_code]} · {item.campaign_code} · {displayLabel(item.status)}</span>
       <span>Primer interés: {new Date(item.created_at).toLocaleString('es-ES')} · Última interacción: {new Date(item.last_interest_at).toLocaleString('es-ES')}</span>
-      <span>Confirmación: {item.confirmed_at ? new Date(item.confirmed_at).toLocaleString('es-ES') : 'Pendiente'} · Correo: {item.confirmation_email_status}</span>
+      <span>Confirmación: {item.confirmed_at ? new Date(item.confirmed_at).toLocaleString('es-ES') : 'Pendiente'} · Correo: {displayLabel(item.confirmation_email_status)}</span>
       <span>Lead: {item.lead_id}</span>
       <Link to={`/admin/prereservations/${item.id}`}>Ver detalle</Link>
     </article>)}

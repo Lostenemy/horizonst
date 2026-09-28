@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { displayLabel } from '../../lib/presentation';
 import { useParams } from 'react-router-dom';
 import { downloadFile, patchJson } from '../../lib/api';
 import { AdminShell, AsyncState } from './AdminShell';
@@ -52,12 +53,12 @@ export default function AdminDistributorDetail() {
       {distributor && <>
         <div className="summary">
           <b>{distributor.company_name}</b>
-          <span>{distributor.email} · {distributor.validation_status}</span>
+          <span>{distributor.email} · {displayLabel(distributor.validation_status)}</span>
           <span>{distributor.tax_id}</span>
         </div>
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notas de revisión" />
         <div className="actions">
-          {statusActions.map((status) => <button disabled={!!busy} key={status} onClick={() => changeStatus(status)}>{status}</button>)}
+          {statusActions.map((status) => <button disabled={!!busy} key={status} onClick={() => changeStatus(status)}>{displayLabel(status)}</button>)}
         </div>
         {feedback && <p className={feedback === 'Estado actualizado' ? 'success' : 'error'}>{feedback}</p>}
 
@@ -70,7 +71,7 @@ export default function AdminDistributorDetail() {
         {data.documents.map((document) => (
           <article className="summary" key={document.id}>
             <b>{documentLabel(document.document_type)}</b>
-            <span>{document.file_name} · {document.status}</span>
+            <span>{document.file_name} · {displayLabel(document.status)}</span>
             {document.review_notes && <span>{document.review_notes}</span>}
             <div className="actions">
               <button type="button" onClick={() => downloadFile(`/api/admin/distributor-documents/${document.id}/download`, document.file_name).catch((downloadError) => setFeedback(apiMessage(downloadError)))}>Descargar</button>

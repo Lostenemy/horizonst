@@ -11,13 +11,14 @@ const offerRequest = async (code: PrereservationCode, token: string): Promise<Of
     headers: { Authorization: `Bearer ${token}` }
   });
   const data = await response.json().catch(() => ({}));
+  if (response.status === 410) throw new Error('campaign_expired');
   if (!response.ok) throw new Error(data.error ?? 'offer_failed');
   return data;
 };
 
 export default function PublicPrereservation({ code }: { code: PrereservationCode }) {
   const [data, setData] = useState<OfferResponse | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'access-required' | 'error' | 'confirming' | 'confirmed' | 'already-confirmed'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'access-required' | 'expired' | 'error' | 'confirming' | 'confirmed' | 'already-confirmed'>('loading');
 
   useEffect(() => {
     const token = sessionStorage.getItem(prereservationSessionKey(code));
@@ -25,7 +26,7 @@ export default function PublicPrereservation({ code }: { code: PrereservationCod
     let active = true;
     offerRequest(code, token)
       .then((offer) => { if (active) { setData(offer); setStatus('ready'); } })
-      .catch(() => { if (active) { sessionStorage.removeItem(prereservationSessionKey(code)); setStatus('access-required'); } });
+      .catch((error) => { if (active) { sessionStorage.removeItem(prereservationSessionKey(code)); setStatus(error.message === 'campaign_expired' ? 'expired' : 'access-required'); } });
     return () => { active = false; };
   }, [code]);
 
@@ -40,12 +41,14 @@ export default function PublicPrereservation({ code }: { code: PrereservationCod
         body: JSON.stringify({ code })
       });
       const result = await response.json().catch(() => ({}));
+      if (response.status === 410) { setStatus('expired'); return; }
       if (!response.ok) throw new Error(result.error ?? 'confirmation_failed');
       setStatus(result.alreadyConfirmed ? 'already-confirmed' : 'confirmed');
     } catch { setStatus('error'); }
   };
 
   if (status === 'loading') return <main className="public-landing"><PublicNav /><section className="lp-section"><p role="status">Cargando oferta...</p></section></main>;
+  if (status === 'expired') return <main className="public-landing"><PublicNav /><section className="lp-section"><h1>Campaña finalizada</h1><p>Consulta las condiciones actuales para tu instalación.</p><a className="btn" href="mailto:comercial@horizonst.es">Solicitar orientación</a></section></main>;
   if (status === 'access-required') return <main className="public-landing"><PublicNav /><section className="lp-section lp-offer"><h1>Acceso a la prerreserva</h1><p>Facilita tu email para consultar la oferta de forma segura.</p><a className="btn" href={`/planes?prerreserva=${code}`}>Continuar</a></section></main>;
   if (!data) return <main className="public-landing"><PublicNav /><section className="lp-section"><p role="alert">No se pudo cargar la oferta.</p></section></main>;
 
@@ -53,8 +56,8 @@ export default function PublicPrereservation({ code }: { code: PrereservationCod
   return <main className="public-landing"><PublicNav /><section className="lp-section lp-offer"><p className="eyebrow">Prerreserva 2026</p><h1>Oferta {code}</h1><p>Disponible hasta el {prereservationEndLabel(data.endAt)}.</p>
     {!offer.available ? <div className="lp-note"><h2>Configuración personalizada</h2><p>Esta oferta no puede calcularse automáticamente con la configuración actual. Contacta con nuestro equipo comercial.</p><a className="btn" href="mailto:comercial@horizonst.es">Contactar</a></div> : <>
       <div className="lp-offer-lines">
-        <div><span>{offer.hardware!.name}<small>{coverageLabel(offer.hardware!.coverageSquareMeters) ? ` · ${coverageLabel(offer.hardware!.coverageSquareMeters)}` : ''}</small></span><strong>{money(offer.hardware!.priceCents)}</strong></div>
-        <div><span>Plan Web {offer.webPlan!.name}</span><strong>{money(offer.webPlan!.priceCents)}</strong></div>
+        <div><span>{offer.hardware!.name} · pago único<small>{coverageLabel(offer.hardware!.coverageSquareMeters) ? ` · ${coverageLabel(offer.hardware!.coverageSquareMeters)}` : ''}</small></span><strong>{money(offer.hardware!.priceCents)} + IVA</strong></div>
+        <div><span>Plan Web {offer.webPlan!.name} · anual</span><strong>{money(offer.webPlan!.priceCents)} + IVA</strong></div>
         <div><span>Subtotal</span><strong>{money(offer.subtotalCents)}</strong></div>
         <div className="discount"><span>Descuento 5 %</span><strong>-{money(offer.discountCents)}</strong></div>
         <div><span>Subtotal con descuento</span><strong>{money(offer.discountedSubtotalCents)}</strong></div>

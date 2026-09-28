@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { displayLabel } from '../../lib/presentation';
 import type { AdminPrereservationDetailResponse } from '../../lib/types';
 import { AdminShell, AsyncState } from './AdminShell';
 import { useAdminLoad } from './useAdminLoad';
@@ -13,7 +14,7 @@ export default function AdminPrereservationDetail() {
     <AsyncState loading={loading} error={error} />
     {item && <div className="summary">
       <b>{item.email}</b>
-      <span>Oferta: {offerNames[item.offer_code]} · Campaña: {item.campaign_code} · Estado: {item.status}</span>
+      <span>Oferta: {offerNames[item.offer_code]} · Campaña: {item.campaign_code} · Estado: {displayLabel(item.status)}</span>
       <span>Primer interés: {new Date(item.created_at).toLocaleString('es-ES')}</span>
       <span>Última interacción: {new Date(item.last_interest_at).toLocaleString('es-ES')}</span>
       <span>Confirmada: {item.confirmed_at ? new Date(item.confirmed_at).toLocaleString('es-ES') : 'Pendiente'}</span>

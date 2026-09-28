@@ -6,7 +6,11 @@ export type PrereservationCode = typeof prereservationCodes[number];
 
 export const PRERESERVATION_CAMPAIGN = 'prereservation_2026';
 export const PUBLIC_PRERESERVATION_SOURCE = 'public_prereservation_2026';
-export const PRERESERVATION_END_AT = '2026-09-01T21:59:59.999Z';
+// Incluye todo el 1 de enero de 2027 en Europe/Madrid (CET, UTC+1).
+export const PRERESERVATION_END_AT = '2027-01-01T22:59:59.999Z';
+export const PRERESERVATION_END_LABEL = new Intl.DateTimeFormat('es-ES', {
+  dateStyle: 'long', timeZone: 'Europe/Madrid'
+}).format(new Date(PRERESERVATION_END_AT));
 export const PRERESERVATION_ACCESS_SECONDS = 30 * 60;
 export const PRERESERVATION_DISCOUNT_PERCENT = 5;
 

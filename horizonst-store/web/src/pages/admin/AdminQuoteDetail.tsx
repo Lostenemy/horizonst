@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { displayLabel, quoteDisplayName } from '../../lib/presentation';
 import { useParams } from 'react-router-dom';
 import { downloadFile, patchJson } from '../../lib/api';
 import { money } from '../../lib/money';
@@ -40,14 +41,14 @@ export default function AdminQuoteDetail() {
       <AsyncState loading={loading} error={error} />
       {quote && <>
         <div className="summary">
-          <b>{quote.quote_number}</b>
-          <span>{quote.email} · {quote.status}</span>
+          <b>{quoteDisplayName(quote)}</b>
+          <span>{quote.email} · {displayLabel(quote.status)}</span>
           <span>Total: {money(quote.total_cents)}</span>
         </div>
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notas internas" />
         <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comentario para historial (opcional)" />
         <div className="actions">
-          {adminStatuses.map((status) => <button disabled={busy || quote.status === status} key={status} onClick={() => changeStatus(status)}>{status}</button>)}
+          {adminStatuses.map((status) => <button disabled={busy || quote.status === status} key={status} onClick={() => changeStatus(status)}>{displayLabel(status)}</button>)}
           <button type="button" onClick={() => downloadFile(`/api/admin/quotes/${id}/pdf`, `PRESUPUESTO-${data.quote.quote_number}.pdf`).catch((downloadError) => setFeedback(apiMessage(downloadError)))}>Descargar presupuesto</button>
         </div>
         {feedback && <p className={feedback === 'Estado actualizado' ? 'success' : 'error'}>{feedback}</p>}
@@ -63,7 +64,7 @@ export default function AdminQuoteDetail() {
         <h2>Historial de estados</h2>
         {data.history.length === 0 ? <div className="empty">Sin cambios registrados.</div> : data.history.map((event) => (
           <article className="summary" key={event.id}>
-            <b>{event.old_status} → {event.new_status}</b>
+            <b>{displayLabel(event.old_status)} → {displayLabel(event.new_status)}</b>
             <span>{new Date(event.created_at).toLocaleString()} · {event.changed_by_email ?? 'Usuario eliminado'}</span>
             {event.comment && <span>{event.comment}</span>}
           </article>

@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { displayLabel } from '../../lib/presentation';
 import { Link } from 'react-router-dom';
 import { money } from '../../lib/money';
 import type { AdminOrdersResponse } from '../../lib/types';
@@ -16,7 +17,7 @@ export default function AdminOrders() {
   return (
     <AdminShell title="Pedidos">
       <form className="filters" onSubmit={onSubmit}>
-        <select name="status"><option value="">Estado</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select>
+        <select name="status"><option value="">Estado</option>{statuses.map((status) => <option key={status} value={status}>{displayLabel(status)}</option>)}</select>
         <input name="email" placeholder="Email" />
         <input name="order_number" placeholder="Pedido" />
         <input name="quote_number" placeholder="Presupuesto" />
@@ -25,7 +26,7 @@ export default function AdminOrders() {
       <AsyncState loading={loading} error={error} empty={data?.orders.length === 0} />
       {data?.orders.map((order) => <article className="summary" key={order.id}>
         <b>{order.order_number}</b>
-        <span>{order.quote_number} · {order.full_name} · {order.email} · <span className={`commercial-status ${order.status}`}>{order.status}</span> · {new Date(order.created_at).toLocaleDateString('es-ES')} · {money(order.total_cents)}</span>
+        <span>{order.quote_number} · {order.full_name} · {order.email} · <span className={`commercial-status ${order.status}`}>{displayLabel(order.status)}</span> · {new Date(order.created_at).toLocaleDateString('es-ES')} · {money(order.total_cents)}</span>
         <Link to={`/admin/orders/${order.id}`}>Ver detalle</Link>
       </article>)}
     </AdminShell>

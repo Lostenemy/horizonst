@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { displayLabel } from '../../lib/presentation';
 import { AdminShell, AsyncState } from './AdminShell';
 import { payloadSummary, submitParams } from './adminUtils';
 import { useAdminLoad } from './useAdminLoad';
@@ -24,7 +25,7 @@ export default function AdminAudit() {
       <AsyncState loading={loading} error={error} empty={data?.events.length === 0} />
       {data?.events.map((event) => (
         <article className="summary" key={event.id}>
-          <b>{event.action}</b>
+          <b>{displayLabel(event.action)}</b><small>Código: {event.action}</small>
           <span>{event.entity_type} · {event.entity_id ?? '—'} · {new Date(event.created_at).toLocaleString()}</span>
           <span>{event.actor_email ?? event.actor_user_id ?? 'sistema'}</span>
           <pre>{payloadSummary(event.payload)}</pre>

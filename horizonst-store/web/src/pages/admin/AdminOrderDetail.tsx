@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { displayLabel } from '../../lib/presentation';
 import { useParams } from 'react-router-dom';
 import { downloadFile } from '../../lib/api';
 import { money } from '../../lib/money';
@@ -16,7 +17,7 @@ export default function AdminOrderDetail() {
     <AdminShell title="Detalle pedido">
       <AsyncState loading={loading} error={error} />
       {order && <>
-        <div className="summary"><b>{order.order_number}</b><span><span className={`commercial-status ${order.status}`}>{order.status}</span> · {new Date(order.created_at).toLocaleString()}</span><span>{order.full_name} · {order.email} · {order.role}</span><span>Presupuesto: {order.quote_number}</span></div>
+        <div className="summary"><b>{order.order_number}</b><span><span className={`commercial-status ${order.status}`}>{displayLabel(order.status)}</span> · {new Date(order.created_at).toLocaleString()}</span><span>{order.full_name} · {order.email} · {displayLabel(order.role)}</span><span>Presupuesto: {order.quote_number}</span></div>
         <button type="button" onClick={() => downloadFile(`/api/admin/orders/${id}/pdf`, `ALBARAN-${order.order_number}.pdf`).catch((error) => setDownloadError(apiMessage(error)))}>Descargar albarán</button>
         {downloadError && <p className="error">{downloadError}</p>}
         {order.customer_notes && <p><strong>Notas de cliente:</strong> {order.customer_notes}</p>}

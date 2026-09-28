@@ -1,4 +1,6 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { pageTitle } from './lib/presentation';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleRoute from './components/RoleRoute';
@@ -38,6 +40,9 @@ import VerifyEmail from './pages/VerifyEmail';
 import { isPublicMarketingHost, publicMarketingPage, publicPrereservationCode } from './lib/domains';
 
 export default function App() {
+  const location = useLocation();
+  const publicSite = isPublicMarketingHost(window.location.hostname);
+  useEffect(() => { document.title = pageTitle(location.pathname, publicSite); }, [location.pathname, publicSite]);
   if (isPublicMarketingHost(window.location.hostname)) {
     const page = publicMarketingPage(window.location.pathname);
     if (page === 'legal-notice' || page === 'privacy') return <PublicLegal page={page} />;

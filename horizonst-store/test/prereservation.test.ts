@@ -334,7 +334,7 @@ await transactionFailure('prereservation');
 
 const expiredApp = express();
 expiredApp.use(express.json());
-expiredApp.use('/api/public/prereservation', createPrereservationRouter({ pool, now: () => Date.parse('2026-09-02T00:00:00Z') }));
+expiredApp.use('/api/public/prereservation', createPrereservationRouter({ pool, now: () => Date.parse('2027-01-01T23:00:00Z') }));
 expiredApp.use((error: unknown, _req: unknown, res: express.Response, _next: unknown) => error instanceof ZodError ? res.status(400).json({ error: 'Validation error' }) : res.status(500).json({ error: 'Internal server error' }));
 const expiredServer = expiredApp.listen(0);
 try {

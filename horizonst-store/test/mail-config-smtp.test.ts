@@ -36,7 +36,7 @@ const prereservationInput = {
   assert.match(email.text, /900,00/, 'the email renders the plan price supplied by the current database calculation');
   assert.match(email.text, /5 %/);
   assert.match(email.text, /IVA/);
-  assert.match(email.text, /1 de septiembre de 2026/);
+  assert.match(email.text, /1 de enero de 2027/);
   assert.match(email.text, /No se ha realizado ningún cobro/);
   assert.match(email.text, /ni se ha generado un pedido definitivo/i);
   assert.match(email.text, /HorizonST contactará contigo/);

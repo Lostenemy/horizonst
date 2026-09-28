@@ -32,10 +32,11 @@ export default function Register() {
     <section className="panel narrow">
       <h1>Registro cliente</h1>
       <form onSubmit={submit}>
-        <input name="fullName" placeholder="Nombre completo" required />
-        <input name="email" type="email" placeholder="Email" required />
-        <input name="phone" placeholder="Teléfono" />
-        <input name="password" type="password" minLength={10} placeholder="Contraseña (mín. 10)" required />
+        <label htmlFor="register-name">Nombre completo</label><input id="register-name" name="fullName" autoComplete="name" required />
+        <label htmlFor="register-email">Email</label><input id="register-email" name="email" type="email" autoComplete="email" required />
+        <label htmlFor="register-phone">Teléfono (opcional)</label><input id="register-phone" name="phone" type="tel" autoComplete="tel" />
+        <label htmlFor="register-password">Contraseña</label><input id="register-password" name="password" type="password" minLength={10} autoComplete="new-password" aria-describedby="password-help" required />
+        <p id="password-help" className="muted">Al menos 10 caracteres.</p>
         <button type="submit">Crear cuenta</button>
       </form>
       {message && <p className="success">{message}</p>}

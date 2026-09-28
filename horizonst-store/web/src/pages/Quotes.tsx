@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import { ApiError, api, downloadFile, postJson } from '../lib/api';
 import { money } from '../lib/money';
 import type { CartItem, Quote } from '../lib/types';
+import { quoteStatusLabels } from '../lib/presentation';
 
 type QuoteHistory = { id: string; old_status: string; new_status: string; comment: string | null; created_at: string };
 type QuoteDetail = { quote: Quote; items: CartItem[]; history: QuoteHistory[] };
 
-const statusLabels: Record<Quote['status'], string> = {
-  draft: 'Borrador', submitted: 'Enviado', in_review: 'En revisión', sent: 'Recibido', accepted: 'Aceptado', rejected: 'Rechazado', cancelled: 'Cancelado'
-};
+const statusLabels = quoteStatusLabels;
 
 const errorMessage = (error: unknown) => {
   if (error instanceof ApiError) {

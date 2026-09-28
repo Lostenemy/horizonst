@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { displayLabel } from '../../lib/presentation';
 import { Link } from 'react-router-dom';
 import { AdminShell, AsyncState } from './AdminShell';
 import { submitParams } from './adminUtils';
@@ -20,7 +21,7 @@ export default function AdminDistributors() {
   return (
     <AdminShell title="Distribuidores">
       <form className="filters" onSubmit={onSubmit}>
-        <select name="validation_status"><option value="">Estado</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select>
+        <select name="validation_status"><option value="">Estado</option>{statuses.map((status) => <option key={status} value={status}>{displayLabel(status)}</option>)}</select>
         <input name="email" placeholder="Email" />
         <input name="company_name" placeholder="Empresa" />
         <button>Filtrar</button>
@@ -29,7 +30,7 @@ export default function AdminDistributors() {
       {data?.map((distributor) => (
         <article className="summary" key={distributor.id}>
           <b>{distributor.company_name}</b>
-          <span>{distributor.email} · {distributor.validation_status}</span>
+          <span>{distributor.email} · {displayLabel(distributor.validation_status)}</span>
           <Link to={`/admin/distributors/${distributor.id}`}>Ver detalle</Link>
         </article>
       ))}
