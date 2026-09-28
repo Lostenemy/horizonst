@@ -54,6 +54,30 @@ Negocio ha respondido H02, H07, H10 y H11; implementación comprobada y 15 halla
 
 ## Validación posterior en staging (pendiente, no realizada)
 
+### Corrección de separación por hostname sobre `359c692`
+
+Causa reproducida: `web/src/lib/domains.ts` solo clasificaba `horizonst.es` y `www.horizonst.es` como web pública; todos sus enlaces de tienda y el retorno desde Store tenían destinos fijos de producción. Nginx conserva Host, por lo que staging cargaba la interfaz equivocada aunque sirviese los mismos artefactos.
+
+`src/resources/store-domains.ts` contiene la lista cerrada compartida; solo normaliza mayúsculas, no admite sufijos, subdominios parecidos, puertos ni URLs como hostname. No genera destinos desde cabeceras arbitrarias. `web/src/lib/domains.ts` consulta ese mapa para selección y enlaces, y todos los consumidores en `PublicLanding.tsx` y `components/Layout.tsx` resuelven el entorno al renderizar. Hosts desconocidos/locales no se convierten en dominios comerciales autorizados; conservan la interfaz local de Store y usan `/` como enlace de respaldo, sin saltar a producción.
+
+| Hostnames exactos | Interfaz | Destino de tienda | Retorno comercial |
+| --- | --- | --- | --- |
+| `horizonst.es`, `www.horizonst.es` | Comercial producción | `https://tienda.horizonst.es` | `https://horizonst.es` |
+| `horizonst.com.es`, `www.horizonst.com.es` | Comercial staging | `https://tienda.horizonst.com.es` | `https://horizonst.com.es` |
+| `tienda.horizonst.es` | Store producción | Mismo entorno | `https://horizonst.es` |
+| `tienda.horizonst.com.es` | Store staging | Mismo entorno | `https://horizonst.com.es` |
+
+Revisión del servidor: `src/server.ts` entrega el mismo SPA y las APIs se llaman por rutas relativas; no hay redirección o selector de hostname que ampliar. CORS, autenticación, permisos y redirecciones de cuenta permanecen intactos. Los enlaces de verificación, recuperación, presupuestos y pedidos de correo ya dependen de `STORE_PUBLIC_BASE_URL`, no del Host recibido. Los dos enlaces comerciales de correo guía sí eran fijos y ahora usan el mapa según esa configuración explícita. No se cambia ninguna configuración desplegada ni se lee `.env`.
+
+Para futura validación autorizada en staging, comprobar sin mostrar secretos que `STORE_PUBLIC_BASE_URL` está configurada como `https://tienda.horizonst.com.es` y que cualquier `STORE_APPCC_GUIDE_URL` explícita pertenece al entorno esperado. Se mantienen las variables existentes, sin ampliar CORS: las llamadas web/API aquí son del mismo origen. No se modifica infraestructura ni se afirma haber comprobado la configuración real del servidor. Las direcciones de contacto corporativo no son navegación entre aplicaciones y se conservan.
+
+Validaciones de esta corrección:
+
+- `test/store-domains.test.ts`: seis hostnames en minúsculas/mayúsculas, selección exacta y destinos por entorno; dominios similares rechazados; rutas públicas; respaldo local; construcción de correo ficticio sin enviar ni contactar SMTP.
+- `scripts/store-domains.browser.js`: seis hosts interceptados y servidos exclusivamente desde preview loopback, API simulada y destinos externos bloqueados. Resultado `passed`, 18 recorridos, enlaces comerciales → tienda → comercial en el mismo entorno, host parecido no autorizado, Store local preservado y cero errores JavaScript. No sobrescribe las capturas anteriores.
+- Suite de Store: 41 módulos aprobados; typecheck backend/frontend y build completo correctos; sintaxis del harness, `git diff --check` y revisión de secretos correctos. Lint sigue sin estar configurado. Las pruebas anteriores de auditoría/campaña/carrito/permisos siguen pasando.
+- No hay cambios de campaña, precios, descuentos, IVA, cálculos, migraciones, Nginx, DNS, certificados, puertos desplegados o permisos. La validación end-to-end del servidor real permanece pendiente; no se hizo despliegue ni prueba contra bases compartidas, correo real o pagos.
+
 No hay nuevas variables, migraciones ni precios que configurar. Requiere actualizar conjuntamente backend y frontend de Store mediante un despliegue autorizado aparte; cambiar solo frontend dejaría incoherente la fecha en servidor/correos.
 
 1. Usar cuentas ficticias independientes cliente/distribuidor/admin y entorno de correo de pruebas, nunca direcciones ni credenciales reales.

@@ -7,7 +7,7 @@ import { customerAccessUrl, isPublicMarketingHost, publicMarketingPage } from '.
 assert.equal(isPublicMarketingHost('horizonst.es'), true);
 assert.equal(isPublicMarketingHost('www.horizonst.es'), true);
 assert.equal(isPublicMarketingHost('tienda.horizonst.es'), false);
-assert.equal(customerAccessUrl, 'https://tienda.horizonst.es');
+assert.equal(customerAccessUrl('horizonst.es'), 'https://tienda.horizonst.es');
 assert.equal(publicMarketingPage('/'), 'home');
 assert.equal(publicMarketingPage('/planes'), 'plans');
 assert.equal(publicMarketingPage('/info-faqs'), 'info-faqs');
@@ -120,7 +120,7 @@ assert.doesNotMatch(landing, /localStorage/);
 assert.doesNotMatch(landing, /email.*window\.location|window\.location.*email/i, 'the email is never added to the URL');
 assert.doesNotMatch(landing, /Planes web|Ver todos los planes y packs/);
 const layout = await readFile(new URL('../web/src/components/Layout.tsx', import.meta.url), 'utf-8');
-assert.match(layout, /https:\/\/horizonst\.es/);
+assert.match(layout, /href=\{marketingAccessUrl\(\)\}/);
 const css = await readFile(new URL('../web/src/styles.css', import.meta.url), 'utf-8');
 assert.match(css, /\.lp-nav \.secondary\{background:#fff;color:#08233f/);
 assert.match(css, /\.lp-nav \.secondary:focus-visible/);

@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { useAuth } from './AuthProvider';
 import { quotesNavigation } from '../lib/presentation';
+import { marketingAccessUrl } from '../lib/domains';
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -33,7 +34,7 @@ export default function Layout() {
         <Link to="/" className="brand">HorizonST Store</Link>
         <button className="nav-toggle" type="button" aria-expanded={menuOpen} aria-controls="store-navigation" onClick={() => setMenuOpen(!menuOpen)}>Menú</button>
         <nav id="store-navigation" className={menuOpen ? '' : 'mobile-hidden'} aria-label="Navegación principal" onClick={() => setMenuOpen(false)}>
-          <a href="https://horizonst.es">Web HorizonST</a>
+          <a href={marketingAccessUrl()}>Web HorizonST</a>
           {user ? (
             <>
               <NavLink to="/catalog">Catálogo</NavLink>

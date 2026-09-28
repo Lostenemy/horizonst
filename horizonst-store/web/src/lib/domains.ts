@@ -1,9 +1,10 @@
-export const isPublicMarketingHost = (hostname: string) => {
-  const host = hostname.toLowerCase();
-  return host === 'horizonst.es' || host === 'www.horizonst.es';
-};
+import { domainEnvironment } from '../../../src/resources/store-domains';
+export { isPublicMarketingHost } from '../../../src/resources/store-domains';
 
-export const customerAccessUrl = 'https://tienda.horizonst.es';
+const currentHostname = () => typeof window === 'undefined' ? '' : window.location.hostname;
+// En local/hosts desconocidos no saltar a producción ni aceptar destinos arbitrarios.
+export const customerAccessUrl = (hostname = currentHostname()) => domainEnvironment(hostname)?.store ?? '/';
+export const marketingAccessUrl = (hostname = currentHostname()) => domainEnvironment(hostname)?.marketing ?? '/';
 
 export type PublicMarketingPage = 'home' | 'plans' | 'info-faqs' | 'prereservation' | 'legal-notice' | 'privacy' | 'not-found';
 
