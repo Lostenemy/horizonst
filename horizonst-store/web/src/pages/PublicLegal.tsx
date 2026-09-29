@@ -1,5 +1,6 @@
 import type { PublicMarketingPage } from '../lib/domains';
 import { commercialCompany } from '../../../src/resources/commercial-company';
+import { PublicNav } from './PublicLanding';
 
 const legalIdentity = `${commercialCompany.legalName}, empresario autónomo, NIF ${commercialCompany.taxId}, con domicilio en ${commercialCompany.addressLines.join(', ')}`;
 
@@ -20,7 +21,7 @@ const content = {
     title: 'Política de privacidad',
     sections: [
       { title: 'Responsable del tratamiento', text: `${legalIdentity}. Para privacidad y ejercicio de derechos: ${commercialCompany.email}.` },
-      { title: 'Datos tratados y finalidades', text: 'Tratamos nombre, empresa, email, teléfono y mensaje de los formularios para gestionar solicitudes de demo, entregar o gestionar solicitudes de la guía APPCC y realizar seguimiento comercial relacionado con la solicitud. No solicitamos categorías especiales de datos.' },
+      { title: 'Datos tratados y finalidades', text: 'En el formulario de contacto tratamos nombre, correo electrónico y mensaje para responder a tu consulta comercial; no solicitamos teléfono ni empresa. En otros formularios tratamos los datos facilitados para entregar o gestionar solicitudes de la guía APPCC y realizar seguimiento comercial relacionado con la solicitud. No solicitamos categorías especiales de datos.' },
       { title: 'Base jurídica y conservación', text: 'La base jurídica es el consentimiento del interesado y, cuando corresponda, la aplicación de medidas precontractuales. Conservamos los datos durante el tiempo necesario para atender la solicitud y cumplir obligaciones legales.' },
       { title: 'Destinatarios', text: 'No comunicamos datos a terceros salvo obligación legal o proveedores necesarios para prestar el servicio, sujetos a las garantías aplicables.' },
       { title: 'Derechos', text: `Puedes ejercer acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a ${commercialCompany.email}. También puedes reclamar ante la Agencia Española de Protección de Datos.` }
@@ -32,10 +33,7 @@ export default function PublicLegal({ page }: { page: Extract<PublicMarketingPag
   const legal = content[page];
   return (
     <main className="public-landing legal-page">
-      <header className="lp-nav">
-        <a className="lp-brand" href="/">HorizonST</a>
-        <a href="/">Volver a inicio</a>
-      </header>
+      <PublicNav />
       <section className="lp-section">
         <p className="eyebrow">{legal.eyebrow}</p>
         <h1>{legal.title}</h1>

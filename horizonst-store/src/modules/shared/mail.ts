@@ -14,7 +14,7 @@ type SmtpSocket = Socket | TLSSocket;
 type SmtpConnector = (config: StoreMailConfig) => { socket: SmtpSocket; readyEvent: string };
 
 export type MailAttachment = { filename: string; contentType: string; content: Uint8Array };
-export type MailContent = { to: string; subject: string; text: string; html: string; attachments?: MailAttachment[] };
+export type MailContent = { to: string; subject: string; text: string; html: string; attachments?: MailAttachment[]; replyTo?: string };
 export type QuoteEmailInput = {
   quote: {
     id: string;
@@ -77,8 +77,9 @@ export class SmtpClient {
 
     await new Promise<void>((resolve, reject) => {
       const socket = this.ensureSocket();
-      const onReady = () => { socket.off('error', onError); resolve(); };
-      const onError = (error: Error) => { socket.off(connection.readyEvent, onReady); reject(error); };
+      const timer = setTimeout(() => onError(new Error('smtp_connect_timeout')), SMTP_TIMEOUT_MS);
+      const onReady = () => { clearTimeout(timer); socket.off('error', onError); resolve(); };
+      const onError = (error: Error) => { clearTimeout(timer); socket.off(connection.readyEvent, onReady); socket.off('error', onError); reject(error); };
       socket.once(connection.readyEvent, onReady);
       socket.once('error', onError);
     });
@@ -90,7 +91,8 @@ export class SmtpClient {
     this.expect(await this.send(Buffer.from(this.config.password).toString('base64')), [235]);
   }
 
-  async sendMail(to: string, subject: string, text: string, html?: string, attachments: MailAttachment[] = []) {
+  async sendMail(to: string, subject: string, text: string, html?: string, attachments: MailAttachment[] = [], replyTo?: string) {
+    if (replyTo && (!/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(replyTo) || /[\r\n\u0000]/.test(replyTo))) throw new Error('invalid_reply_to');
     this.expect(await this.send(`MAIL FROM:<${this.config.from}>`), [250]);
     this.expect(await this.send(`RCPT TO:<${to}>`), [250, 251]);
     this.expect(await this.send('DATA'), [354]);
@@ -101,6 +103,7 @@ export class SmtpClient {
       `From: ${this.config.from}`,
       `To: ${to}`,
       `Subject: ${subject}`,
+      ...(replyTo ? [`Reply-To: ${replyTo}`] : []),
       'MIME-Version: 1.0'
     ];
     const alternativeBoundary = `horizonst-alternative-${randomUUID()}`;
@@ -181,15 +184,26 @@ export class SmtpClient {
 const textHtml = (text: string) => `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#08233f">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</div>`;
 const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-async function sendMail({ to, subject, text, html, attachments }: MailContent) {
+async function sendMail({ to, subject, text, html, attachments, replyTo }: MailContent) {
   if (!env.mail.enabled) return;
   const client = new SmtpClient();
   try {
     await client.connect();
-    await client.sendMail(to, subject, text, html, attachments);
+    await client.sendMail(to, subject, text, html, attachments, replyTo);
   } finally {
     await client.close();
   }
+}
+
+export function buildPublicContactEmail(input: { fullName: string; email: string; message: string }): MailContent {
+  return { to: 'comercial@horizonst.es', replyTo: input.email, subject: 'Nuevo mensaje de contacto HorizonST',
+    text: `Nombre: ${input.fullName}\nCorreo: ${input.email}\n\n${input.message}`,
+    html: `<h1>Contacto HorizonST</h1><p>Nombre: ${escapeHtml(input.fullName)}</p><p>Correo: ${escapeHtml(input.email)}</p><p>${escapeHtml(input.message).replace(/\n/g, '<br>')}</p>` };
+}
+
+export async function sendPublicContactEmail(input: { fullName: string; email: string; message: string }, deliver = sendMail) {
+  if (!env.mail.enabled) throw new Error('contact_mail_disabled');
+  await deliver(buildPublicContactEmail(input));
 }
 
 export function buildQuoteAvailableEmail({ quote }: QuoteEmailInput): MailContent {

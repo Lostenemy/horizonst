@@ -26,6 +26,7 @@ import { adminDashboardRouter } from './modules/admin/dashboard.routes.js';
 import { cartRouter } from './modules/cart/cart.routes.js';
 import { quotesRouter } from './modules/quotes/quotes.routes.js';
 import { ordersRouter } from './modules/orders/orders.routes.js';
+import { contactRouter } from './modules/contact/contact.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
@@ -36,6 +37,7 @@ export const createServer = (staticRoot = webDist) => {
 
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cors({ origin: env.corsOrigin, credentials: false }));
+  app.use('/api/contact', contactRouter);
   app.use(express.json({ limit: '16kb' }));
 
   app.use('/health', healthRouter);

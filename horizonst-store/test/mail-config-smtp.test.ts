@@ -189,10 +189,13 @@ class FakeSocket extends EventEmitter {
   socket.emit('secureConnect');
   setTimeout(() => socket.emit('data', Buffer.from('220-mail.horizonst.es\r\n220 ready\r\n')), 0);
   await connectPromise;
-  await client.sendMail('u@example.com', 'Subject', '.line', '<strong>HTML</strong>', [{ filename: 'HorizonST_Frio.pdf', contentType: 'application/pdf', content: Buffer.from('%PDF-test') }]);
+  await client.sendMail('comercial@horizonst.es', 'Subject', '.line', '<strong>HTML</strong>', [{ filename: 'HorizonST_Frio.pdf', contentType: 'application/pdf', content: Buffer.from('%PDF-test') }], 'validated@example.test');
   await client.close();
   assert.ok(socket.writes.some((write) => write.includes('\r\n..line\r\n--')), 'DATA applies dot-stuffing');
   assert.ok(socket.writes.some((write) => write.includes('multipart/alternative')), 'DATA includes HTML alternative');
+  assert.ok(socket.writes.includes(`MAIL FROM:<${mailConfig.from}>\r\n`), 'configured server sender, not visitor');
+  assert.ok(socket.writes.includes('RCPT TO:<comercial@horizonst.es>\r\n'), 'fixed contact recipient');
+  assert.ok(socket.writes.some((write) => write.includes('Reply-To: validated@example.test\r\n')), 'validated visitor only as Reply-To');
   assert.ok(socket.writes.some((write) => write.includes('multipart/mixed')), 'DATA wraps messages with attachments in a mixed multipart');
   assert.ok(socket.writes.some((write) => write.includes('filename="HorizonST_Frio.pdf"')), 'DATA identifies the attached brochure');
   assert.ok(socket.writes.some((write) => write.includes(Buffer.from('%PDF-test').toString('base64'))), 'DATA includes the base64 attachment');
@@ -218,4 +221,30 @@ class FakeSocket extends EventEmitter {
   assert.equal(socket.destroyed, true);
 }
 
+{
+  // Acelerar solo el temporizador de esta conexión simulada, sin esperar 15 s.
+  const originalTimer = globalThis.setTimeout;
+  const socket = new FakeSocket([], 0, true);
+  const client = new SmtpClient(mailConfig, () => ({ socket: socket as any, readyEvent: 'secureConnect' }));
+  let connecting: Promise<void>;
+  try {
+    globalThis.setTimeout = ((callback: any, ms: number, ...args: any[]) => originalTimer(callback, ms === 15000 ? 0 : ms, ...args)) as typeof setTimeout;
+    connecting = client.connect();
+  } finally { globalThis.setTimeout = originalTimer; }
+  await assert.rejects(connecting!, /smtp_connect_timeout/);
+  assert.equal(socket.listenerCount('secureConnect'), 0);
+  assert.equal(socket.listenerCount('error'), 0);
+  await client.close();
+  assert.equal(socket.destroyed, true);
+}
+
 assert.equal(sanitizeMailError(new Error('smtp@horizonst.es failed secret-password'), { user: 'smtp@horizonst.es', password: 'secret-password' }), '[redacted] failed [redacted]');
+
+{
+  const socket = new FakeSocket();
+  const client = new SmtpClient(mailConfig, () => ({ socket: socket as any, readyEvent: 'secureConnect' }));
+  for (const replyTo of ['valid@example.test\r\nBcc: other@example.test', 'invalid', '<valid@example.test>', 'valid@example.test\u0000']) {
+    await assert.rejects(client.sendMail('comercial@horizonst.es', 'Contact', 'Body', undefined, [], replyTo), /invalid_reply_to/);
+  }
+  assert.deepEqual(socket.writes, [], 'header injection rejected before any SMTP command');
+}

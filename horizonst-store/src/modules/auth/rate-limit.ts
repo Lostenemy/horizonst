@@ -7,21 +7,21 @@ const protectedPaths = new Set(['/login', '/forgot-password', '/request-password
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
 // Contadores atómicos compartidos por réplicas; nunca almacenar emails, contraseñas o tokens.
-export function createAuthRateLimit(store: Store): RequestHandler {
+export function createAuthRateLimit(store: Store, policy?: { paths: readonly string[]; group: string; source: number; account: number; pair: number; windowSeconds: number; unavailableError: string }): RequestHandler {
   let nextCleanup = 0;
   return async (req, res, next) => {
-    const path = req.path.toLowerCase().replace(/\/+$/, '');
-    if (req.method !== 'POST' || !protectedPaths.has(path)) { next(); return; }
+    const path = req.path.toLowerCase().replace(/\/+$/, '') || '/';
+    if (req.method !== 'POST' || !(policy ? policy.paths.includes(path) : protectedPaths.has(path))) { next(); return; }
     res.setHeader('Cache-Control', 'no-store');
     // req.ip solo incorpora X-Forwarded-For cuando la conexión viene del proxy exacto configurado.
     const address = req.ip || 'unknown';
     const account = typeof (req.body?.email ?? req.body?.username) === 'string'
       ? String(req.body.email ?? req.body.username).trim().toLowerCase().slice(0, 320) : '';
-    const group = path === '/login' ? 'login' : 'recovery-registration';
-    const buckets: Array<[string, number]> = [[digest(group + ':source:' + address), 120]];
+    const group = policy?.group ?? (path === '/login' ? 'login' : 'recovery-registration');
+    const buckets: Array<[string, number]> = [[digest(group + ':source:' + address), policy?.source ?? 120]];
     if (account) {
-      buckets.push([digest(group + ':account:' + account), 30]);
-      buckets.push([digest(group + ':pair:' + address + ':' + account), 10]);
+      buckets.push([digest(group + ':account:' + account), policy?.account ?? 30]);
+      buckets.push([digest(group + ':pair:' + address + ':' + account), policy?.pair ?? 10]);
     }
     try {
       if (Date.now() >= nextCleanup) {
@@ -36,7 +36,7 @@ export function createAuthRateLimit(store: Store): RequestHandler {
              attempts = CASE WHEN budget.expires_at <= clock_timestamp() THEN 1 ELSE LEAST(budget.attempts + 1, 1000000) END,
              expires_at = CASE WHEN budget.expires_at <= clock_timestamp() THEN clock_timestamp() + $2::integer * interval '1 second' ELSE budget.expires_at END
            RETURNING attempts, GREATEST(1, CEIL(EXTRACT(EPOCH FROM (expires_at - clock_timestamp()))))::int AS retry_after`,
-          [key, WINDOW_SECONDS]
+          [key, policy?.windowSeconds ?? WINDOW_SECONDS]
         );
         const row = result.rows[0];
         if (!row) throw new Error('rate_limit_unavailable');
@@ -50,7 +50,7 @@ export function createAuthRateLimit(store: Store): RequestHandler {
     } catch {
       // Un fallo del almacén no habilita intentos ilimitados ni revela mensajes SQL.
       res.setHeader('Retry-After', '30');
-      res.status(503).json({ error: 'authentication_temporarily_unavailable' });
+      res.status(503).json({ error: policy?.unavailableError ?? 'authentication_temporarily_unavailable' });
     }
   };
 }

@@ -29,6 +29,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import PublicLegal from './pages/PublicLegal';
+import PublicContact from './pages/PublicContact';
 import { PublicHome, PublicInfoFaqs, PublicPlans } from './pages/PublicLanding';
 import PublicPrereservation from './pages/PublicPrereservation';
 import Quotes from './pages/Quotes';
@@ -47,6 +48,7 @@ export default function App() {
     const page = publicMarketingPage(window.location.pathname);
     if (page === 'legal-notice' || page === 'privacy') return <PublicLegal page={page} />;
     if (page === 'plans') return <PublicPlans />;
+    if (page === 'contact') return <PublicContact />;
     if (page === 'info-faqs') return <PublicInfoFaqs />;
     if (page === 'prereservation') return <PublicPrereservation code={publicPrereservationCode(window.location.pathname)!} />;
     if (page === 'home') return <PublicHome />;

@@ -22,6 +22,7 @@
 /* Auditoría UX: enlaces, captación y navegación compacta sin cambiar la marca. */
 .lp-privacy a,.lp-privacy a:visited{color:#d8fbff;text-decoration:underline;text-underline-offset:.2em}
 .lp-privacy a:focus-visible{outline:3px solid #86f2ea;outline-offset:3px}
+.public-contact{max-width:860px}.public-contact textarea{width:100%;resize:vertical}.public-contact small{color:#c9e5e8}.public-contact [aria-invalid=true]{border-color:#ffd4cf}.public-contact .lp-form>p[role=alert]{color:#ffd4cf}.public-contact .lp-form>p[role=status]{color:#86f2ea}.public-contact textarea:focus-visible{outline:3px solid #86f2ea;outline-offset:3px}.public-contact button{min-height:44px}.public-contact .lp-privacy input{width:auto}.public-contact :disabled{cursor:default;opacity:.7}
 #guia-solicitud{scroll-margin-top:110px}
 .nav-toggle{display:none}
 .line span p{font-size:.9rem;line-height:1.5;color:#607789;margin:.5rem 0;overflow-wrap:anywhere}

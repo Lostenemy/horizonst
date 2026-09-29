@@ -49,13 +49,13 @@ export default function PublicPrereservation({ code }: { code: PrereservationCod
   };
 
   if (status === 'loading') return <main className="public-landing"><PublicNav /><section className="lp-section"><p role="status">Cargando oferta...</p></section></main>;
-  if (status === 'expired') return <main className="public-landing"><PublicNav /><section className="lp-section"><h1>Campaña finalizada</h1><p>Consulta las condiciones actuales para tu instalación.</p><a className="btn" href="mailto:comercial@horizonst.es">Solicitar orientación</a></section></main>;
+  if (status === 'expired') return <main className="public-landing"><PublicNav /><section className="lp-section"><h1>Campaña finalizada</h1><p>Consulta las condiciones actuales para tu instalación.</p><a className="btn" href="/contacto">Solicitar orientación</a></section></main>;
   if (status === 'access-required') return <main className="public-landing"><PublicNav /><section className="lp-section lp-offer"><h1>Acceso a la prerreserva</h1><p>Facilita tu email para consultar la oferta de forma segura.</p><a className="btn" href={`/planes?prerreserva=${code}`}>Continuar</a></section></main>;
   if (!data) return <main className="public-landing"><PublicNav /><section className="lp-section"><p role="alert">No se pudo cargar la oferta.</p></section></main>;
 
   const { offer } = data;
   return <main className="public-landing"><PublicNav /><section className="lp-section lp-offer"><p className="eyebrow">Prerreserva 2026</p><h1>Oferta {code}</h1><p>Disponible hasta el {prereservationEndLabel(data.endAt)}.</p>
-    {!offer.available ? <div className="lp-note"><h2>Configuración personalizada</h2><p>Esta oferta no puede calcularse automáticamente con la configuración actual. Contacta con nuestro equipo comercial.</p><a className="btn" href="mailto:comercial@horizonst.es">Contactar</a></div> : <>
+    {!offer.available ? <div className="lp-note"><h2>Configuración personalizada</h2><p>Esta oferta no puede calcularse automáticamente con la configuración actual. Contacta con nuestro equipo comercial.</p><a className="btn" href="/contacto">Contactar</a></div> : <>
       <div className="lp-offer-lines">
         <div><span>{offer.hardware!.name} · pago único<small>{coverageLabel(offer.hardware!.coverageSquareMeters) ? ` · ${coverageLabel(offer.hardware!.coverageSquareMeters)}` : ''}</small></span><strong>{money(offer.hardware!.priceCents)} + IVA</strong></div>
         <div><span>Plan Web {offer.webPlan!.name} · anual</span><strong>{money(offer.webPlan!.priceCents)} + IVA</strong></div>

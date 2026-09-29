@@ -6,7 +6,7 @@ const currentHostname = () => typeof window === 'undefined' ? '' : window.locati
 export const customerAccessUrl = (hostname = currentHostname()) => domainEnvironment(hostname)?.store ?? '/';
 export const marketingAccessUrl = (hostname = currentHostname()) => domainEnvironment(hostname)?.marketing ?? '/';
 
-export type PublicMarketingPage = 'home' | 'plans' | 'info-faqs' | 'prereservation' | 'legal-notice' | 'privacy' | 'not-found';
+export type PublicMarketingPage = 'home' | 'plans' | 'contact' | 'info-faqs' | 'prereservation' | 'legal-notice' | 'privacy' | 'not-found';
 
 export const publicPrereservationCode = (pathname: string) => {
   const match = /^\/prerreserva\/(starter|professional|enterprise)$/.exec(pathname);
@@ -16,6 +16,7 @@ export const publicPrereservationCode = (pathname: string) => {
 export const publicMarketingPage = (pathname: string): PublicMarketingPage => {
   if (pathname === '/') return 'home';
   if (pathname === '/planes') return 'plans';
+  if (pathname === '/contacto') return 'contact';
   if (pathname === '/info-faqs') return 'info-faqs';
   if (publicPrereservationCode(pathname)) return 'prereservation';
   if (pathname === '/aviso-legal') return 'legal-notice';

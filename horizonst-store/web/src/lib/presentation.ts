@@ -50,7 +50,7 @@ export const itemPresentation = (description: string) => {
 export function pageTitle(pathname: string, publicSite: boolean): string {
   const publicTitles: Record<string, string> = {
     '/': 'Supervisión en cámaras congeladoras', '/planes': 'Planes', '/info-faqs': 'Cómo funciona',
-    '/privacidad': 'Privacidad', '/aviso-legal': 'Aviso legal'
+    '/privacidad': 'Privacidad', '/aviso-legal': 'Aviso legal', '/contacto': 'Contacto'
   };
   const storeTitles: Record<string, string> = {
     '/': 'Tienda B2B', '/catalog': 'Catálogo B2B', '/cart': 'Carrito', '/login': 'Acceso',
