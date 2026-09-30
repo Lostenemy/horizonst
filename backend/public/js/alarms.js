@@ -1,5 +1,6 @@
 import { apiGet, apiPost } from './api.js';
 import { initAuthPage } from './ui.js';
+import { createLoadState, createMetadataLoader } from './load-state.js';
 
 const { user } = initAuthPage();
 if (!user) {
@@ -25,17 +26,15 @@ const populateSelect = (select, data, textKey) => {
   });
 };
 
-const loadMetadata = async () => {
-  const [devices, categories, groups] = await Promise.all([
-    apiGet('/devices'),
-    apiGet('/categories'),
-    apiGet('/users/groups')
-  ]);
-
-  populateSelect(deviceSelect, devices, 'ble_mac');
-  populateSelect(categorySelect, categories, 'name');
-  populateSelect(groupSelect, groups, 'name');
-};
+const metadata = createMetadataLoader({ anchor: alarmForm, resources: [
+  { key: 'dispositivos', load: () => apiGet('/devices'), apply: (items) => populateSelect(deviceSelect, items, 'ble_mac') },
+  { key: 'categorías', load: () => apiGet('/categories'), apply: (items) => populateSelect(categorySelect, items, 'name') },
+  { key: 'grupos', load: () => apiGet('/users/groups'), apply: (items) => populateSelect(groupSelect, items, 'name') }
+], onChange: () => {
+  for (const control of alarmForm.querySelectorAll('input,select,button')) {
+    control.disabled = !['dispositivos', 'categorías', 'grupos'].every(metadata.ready);
+  }
+} });
 
 const renderConfigs = (configs) => {
   configsTableBody.innerHTML = '';
@@ -112,10 +111,23 @@ const renderAlarms = (alarms) => {
   });
 };
 
+let refreshing = false;
+const dataState = createLoadState({ anchor: configsTableBody.closest('table'), label: 'reglas y alarmas de este módulo',
+  clear: () => {
+    configsTableBody.innerHTML = ''; alarmsTableBody.innerHTML = '';
+    configsEmpty.style.display = 'none'; alarmsEmpty.style.display = 'none';
+  }, onRetry: () => refreshData() });
 const refreshData = async () => {
-  const [configs, alarms] = await Promise.all([apiGet('/alarms/configs'), apiGet('/alarms')]);
-  renderConfigs(configs);
-  renderAlarms(alarms);
+  if (refreshing) return;
+  refreshing = true;
+  dataState('loading');
+  try {
+    const [configs, alarms] = await Promise.all([apiGet('/alarms/configs'), apiGet('/alarms')]);
+    renderConfigs(configs);
+    renderAlarms(alarms);
+    dataState('ready');
+  } catch (error) { dataState(error.status === 403 ? 'denied' : 'error', error); }
+  finally { refreshing = false; }
 };
 
 alarmForm.addEventListener('submit', async (event) => {
@@ -142,16 +154,6 @@ alarmForm.addEventListener('submit', async (event) => {
   }
 });
 
-const init = async () => {
-  try {
-    await loadMetadata();
-    await refreshData();
-  } catch (error) {
-    alarmMessage.textContent = error.message;
-    alarmMessage.className = 'alert error';
-    alarmMessage.style.display = 'block';
-  }
-};
-
-init();
+void metadata.run();
+void refreshData();
 setInterval(refreshData, 20000);

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { pool } from '../db/pool';
-import { normalizeGatewayMac } from '../utils/mac';
+import { normalizeInventoryMac } from '../utils/mac';
 import { appendTechnicalAudit } from './technicalAudit';
 
 export class GatewayOnboardingConflictError extends Error {}
@@ -32,12 +32,7 @@ type ConnectablePool = Pick<Pool, 'connect'>;
 const exactAcl = (pattern: string): Array<{ pattern: string }> => [{ pattern }];
 
 export function normalizeGatewayOnboardingMac(input: unknown): string | null {
-  if (typeof input !== 'string') return null;
-  const trimmed = input.trim();
-  if (!/^(?:[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|(?:[0-9a-f]{2}-){5}[0-9a-f]{2})$/i.test(trimmed)) {
-    return null;
-  }
-  return normalizeGatewayMac(trimmed);
+  return normalizeInventoryMac(input, 'gateway');
 }
 
 export async function onboardGateway(params: {

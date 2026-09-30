@@ -8,7 +8,7 @@ import {
   scopedHardwarePredicate
 } from '../middleware/hardwareRbac';
 import { pool } from '../db/pool';
-import { normalizeGatewayMac } from '../utils/mac';
+import { normalizeGatewayMac, normalizeInventoryMac, inventoryMacSql } from '../utils/mac';
 import { appendTechnicalAudit } from '../services/technicalAudit';
 import {
   configureB5Gateway,
@@ -81,7 +81,7 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
 });
 
 router.get('/by-mac/:mac', authenticate, async (req: AuthenticatedRequest, res) => {
-  const mac = normalizeGatewayMac(req.params.mac);
+  const mac = normalizeInventoryMac(req.params.mac, 'gateway');
   if (!mac) return res.status(400).json({ message: 'MAC address is invalid' });
   try {
     const scope = await resolveHardwareAccess(req.user!, 'read');
@@ -89,9 +89,10 @@ router.get('/by-mac/:mac', authenticate, async (req: AuthenticatedRequest, res) 
     const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'g.company_id', ownerColumn: 'g.owner_id' });
     const result = await pool.query(
       `${gatewaySelect}
-       WHERE regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g') = $1 AND ${predicate}`,
+       WHERE ${inventoryMacSql('g.mac_address', 'gateway')} = $1 AND ${predicate}`,
       values
     );
+    if (new Set(result.rows.map(row => row.id)).size > 1) return res.status(409).json({ message: 'Ambiguous gateway MAC; inventory review required' });
     if (!result.rows[0]) return res.status(404).json({ message: 'Gateway not found' });
     return res.json(result.rows[0]);
   } catch (error) {
@@ -731,7 +732,7 @@ router.post('/:gatewayId/assign-company', authenticate, authorizeHardware('super
 
 router.post('/', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   const { name, macAddress, description, ownerId } = req.body;
-  const normalizedMac = normalizeGatewayMac(macAddress);
+  const normalizedMac = normalizeInventoryMac(macAddress, 'gateway');
   if (!normalizedMac) return res.status(400).json({ message: 'MAC address is invalid' });
   const parsedCompanyId = companyIdValue(req.body?.companyId);
   if (!parsedCompanyId) {
@@ -743,6 +744,9 @@ router.post('/', authenticate, authorizeHardware('superadmin'), async (req: Auth
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 7247))', [normalizedMac]);
+    const collision = await client.query(`SELECT id FROM gateways WHERE ${inventoryMacSql('mac_address', 'gateway')} = $1`, [normalizedMac]);
+    if (collision.rows.length) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Gateway MAC already registered; inventory review required' }); }
     if (parsedCompanyId) {
       const company = await client.query('SELECT id FROM companies WHERE id = $1 AND active = TRUE', [parsedCompanyId]);
       if (!company.rows[0]) {

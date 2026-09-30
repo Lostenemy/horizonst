@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './api.js';
 import { initAuthPage, openFormModal, confirmAction } from './ui.js';
+import { createLoadState, createMetadataLoader } from './load-state.js';
 
 const { user, isAdmin, isHardwareTechnician } = initAuthPage();
 const canEditHardware = isAdmin || isHardwareTechnician;
@@ -22,8 +23,8 @@ let owners = [];
 let companies = [];
 
 const normalizeMac = (value) => {
-  if (!value) return '';
-  return value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+  if (typeof value !== 'string' || !/^(?:[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|(?:[0-9a-f]{2}-){5}[0-9a-f]{2})$/i.test(value.trim())) return '';
+  return value.trim().replace(/[:-]/g, '').toUpperCase();
 };
 
 const validateMac = (value) => /^[0-9A-F]{12}$/.test(normalizeMac(value));
@@ -43,32 +44,60 @@ const setSelectOptions = (select, items, placeholder) => {
   });
 };
 
-const loadMetadata = async () => {
-  categories = await apiGet('/categories');
+const applyCategories = (value) => {
+  categories = value;
   setSelectOptions(
     categorySelect,
     categories.map((category) => ({ value: category.id, label: category.name })),
     'Sin categoría'
   );
 
-  if (isAdmin && ownerSelect) {
-    [owners, companies] = await Promise.all([apiGet('/users'), apiGet('/companies')]);
+};
+const applyOwners = (value) => {
+    owners = value;
     setSelectOptions(
       ownerSelect,
       owners.map((owner) => ({ value: owner.id, label: owner.display_name || owner.email })),
       'Sin propietario'
     );
+};
+const applyCompanies = (value) => {
+    companies = value;
     setSelectOptions(
       companySelect,
       companies.map((company) => ({ value: company.id, label: company.name })),
       'Sin empresa (legacy)'
     );
-  }
 };
 
-const loadDevices = async () => {
-  devices = await apiGet('/devices');
+const metadata = createMetadataLoader({ anchor: form, resources: [
+  { key: 'categorías', load: () => apiGet('/categories'), apply: applyCategories },
+  ...(isAdmin ? [
+    { key: 'usuarios', load: () => apiGet('/users'), apply: applyOwners },
+    { key: 'compañías', load: () => apiGet('/companies'), apply: applyCompanies }
+  ] : [])
+], onChange: () => {
+  for (const control of form.querySelectorAll('input,select,button')) control.disabled = !canEditMetadata();
   renderDevices();
+} });
+const canEditMetadata = () => metadata.ready('categorías')
+  && (!isAdmin || (metadata.ready('usuarios') && metadata.ready('compañías')));
+let loadingDevices = false;
+const inventoryState = createLoadState({ anchor: devicesTableBody.closest('table'), empty: devicesEmpty,
+  label: 'dispositivos registrados', clear: () => { devicesTableBody.innerHTML = ''; }, onRetry: () => loadDevices() });
+
+const loadDevices = async () => {
+  if (loadingDevices) return;
+  loadingDevices = true;
+  inventoryState('loading');
+  try {
+    devices = await apiGet('/devices');
+    renderDevices();
+    inventoryState(devices.length ? 'ready' : 'empty');
+  } catch (error) {
+    devices = [];
+    inventoryState(error.status === 403 ? 'denied' : 'error', error);
+  } finally { loadingDevices = false; }
 };
 
 const getCategoryOptions = () => {
@@ -152,10 +181,8 @@ const handleDeleteDevice = async (device) => {
 const renderDevices = () => {
   devicesTableBody.innerHTML = '';
   if (!devices.length) {
-    devicesEmpty.style.display = 'block';
     return;
   }
-  devicesEmpty.style.display = 'none';
 
   devices.forEach((device) => {
     const row = document.createElement('tr');
@@ -184,6 +211,8 @@ const renderDevices = () => {
       const editButton = document.createElement('button');
       editButton.type = 'button';
       editButton.textContent = 'Editar';
+      editButton.disabled = !canEditMetadata();
+      editButton.title = editButton.disabled ? 'Faltan metadatos necesarios para editar.' : '';
       editButton.addEventListener('click', () => handleEditDevice(device));
       actionsContainer.appendChild(editButton);
     }
@@ -241,13 +270,5 @@ if (form && isAdmin) {
   });
 }
 
-const init = async () => {
-  try {
-    await loadMetadata();
-    await loadDevices();
-  } catch (error) {
-    devicesTableBody.innerHTML = `<tr><td colspan="9">${error.message}</td></tr>`;
-  }
-};
-
-init();
+void metadata.run();
+void loadDevices();

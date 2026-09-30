@@ -6,7 +6,7 @@ import {
   ServiceAuthenticatedRequest
 } from '../middleware/serviceAuth';
 import { HARDWARE_COMMAND_SCOPE, HARDWARE_READ_SCOPE } from '../services/serviceIdentity';
-import { normalizeGatewayMac, normalizeMacAddress } from '../utils/mac';
+import { normalizeInventoryMac, inventoryMacSql } from '../utils/mac';
 import { hasVerifiedMkgw3V2 } from '../services/gatewayCapabilities';
 import { appendTechnicalAudit } from '../services/technicalAudit';
 import {
@@ -93,16 +93,17 @@ router.get('/devices', requireRead, async (req: ServiceAuthenticatedRequest, res
 });
 
 router.get('/devices/by-mac/:mac', requireRead, async (req: ServiceAuthenticatedRequest, res) => {
-  const mac = normalizeMacAddress(req.params.mac);
+  const mac = normalizeInventoryMac(req.params.mac, 'device');
   if (!mac) return res.status(400).json({ message: 'MAC address is invalid' });
   try {
     const principal = req.servicePrincipal!;
     const result = await pool.query(
       `${deviceSelect}
-       WHERE upper(regexp_replace(d.ble_mac, '[^0-9A-Fa-f]', '', 'g')) = $1
+       WHERE ${inventoryMacSql('d.ble_mac', 'device')} = $1
          AND d.company_id = $2`,
       [mac, principal.companyId]
     );
+    if (result.rows.length > 1) return res.status(409).json({ message: 'Ambiguous device MAC; inventory review required' });
     if (!result.rows[0]) {
       await auditRead(req, 'internal.device.read_by_mac', mac, 'failure', 'device');
       return res.status(404).json({ message: 'Device not found' });
@@ -140,16 +141,17 @@ router.get('/devices/:deviceId', requireRead, async (req: ServiceAuthenticatedRe
 });
 
 router.get('/gateways/by-mac/:mac', requireRead, async (req: ServiceAuthenticatedRequest, res) => {
-  const mac = normalizeGatewayMac(req.params.mac);
+  const mac = normalizeInventoryMac(req.params.mac, 'gateway');
   if (!mac) return res.status(400).json({ message: 'MAC address is invalid' });
   try {
     const principal = req.servicePrincipal!;
     const result = await pool.query(
       `${gatewaySelect}
-       WHERE regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g') = $1
+       WHERE ${inventoryMacSql('g.mac_address', 'gateway')} = $1
          AND g.company_id = $2`,
       [mac, principal.companyId]
     );
+    if (result.rows.length > 1) return res.status(409).json({ message: 'Ambiguous gateway MAC; inventory review required' });
     if (!result.rows[0]) {
       await auditRead(req, 'internal.gateway.read_by_mac', mac, 'failure');
       return res.status(404).json({ message: 'Gateway not found' });

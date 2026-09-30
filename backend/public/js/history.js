@@ -1,5 +1,6 @@
 import { apiGet } from './api.js';
 import { initAuthPage } from './ui.js';
+import { createLoadState } from './load-state.js';
 
 const { user } = initAuthPage();
 if (!user) {
@@ -11,16 +12,31 @@ const loadHistoryBtn = document.getElementById('loadHistory');
 const tableBody = document.querySelector('#historyTable tbody');
 const emptyState = document.getElementById('historyEmpty');
 let devices = [];
+let historyGeneration = 0;
+let selectorLoading = false;
+const historyState = createLoadState({ anchor: tableBody.closest('table'), empty: emptyState,
+  label: 'histórico central (hasta 500 registros)', clear: () => { tableBody.innerHTML = ''; }, onRetry: () => loadHistory() });
+const selectorState = createLoadState({ anchor: deviceSelect,
+  label: 'dispositivos registrados', onRetry: () => init() });
 
 const loadDevices = async () => {
+  deviceSelect.disabled = true;
+  loadHistoryBtn.disabled = true;
+  selectorState('loading');
   devices = await apiGet('/devices');
   deviceSelect.innerHTML = '';
   if (!devices.length) {
     deviceSelect.innerHTML = '<option>No hay dispositivos</option>';
     deviceSelect.disabled = true;
     loadHistoryBtn.disabled = true;
+    selectorState('empty');
+    historyState('empty');
+    emptyState.textContent = 'No hay dispositivos registrados visibles en tu alcance.';
     return;
   }
+  deviceSelect.disabled = false;
+  loadHistoryBtn.disabled = false;
+  selectorState('ready');
   devices.forEach((device) => {
     const option = document.createElement('option');
     option.value = device.id;
@@ -32,15 +48,18 @@ const loadDevices = async () => {
 const loadHistory = async () => {
   const deviceId = Number(deviceSelect.value);
   if (!deviceId) return;
+  const generation = ++historyGeneration;
+  historyState('loading');
   try {
     const history = await apiGet(`/devices/${deviceId}/history`);
+    if (generation !== historyGeneration || Number(deviceSelect.value) !== deviceId) return;
     tableBody.innerHTML = '';
     if (!history.length) {
-      emptyState.style.display = 'block';
-      emptyState.textContent = 'No hay registros para este dispositivo.';
+      historyState('empty');
+      emptyState.textContent = 'Sin registros en el histórico central consultado (hasta 500 registros). No representa presencia de Horneo.';
       return;
     }
-    emptyState.style.display = 'none';
+    historyState('ready');
     history.forEach((entry) => {
       const row = document.createElement('tr');
       row.innerHTML = `
@@ -53,17 +72,26 @@ const loadHistory = async () => {
       tableBody.appendChild(row);
     });
   } catch (error) {
-    tableBody.innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
+    if (generation === historyGeneration) historyState(error.status === 403 ? 'denied' : 'error', error);
   }
 };
 
 loadHistoryBtn.addEventListener('click', loadHistory);
+deviceSelect.addEventListener('change', () => { historyGeneration++; historyState('ready'); tableBody.innerHTML = ''; });
 
 const init = async () => {
+  if (selectorLoading) return;
+  selectorLoading = true;
+  try {
   await loadDevices();
   if (devices.length) {
     await loadHistory();
   }
+  } catch (error) {
+    selectorState(error.status === 403 ? 'denied' : 'error', error);
+    historyState('ready');
+    tableBody.innerHTML = '';
+  } finally { selectorLoading = false; }
 };
 
 init();

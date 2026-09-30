@@ -77,16 +77,22 @@ const handleUnauthorized = async (response) => {
 };
 
 export const apiGet = async (path) => {
-  const response = await callApi(path, {
-    headers: defaultHeaders()
-  });
-  if (response.status === 401) {
-    await handleUnauthorized(response);
-  }
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
-  return response.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await callApi(path, {
+      headers: defaultHeaders(), signal: controller.signal
+    });
+    if (response.status === 401) {
+      await handleUnauthorized(response);
+    }
+    if (!response.ok) {
+      const error = new Error(`Request failed with status ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return await response.json();
+  } finally { clearTimeout(timer); }
 };
 
 export const apiPost = async (path, body) => {

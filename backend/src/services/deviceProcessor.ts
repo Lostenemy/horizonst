@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { pool } from '../db/pool';
 import { ProcessedDeviceRecord } from '../types';
-import { normalizeMacAddress } from '../utils/mac';
+import { normalizeInventoryMac, inventoryMacSql } from '../utils/mac';
 
 interface GatewayRow {
   id: number;
@@ -29,7 +29,9 @@ export const handleDeviceRecord = async (record: ProcessedDeviceRecord): Promise
   try {
     await client.query('BEGIN');
 
-    const gatewayMac = record.gatewayMac.toUpperCase();
+    const gatewayMac = normalizeInventoryMac(record.gatewayMac, 'gateway');
+    const deviceMac = normalizeInventoryMac(record.bleMac, 'device');
+    if (!gatewayMac || !deviceMac) { await client.query('ROLLBACK'); return; }
     const gatewayResult = await client.query<GatewayRow>(
       `SELECT g.id, g.company_id, gp.place_id
        FROM gateways g
@@ -40,26 +42,29 @@ export const handleDeviceRecord = async (record: ProcessedDeviceRecord): Promise
          ORDER BY assigned_at DESC
          LIMIT 1
        ) gp ON TRUE
-       WHERE g.mac_address = $1 AND g.active = true
-       LIMIT 1`,
+       WHERE ${inventoryMacSql('g.mac_address', 'gateway')} = $1 AND g.active = true
+       LIMIT 2`,
       [gatewayMac]
     );
     const gateway = gatewayResult.rows[0];
+    if (gatewayResult.rows.length > 1) {
+      console.warn('Ambiguous gateway MAC; observation discarded');
+      await client.query('ROLLBACK'); return;
+    }
     if (!gateway) {
       await client.query('ROLLBACK');
       return;
     }
 
-    const deviceMac = normalizeMacAddress(record.bleMac);
-    if (!deviceMac) {
-      await client.query('ROLLBACK');
-      return;
-    }
     const deviceResult = await client.query<DeviceRow>(
-      `SELECT id, owner_id, company_id FROM devices WHERE ble_mac = $1 AND active = true LIMIT 1`,
+      `SELECT id, owner_id, company_id FROM devices WHERE ${inventoryMacSql('ble_mac', 'device')} = $1 AND active = true LIMIT 2`,
       [deviceMac]
     );
     const device = deviceResult.rows[0];
+    if (deviceResult.rows.length > 1) {
+      console.warn('Ambiguous device MAC; observation discarded');
+      await client.query('ROLLBACK'); return;
+    }
     if (!device) {
       await client.query('ROLLBACK');
       return;

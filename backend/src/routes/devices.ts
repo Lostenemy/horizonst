@@ -8,7 +8,7 @@ import {
   scopedHardwarePredicate
 } from '../middleware/hardwareRbac';
 import { pool } from '../db/pool';
-import { normalizeMacAddress } from '../utils/mac';
+import { normalizeInventoryMac, inventoryMacSql } from '../utils/mac';
 import { appendTechnicalAudit } from '../services/technicalAudit';
 
 const router = Router();
@@ -74,13 +74,14 @@ router.get('/grouped-by-place', authenticate, async (req: AuthenticatedRequest, 
 });
 
 router.get('/by-mac/:mac', authenticate, async (req: AuthenticatedRequest, res) => {
-  const mac = normalizeMacAddress(req.params.mac);
+  const mac = normalizeInventoryMac(req.params.mac, 'device');
   if (!mac) return res.status(400).json({ message: 'BLE MAC is invalid' });
   try {
     const scope = await resolveHardwareAccess(req.user!, 'read');
     const values: unknown[] = [mac];
     const predicate = scopedHardwarePredicate({ scope, values, companyColumn: 'd.company_id', ownerColumn: 'd.owner_id' });
-    const result = await pool.query(`${deviceSelect} WHERE d.ble_mac = $1 AND ${predicate}`, values);
+    const result = await pool.query(`${deviceSelect} WHERE ${inventoryMacSql('d.ble_mac', 'device')} = $1 AND ${predicate}`, values);
+    if (result.rows.length > 1) return res.status(409).json({ message: 'Ambiguous device MAC; inventory review required' });
     if (!result.rows[0]) return res.status(404).json({ message: 'Device not found' });
     return res.json(result.rows[0]);
   } catch (error) {
@@ -91,7 +92,7 @@ router.get('/by-mac/:mac', authenticate, async (req: AuthenticatedRequest, res) 
 
 router.post('/', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
   const { name, bleMac, description, ownerId, categoryId } = req.body;
-  const normalizedMac = normalizeMacAddress(bleMac);
+  const normalizedMac = normalizeInventoryMac(bleMac, 'device');
   if (!normalizedMac) return res.status(400).json({ message: 'BLE MAC is invalid' });
   const companyId = companyIdValue(req.body?.companyId);
   if (req.body?.companyId !== undefined && companyId === undefined) return res.status(400).json({ message: 'companyId is invalid' });
@@ -106,6 +107,9 @@ router.post('/', authenticate, authorizeHardware('superadmin'), async (req: Auth
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 7248))', [normalizedMac]);
+    const collision = await client.query(`SELECT id FROM devices WHERE ${inventoryMacSql('ble_mac', 'device')} = $1`, [normalizedMac]);
+    if (collision.rows.length) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Device MAC already registered; inventory review required' }); }
     if (companyId) {
       const company = await client.query('SELECT id FROM companies WHERE id = $1 AND active = TRUE', [companyId]);
       if (!company.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Company not found' }); }
@@ -131,12 +135,13 @@ router.post('/', authenticate, authorizeHardware('superadmin'), async (req: Auth
 
 router.post('/claim', authenticate, async (req: AuthenticatedRequest, res) => {
   if (req.user!.role !== 'USER') return res.status(403).json({ message: 'Forbidden' });
-  const normalizedMac = normalizeMacAddress(req.body?.bleMac);
+  const normalizedMac = normalizeInventoryMac(req.body?.bleMac, 'device');
   if (!normalizedMac) return res.status(400).json({ message: 'bleMac is invalid' });
   try {
     const result = await pool.query(
       `UPDATE devices SET owner_id = $1, name = COALESCE($2, name), updated_at = NOW()
-       WHERE ble_mac = $3 AND company_id IS NULL AND (owner_id IS NULL OR owner_id = $1)
+       WHERE ${inventoryMacSql('ble_mac', 'device')} = $3 AND company_id IS NULL AND (owner_id IS NULL OR owner_id = $1)
+         AND (SELECT count(*) FROM devices candidate WHERE ${inventoryMacSql('candidate.ble_mac', 'device')} = $3) = 1
        RETURNING id, name, ble_mac, owner_id, company_id`,
       [req.user!.id, req.body?.name ? String(req.body.name).trim() || null : null, normalizedMac]
     );

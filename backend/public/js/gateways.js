@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './api.js';
 import { initAuthPage, openFormModal, confirmAction } from './ui.js';
+import { createLoadState, createMetadataLoader } from './load-state.js';
 
 const { user, isAdmin, isHardwareTechnician } = initAuthPage();
 const canEditHardware = isAdmin || isHardwareTechnician;
@@ -108,8 +109,8 @@ const validateMqttForm = (data, mac) => {
 };
 
 const normalizeMac = (value) => {
-  if (!value) return '';
-  return value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+  if (typeof value !== 'string' || !/^(?:[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|(?:[0-9a-f]{2}-){5}[0-9a-f]{2})$/i.test(value.trim())) return '';
+  return value.trim().replace(/[:-]/g, '').toUpperCase();
 };
 
 const validateMac = (value) => /^[0-9A-F]{12}$/.test(normalizeMac(value));
@@ -138,8 +139,7 @@ const refreshFirmwareControls = (gateway) => {
 };
 
 const loadOwners = async () => {
-  if (!isAdmin) return;
-  [owners, companies] = await Promise.all([apiGet('/users'), apiGet('/companies')]);
+  owners = await apiGet('/users');
   if (gatewayOwnerSelect) {
     gatewayOwnerSelect.innerHTML = '';
     const emptyOption = document.createElement('option');
@@ -155,17 +155,32 @@ const loadOwners = async () => {
   }
 };
 
+const metadata = createMetadataLoader({ anchor: gatewayForm, resources: isAdmin ? [
+  { key: 'usuarios', load: loadOwners, apply: () => {} },
+  { key: 'compañías', load: () => apiGet('/companies'), apply: (value) => { companies = value; } }
+] : [], onChange: () => renderGateways() });
+let loadingGateways = false;
+const inventoryState = createLoadState({ anchor: gatewaysTableBody.closest('table'), empty: gatewaysEmpty,
+  label: 'gateways registradas', clear: () => { gatewaysTableBody.innerHTML = ''; }, onRetry: () => loadGateways() });
 const loadGateways = async () => {
-  gateways = await apiGet('/gateways');
-  renderGateways();
-  if (selectedGateway) {
-    const updated = gateways.find((gateway) => gateway.id === selectedGateway.id);
-    if (updated) await selectGateway(updated);
-    else {
-      selectedGateway = null;
-      technicalPanel.hidden = true;
+  if (loadingGateways) return;
+  loadingGateways = true;
+  inventoryState('loading');
+  try {
+    gateways = await apiGet('/gateways');
+    renderGateways();
+    inventoryState(gateways.length ? 'ready' : 'empty');
+    if (selectedGateway) {
+      const updated = gateways.find((gateway) => gateway.id === selectedGateway.id);
+      if (updated) await selectGateway(updated);
+      else { selectedGateway = null; technicalPanel.hidden = true; }
     }
-  }
+  } catch (error) {
+    gateways = [];
+    selectedGateway = null;
+    technicalPanel.hidden = true;
+    inventoryState(error.status === 403 ? 'denied' : 'error', error);
+  } finally { loadingGateways = false; }
 };
 
 const ownerLabel = (gateway) => {
@@ -281,9 +296,20 @@ const renderHistory = (body, items, columns) => {
   }
 };
 
+let technicalLoading = false;
+const technicalState = createLoadState({ anchor: commandsBody.closest('table'),
+  label: 'historial técnico (hasta 200 entradas por diario)',
+  clear: () => {
+    for (const body of [commandsBody, mqttHistoryBody, readsBody, auditBody, observedSettingsBody, bleSnapshotBody]) body.replaceChildren();
+    bleSnapshotEmpty.hidden = true;
+    bleSnapshotObservedAt.textContent = 'Consulta de fotografía BLE no completada.';
+  }, onRetry: () => refreshTechnicalHistory() });
 const refreshTechnicalHistory = async () => {
   if (!selectedGateway || document.hidden) return;
+  if (technicalLoading) return;
+  technicalLoading = true;
   const gatewayId = selectedGateway.id;
+  technicalState('loading');
   try {
     const [commands, reads, audit, observedSettings, bleSnapshot] = await Promise.all([
       apiGet(`/gateways/${gatewayId}/commands`),
@@ -338,8 +364,12 @@ const refreshTechnicalHistory = async () => {
         (item) => item.type
       ]);
     }
+    technicalState('ready');
   } catch (error) {
-    technicalFeedback.textContent = `No se pudo actualizar el historial: ${error.message}`;
+    if (selectedGateway?.id === gatewayId) technicalState(error.status === 403 ? 'denied' : 'error', error);
+  } finally {
+    technicalLoading = false;
+    if (selectedGateway && selectedGateway.id !== gatewayId) void refreshTechnicalHistory();
   }
 };
 
@@ -470,18 +500,32 @@ firmwareClearButton.addEventListener('click', async () => {
   await loadGateways();
 });
 
+const devicesState = createLoadState({ anchor: devicesBody.closest('table'),
+  label: 'dispositivos con última observación central en esta gateway',
+  clear: () => devicesBody.replaceChildren(), onRetry: () => selectedGateway && refreshGatewayDevices(selectedGateway.id) });
 const refreshGatewayDevices = async (gatewayId) => {
+  devicesState('loading');
   try {
     const devices = await apiGet('/devices');
     if (selectedGateway?.id !== gatewayId) return;
-    renderHistory(devicesBody, devices.filter((device) => Number(device.last_gateway_id) === gatewayId), [
+    const observed = devices.filter((device) => Number(device.last_gateway_id) === gatewayId);
+    renderHistory(devicesBody, observed, [
       (item) => item.name || 'Sin nombre',
       (item) => item.ble_mac,
       (item) => item.device_type,
       (item) => item.last_seen_at ? new Date(item.last_seen_at).toLocaleString('es-ES') : '—'
     ]);
+    devicesState('ready');
+    if (!observed.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 4;
+      cell.textContent = 'Sin última observación central de dispositivos en esta gateway.';
+      row.appendChild(cell);
+      devicesBody.appendChild(row);
+    }
   } catch (error) {
-    technicalFeedback.textContent = `No se pudo cargar el inventario de tags: ${error.message}`;
+    if (selectedGateway?.id === gatewayId) devicesState(error.status === 403 ? 'denied' : 'error', error);
   }
 };
 
@@ -593,10 +637,8 @@ setInterval(() => { void refreshTechnicalHistory(); }, 5000);
 const renderGateways = () => {
   gatewaysTableBody.innerHTML = '';
   if (!gateways.length) {
-    gatewaysEmpty.style.display = 'block';
     return;
   }
-  gatewaysEmpty.style.display = 'none';
 
     gateways.forEach((gateway) => {
     const row = document.createElement('tr');
@@ -618,6 +660,8 @@ const renderGateways = () => {
       const editButton = document.createElement('button');
       editButton.type = 'button';
       editButton.textContent = 'Editar';
+      editButton.disabled = isAdmin && !metadata.ready('usuarios');
+      editButton.title = editButton.disabled ? 'Faltan los propietarios necesarios para editar.' : '';
       editButton.addEventListener('click', () => handleEditGateway(gateway));
       container.appendChild(editButton);
     }
@@ -627,6 +671,8 @@ const renderGateways = () => {
         const assignButton = document.createElement('button');
         assignButton.type = 'button';
         assignButton.textContent = 'Asignar compañía';
+        assignButton.disabled = !metadata.ready('compañías');
+        assignButton.title = assignButton.disabled ? 'Faltan las compañías disponibles para asignar.' : '';
         assignButton.addEventListener('click', () => handleAssignCompany(gateway));
         container.appendChild(assignButton);
       }
@@ -679,18 +725,5 @@ if (isAdmin && gatewayForm) {
   });
 }
 
-const init = async () => {
-  try {
-    await loadOwners();
-    await loadGateways();
-  } catch (error) {
-    const row = document.createElement('tr');
-    const cell = document.createElement('td');
-    cell.colSpan = 6;
-    cell.textContent = error.message;
-    row.appendChild(cell);
-    gatewaysTableBody.replaceChildren(row);
-  }
-};
-
-init();
+void metadata.run();
+void loadGateways();
