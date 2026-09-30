@@ -1,5 +1,6 @@
 import { sessionExposureEndSql, sessionExposureSecondsSql } from '../compliance/session-exposure.sql';
 import { formatDateTimeMadrid } from '../../utils/datetime';
+import { createWorkerDailyAccumulator, WorkerDailyTotal } from '../realtime/workday-duration';
 
 export interface InspectionFilters {
   from?: string;
@@ -9,6 +10,7 @@ export interface InspectionFilters {
 
 export interface InspectionRow {
   session_id: string;
+  worker_id: string;
   worker_name: string;
   worker_dni: string;
   tag_mac: string;
@@ -44,15 +46,17 @@ function inspectionConditions(filters: InspectionFilters, values: unknown[]): st
   const conditions: string[] = [];
   if (filters.from) {
     values.push(filters.from);
-    conditions.push(`s.started_at >= ($${values.length}::date::timestamp AT TIME ZONE 'Europe/Madrid')`);
+    // Una sesión iniciada antes del rango se incluye si su exposición solapa el primer día.
+    const lower = `($${values.length}::date::timestamp AT TIME ZONE 'Europe/Madrid')`;
+    conditions.push(`(s.started_at >= ${lower} OR ${sessionExposureEndSql('s')} > ${lower})`);
   }
   if (filters.to) {
     values.push(filters.to);
     conditions.push(`s.started_at < ((($${values.length}::date + 1)::timestamp) AT TIME ZONE 'Europe/Madrid')`);
   }
   if (filters.workerDni) {
-    values.push(`%${filters.workerDni}%`);
-    conditions.push(`w.dni ILIKE $${values.length}`);
+    values.push(`%${filters.workerDni.replace(/[\\%_]/g, (character) => `\\${character}`)}%`);
+    conditions.push(`w.dni ILIKE $${values.length} ESCAPE '\\'`);
   }
   return conditions;
 }
@@ -107,6 +111,7 @@ export async function consumeInspectionRows(
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const rows = await query(
       `SELECT s.id::text AS session_id,
+              s.worker_id::text AS worker_id,
               w.full_name AS worker_name,
               w.dni AS worker_dni,
               COALESCE(t.tag_uid, '') AS tag_mac,
@@ -131,6 +136,21 @@ export async function consumeInspectionRows(
     cursor = { started_at: last.started_at, session_id: last.session_id };
   }
   return consumed;
+}
+
+/** Lectura paginada y la misma lógica de calendario/unión que el panel. */
+export async function loadInspectionDailyTotals(
+  query: InspectionPageQuery,
+  filters: InspectionFilters,
+  now = new Date(),
+  batchSize = INSPECTION_BATCH_SIZE
+): Promise<WorkerDailyTotal[]> {
+  const accumulator = createWorkerDailyAccumulator(filters, now);
+  await consumeInspectionRows(query, filters, (row) => accumulator.add({
+    worker_id: row.worker_id, full_name: row.worker_name, dni: row.worker_dni,
+    started_at: row.started_at, exposure_ended_at: row.exposure_ended_at
+  }), batchSize);
+  return accumulator.rows();
 }
 
 export function assertInspectionIntegrity(expected: number, included: number): void {

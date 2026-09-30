@@ -12,6 +12,7 @@ import {
   assertInspectionIntegrity,
   consumeInspectionRows,
   inspectionDisplayTimes,
+  loadInspectionDailyTotals,
   loadInspectionSummary
 } from './inspection-report.service';
 
@@ -19,11 +20,28 @@ export const reportsRouter = Router();
 reportsRouter.use(requireAuth, requireRoles(['supervisor', 'administrador', 'superadministrador']));
 
 function requestFilters(req: Request): InspectionFilters {
-  return {
-    from: typeof req.query.from === 'string' ? req.query.from : undefined,
-    to: typeof req.query.to === 'string' ? req.query.to : undefined,
-    workerDni: typeof req.query.workerDni === 'string' ? req.query.workerDni : undefined
+  const field = (name: 'from' | 'to' | 'workerDni') => {
+    const value = req.query[name];
+    if (value !== undefined && typeof value !== 'string') throw new Error('invalid_inspection_filters');
+    return value?.trim() || undefined;
   };
+  const filters = { from: field('from'), to: field('to'), workerDni: field('workerDni') };
+  for (const date of [filters.from, filters.to]) {
+    if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) ||
+      new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date)) {
+      throw new Error('invalid_inspection_filters');
+    }
+  }
+  if (filters.from && filters.to && filters.from > filters.to) throw new Error('invalid_inspection_filters');
+  if (filters.workerDni && filters.workerDni.length > 80) throw new Error('invalid_inspection_filters');
+  return filters;
+}
+
+function reportError(error: unknown, res: Response, next: (error: unknown) => void) {
+  if (error instanceof Error && error.message === 'invalid_inspection_filters' && !res.headersSent) {
+    res.status(400).json({ error: 'invalid_inspection_filters' });
+  } else next(error);
 }
 
 async function withInspectionSnapshot<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -48,6 +66,11 @@ function formatDurationMmSs(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function formatDurationHhMmSs(totalSeconds: number): string {
+  const safe = Number.isFinite(totalSeconds) && totalSeconds > 0 ? Math.floor(totalSeconds) : 0;
+  return `${Math.floor(safe / 3600)}:${String(Math.floor((safe % 3600) / 60)).padStart(2, '0')}:${String(safe % 60).padStart(2, '0')}`;
+}
+
 function applyCellBorder(row: ExcelJS.Row): void {
   row.eachCell((cell) => {
     cell.border = {
@@ -59,10 +82,26 @@ function applyCellBorder(row: ExcelJS.Row): void {
   });
 }
 
+reportsRouter.get('/inspection/daily', async (req: Request, res: Response, next) => {
+  try {
+    const filters = requestFilters(req);
+    const rows = await withInspectionSnapshot((client) => loadInspectionDailyTotals(
+      async (sql, values) => (await client.query<InspectionRow>(sql, values)).rows,
+      filters
+    ));
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ rows });
+  } catch (error) { reportError(error, res, next); }
+});
+
 reportsRouter.get('/inspection.xlsx', async (req: Request, res: Response, next) => {
   try {
     await withInspectionSnapshot(async (client) => {
       const filters = requestFilters(req);
+      const dailyTotals = await loadInspectionDailyTotals(
+        async (sql, values) => (await client.query<InspectionRow>(sql, values)).rows,
+        filters
+      );
       const summary = await loadInspectionSummary(
         async (sql, values) => (await client.query(sql, values)).rows[0] ?? {},
         filters
@@ -130,10 +169,24 @@ reportsRouter.get('/inspection.xlsx', async (req: Request, res: Response, next) 
       );
       assertInspectionIntegrity(summary.totalRows, included);
       ws.commit();
+      const dailySheet = wb.addWorksheet('Acumulado por jornada', { views: [{ state: 'frozen', ySplit: 2 }] });
+      dailySheet.columns = [{ width: 18 }, { width: 32 }, { width: 20 }, { width: 24 }, { width: 20 }];
+      const dailyTitle = dailySheet.addRow(['Acumulado por jornada · Europe/Madrid']);
+      dailyTitle.font = { bold: true, size: 14, color: { argb: 'FF0F3D5E' } };
+      dailyTitle.commit();
+      const dailyHeader = dailySheet.addRow(['Jornada', 'Trabajador', 'DNI', 'Exposición total (h:mm:ss)', 'Segundos']);
+      dailyHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      dailyHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A7AB9' } };
+      dailyHeader.commit();
+      for (const row of dailyTotals) {
+        dailySheet.addRow([row.workday_date, row.full_name, row.dni,
+          formatDurationHhMmSs(row.accumulated_seconds), row.accumulated_seconds]).commit();
+      }
+      dailySheet.commit();
       await wb.commit();
     });
   } catch (error) {
-    next(error);
+    reportError(error, res, next);
   }
 });
 
@@ -141,6 +194,10 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
   try {
     await withInspectionSnapshot(async (client) => {
       const filters = requestFilters(req);
+      const dailyTotals = await loadInspectionDailyTotals(
+        async (sql, values) => (await client.query<InspectionRow>(sql, values)).rows,
+        filters
+      );
       const summary = await loadInspectionSummary(
         async (sql, values) => (await client.query(sql, values)).rows[0] ?? {},
         filters
@@ -245,9 +302,44 @@ reportsRouter.get('/inspection.pdf', async (req: Request, res: Response, next) =
       );
       assertInspectionIntegrity(summary.totalRows, included);
       drawFooter();
+      doc.addPage();
+      pageNumber += 1;
+      drawPageHeader();
+      y = tableTop;
+      doc.fillColor('#0F3D5E').fontSize(14).font('Helvetica-Bold')
+        .text('Acumulado por jornada · Europe/Madrid', margin, 119);
+      doc.font('Helvetica').fontSize(9).fillColor('#4B5563')
+        .text('Sesiones solapadas: detalle completo; acumulado recortado a las jornadas seleccionadas.', margin, 143);
+      const dailyColumns = [36, 155, 445, 605];
+      const drawDailyHeader = () => {
+        doc.fillColor('#2A7AB9').rect(margin, y, doc.page.width - margin * 2, 20).fill();
+        doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
+        ['Jornada', 'Trabajador', 'DNI', 'Exposición total'].forEach((header, index) =>
+          doc.text(header, dailyColumns[index], y + 6, { width: index === 3 ? 175 : dailyColumns[index + 1] - dailyColumns[index] - 4 })
+        );
+        y += 22;
+        doc.font('Helvetica');
+      };
+      drawDailyHeader();
+      if (!dailyTotals.length) {
+        doc.fillColor('#4B5563').fontSize(9).text('Sin jornadas para los filtros seleccionados.', margin, y + 4);
+      }
+      for (const [index, row] of dailyTotals.entries()) {
+        if (y + rowHeight > maxRowY) {
+          drawFooter(); doc.addPage(); pageNumber += 1; drawPageHeader(); y = tableTop; drawDailyHeader();
+        }
+        if (index % 2 === 0) doc.fillColor('#F8FAFC').rect(margin, y - 2, doc.page.width - margin * 2, rowHeight).fill();
+        doc.fillColor('#111827').fontSize(8);
+        doc.text(row.workday_date, dailyColumns[0], y, { width: 110 });
+        doc.text(row.full_name, dailyColumns[1], y, { width: 280, ellipsis: true });
+        doc.text(row.dni, dailyColumns[2], y, { width: 150 });
+        doc.text(formatDurationHhMmSs(row.accumulated_seconds), dailyColumns[3], y, { width: 175 });
+        y += rowHeight;
+      }
+      drawFooter();
       doc.end();
     });
   } catch (error) {
-    next(error);
+    reportError(error, res, next);
   }
 });

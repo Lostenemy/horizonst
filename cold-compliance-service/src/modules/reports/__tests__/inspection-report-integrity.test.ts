@@ -14,6 +14,7 @@ import { sessionExposureEndSql, sessionExposureSecondsSql } from '../../complian
 function session(index: number): InspectionRow {
   return {
     session_id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    worker_id: `00000000-0000-4000-8000-${String(index % 37).padStart(12, '0')}`,
     worker_name: `Trabajador ${index % 37}`,
     worker_dni: `DNI${index % 37}`,
     tag_mac: `TAG${index % 53}`,
@@ -107,8 +108,10 @@ test('aplica únicamente los filtros explícitos y cubre el día to completo', a
 
   assert.equal(calls.length, 1);
   assert.match(calls[0].sql, /s\.started_at >= \(\$1::date::timestamp AT TIME ZONE 'Europe\/Madrid'\)/);
+  assert.match(calls[0].sql, /sessionExposureEndSql|MAX\(ps\.last_presence_at\)/);
   assert.match(calls[0].sql, /s\.started_at < \(\(\(\$2::date \+ 1\)::timestamp\) AT TIME ZONE 'Europe\/Madrid'\)/);
   assert.match(calls[0].sql, /w\.dni ILIKE \$3/);
+  assert.match(calls[0].sql, /ESCAPE/);
   assert.deepEqual(calls[0].values, ['2026-03-01', '2026-03-31', '%1234%', 1000]);
 });
 

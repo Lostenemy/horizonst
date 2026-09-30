@@ -1235,16 +1235,30 @@ async function renderReports() {
   q('reports').innerHTML = `
     <p>Genera informes de inspección. PDF para revisión documental y Excel para análisis operativo.</p>
     <div class="grid three">
-      <div class="field"><label>Desde</label><input id="rFrom" type="date" value="${esc(from)}" /></div>
-      <div class="field"><label>Hasta</label><input id="rTo" type="date" value="${esc(to)}" /></div>
-      <div class="field"><label>Filtrar por DNI (opcional)</label><input id="rWorker" placeholder="Ej: 12345678A" value="${esc(worker)}" /></div>
+      <div class="field"><label for="rFrom">Desde</label><input id="rFrom" type="date" value="${esc(from)}" oninput="reportFiltersChanged()" /></div>
+      <div class="field"><label for="rTo">Hasta</label><input id="rTo" type="date" value="${esc(to)}" oninput="reportFiltersChanged()" /></div>
+      <div class="field"><label for="rWorker">Filtrar por DNI (opcional)</label><input id="rWorker" placeholder="Ej: 12345678A" value="${esc(worker)}" oninput="reportFiltersChanged()" /></div>
     </div>
     <p class="help mt-12">Cada descarga usa los filtros actuales; si se dejan vacíos, incluye todo el histórico y todos los trabajadores.</p>
     <div class="actions report-actions">
       <button class="report-btn report-btn-pdf" onclick="downloadReport('inspection.pdf', this)">Descargar PDF (auditoría)</button>
       <button class="report-btn report-btn-excel" onclick="downloadReport('inspection.xlsx', this)">Descargar Excel (análisis)</button>
+      <button class="report-btn report-btn-refresh" onclick="viewDailyAccumulation(this)">Ver acumulado por jornada</button>
     </div>
+    <section id="reportDailyResults" aria-label="Acumulado por jornada" aria-live="polite"></section>
   `;
+}
+
+let reportDailyRequestId = 0;
+function reportFiltersChanged() {
+  reportDailyRequestId += 1;
+  const target = q('reportDailyResults');
+  if (target) {
+    target.setAttribute('aria-busy', 'false');
+    target.innerHTML = '<p class="help mt-12">Filtros modificados. Pulsa «Ver acumulado por jornada» para actualizar la lista.</p>';
+  }
+  const button = q('reports')?.querySelector('.report-btn-refresh');
+  if (button) button.disabled = false;
 }
 
 function inspectionReportUrl(filename) {
@@ -1277,6 +1291,40 @@ async function downloadReport(filename, button) {
     toast(apiErrorMessage(error), 'error');
   } finally {
     if (button) { button.disabled = false; button.textContent = previous; }
+  }
+}
+
+async function viewDailyAccumulation(button) {
+  if (button?.disabled) return;
+  const requestId = ++reportDailyRequestId;
+  const target = q('reportDailyResults');
+  if (!target) return;
+  if (button) button.disabled = true;
+  target.setAttribute('aria-busy', 'true');
+  target.innerHTML = '<p role="status" class="help mt-12">Cargando acumulados por jornada...</p>';
+  try {
+    const response = await fetch(inspectionReportUrl('inspection/daily'), {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('No se pudo consultar el acumulado por jornada');
+    const data = await response.json();
+    if (requestId !== reportDailyRequestId) return;
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    target.innerHTML = rows.length
+      ? `<h3 class="mt-12">Acumulado por jornada · Europe/Madrid</h3>${table(
+          ['Fecha de jornada', 'Trabajador', 'DNI', 'Exposición total'],
+          rows.map((row) => [row.workday_date, row.full_name, row.dni, formatAccumulated(row.accumulated_seconds)])
+        )}`
+      : '<p role="status" class="list-empty mt-12">No hay jornadas para los filtros seleccionados.</p>';
+  } catch (error) {
+    if (requestId === reportDailyRequestId) {
+      target.innerHTML = `<p role="alert" class="error mt-12">${esc(apiErrorMessage(error))}</p>`;
+    }
+  } finally {
+    if (requestId === reportDailyRequestId) {
+      target.setAttribute('aria-busy', 'false');
+      if (button) button.disabled = false;
+    }
   }
 }
 

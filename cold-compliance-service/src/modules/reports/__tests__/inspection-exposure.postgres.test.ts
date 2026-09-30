@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { accumulateWorkerWorkday } from '../../realtime/workday-duration';
-import { consumeInspectionRows, InspectionRow, loadInspectionSummary } from '../inspection-report.service';
+import { consumeInspectionRows, InspectionRow, loadInspectionDailyTotals, loadInspectionSummary } from '../inspection-report.service';
 
 const databaseUrl = process.env.HORNEO_EXPOSURE_TEST_DATABASE_URL;
 const enabled = process.env.HORNEO_EXPOSURE_ALLOW_DATABASE_TESTS === 'true' && Boolean(databaseUrl);
@@ -92,6 +92,22 @@ test('PostgreSQL 15 keeps report and panel exposure coherent across timeouts, ga
       worker_id: 'worker-2', full_name: crossing.worker_name, dni: crossing.worker_dni,
       started_at: crossing.started_at, exposure_ended_at: crossing.exposure_ended_at
     }], new Date('2026-03-29T12:00:00Z'))[0].accumulated_seconds, 5400);
+
+    // La entrada fue el día 28, pero el intervalo solapa el 29 (salto de hora).
+    const boundaryFilters = { from: '2026-03-29', to: '2026-03-29', workerDni: 'DNI2' };
+    const boundaryRows: InspectionRow[] = [];
+    await consumeInspectionRows(async (sql, values) => (await database.query<InspectionRow>(sql, values)).rows,
+      boundaryFilters, (row) => { boundaryRows.push(row); });
+    assert.deepEqual(boundaryRows.map((row) => row.session_id), [crossing.session_id]);
+    const boundarySummary = await loadInspectionSummary(async (sql, values) =>
+      (await database.query(sql, values)).rows[0], boundaryFilters);
+    assert.equal(boundarySummary.totalRows, 1);
+    assert.equal(boundarySummary.averageSeconds, 7200, 'el detalle conserva la sesión íntegra');
+    const boundaryDaily = await loadInspectionDailyTotals(async (sql, values) =>
+      (await database.query<InspectionRow>(sql, values)).rows, boundaryFilters,
+      new Date('2026-03-29T12:00:00Z'));
+    assert.deepEqual(boundaryDaily.map((value) => [value.workday_date, value.accumulated_seconds]),
+      [['2026-03-29', 5400]], 'el acumulado solo cuenta el tramo del día solicitado');
   } finally {
     await database.end();
     if (schemaCreated) await admin.query(`DROP SCHEMA ${schema} CASCADE`);
