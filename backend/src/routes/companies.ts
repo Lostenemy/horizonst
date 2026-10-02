@@ -7,6 +7,7 @@ import {
 } from '../middleware/hardwareRbac';
 import { pool } from '../db/pool';
 import { appendTechnicalAudit } from '../services/technicalAudit';
+import { validDeviceTypeCode } from '../services/deviceTypePolicy';
 
 const router = Router();
 const COMPANY_CODE_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -28,10 +29,11 @@ router.get('/', authorizeHardware('read'), async (req: AuthenticatedRequest, res
     const scope = await resolveHardwareAccess(req.user!, 'read');
     const result = scope.global
       ? await pool.query(
-          'SELECT id, code, name, active, created_at, updated_at FROM companies ORDER BY name'
+          'SELECT id, code, name, active, created_at, updated_at, ARRAY(SELECT type_code FROM company_device_types WHERE company_id=companies.id ORDER BY type_code) AS permitted_device_types FROM companies ORDER BY name'
         )
       : await pool.query(
-          `SELECT c.id, c.code, c.name, c.active, c.created_at, c.updated_at, m.role AS membership_role
+          `SELECT c.id, c.code, c.name, c.active, c.created_at, c.updated_at, m.role AS membership_role,
+                  ARRAY(SELECT type_code FROM company_device_types WHERE company_id=c.id ORDER BY type_code) AS permitted_device_types
            FROM companies c
            JOIN company_user_memberships m ON m.company_id = c.id
            WHERE m.user_id = $1 AND c.id = ANY($2::uuid[])
@@ -301,6 +303,38 @@ router.delete('/:id/memberships/:userId', authorizeHardware('superadmin'), async
   } finally {
     client.release();
   }
+});
+
+router.get('/:id/device-types', authorizeHardware('read'), async (req: AuthenticatedRequest, res) => {
+  if (!validateUuid(req.params.id)) return res.status(400).json({ message: 'Invalid company id' });
+  try {
+    const scope = await resolveHardwareAccess(req.user!, 'read');
+    if (!scope.global && !scope.companyIds.includes(req.params.id)) return res.status(404).json({ message: 'Company not found' });
+    if (!(await pool.query('SELECT id FROM companies WHERE id=$1', [req.params.id])).rows[0]) return res.status(404).json({ message: 'Company not found' });
+    return res.json((await pool.query('SELECT type_code FROM company_device_types WHERE company_id=$1 ORDER BY type_code', [req.params.id])).rows.map(row => row.type_code));
+  } catch { return res.status(503).json({ message: 'Company type policy temporarily unavailable' }); }
+});
+router.put('/:id/device-types', authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
+  const codes = req.body?.types;
+  if (!validateUuid(req.params.id) || !Array.isArray(codes) || codes.length > 100 || codes.some(code => !validDeviceTypeCode(code))
+    || new Set(codes).size !== codes.length || Object.keys(req.body).some(key => key !== 'types')) return res.status(400).json({ message: 'Invalid type selection' });
+  let client;
+  try { client = await pool.connect(); } catch { return res.status(503).json({ message: 'Company type policy temporarily unavailable' }); }
+  try {
+    await client.query('BEGIN');
+    if (!(await client.query('SELECT id FROM companies WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0]) {
+      await client.query('ROLLBACK'); return res.status(404).json({ message: 'Company not found' });
+    }
+    const before = (await client.query('SELECT type_code FROM company_device_types WHERE company_id=$1 ORDER BY type_code', [req.params.id])).rows.map(row => row.type_code);
+    // Los triggers comprueban existencia, actividad y referencias también para SQL programático.
+    await client.query('DELETE FROM company_device_types WHERE company_id=$1 AND NOT(type_code=ANY($2::varchar[]))', [req.params.id,codes]);
+    for (const code of [...codes].sort()) if (!before.includes(code)) await client.query('INSERT INTO company_device_types(company_id,type_code) VALUES($1,$2)', [req.params.id,code]);
+    await appendTechnicalAudit({ actorUserId: req.user!.id, action: 'company.device_types.update', entityType: 'company', entityId: req.params.id, companyId: req.params.id, requestId: req.requestId, result: 'success', before: { types: before }, after: { types: codes } }, client);
+    await client.query('COMMIT'); return res.json(codes);
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    return res.status(['23514','23503','23505','40P01'].includes(error.code) ? 409 : 503).json({ message: 'Policy change rejected: review selected types and assigned devices, then retry' });
+  } finally { client.release(); }
 });
 
 export default router;

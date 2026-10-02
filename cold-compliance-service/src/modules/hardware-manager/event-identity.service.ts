@@ -137,7 +137,7 @@ export async function resolveEventTechnicalIdentity(
   if (!isOperationalB5(device)) {
     const reason = !device.active ? 'central_device_inactive'
       : device.status !== 'active' ? `central_device_status_${device.status}`
-        : `central_device_type_${device.device_type}`;
+        : device.device_type !== 'b5' ? `central_device_type_${device.device_type}` : 'central_device_policy_unavailable_or_not_permitted';
     logger.warn({ tagMac, gatewayMac, hardwareDeviceId: device.id, reason }, 'event device rejected by central state');
     return { source: 'central_rejected', ...base, device, gateway, reason };
   }

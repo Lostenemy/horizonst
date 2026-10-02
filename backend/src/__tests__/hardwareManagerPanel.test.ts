@@ -85,7 +85,8 @@ test('gateway onboarding asks only for MAC and describes broker preparation with
   assert.match(ui, /apiPost\('\/gateways\/onboard', \{ macAddress \}\)/);
   assert.match(ui, /onboardingMacPattern/);
   assert.match(routes, /router\.post\('\/onboard'.*authorizeHardware\('superadmin'\)/s);
-  assert.match(html, /Compañías/);
+  assert.match(html, /id="adminNavigation"/);
+  assert.match(source('public/js/navigation.js'), /Compañías/);
   assert.match(ui, /\/assign-company/);
   assert.match(docs, /predecible y no robusta/);
   assert.match(docs, /configurarse primero localmente/);

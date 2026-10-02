@@ -1,6 +1,8 @@
 import { clearSession, getCurrentUser } from './api.js';
+import { renderNavigation } from './navigation.js';
 
 export const initAuthPage = () => {
+  renderNavigation(getCurrentUser());
   const helpers = window.domHelpers || {};
   const fallbackGet = (id) => (typeof id === 'string' && id ? document.getElementById(id) : null);
   const setText = typeof helpers.setText === 'function' ? helpers.setText : (id, text) => {

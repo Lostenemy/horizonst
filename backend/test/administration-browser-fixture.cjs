@@ -9,6 +9,10 @@ const devices = Array.from({ length: 13 }, (_, i) => ({ id: i + 1, name: `Dispos
 const gateways = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, mac_address: `abcdef${String(i + 1).padStart(6, '0')}`,
   company_name: 'Fixture', company_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', active: true }));
 const data = { '/devices': devices, '/gateways': gateways, '/users': [], '/companies': [], '/categories': [], '/alarms': [], '/messages': [], '/users/groups': [], '/alarms/configs': [] };
+data['/device-types'] = [{code:'b5',name:'B5',description:'Fixture',active:true},{code:'sensor',name:'Sensor',description:'Fixture',active:false}];
+data['/companies'] = [{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',code:'fixture',name:'Fixture',active:true,permitted_device_types:['b5']}];
+data['/companies/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/device-types'] = ['b5'];
+for (const device of devices) { device.company_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; device.type_policy={known:true,typeActive:true,companyAllowed:true,horneoCompatible:true}; }
 let failure = '';
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');

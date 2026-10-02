@@ -3,7 +3,7 @@ import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
-import { listHardwareDevices, LocalTagReference, normalizeHorneoDeviceMac, resolveHardwareDevice } from './hardware-manager.client';
+import { isOperationalB5, listHardwareDevices, LocalTagReference, normalizeHorneoDeviceMac, resolveHardwareDevice } from './hardware-manager.client';
 
 export const tagsRouter = Router();
 
@@ -56,6 +56,8 @@ tagsRouter.get('/', async (_req, res, next) => {
         active: hardware.active,
         status: hardware.status,
         device_type: hardware.device_type,
+        type_policy: hardware.type_policy,
+        operational_allowed: isOperationalB5(hardware),
         technical_description: hardware.description,
         hardware_source: 'central'
       } : { ...row, hardware_source: 'central_not_found', hardware_active: false };

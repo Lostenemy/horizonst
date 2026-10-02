@@ -43,7 +43,7 @@ async function fixture(page: string, role = 'ADMIN', failure?: string, failureSt
   const data: Record<string, unknown> = {
     '/devices': [{ id: 1, name: 'Fixture', ble_mac: 'ABCDEF000001', active: true }],
     '/gateways': [{ id: 1, mac_address: 'abcdef000002', active: true }],
-    '/categories': [], '/users': [], '/companies': [], '/users/groups': [],
+    '/categories': [], '/users': [], '/companies': [], '/users/groups': [], '/device-types': [],
     '/alarms/configs': [], '/alarms': [], '/messages': []
   };
   const context = vm.createContext({
@@ -73,7 +73,7 @@ for (const role of ['ADMIN', 'hardware_superadmin', 'hardware_technician', 'hard
   });
 }
 
-for (const page of ['devices', 'gateways']) for (const metadata of page === 'devices' ? ['/categories', '/users', '/companies'] : ['/users', '/companies']) {
+for (const page of ['devices', 'gateways']) for (const metadata of page === 'devices' ? ['/categories', '/users', '/companies', '/device-types'] : ['/users', '/companies']) {
   for (const status of [403, 500, 0]) test(`${page}: ${metadata} failure ${status} preserves inventory and metadata retry`, async () => {
     const f = await fixture(page, 'ADMIN', metadata, status);
     assert.equal(f.get(`#${page}Table tbody`).children.length, 1);

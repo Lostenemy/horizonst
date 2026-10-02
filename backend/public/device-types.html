@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base href="./">
+<title>Tipos de dispositivos | HorizonST</title><link rel="stylesheet" href="./styles.css"></head>
+<body><header><h1>HorizonST · Tipos de dispositivos</h1><nav id="adminNavigation" aria-label="Administración"></nav></header>
+<main><section class="card"><h2>Catálogo técnico</h2>
+<p>El tipo técnico no es una categoría ni un modelo observado. Solo B5 tiene soporte operativo en Horneo. Desactivar impide nuevas altas/asignaciones, sin interrumpir dispositivos existentes.</p>
+<button type="button" id="createType">Crear tipo</button><p id="typeFeedback" role="status" aria-live="polite"></p>
+<div class="table-wrapper"><table id="typesTable"><thead><tr><th>Código estable</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Horneo</th><th>Acciones</th></tr></thead><tbody></tbody></table></div>
+<p id="typesEmpty" hidden>No hay tipos registrados.</p></section></main>
+<footer>&copy; <span id="year"></span> HorizonST</footer><script src="./js/base.js"></script><script type="module" src="./js/device-types.js"></script></body></html>

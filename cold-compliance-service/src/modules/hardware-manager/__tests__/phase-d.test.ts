@@ -19,7 +19,8 @@ const original = {
 };
 const device: HardwareDevice = {
   id: 31, name: 'B5 central', ble_mac: 'FD9D4F8AE226', description: null,
-  company_id: 'horneo', device_type: 'b5', status: 'active', active: true
+  company_id: 'horneo', device_type: 'b5', status: 'active', active: true,
+  type_policy: { known: true, typeActive: true, companyAllowed: true, horneoCompatible: true }
 };
 const gateway: HardwareGateway = {
   id: 41, name: 'MKGW3 central', mac_address: '2805A55EFB68', description: null,
@@ -68,6 +69,17 @@ test('inactive, maintenance and non-B5 devices are rejected by central state', a
       inventoryDeps([{ ...device, ...patch }])
     );
     assert.equal(result.source, 'central_rejected');
+  }
+});
+
+test('existing B5 event survives catalog deactivation; missing or denied policy rejects explicitly', async () => {
+  const accepted = await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address },
+    inventoryDeps([{ ...device, type_policy: { ...device.type_policy!, typeActive: false } }]));
+  assert.equal(accepted.source, 'central');
+  for (const policy of [undefined, { ...device.type_policy!, companyAllowed: false }]) {
+    const rejected = await resolveEventTechnicalIdentity({ tagMac: device.ble_mac, gatewayMac: gateway.mac_address }, inventoryDeps([{ ...device,type_policy:policy }]));
+    assert.equal(rejected.source, 'central_rejected');
+    assert.equal(rejected.reason, 'central_device_policy_unavailable_or_not_permitted');
   }
 });
 

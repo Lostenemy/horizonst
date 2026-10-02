@@ -34,6 +34,7 @@ const centralDevice: HardwareDevice = {
   description: null,
   company_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   device_type: 'b5',
+  type_policy: { known: true, typeActive: true, companyAllowed: true, horneoCompatible: true },
   status: 'active',
   active: true
 };

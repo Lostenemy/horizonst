@@ -36,6 +36,19 @@ nav {
   gap: 1rem;
   align-items: center;
 }
+.nav-links { display: flex; flex-wrap: wrap; gap: .25rem; align-items: center; }
+.nav-toggle { display: none; }
+header { gap: 1rem; flex-wrap: wrap; }
+header h1, header nav { min-width: 0; max-width: 100%; }
+@media (max-width: 1000px) {
+  header { align-items: flex-start; padding: 1rem; }
+  header nav { flex-direction: column; align-items: stretch; width: 100%; }
+  .nav-toggle { display: block; align-self: flex-start; }
+  .nav-links { display: none; flex-direction: column; align-items: stretch; }
+  nav[data-open="true"] .nav-links { display: flex; }
+  main { padding: 1rem; }
+}
+button:focus-visible, a:focus-visible { outline: 3px solid #d6a800; outline-offset: 3px; }
 
 nav a {
   color: #fff;

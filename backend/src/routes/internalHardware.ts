@@ -9,6 +9,7 @@ import { HARDWARE_COMMAND_SCOPE, HARDWARE_READ_SCOPE } from '../services/service
 import { normalizeInventoryMac, inventoryMacSql } from '../utils/mac';
 import { hasVerifiedMkgw3V2 } from '../services/gatewayCapabilities';
 import { appendTechnicalAudit } from '../services/technicalAudit';
+import { operationalDevicePolicy } from '../services/deviceTypePolicy';
 import {
   configureB5Gateway,
   configureGatewayRssi,
@@ -30,7 +31,8 @@ const gatewaySelect = `SELECT g.id, g.name, g.mac_address, g.description, g.comp
                        LEFT JOIN places p ON p.id = gp.place_id`;
 
 const deviceSelect = `SELECT d.id, d.name, d.ble_mac, d.description, d.company_id,
-                             d.device_type, d.status, d.active, d.created_at, d.updated_at
+                             d.device_type, hardware_device_policy(d.device_type,d.company_id) AS type_policy,
+                             d.status, d.active, d.created_at, d.updated_at
                       FROM devices d`;
 
 router.use(authenticateService);
@@ -231,13 +233,13 @@ router.post('/gateways/:gatewayId/b5-command', requireCommand, async (req: Servi
   try {
     const gateway = await scopedActiveGateway(gatewayId, principal.companyId);
     if (!gateway) return res.status(404).json({ message: 'Hardware target not found' });
-    const device = await pool.query<{ id: number; ble_mac: string }>(
-      `SELECT id, ble_mac FROM devices
+    const device = await pool.query(
+      `SELECT id, ble_mac,active,status,device_type,hardware_device_policy(device_type,company_id) AS type_policy FROM devices
        WHERE id = $1 AND company_id = $2 AND active = TRUE
          AND status = 'active' AND device_type = 'b5'`,
       [deviceId, principal.companyId]
     );
-    if (!device.rows[0]) return res.status(404).json({ message: 'Hardware target not found' });
+    if (!device.rows[0] || !operationalDevicePolicy(device.rows[0])) return res.status(404).json({ message: 'Hardware target not found' });
 
     const sessionPassword = command === 'connect' ? process.env.B5_SESSION_PASSWORD?.trim() : undefined;
     if (command === 'connect' && !sessionPassword) {

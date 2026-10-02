@@ -21,6 +21,7 @@ let devices = [];
 let categories = [];
 let owners = [];
 let companies = [];
+let deviceTypes = [];
 
 const normalizeMac = (value) => {
   if (typeof value !== 'string' || !/^(?:[0-9a-f]{12}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|(?:[0-9a-f]{2}-){5}[0-9a-f]{2})$/i.test(value.trim())) return '';
@@ -69,18 +70,29 @@ const applyCompanies = (value) => {
       'Sin empresa (legacy)'
     );
 };
+const refreshTypeOptions = () => {
+  const company = companySelect?.value ? companies.find(item => item.id === companySelect.value) : null;
+  const permitted = company ? company.permitted_device_types : null;
+  const types = deviceTypes.filter(type => type.active && (!company || Array.isArray(permitted) && permitted.includes(type.code)));
+  const previous = deviceTypeSelect?.value;
+  setSelectOptions(deviceTypeSelect, types.map(type => ({ value: type.code, label: type.name })), types.length ? 'Selecciona un tipo' : 'Ningún tipo permitido');
+  if (types.some(type => type.code === previous)) deviceTypeSelect.value = previous;
+};
+companySelect?.addEventListener('change', refreshTypeOptions);
 
 const metadata = createMetadataLoader({ anchor: form, resources: [
   { key: 'categorías', load: () => apiGet('/categories'), apply: applyCategories },
+  { key: 'tipos', load: () => apiGet('/device-types'), apply: value => { deviceTypes = value; } },
   ...(isAdmin ? [
     { key: 'usuarios', load: () => apiGet('/users'), apply: applyOwners },
     { key: 'compañías', load: () => apiGet('/companies'), apply: applyCompanies }
   ] : [])
 ], onChange: () => {
+  refreshTypeOptions();
   for (const control of form.querySelectorAll('input,select,button')) control.disabled = !canEditMetadata();
   renderDevices();
 } });
-const canEditMetadata = () => metadata.ready('categorías')
+const canEditMetadata = () => metadata.ready('categorías') && metadata.ready('tipos')
   && (!isAdmin || (metadata.ready('usuarios') && metadata.ready('compañías')));
 let loadingDevices = false;
 const inventoryState = createLoadState({ anchor: devicesTableBody.closest('table'), empty: devicesEmpty,
@@ -129,11 +141,8 @@ const handleEditDevice = async (device) => {
       { value: '', label: 'Sin empresa (legacy)' },
       ...companies.map((company) => ({ value: company.id, label: company.name }))
     ] });
-    fields.push({ name: 'deviceType', label: 'Tipo técnico', type: 'select', options: [
-      { value: 'unknown', label: 'Desconocido' }, { value: 'tag', label: 'Tag' },
-      { value: 'b5', label: 'B5' }, { value: 'sensor', label: 'Sensor' },
-      { value: 'beacon', label: 'Beacon' }
-    ] });
+    fields.push({ name: 'deviceType', label: 'Tipo técnico (destino debe permitirlo)', type: 'select', options:
+      deviceTypes.filter(type => type.active || type.code === device.device_type).map(type => ({ value:type.code,label:`${type.name}${type.active?'':' (inactivo; conservar el actual)'}` })) });
   }
 
   await openFormModal({
@@ -202,6 +211,9 @@ const renderDevices = () => {
       <td>${device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : '—'}</td>
       <td></td>
     `;
+    const policy = device.type_policy;
+    const typeCell = row.children[3];
+    if (typeCell) typeCell.textContent = `${device.device_type || 'unknown'} · ${!policy?.known ? 'Política no disponible' : device.company_id && !policy.companyAllowed ? 'No permitido por compañía' : !policy.typeActive ? 'Tipo inactivo; uso existente conservado' : 'Tipo válido'} · ${policy?.horneoCompatible ? 'Horneo compatible' : 'Horneo no soportado'}`;
 
     const actionsCell = row.querySelector('td:last-child');
     const actionsContainer = document.createElement('div');

@@ -10,9 +10,9 @@ import {
 import { pool } from '../db/pool';
 import { normalizeInventoryMac, inventoryMacSql } from '../utils/mac';
 import { appendTechnicalAudit } from '../services/technicalAudit';
+import { validDeviceTypeCode } from '../services/deviceTypePolicy';
 
 const router = Router();
-const DEVICE_TYPES = ['tag', 'b5', 'sensor', 'beacon', 'unknown'] as const;
 const DEVICE_STATUSES = ['active', 'inactive', 'maintenance', 'retired', 'unknown'] as const;
 
 const enumValue = <T extends readonly string[]>(values: T, value: unknown): T[number] | undefined =>
@@ -25,7 +25,8 @@ const companyIdValue = (value: unknown): string | null | undefined => {
 };
 
 const deviceSelect = `SELECT d.id, d.name, d.ble_mac, d.description, d.owner_id, d.company_id,
-                             d.device_type, d.status, d.category_id, d.active, d.last_seen_at,
+                             d.device_type, hardware_device_policy(d.device_type,d.company_id) AS type_policy,
+                             d.status, d.category_id, d.active, d.last_seen_at,
                              d.last_place_id, d.last_gateway_id, d.last_rssi,
                              d.last_temperature_c, d.last_battery_mv,
                              p.name AS place_name, g.name AS gateway_name,
@@ -96,9 +97,9 @@ router.post('/', authenticate, authorizeHardware('superadmin'), async (req: Auth
   if (!normalizedMac) return res.status(400).json({ message: 'BLE MAC is invalid' });
   const companyId = companyIdValue(req.body?.companyId);
   if (req.body?.companyId !== undefined && companyId === undefined) return res.status(400).json({ message: 'companyId is invalid' });
-  const deviceType = req.body?.deviceType === undefined ? 'unknown' : enumValue(DEVICE_TYPES, req.body.deviceType);
+  const deviceType = req.body?.deviceType === undefined ? 'unknown' : req.body.deviceType;
   const status = req.body?.status === undefined ? 'active' : enumValue(DEVICE_STATUSES, req.body.status);
-  if (!deviceType || !status) return res.status(400).json({ message: 'Invalid deviceType or status' });
+  if (!validDeviceTypeCode(deviceType) || !status) return res.status(400).json({ message: 'Invalid deviceType or status' });
   const ownerValue = ownerId === undefined || ownerId === null || ownerId === '' ? null : Number(ownerId);
   const categoryValue = categoryId === undefined || categoryId === null || categoryId === '' ? null : Number(categoryId);
   if ((ownerValue !== null && !Number.isInteger(ownerValue)) || (categoryValue !== null && !Number.isInteger(categoryValue))) {
@@ -128,6 +129,7 @@ router.post('/', authenticate, authorizeHardware('superadmin'), async (req: Auth
   } catch (error: any) {
     await client.query('ROLLBACK');
     if (error?.code === '23505') return res.status(409).json({ message: 'Device already exists' });
+    if (error?.code === '23514' || error?.code === '23503') return res.status(409).json({ message: 'Device type is unknown, inactive or not permitted for company' });
     console.error('Failed to create device', error);
     return res.status(500).json({ message: 'Failed to create device' });
   } finally { client.release(); }
@@ -241,8 +243,8 @@ router.put('/:deviceId', authenticate, async (req: AuthenticatedRequest, res) =>
         values.push(parsed); fields.push(`company_id = $${values.length}`);
       }
       if (req.body?.deviceType !== undefined) {
-        const parsed = enumValue(DEVICE_TYPES, req.body.deviceType);
-        if (!parsed) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'deviceType is invalid' }); }
+        const parsed = req.body.deviceType;
+        if (!validDeviceTypeCode(parsed)) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'deviceType is invalid' }); }
         values.push(parsed); fields.push(`device_type = $${values.length}`);
       }
       if (req.body?.status !== undefined) {
@@ -272,8 +274,9 @@ router.put('/:deviceId', authenticate, async (req: AuthenticatedRequest, res) =>
     await appendTechnicalAudit({ actorUserId: req.user!.id, action: 'device.update', entityType: 'device', entityId: deviceId, companyId: after.company_id, requestId: req.requestId, result: 'success', before, after }, client);
     await client.query('COMMIT');
     return res.json(after);
-  } catch (error) {
+  } catch (error: any) {
     await client.query('ROLLBACK');
+    if (error?.code === '23514' || error?.code === '23503') return res.status(409).json({ message: 'Device type is unknown, inactive or not permitted for company' });
     console.error('Failed to update device', error);
     return res.status(500).json({ message: 'Failed to update device' });
   } finally { client.release(); }

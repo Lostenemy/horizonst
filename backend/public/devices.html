@@ -10,18 +10,7 @@
   <body>
     <header>
       <h1>HorizonST · Dispositivos</h1>
-      <nav>
-        <a href="dashboard.html">Resumen</a>
-        <a href="devices.html" class="active">Dispositivos</a>
-        <a href="users.html" class="admin-only">Usuarios</a>
-        <a href="categories.html">Categorías</a>
-        <a href="gateways.html">Gateways</a>
-        <a href="companies.html" class="admin-only">Compañías</a>
-        <a href="messages.html">Mensajes</a>
-        <a href="history.html">Históricos</a>
-        <a href="alarms.html">Alarmas</a>
-        <a href="#" id="logoutLink">Salir</a>
-      </nav>
+      <nav id="adminNavigation" aria-label="Administración"></nav>
     </header>
     <main>
       <section class="card admin-only" id="deviceAdminSection">
@@ -57,13 +46,8 @@
           </div>
           <div>
             <label for="deviceType">Tipo técnico</label>
-            <select id="deviceType">
-              <option value="unknown">Desconocido</option>
-              <option value="tag">Tag</option>
-              <option value="b5">B5</option>
-              <option value="sensor">Sensor</option>
-              <option value="beacon">Beacon</option>
-            </select>
+            <select id="deviceType" required></select>
+            <p>Solo tipos activos permitidos por la compañía. Sin compañía: catálogo activo.</p>
           </div>
           <div class="actions">
             <button type="submit">Registrar</button>

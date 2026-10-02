@@ -21,6 +21,7 @@ export type HardwareDevice = {
   device_type: string;
   status: string;
   active: boolean;
+  type_policy?: { known: boolean; typeActive: boolean; companyAllowed: boolean; horneoCompatible: boolean };
 };
 
 export type HardwareDeviceResolution = {
@@ -78,7 +79,9 @@ export async function listHardwareDevices(fetchImpl: typeof fetch = fetch): Prom
 }
 
 export function isOperationalB5(device: HardwareDevice): boolean {
-  return device.active && device.status === 'active' && device.device_type === 'b5';
+  const policy = device.type_policy;
+  return device.active && device.status === 'active' && device.device_type === 'b5'
+    && policy?.known === true && policy.companyAllowed === true && policy.horneoCompatible === true;
 }
 
 export async function resolveHardwareDevice(
@@ -112,6 +115,7 @@ export async function resolveHardwareDevice(
     if (central.active !== local.active) divergences.push('active');
     if (central.status !== (local.active ? 'active' : 'inactive')) divergences.push('status');
     if (central.device_type !== 'b5') divergences.push('device_type');
+    if (!central.type_policy?.known || !central.type_policy.companyAllowed) divergences.push('type_policy');
     if (divergences.length) {
       logger.warn(
         { localTagId: local.id, hardwareDeviceId: central.id, tagUid: localMac, divergences },

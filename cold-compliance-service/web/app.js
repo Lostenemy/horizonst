@@ -784,7 +784,8 @@ async function renderInventory() {
       const delay = t.physical_alarm_followup_delay_ms == null ? TAG_DEFAULT_FOLLOWUP_DELAY_MS : t.physical_alarm_followup_delay_ms;
       const buzzerDuration = t.physical_alarm_buzzer_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_buzzer_duration_ms;
       const vibrationDuration = t.physical_alarm_vibration_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_vibration_duration_ms;
-      if (!editing) return [t.tag_uid, t.hardware_name || t.model || '', formatSecondsFromMs(delay), formatSecondsFromMs(buzzerDuration), formatSecondsFromMs(vibrationDuration), htmlCell(t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>'), t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? htmlCell(`<button onclick="beginTagInlineEdit('${actionId(t.id)}')">Tiempos de alarma</button>`) : '-'];
+      const policyNotice = t.hardware_source === 'local_disabled' ? '' : t.operational_allowed === true ? ' · Compatible con Horneo' : ' · Compatibilidad/política no autorizada o sin verificar';
+      if (!editing) return [t.tag_uid, (t.hardware_name || t.model || '') + policyNotice, formatSecondsFromMs(delay), formatSecondsFromMs(buzzerDuration), formatSecondsFromMs(vibrationDuration), htmlCell(t.active ? '<span class="badge ok">Activo</span>' : '<span class="badge warn">Inactivo</span>'), t.updated_at ? formatDateTimeMadrid(t.updated_at) : '-', roleCan('superadministrador') ? htmlCell(`<button onclick="beginTagInlineEdit('${actionId(t.id)}')">Tiempos de alarma</button>`) : '-'];
       const d = inlineEdit.tags.draft;
       return [
         t.tag_uid,
@@ -888,7 +889,7 @@ async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se pu
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 
 function renderTagOptions(tags) {
-  return tags.filter((t) => t.active).map((t) => `<option value="${actionId(t.id)}">${esc((t.model || 'Tag sin descripción'))} (${esc(t.tag_uid)})</option>`).join('');
+  return tags.filter((t) => t.active).map((t) => `<option value="${actionId(t.id)}">${esc((t.model || 'Tag sin descripción'))} (${esc(t.tag_uid)})${t.hardware_source === 'local_disabled' || t.operational_allowed === true ? '' : ' · Compatibilidad sin verificar (validación en servidor)'}</option>`).join('');
 }
 function currentWorkerHasTag(workers, workerId) { const w = workers.find((item) => item.id === workerId); return w && w.current_tag_uid; }
 function workerDependencyCounts(worker) {
