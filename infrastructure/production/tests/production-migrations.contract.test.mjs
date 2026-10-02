@@ -251,6 +251,34 @@ test('a simulated name collision never removes the pre-existing container', () =
   assert.deepEqual(cleanupCalls, []);
 });
 
+test('current Backend migration manifest includes 013 and verifies checksums and unchanged ledger on repeat', () => {
+  assert.match(source, /const backendMigrations = readdirSync\(path\.join\(root, 'backend', 'migrations'\)\)/);
+  assert.match(source, /backendMigrations\.includes\('013_device_type_catalog\.sql'\)/);
+  assert.match(source, /createHash\('sha256'\)\.update\(sqlFile\(`backend\/migrations\/\$\{file\}`\)\)\.digest\('hex'\)/);
+  assert.match(source, /SELECT name,checksum FROM app_schema_migrations ORDER BY name/);
+  assert.match(source, /SELECT name,checksum,applied_at FROM app_schema_migrations ORDER BY name/);
+  assert.match(source, /assert\.equal\(checkBackendLedger\(\), backendLedgerBeforeRepeat/);
+  assert.doesNotMatch(source, /SELECT count\(\*\) FROM app_schema_migrations[^\n]*'11'/);
+});
+
+test('bootstrap fixture denies empty policy before an explicit tag grant and preserves original states/history', () => {
+  const denial = source.indexOf('const deniedBootstrap = runCentralBootstrap()');
+  const explicitGrant = source.indexOf("INSERT INTO company_device_types(company_id,type_code) SELECT id,'tag' FROM companies WHERE code='horneo'");
+  const success = source.indexOf('let bootstrapResult = runCentralBootstrap()');
+  assert.ok(denial > 0 && denial < explicitGrant && explicitGrant < success);
+  assert.match(source, /assert\.notEqual\(deniedBootstrap\.status, 0/);
+  assert.match(source, /Device type is not permitted for company/);
+  assert.match(source, /assert\.equal\(centralSnapshot\(\), emptyCentralSnapshot/);
+  assert.match(source, /active=true AND status='active' AND device_type='tag'/);
+  assert.match(source, /active=false AND status='inactive'/);
+  assert.match(source, /INSERT INTO device_records/);
+  assert.match(source, /assert\.equal\(centralSnapshot\(\), importedCentralSnapshot/g);
+  assert.match(source, /assert\.equal\(overlayHistorySnapshot\(\), originalOverlayHistory/g);
+  assert.match(source, /assert\.notEqual\(duplicateResult\.status, 0/);
+  assert.doesNotMatch(centralBootstrapSql, /company_device_types|device_types|['"]b5['"]/i);
+  assert.doesNotMatch(bootstrapSource, /INSERT INTO company_device_types/i);
+});
+
 test('successful ownership uses one loopback binding and cleans only the exact generated name', () => {
   const state = { name: 'unique-container-name', password: 'random-test-value', containerCreated: false };
   const dockerCalls = [];

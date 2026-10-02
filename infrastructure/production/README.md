@@ -95,3 +95,34 @@ node infrastructure/production/tests/production-migrations.postgres.mjs
 ```
 
 El segundo comando crea y destruye un contenedor PostgreSQL 15 aislado; nunca acepta una URL de base externa. Requiere un daemon Docker local y las builds de Backend, Horneo y Store.
+
+### Repetir el bootstrap con la política de tipos 013
+
+Ejecutar únicamente en una copia de validación, nunca desde un checkout con artefactos o configuración de servicios desplegados. Requisitos: Bash, Node.js 22, npm, Git con el commit base `9f5754d378491772b2730a9adc1fe88edc86dd31` disponible, Docker **de validación/staging, no de producción**, e imagen `postgres:15-alpine`. El commit adicional de esta entrega debe estar incorporado previamente a la rama local; estos comandos no hacen fetch, push ni despliegue.
+
+Desde el repositorio que contiene ese commit:
+
+```sh
+set -eu
+validation_parent=$(mktemp -d -t horizonst-bootstrap-validation.XXXXXXXX)
+git worktree add --detach "$validation_parent/checkout" codex/device-types-company-policy
+cd "$validation_parent/checkout"
+git log -1 --format='%H %s'
+
+npm --prefix backend ci
+npm --prefix cold-compliance-service ci
+npm --prefix horizonst-store ci
+npm --prefix backend run build
+npm --prefix cold-compliance-service run build
+(cd horizonst-store && ./node_modules/.bin/tsc -p tsconfig.build.json)
+
+node --test infrastructure/production/tests/production-migrations.contract.test.mjs
+node infrastructure/production/tests/validate-production-artifacts.mjs
+node infrastructure/production/tests/production-migrations.postgres.mjs
+```
+
+La copia nueva no contiene `.env` no versionados; no copiarlos ni cargar configuración compartida. El harness usa su propio directorio vacío de runners y entorno explícito, credenciales PostgreSQL/JWT efímeras, y no envía MQTT ni correo. Solo crea su contenedor UUID sin volumen, publicado en `127.0.0.1` con puerto aleatorio y binding verificado; espera PostgreSQL 15 definitivo y estable. Limpia únicamente el contenedor que adquirió y el directorio vacío propio de runners. La copia de validación se conserva para revisar resultados; no ejecutar borrados amplios para retirarla.
+
+Resultado esperado del último comando: `PostgreSQL 15 production-like migration checks: all assertions passed (including current ledger and explicit bootstrap type policy)` y código 0. Si falla, no desplegar ni conceder permisos para eludirlo. Los contratos estáticos no sustituyen esta ejecución real.
+
+El fixture exige rechazo transaccional sin selección antes de conceder explícitamente solo `tag`. Luego verifica activos/inactivos, idempotencia, conflictos, historial y ledger/checksums de **todas** las migraciones Backend actuales, incluida 013. El bootstrap operativo permanece intacto: el operador debe autorizar explícitamente los tipos adecuados antes de una importación real; esta prueba no lo hace en ninguna compañía compartida.

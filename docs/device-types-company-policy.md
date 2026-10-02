@@ -36,11 +36,11 @@ No se ejecutaron bootstrap ni conciliadores. Sus INSERT/UPDATE quedan sujetos a 
 
 Para una compañía nueva o vacía, un operador global debe seleccionar explícitamente `tag` antes de bootstrap que lo requiera, o `b5` antes de altas B5 del conciliador. No insertar permisos automáticamente para hacer que el script pase. Un dry-run antiguo no acredita autorización de tipos: el apply puede rechazar y revertir su transacción central. No usar scripts de reconciliación como despliegue ni tratar sus dos bases como transacción distribuida.
 
-El harness histórico de paridad de producción que crea una compañía nueva y luego importa dispositivos debe preparar **en sus fixtures aislados** la selección requerida antes del bootstrap. No se ha ejecutado ni modificado ese harness en esta entrega; repetirlo y revisar este cambio de contrato antes de utilizarlo como validación de producción. No interpretar la migración 013 como soporte de nuevos protocolos físicos.
+El harness de paridad de producción prepara **en sus fixtures aislados** la selección requerida antes del bootstrap: primero prueba rechazo y rollback sin selección; después selecciona explícitamente solo `tag`. No se ha cambiado el bootstrap operativo ni se conceden permisos desde él. El ledger Backend se compara por nombres y checksums SHA-256 de todas las migraciones actuales (incluida 013), y se comprueba que el rearranque conserva también sus fechas. Repetir el harness actualizado antes de utilizarlo como validación de producción. No interpretar la migración 013 como soporte de nuevos protocolos físicos.
 
 ## Secuencia propuesta (no ejecutada)
 
-1. Antes de cualquier cambio compartido, ejecutar migración/pruebas en PostgreSQL 15 desechable y revisión de retorno. Este paso está pendiente: Docker local no tiene daemon disponible. No sustituirlo por staging ni puerto de base compartida.
+1. Antes de cualquier cambio compartido, ejecutar migración/pruebas en PostgreSQL 15 desechable y revisión de retorno. El usuario ha comunicado que `deviceTypes.postgres.test` pasó en PostgreSQL 15 aislado en staging: 1 aprobada, 0 fallidas, 0 omitidas. Esta evidencia no equivale a ejecutar el harness de bootstrap actualizado, que sigue pendiente. Docker local no tiene daemon disponible. No sustituir el entorno desechable por la base compartida de staging.
 2. Operador autorizado: obtener inventario agregado previo, incluidos NULL, tipos legacy, compañías/dispositivos inactivos y sin compañía. Comparar conteos/IDs/referencias privadamente; no exportar MAC, trabajadores, credenciales o payloads.
 
    ```sql
@@ -70,9 +70,21 @@ El harness histórico de paridad de producción que crea una compañía nueva y 
 
 - Typecheck/build de Backend y Horneo en directorios nuevos; se conserva `dist` no versionado preexistente. Ninguna dependencia o lockfile añadido/modificado.
 - Suites Backend/Horneo: autorización HTTP local con JWT ficticio y pool simulado; catálogo/selecciones, duplicados, código inmutable, auditoría/rollback/503, estados auxiliares, B5 existente y eventos con catálogo inactivo, tipo nuevo incompatible y política ausente/rechazada. Backend: 246 pruebas, 241 aprobadas, 0 fallidas, 5 omitidas. Horneo: 158 pruebas, 156 aprobadas, 0 fallidas, 2 omitidas. Typecheck y build de ambos correctos. Las omisiones corresponden a pruebas opt-in de base de datos y no acreditan su resultado.
-- `deviceTypes.postgres.test.ts` opt-in: exige PostgreSQL 15, URL loopback y nombre acabado `_isolated_test`, flag explícito `DEVICE_TYPES_ALLOW_DATABASE_TESTS=true`; crea/elimina solo schema UUID propio. Verifica migración+checksum/rearranque, filas/historial intactos, referencias, selección vacía, dispositivos inactivos, unicidad, desactivación y carrera asignación/retirada. **Pendiente de ejecución real**; una omisión no es aprobación de SQL/concurrencia.
+- `deviceTypes.postgres.test.ts` opt-in: exige PostgreSQL 15, URL loopback y nombre acabado `_isolated_test`, flag explícito `DEVICE_TYPES_ALLOW_DATABASE_TESTS=true`; crea/elimina solo schema UUID propio. Verifica migración+checksum/rearranque, filas/historial intactos, referencias, selección vacía, dispositivos inactivos, unicidad, desactivación y carrera asignación/retirada. **Ejecución real comunicada por el usuario en staging aislado: 1 aprobada, 0 fallidas, 0 omitidas**; no repetida localmente.
 - Navegador real local con Playwright: **184 comprobaciones** de páginas autorizadas por cinco roles a 390/768/1000/1440; cero fallos, sin scroll horizontal global y sección actual marcada. Menú click/Escape y foco de retorno; catálogo y selección con B5 marcado/sensor inactivo deshabilitado. Los fixtures no autorizan nada en servidor: roles/aislamiento se prueban por HTTP aparte.
 - Un primer recorrido intentó exigir aria-current en Compañías para USER (destino no autorizado/no incluido); se corrigió la matriz del test, no los permisos. Una prueba textual de enlace anterior se adaptó a navegación compartida y se mantiene prueba ejecutable del menú.
 - No se certifica lector de pantalla completo ni un despliegue real. No se ejecuta PostgreSQL compartido, servidor externo, MQTT/hardware, emails, push, merge ni despliegue. Las pruebas de protocolos existentes usan simulaciones.
 
-**No considerar la rama desplegable hasta completar PostgreSQL 15 aislado, validar la paridad del bootstrap con selección explícita y revisar la secuencia/retorno.**
+## Validación adicional del bootstrap (02-10-2026)
+
+Solo cambian el harness y sus contratos/documentación. La prueba actualizada exige:
+
+- Sin selección: error de política concreto, rollback de inventario completo (incluidas gateways insertadas antes del fallo), sin concesiones automáticas ni cambios del overlay/históricos.
+- Selección explícita `tag` en fixture: 5 gateways, 13 dispositivos `tag`, 12 activos y 1 inactivo. Los modelos/estados originales de Horneo no cambian ni se convierten en B5.
+- Segunda ejecución: mismas filas completas, IDs, tipos, estados e históricos. Un registro central de historial no vacío acredita la conservación, además del histórico Horneo ya existente.
+- Conflicto de estado y duplicación de identidad de origen: rechazo sin alterar filas; runner posterior conserva inventario e historial.
+- Ledger completo y checksums actuales; repetición sin reaplicar ni modificar `applied_at`. Sin expectativa fija de 11 migraciones ni mensaje engañoso de 24 comprobaciones.
+
+Validación local: **18/18 pruebas contractuales**, **51/51 comprobaciones de artefactos**, comprobación de sintaxis y diff correctos. No se ha ejecutado el harness PostgreSQL real localmente ni se ha iniciado Docker. Backend/Horneo no cambian en esta entrega; el usuario comunica sus suites anteriores con 241 y 156 aprobadas respectivamente, sin fallos.
+
+**No considerar la rama desplegable hasta ejecutar el harness actualizado contra PostgreSQL 15 desechable y revisar la secuencia/retorno.**

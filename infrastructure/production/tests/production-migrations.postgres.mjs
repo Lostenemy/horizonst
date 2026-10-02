@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -40,6 +41,16 @@ const psql = (database, sql) => {
   return result.stdout;
 };
 const scalar = (database, query) => psql(database, `COPY (${query}) TO STDOUT;`).trim();
+const backendMigrations = readdirSync(path.join(root, 'backend', 'migrations'))
+  .filter((file) => /^\d+_.*\.sql$/.test(file)).sort();
+const expectedBackendLedger = backendMigrations.map((file) =>
+  `${file}\t${createHash('sha256').update(sqlFile(`backend/migrations/${file}`)).digest('hex')}`
+).join('\n');
+const checkBackendLedger = () => {
+  assert.ok(backendMigrations.includes('013_device_type_catalog.sql'));
+  assert.equal(scalar('horizonst', 'SELECT name,checksum FROM app_schema_migrations ORDER BY name'), expectedBackendLedger);
+  return scalar('horizonst', 'SELECT name,checksum,applied_at FROM app_schema_migrations ORDER BY name');
+};
 const runNode = ({ serviceName, code, database, extraEnv = {} }) => {
   const runnerEnv = {
     NODE_ENV: 'test',
@@ -111,7 +122,7 @@ try {
     database: 'horizonst',
     extraEnv: { JWT_SECRET: backendJwtSecret, MAIL_ENABLED: 'false' }
   });
-  assert.equal(scalar('horizonst', 'SELECT count(*) FROM app_schema_migrations'), '11');
+  const backendLedgerBeforeRepeat = checkBackendLedger();
   assert.equal(scalar('horizonst', `SELECT concat_ws(',',
     (SELECT count(*) FROM gateways),(SELECT count(*) FROM devices),(SELECT count(*) FROM device_records),
     (SELECT count(*) FROM mqtt_messages),(SELECT count(*) FROM vmq_auth_acl))`), backendBefore);
@@ -122,7 +133,7 @@ try {
     database: 'horizonst',
     extraEnv: { JWT_SECRET: backendJwtSecret, MAIL_ENABLED: 'false' }
   });
-  assert.equal(scalar('horizonst', 'SELECT count(*) FROM app_schema_migrations'), '11');
+  assert.equal(checkBackendLedger(), backendLedgerBeforeRepeat, 'repeated runner must preserve ledger/checksums/timestamps');
   assert.equal(scalar('horizonst', 'SELECT count(*) FROM gateways'), '0');
   assert.equal(scalar('horizonst', 'SELECT count(*) FROM devices'), '0');
 
@@ -201,16 +212,49 @@ try {
     ${centralBootstrapSql}
     COMMIT;
   `);
+  // Company from migration 002 has no devices/types. The fixture grants nothing implicitly.
+  assert.equal(scalar('horizonst', "SELECT count(*) FROM company_device_types p JOIN companies c ON c.id=p.company_id WHERE c.code='horneo'"), '0');
+  const centralSnapshot = () => scalar('horizonst', `SELECT jsonb_build_object(
+    'gateways',(SELECT coalesce(jsonb_agg(to_jsonb(g) ORDER BY id),'[]'::jsonb) FROM gateways g),
+    'devices',(SELECT coalesce(jsonb_agg(to_jsonb(d) ORDER BY id),'[]'::jsonb) FROM devices d),
+    'history',(SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY id),'[]'::jsonb) FROM device_records r),
+    'audit',(SELECT coalesce(jsonb_agg(to_jsonb(a) ORDER BY id),'[]'::jsonb) FROM technical_audit_log a))`);
+  const overlayHistorySnapshot = () => scalar('cold_compliance', `SELECT jsonb_build_object(
+    'tags',(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY id),'[]'::jsonb) FROM tags t),
+    'gateways',(SELECT coalesce(jsonb_agg(to_jsonb(g) ORDER BY id),'[]'::jsonb) FROM gateways g),
+    'assignments',(SELECT coalesce(jsonb_agg(to_jsonb(a) ORDER BY id),'[]'::jsonb) FROM worker_tag_assignments a),
+    'sessions',(SELECT coalesce(jsonb_agg(to_jsonb(s) ORDER BY id),'[]'::jsonb) FROM cold_room_sessions s),
+    'alerts',(SELECT coalesce(jsonb_agg(to_jsonb(a) ORDER BY id),'[]'::jsonb) FROM alerts a),
+    'incidents',(SELECT coalesce(jsonb_agg(to_jsonb(i) ORDER BY id),'[]'::jsonb) FROM incidents i),
+    'events',(SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY to_jsonb(e)::text),'[]'::jsonb) FROM presence_events e),
+    'alarm_sessions',(SELECT coalesce(jsonb_agg(to_jsonb(b) ORDER BY to_jsonb(b)::text),'[]'::jsonb) FROM ble_alarm_sessions b),
+    'presence',(SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY to_jsonb(p)::text),'[]'::jsonb) FROM presence_operational_state p))`);
+  const emptyCentralSnapshot = centralSnapshot();
+  const originalOverlayHistory = overlayHistorySnapshot();
+  const deniedBootstrap = runCentralBootstrap();
+  assert.notEqual(deniedBootstrap.status, 0, 'bootstrap without explicit type selection must abort');
+  assert.match(deniedBootstrap.stderr, /Device type is not permitted for company/);
+  assert.equal(centralSnapshot(), emptyCentralSnapshot, 'denied bootstrap must roll back even gateway inserts');
+  assert.equal(overlayHistorySnapshot(), originalOverlayHistory);
+  assert.equal(scalar('horizonst', 'SELECT count(*) FROM company_device_types'), '0');
+  // Explicit test-only decision. Never add this grant to the operational bootstrap.
+  psql('horizonst', "INSERT INTO company_device_types(company_id,type_code) SELECT id,'tag' FROM companies WHERE code='horneo';");
   let bootstrapResult = runCentralBootstrap();
   assert.equal(bootstrapResult.status, 0, `central bootstrap failed:\n${bootstrapResult.stdout}\n${bootstrapResult.stderr}`);
   assert.equal(scalar('horizonst', 'SELECT count(*) FROM gateways'), '5');
   assert.equal(scalar('horizonst', 'SELECT count(*) FROM devices'), '13');
   assert.equal(scalar('horizonst', "SELECT count(*) FROM devices WHERE device_type='tag' AND owner_id IS NULL AND category_id IS NULL"), '13');
   assert.equal(scalar('horizonst', "SELECT count(*) FROM devices WHERE active=false AND status='inactive'"), '1');
+  assert.equal(scalar('horizonst', "SELECT count(*) FROM devices WHERE active=true AND status='active' AND device_type='tag'"), '12');
+  assert.equal(overlayHistorySnapshot(), originalOverlayHistory, 'source models/states and historical rows remain unchanged');
+  psql('horizonst', "INSERT INTO device_records(device_id,gateway_id,rssi,adv_type) SELECT d.id,g.id,-55,'fixture' FROM devices d CROSS JOIN gateways g WHERE d.ble_mac='bb0000000001' AND g.mac_address='aa0000000001';");
+  assert.equal(scalar('horizonst', 'SELECT count(*) FROM device_records'), '1');
+  const importedCentralSnapshot = centralSnapshot();
 
   bootstrapResult = runCentralBootstrap();
   assert.equal(bootstrapResult.status, 0, `idempotent central bootstrap failed:\n${bootstrapResult.stdout}\n${bootstrapResult.stderr}`);
   assert.equal(scalar('horizonst', "SELECT concat_ws(',', (SELECT count(*) FROM gateways), (SELECT count(*) FROM devices))"), '5,13');
+  assert.equal(centralSnapshot(), importedCentralSnapshot, 'idempotency preserves every inventory/history field');
 
   const conflictingTag = tagFixtures[12];
   const conflictResult = runCentralBootstrap([
@@ -218,6 +262,17 @@ try {
   ]);
   assert.notEqual(conflictResult.status, 0, 'a contradictory existing tag state must abort');
   assert.equal(scalar('horizonst', "SELECT concat_ws(',', (SELECT count(*) FROM gateways), (SELECT count(*) FROM devices))"), '5,13');
+  assert.equal(centralSnapshot(), importedCentralSnapshot);
+  const duplicateResult = runCentralBootstrap([...inventoryRows, inventoryRows[0]]);
+  assert.notEqual(duplicateResult.status, 0, 'duplicate source identity must abort');
+  assert.equal(centralSnapshot(), importedCentralSnapshot);
+  assert.equal(overlayHistorySnapshot(), originalOverlayHistory);
+  runNode({
+    serviceName: 'backend', code: backendRunner, database: 'horizonst',
+    extraEnv: { JWT_SECRET: backendJwtSecret, MAIL_ENABLED: 'false' }
+  });
+  assert.equal(checkBackendLedger(), backendLedgerBeforeRepeat);
+  assert.equal(centralSnapshot(), importedCentralSnapshot, 'runner after bootstrap preserves inventory and history');
 
   const mappingSource = inventoryRows.join(',\n');
   const mappingTsv = scalar('horizonst', `WITH source(kind, overlay_id, normalized_mac, source_active) AS (
@@ -324,7 +379,7 @@ try {
   });
   assert.equal(scalar('horizonst', `SELECT count(*) FROM store.security_migrations`), '1');
 
-  console.log('PostgreSQL 15 production-like migration checks: 24 assertions passed');
+  console.log('PostgreSQL 15 production-like migration checks: all assertions passed (including current ledger and explicit bootstrap type policy)');
 } finally {
   cleanupOwnedContainer({ spawn: spawnSync, state: containerState, cwd: root });
   const runnerCleanup = cleanupOwnedEmptyDirectory({ directoryPath: runnerCwd });
