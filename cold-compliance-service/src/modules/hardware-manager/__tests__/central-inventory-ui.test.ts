@@ -8,12 +8,14 @@ const source = (path: string): string => readFileSync(join(process.cwd(), path),
 test('Horneo displays central gateway and device names while keeping the local model separate', () => {
   const gatewayRoute = source('src/modules/gateways/gateways.routes.ts');
   const deviceRoute = source('src/modules/tags/tags.routes.ts');
+  const deviceInventory = source('src/modules/tags/tag-availability.service.ts');
   const ui = source('web/app.js');
 
   assert.match(gatewayRoute, /hardware_name: hardware\.name/);
   assert.match(gatewayRoute, /hardware_place_name: hardware\.place_name/);
-  assert.match(deviceRoute, /hardware_name: hardware\.name/);
-  assert.doesNotMatch(deviceRoute, /model: hardware\.name/);
+  assert.match(deviceRoute, /operationalTagInventory\(result.rows\)/);
+  assert.match(deviceInventory, /hardware_name: central\.name/);
+  assert.doesNotMatch(deviceInventory, /model: central\.name/);
   assert.match(ui, /g\.hardware_name \|\| g\.description/);
   assert.match(ui, /t\.hardware_name \|\| t\.model/);
 });

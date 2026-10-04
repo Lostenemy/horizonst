@@ -778,8 +778,9 @@ async function renderInventory() {
   const [tags, gateways] = await Promise.all([api('/tags'), api('/gateways')]);
   q('inventory').innerHTML = `
     <p>La identidad y configuración técnica de gateways y tags se gestionan en <a href="/administracion/gateways.html">Administración</a>. Aquí se conservan únicamente los ajustes operativos de alarma.</p>
+    ${tagAvailabilityNotice(tags)}
     <h3 class="mt-12">Listado de tags</h3>
-    ${table(['MAC', 'Nombre', 'Delay (s)', 'Pitido (s)', 'Vibración (s)', 'Activo', 'Último evento', 'Acciones'], tags.map((t) => {
+    ${table(['MAC', 'Nombre', 'Delay (s)', 'Pitido (s)', 'Vibración (s)', 'Activo', 'Último evento', 'Acciones'], operationalInventoryTags(tags).map((t) => {
       const editing = inlineEdit.tags.id === t.id;
       const delay = t.physical_alarm_followup_delay_ms == null ? TAG_DEFAULT_FOLLOWUP_DELAY_MS : t.physical_alarm_followup_delay_ms;
       const buzzerDuration = t.physical_alarm_buzzer_duration_ms == null ? TAG_DEFAULT_ACTION_DURATION_MS : t.physical_alarm_buzzer_duration_ms;
@@ -889,7 +890,14 @@ async function deleteTag(id) { if (!confirm('¿Borrar tag? Esta acción no se pu
 async function deleteGateway(id) { if (!confirm('¿Borrar gateway? Esta acción no se puede deshacer.')) return; try { await api(`/gateways/${id}`, { method: 'DELETE' }); toast('Gateway borrado'); renderInventory(); } catch (error) { toast(apiErrorMessage(error), 'error'); } }
 
 function renderTagOptions(tags) {
-  return tags.filter((t) => t.active).map((t) => `<option value="${actionId(t.id)}">${esc((t.model || 'Tag sin descripción'))} (${esc(t.tag_uid)})${t.hardware_source === 'local_disabled' || t.operational_allowed === true ? '' : ' · Compatibilidad sin verificar (validación en servidor)'}</option>`).join('');
+  return tags.filter((t) => t.assignment_available === true && t.availability_status === 'available').map((t) => `<option value="${actionId(t.id)}">${esc((t.model || 'Tag sin descripción'))} (${esc(t.tag_uid)})</option>`).join('');
+}
+function operationalInventoryTags(tags) {
+  return tags.filter((t) => t.availability_status !== 'not_in_company');
+}
+function tagAvailabilityNotice(tags) {
+  return tags.some(t => t.availability_status === 'unverified')
+    ? '<p role="status" class="help">Hay tags cuya autorización central no se ha podido verificar. Se conservan sus referencias, pero no se permiten nuevas asignaciones. Reintenta cuando Administración esté disponible.</p>' : '';
 }
 function currentWorkerHasTag(workers, workerId) { const w = workers.find((item) => item.id === workerId); return w && w.current_tag_uid; }
 function workerDependencyCounts(worker) {
@@ -928,6 +936,7 @@ function renderWorkerActions(worker) {
 async function renderAssignments() {
   const [workers, tags, history] = await Promise.all([api('/workers'), api('/tags'), api('/workers/assignments/history')]);
   const assignableWorkers = workers.filter((w) => w.active);
+  const tagOptions = renderTagOptions(tags);
   q('assignments').innerHTML = `
     <div class="grid two assignment-steps">
       <div class="card-block assignment-step-card create-worker-card">
@@ -942,12 +951,14 @@ async function renderAssignments() {
       <div class="card-block assignment-step-card">
         <h3>2) Asignar tag</h3>
         <p class="help">Si el trabajador ya tenía tag, la asignación anterior se cierra automáticamente.</p>
+        ${tagAvailabilityNotice(tags)}
+        ${tagOptions ? '' : '<p role="status" class="help">No hay tags verificados disponibles para nuevas asignaciones.</p>'}
         <div class="grid two">
           <div class="field"><label>Trabajador</label><select id="asWorker" onchange="showAssignmentWarning()" ${assignableWorkers.length ? '' : 'disabled'}>${assignableWorkers.map((w) => `<option value="${actionId(w.id)}">${esc(w.full_name)} (${esc(w.dni)})</option>`).join('')}</select></div>
-          <div class="field"><label>Tag</label><select id="asTag">${renderTagOptions(tags)}</select></div>
+          <div class="field"><label>Tag</label><select id="asTag" ${tagOptions ? '' : 'disabled'}>${tagOptions}</select></div>
         </div>
         <div id="assignmentWarning" class="help mt-12"></div>
-        <button class="mt-12" onclick="assignTag()" ${assignableWorkers.length ? '' : 'disabled'}>Asignar tag</button>
+        <button class="mt-12" onclick="assignTag()" ${assignableWorkers.length && tagOptions ? '' : 'disabled'}>Asignar tag</button>
       </div>
     </div>
     <h3 class="mt-12">Trabajadores registrados</h3>
@@ -988,9 +999,13 @@ async function createWorker() { await api('/workers', { method: 'POST', body: JS
 async function assignTag() {
   const workerId = q('asWorker')?.value;
   if (!workerId) return toast('No hay trabajadores activos disponibles para asignación.', 'error');
-  await api(`/workers/${workerId}/assign-tag`, { method: 'POST', body: JSON.stringify({ tagId: q('asTag').value }) });
-  toast('Tag asignado');
-  renderAssignments();
+  const tagId = q('asTag')?.value;
+  if (!tagId) return toast('No hay tags verificados disponibles para nuevas asignaciones.', 'error');
+  try {
+    await api(`/workers/${workerId}/assign-tag`, { method: 'POST', body: JSON.stringify({ tagId }) });
+    toast('Tag asignado');
+    renderAssignments();
+  } catch (error) { toast(apiErrorMessage(error), 'error'); }
 }
 async function beginWorkerInlineEdit(id) { const workers = await api('/workers'); const worker = workers.find((w) => w.id === id); if (!worker) return; startInlineEdit('workers', id, { fullName: worker.full_name, role: worker.role || 'trabajador', active: !!worker.active }); renderAssignments(); }
 function cancelWorkerInlineEdit() { cancelInlineEdit('workers'); renderAssignments(); }

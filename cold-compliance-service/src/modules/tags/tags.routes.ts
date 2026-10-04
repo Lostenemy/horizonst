@@ -1,9 +1,8 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
-import { env } from '../../config/env';
-import { logger } from '../../utils/logger';
-import { isOperationalB5, listHardwareDevices, LocalTagReference, normalizeHorneoDeviceMac, resolveHardwareDevice } from './hardware-manager.client';
+import { LocalTagReference, resolveHardwareDevice } from './hardware-manager.client';
+import { operationalTagInventory } from './tag-availability.service';
 
 export const tagsRouter = Router();
 
@@ -40,28 +39,7 @@ tagsRouter.get('/', async (_req, res, next) => {
                     ORDER BY last_seen_at DESC LIMIT 1) as last_battery
        FROM tags t ORDER BY created_at DESC`
     );
-    if (!env.HARDWARE_MANAGER_ENABLED) return res.json(result.rows.map((row) => ({ ...row, hardware_source: 'local_disabled' })));
-    const central = await listHardwareDevices();
-    if (central.kind === 'unavailable') {
-      logger.warn({ error: central.error }, 'Hardware Manager unavailable; listing local tags');
-      return res.json(result.rows.map((row) => ({ ...row, hardware_source: 'local_fallback' })));
-    }
-    const byId = new Map((central.kind === 'found' ? central.value : []).map((device) => [device.id, device]));
-    return res.json(result.rows.map((row) => {
-      const hardware = row.hardware_device_id ? byId.get(row.hardware_device_id) : undefined;
-      return hardware ? {
-        ...row,
-        tag_uid: normalizeHorneoDeviceMac(hardware.ble_mac)?.toLowerCase(),
-        hardware_name: hardware.name,
-        active: hardware.active,
-        status: hardware.status,
-        device_type: hardware.device_type,
-        type_policy: hardware.type_policy,
-        operational_allowed: isOperationalB5(hardware),
-        technical_description: hardware.description,
-        hardware_source: 'central'
-      } : { ...row, hardware_source: 'central_not_found', hardware_active: false };
-    }));
+    return res.json(await operationalTagInventory(result.rows));
   } catch (e) { next(e); }
 });
 

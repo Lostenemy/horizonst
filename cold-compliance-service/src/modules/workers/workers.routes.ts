@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
+import { LocalTagReference } from '../tags/hardware-manager.client';
+import { verifyTagAssignment } from '../tags/tag-availability.service';
 
 export const workersRouter = Router();
 workersRouter.use(requireAuth);
@@ -135,8 +137,8 @@ workersRouter.post('/:id/assign-tag', requireRoles(['supervisor', 'administrador
       return res.status(409).json({ error: 'inactive_worker', entity: 'worker', message: 'No se puede asignar un tag a un trabajador inactivo.' });
     }
 
-    const tag = await db.query<{ hardware_device_id: number | null }>(
-      'SELECT hardware_device_id FROM tags WHERE id = $1',
+    const tag = await db.query<LocalTagReference>(
+      'SELECT id, tag_uid, hardware_device_id, model, active FROM tags WHERE id = $1',
       [tagId]
     );
     if (!tag.rowCount) return res.status(404).json({ error: 'not_found' });
@@ -147,6 +149,14 @@ workersRouter.post('/:id/assign-tag', requireRoles(['supervisor', 'administrador
         message: 'El tag debe estar reconciliado con Hardware Manager antes de asignarlo.'
       });
     }
+
+    // Fresh company-scoped lookup for every request, including stale/direct clients.
+    // All authorization checks precede mutation of existing assignments.
+    const availability = await verifyTagAssignment(tag.rows[0]);
+    if (availability === 'unverified') return res.status(503).json({ error: 'tag_authorization_unverified',
+      message: 'No se puede verificar la autorización central del tag. No se ha cambiado ninguna asignación.' });
+    if (availability !== 'available') return res.status(409).json({ error: 'tag_not_available',
+      message: 'El tag no está autorizado para nuevas asignaciones en esta compañía.' });
 
     await db.query('UPDATE worker_tag_assignments SET active = false, unassigned_at = NOW() WHERE worker_id = $1 AND active = true', [req.params.id]);
     await db.query(
