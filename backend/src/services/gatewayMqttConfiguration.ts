@@ -91,12 +91,20 @@ function isValidLwtPayload(value: unknown, gatewayMac: string): value is string 
   return isExactObject(record.data, []);
 }
 
-export function buildHorizonstMqttPreset(gatewayMacInput: string): GatewayMqttConfigurationData {
+export class GatewayMqttPresetUnavailableError extends Error {
+  constructor() { super('MQTT proposal preset environment is missing or invalid'); }
+}
+
+export function buildHorizonstMqttPreset(
+  gatewayMacInput: string,
+  environment: unknown = process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT
+): GatewayMqttConfigurationData {
+  if (environment !== 'staging' && environment !== 'production') throw new GatewayMqttPresetUnavailableError();
   const mac = normalizeGatewayMac(gatewayMacInput);
   if (!mac) throw new Error('Invalid gateway MAC');
   return {
     security_type: 1,
-    host: 'mqtt.horizonst.com.es',
+    host: environment === 'production' ? 'mqtt.horizonst.es' : 'mqtt.horizonst.com.es',
     port: 8883,
     client_id: mac,
     username: mac,

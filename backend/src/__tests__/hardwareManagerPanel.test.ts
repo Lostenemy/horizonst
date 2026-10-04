@@ -62,7 +62,10 @@ test('MQTT 1030 UI keeps the secret ephemeral, restores the preset and explains 
   assert.doesNotMatch(html, /name="reset"/);
   assert.match(html, /gatewayMqttRestorePreset/);
   assert.match(html, /gatewayMqttHistoryTable/);
-  assert.match(ui, /horizonstMqttPreset/);
+  assert.match(ui, /\/mqtt-preset/);
+  assert.doesNotMatch(ui, /mqtt\.horizonst\.(?:com\.)?es/);
+  assert.match(html, /Configuración propuesta/);
+  assert.match(html, /Configuración observada/);
   assert.match(ui, /confirmationMac.*!== mac/);
   assert.match(ui, /passwordInput\.value = ''/);
   assert.match(ui, /\/configure-mqtt/);

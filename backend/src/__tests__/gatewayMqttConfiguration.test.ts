@@ -11,7 +11,27 @@ import { buildGatewayResetCommand } from '../services/gatewayCommands';
 const MAC = '2805a55efb68';
 const TEST_PASSWORD = 'test-only-secret-not-real';
 
-const validData = () => ({ ...buildHorizonstMqttPreset(MAC), passwd: TEST_PASSWORD });
+const validData = () => ({ ...buildHorizonstMqttPreset(MAC, 'staging'), passwd: TEST_PASSWORD });
+
+test('public preset environment is explicit, independent of internal broker and NODE_ENV, with no staging fallback', () => {
+  for (const [environment, host] of [['staging', 'mqtt.horizonst.com.es'], ['production', 'mqtt.horizonst.es']]) {
+    const preset = buildHorizonstMqttPreset(MAC, environment);
+    assert.equal(preset.host, host); assert.equal(preset.port, 8883); assert.equal(preset.security_type, 1);
+    assert.equal(preset.passwd, '');
+    assert.equal(preset.qos, 0); assert.equal(preset.lwt_qos, 1);
+  }
+  for (const environment of [null, '', 'prod', 'development', 'vernemq', 'Production', { environment: 'production' }]) {
+    assert.throws(() => buildHorizonstMqttPreset(MAC, environment), /preset environment is missing or invalid/);
+  }
+  const previous = process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT;
+  try {
+    delete process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT;
+    assert.throws(() => buildHorizonstMqttPreset(MAC), /preset environment is missing or invalid/);
+  } finally {
+    if (previous === undefined) delete process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT;
+    else process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT = previous;
+  }
+});
 
 test('1030 HorizonST preset produces the exact observed wire payload and a separately redacted journal payload', () => {
   const { wirePayload, persistedPayload } = buildGatewayMqttConfiguration(MAC, validData());

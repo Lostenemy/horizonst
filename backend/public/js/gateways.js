@@ -26,6 +26,8 @@ const bluetoothPanel = document.getElementById('gatewayBluetoothPanel');
 const mqttPanel = document.getElementById('gatewayMqttPanel');
 const mqttForm = document.getElementById('gatewayMqttForm');
 const mqttFeedback = document.getElementById('gatewayMqttFeedback');
+const mqttPresetStatus = document.getElementById('gatewayMqttPresetStatus');
+const mqttSubmit = document.getElementById('gatewayMqttSubmit');
 const mqttHistoryBody = document.querySelector('#gatewayMqttHistoryTable tbody');
 const mqttConfirmationMac = document.getElementById('gatewayMqttConfirmationMac');
 const technicalFeedback = document.getElementById('gatewayTechnicalFeedback');
@@ -52,35 +54,52 @@ let selectedGateway = null;
 const mqttIntegerFields = [
   'security_type', 'port', 'qos', 'clean_session', 'keepalive', 'lwt_en', 'lwt_qos', 'lwt_retain'
 ];
+const mqttFieldNames = ['security_type', 'host', 'port', 'client_id', 'username', 'passwd', 'sub_topic',
+  'pub_topic', 'qos', 'clean_session', 'keepalive', 'lwt_en', 'lwt_qos', 'lwt_retain', 'lwt_topic', 'lwt_payload'];
+let mqttPresetGeneration = 0;
+let mqttPresetReady = false;
+let mqttSubmitting = false;
 
 const normalizedCentralMac = (gateway) => String(gateway?.mac_address || '').replace(/[^0-9a-fA-F]/g, '').toLowerCase();
 
-const horizonstMqttPreset = (gateway) => {
-  const mac = normalizedCentralMac(gateway);
-  return {
-    security_type: 1, host: 'mqtt.horizonst.com.es', port: 8883, client_id: mac, username: mac, passwd: '',
-    sub_topic: `gw/${mac}/subscribe`, pub_topic: `gw/${mac}/publish`, qos: 0, clean_session: 1,
-    keepalive: 60, lwt_en: 1, lwt_qos: 1, lwt_retain: 0, lwt_topic: `gw/${mac}/publish`,
-    lwt_payload: JSON.stringify({ msg_id: 3999, device_info: { mac }, data: {} })
-  };
+const setMqttFormAvailability = (ready) => {
+  mqttPresetReady = ready;
+  mqttSubmit.disabled = !ready || mqttSubmitting;
+  for (const name of [...mqttFieldNames, 'confirmationMac']) mqttForm.elements.namedItem(name).disabled = !ready || mqttSubmitting;
 };
 
-const applyMqttPreset = () => {
-  if (!selectedGateway) return;
-  const preset = horizonstMqttPreset(selectedGateway);
-  for (const [name, value] of Object.entries(preset)) mqttForm.elements.namedItem(name).value = String(value);
-  mqttForm.elements.namedItem('confirmationMac').value = '';
+const applyMqttPreset = async () => {
+  if (!selectedGateway || mqttSubmitting) return;
+  const gateway = selectedGateway;
+  const generation = ++mqttPresetGeneration;
+  setMqttFormAvailability(false);
+  for (const name of [...mqttFieldNames, 'confirmationMac']) mqttForm.elements.namedItem(name).value = '';
+  mqttPresetStatus.textContent = 'Cargando propuesta del entorno; no se consulta la gateway…';
+  mqttFeedback.textContent = '';
+  try {
+    const preset = await apiGet(`/gateways/${gateway.id}/mqtt-preset`);
+    if (generation !== mqttPresetGeneration || selectedGateway?.id !== gateway.id) return;
+    const expected = mqttFieldNames.filter(name => name !== 'passwd').sort().join(',');
+    if (!preset || preset.source !== 'proposed' || !['staging', 'production'].includes(preset.environment)
+        || !preset.data || Object.keys(preset.data).sort().join(',') !== expected
+        || !validateMqttForm({ ...preset.data, passwd: '' }, normalizedCentralMac(gateway), false)) {
+      throw new Error('Plantilla pública inválida');
+    }
+    for (const name of mqttFieldNames) mqttForm.elements.namedItem(name).value = name === 'passwd' ? '' : String(preset.data[name]);
+    setMqttFormAvailability(true);
+    mqttPresetStatus.textContent = `Propuesta del entorno ${preset.environment}: ${preset.data.host}:${preset.data.port}. No leída de la gateway.`;
+  } catch {
+    if (generation !== mqttPresetGeneration || selectedGateway?.id !== gateway.id) return;
+    mqttPresetStatus.textContent = 'Plantilla propuesta no disponible o inválida. No se ha elegido ningún destino. Revisa la configuración del entorno y pulsa Restaurar propuesta para reintentar.';
+  }
 };
 
-const mqttFormData = () => Object.fromEntries([
-  'security_type', 'host', 'port', 'client_id', 'username', 'passwd', 'sub_topic', 'pub_topic', 'qos',
-  'clean_session', 'keepalive', 'lwt_en', 'lwt_qos', 'lwt_retain', 'lwt_topic', 'lwt_payload'
-].map((name) => {
+const mqttFormData = () => Object.fromEntries(mqttFieldNames.map((name) => {
   const value = mqttForm.elements.namedItem(name).value;
   return [name, mqttIntegerFields.includes(name) ? Number(value) : value];
 }));
 
-const validateMqttForm = (data, mac) => {
+const validateMqttForm = (data, mac, requirePassword = true) => {
   const byteLength = (value) => new TextEncoder().encode(value).length;
   if (!Number.isInteger(data.port) || data.port < 1 || data.port > 65535
       || !Number.isInteger(data.keepalive) || data.keepalive < 0 || data.keepalive > 65535) return false;
@@ -88,7 +107,7 @@ const validateMqttForm = (data, mac) => {
     .every((value) => Number.isInteger(value))) return false;
   if (![0, 1].includes(data.security_type) || ![0, 1].includes(data.qos) || ![0, 1].includes(data.lwt_qos)
       || ![data.clean_session, data.lwt_en, data.lwt_retain].every((value) => value === 0 || value === 1)) return false;
-  if (!data.passwd || byteLength(data.passwd) > 256
+  if ((requirePassword && !data.passwd) || byteLength(data.passwd) > 256
       || !data.host.trim() || byteLength(data.host) > 253 || /[\u0000-\u001f\u007f]/.test(data.host)
       || data.host.includes('://') || data.host.includes('/') || /\s/.test(data.host)) return false;
   if ([data.client_id, data.username].some((value) => !value.trim() || byteLength(value) > 256)) return false;
@@ -401,12 +420,11 @@ const selectGateway = async (gateway) => {
   bluetoothPanel.hidden = technicalActions.hidden;
   mqttPanel.hidden = !gateway.active || !canEditHardware || (!gateway.company_id && !isAdmin);
   mqttConfirmationMac.textContent = normalizedCentralMac(gateway);
-  applyMqttPreset();
   refreshFirmwareControls(gateway);
   renderReportedIdentity(gateway);
   gatewayRssi.value = gateway.rssi_threshold ?? -127;
   technicalFeedback.textContent = '';
-  await Promise.all([refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
+  await Promise.all([mqttPanel.hidden ? Promise.resolve() : applyMqttPreset(), refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
 };
 
 firmwareRecordButton.addEventListener('click', async () => {
@@ -564,9 +582,10 @@ document.getElementById('gatewayMqttRestorePreset').addEventListener('click', ap
 
 mqttForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!selectedGateway || !canEditHardware) return;
+  if (!selectedGateway || !canEditHardware || !mqttPresetReady || mqttSubmitting) return;
+  const gateway = selectedGateway;
   const passwordInput = mqttForm.elements.namedItem('passwd');
-  const mac = normalizedCentralMac(selectedGateway);
+  const mac = normalizedCentralMac(gateway);
   const data = mqttFormData();
   if (mqttForm.elements.namedItem('confirmationMac').value !== mac) {
     mqttFeedback.textContent = `Escribe exactamente ${mac} para confirmar.`;
@@ -578,9 +597,19 @@ mqttForm.addEventListener('submit', async (event) => {
     passwordInput.value = '';
     return;
   }
+  const escapeConfirmation = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  mqttSubmitting = true;
+  setMqttFormAvailability(true);
+  passwordInput.value = '';
   try {
+    const confirmed = await confirmAction({
+      title: 'Confirmar configuración propuesta y reinicio',
+      message: `Gateway ${escapeConfirmation(mac)}${gateway.name ? ` (${escapeConfirmation(gateway.name)})` : ''}: servidor ${escapeConfirmation(data.host)}, puerto ${escapeConfirmation(data.port)}, seguridad ${data.security_type === 1 ? 'TLS (1)' : 'SIN TLS (0)'}. Se enviará 1030 y solo tras ACK satisfactorio se solicitará 1000. Esto no demuestra conexión al destino.`,
+      confirmText: 'Enviar configuración y reiniciar'
+    });
+    if (!confirmed || selectedGateway?.id !== gateway.id) return;
     mqttFeedback.textContent = 'Enviando una única orden 1030 y esperando su ACK…';
-    const request = apiPost(`/gateways/${selectedGateway.id}/configure-mqtt`, {
+    const request = apiPost(`/gateways/${gateway.id}/configure-mqtt`, {
       confirmationMac: mac,
       data
     });
@@ -588,9 +617,12 @@ mqttForm.addEventListener('submit', async (event) => {
     const result = await request;
     mqttFeedback.textContent = result.message;
   } catch (error) {
-    mqttFeedback.textContent = error.message;
+    mqttFeedback.textContent = 'No se pudo completar la configuración MQTT. Revisa el historial de comandos antes de reintentar; no se confirma conexión al destino.';
   } finally {
-    passwordInput.value = '';
+    data.passwd = '';
+    mqttSubmitting = false;
+    if (selectedGateway?.id === gateway.id) { passwordInput.value = ''; setMqttFormAvailability(mqttPresetReady); }
+    else await applyMqttPreset();
     await refreshTechnicalHistory();
   }
 });

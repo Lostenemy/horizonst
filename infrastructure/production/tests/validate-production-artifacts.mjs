@@ -51,6 +51,7 @@ assert.equal(app.environment.MQTT_CLIENT_ID, 'acces_control_server_backend');
 assert.equal(app.environment.MQTT_REQUIRED, 'true');
 assert.equal(app.environment.MQTT_PERSISTENCE_MODE, 'app');
 assert.equal(app.environment.MQTT_HOST, 'vernemq');
+assert.equal(app.environment.GATEWAY_MQTT_PRESET_ENVIRONMENT, 'production');
 assert.equal(app.environment.TRUSTED_PROXY_IP, '172.31.0.1');
 assert.match(JSON.stringify(app.depends_on), /postgres/);
 assert.match(JSON.stringify(app.depends_on), /vernemq/);
@@ -104,4 +105,4 @@ assert.match(runbook, /Las dos bases no comparten una transacción/);
 assert.match(runbook, /modo explícito `0600`/);
 assert.match(runbook, /No ejecutar `npm run migrate`/);
 
-console.log('production artifact checks: 51 assertions passed');
+console.log('production artifact checks: 52 assertions passed');

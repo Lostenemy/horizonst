@@ -99,7 +99,9 @@
           </div>
         </div>
         <section id="gatewayMqttPanel" hidden aria-labelledby="gatewayMqttTitle">
-          <h3 id="gatewayMqttTitle">Configurar conexión MQTT (1030)</h3>
+          <h3 id="gatewayMqttTitle">Configuración propuesta — Configurar conexión MQTT (1030)</h3>
+          <p>Estos campos son una propuesta editable. No se han leído de la gateway y no representan su conexión actual.</p>
+          <p id="gatewayMqttPresetStatus" role="status" aria-live="polite"></p>
           <div class="alert warning">
             <strong>Operación de riesgo.</strong> La gateway cambiará su conexión MQTT, recibirá una orden de reinicio
             y puede desconectarse temporalmente del broker actual.
@@ -108,7 +110,7 @@
           </div>
           <form id="gatewayMqttForm" class="form-grid" autocomplete="off">
             <label>security_type
-              <select name="security_type" required><option value="0">0</option><option value="1">1</option></select>
+              <select name="security_type" required><option value="0">0 — Sin TLS</option><option value="1">1 — TLS</option></select>
             </label>
             <label>Host
               <input name="host" type="text" maxlength="253" required />
@@ -159,12 +161,13 @@
               <input name="confirmationMac" type="text" required spellcheck="false" autocomplete="off" />
             </label>
             <div class="actions">
-              <button type="button" id="gatewayMqttRestorePreset">Restaurar preset HorizonST</button>
-              <button type="submit">Enviar configuración y reiniciar</button>
+              <button type="button" id="gatewayMqttRestorePreset">Restaurar propuesta del entorno</button>
+              <button type="submit" id="gatewayMqttSubmit" disabled>Enviar configuración y reiniciar</button>
             </div>
           </form>
           <p id="gatewayMqttFeedback" role="status" aria-live="polite"></p>
-          <h4>Historial de configuración MQTT 1030 y reinicio 1000</h4>
+          <h4>Comandos registrados: configuración MQTT 1030 y reinicio 1000</h4>
+          <p>Destinos solicitados y resultados de comandos; no son una lectura de la configuración actual ni prueba de conexión al destino.</p>
           <div class="table-wrapper"><table id="gatewayMqttHistoryTable">
             <thead><tr><th>Fecha</th><th>Paso</th><th>Actor</th><th>Destino</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
           </table></div>
@@ -173,8 +176,8 @@
         <h3>Identidad reportada automáticamente</h3>
         <p>Datos observados en una respuesta MQTT 2002 válida; separados del registro manual.</p>
         <dl id="gatewayReportedIdentity"></dl>
-        <h3>Última configuración observada</h3>
-        <p>Valores observados; no son ACK correlacionados ni habilitan capacidades de escritura.</p>
+        <h3>Configuración observada (lecturas disponibles)</h3>
+        <p>Valores registrados en respuestas reales con su fecha; no son ACK correlacionados ni habilitan capacidades de escritura. Este apartado no proporciona una lectura de la configuración MQTT actual.</p>
         <div class="table-wrapper"><table id="gatewayObservedSettingsTable">
           <thead><tr><th>Lectura</th><th>Valor observado</th><th>Fecha</th></tr></thead><tbody></tbody>
         </table></div>

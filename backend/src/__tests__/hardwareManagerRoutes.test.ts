@@ -343,6 +343,47 @@ test('MQTT 1030 enforces exact confirmation, strict payload and HTTP idempotency
   assert.equal(observed.published.length, 2);
 });
 
+test('public MQTT proposal endpoint preserves scope/roles, handles missing environment and never publishes or reads physically', async () => {
+  const previous = process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT;
+  const observed = fakeDatabase();
+  const path = '/api/gateways/41/mqtt-preset';
+  try {
+    assert.equal((await api(path)).status, 401);
+    assert.equal((await api(path, 1, 'hardware_readonly')).status, 403);
+    assert.equal((await api(path, 3, 'hardware_technician')).status, 404);
+    for (const [environment, host] of [['staging', 'mqtt.horizonst.com.es'], ['production', 'mqtt.horizonst.es']]) {
+      process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT = environment;
+      const response = await api(path, 2, 'hardware_technician');
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const preset = await response.json();
+      assert.deepEqual(Object.keys(preset).sort(), ['data', 'environment', 'source']);
+      assert.equal(preset.source, 'proposed'); assert.equal(preset.environment, environment);
+      assert.equal(preset.data.host, host); assert.equal(preset.data.port, 8883); assert.equal(preset.data.security_type, 1);
+      assert.equal('passwd' in preset.data, false);
+      assert.equal(preset.data.client_id, '2805a55efb68');
+      assert.doesNotMatch(JSON.stringify(preset), /test-only-secret-not-real|B5_SESSION_PASSWORD|MQTT_PASS|JWT_SECRET/);
+    }
+    for (const environment of ['', 'invalid']) {
+      process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT = environment;
+      const response = await api(path, 2, 'hardware_technician');
+      assert.equal(response.status, 503);
+      assert.doesNotMatch(JSON.stringify(await response.json()), /mqtt\.horizonst/);
+    }
+    delete process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT;
+    assert.equal((await api(path, 2, 'hardware_technician')).status, 503);
+    assert.equal(observed.published.length, 0); assert.equal(observed.commandInserts, 0); assert.equal(observed.readInserts, 0);
+    process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT = 'production';
+    const unassigned = fakeDatabase(false, false, true);
+    assert.equal((await api(path, 2, 'hardware_technician')).status, 404);
+    assert.equal((await api(path, 5, 'hardware_superadmin')).status, 200);
+    assert.equal(unassigned.published.length, 0); assert.equal(unassigned.commandInserts, 0); assert.equal(unassigned.readInserts, 0);
+  } finally {
+    if (previous === undefined) delete process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT;
+    else process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT = previous;
+  }
+});
+
 test('MQTT 1030 timeout is uncertain and never triggers an automatic retry', async () => {
   const previousTimeout = process.env.GATEWAY_COMMAND_TIMEOUT_MS;
   process.env.GATEWAY_COMMAND_TIMEOUT_MS = '20';

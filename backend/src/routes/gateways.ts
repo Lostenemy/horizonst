@@ -28,7 +28,7 @@ import {
   executeGatewayConfigurationRead,
   isGatewayConfigurationReadType
 } from '../services/gatewayObservedReads';
-import { buildGatewayMqttConfiguration } from '../services/gatewayMqttConfiguration';
+import { buildGatewayMqttConfiguration, buildHorizonstMqttPreset, GatewayMqttPresetUnavailableError } from '../services/gatewayMqttConfiguration';
 import {
   GatewayOnboardingConflictError,
   onboardGateway,
@@ -437,6 +437,24 @@ router.post('/:gatewayId/configure-emergency-button', authenticate, authorizeHar
     }
     console.error('Failed to configure B5 gateway', error);
     return res.status(500).json({ message: 'Failed to configure B5 gateway' });
+  }
+});
+
+// Public proposal fields only. This GET never reads from or publishes to a gateway.
+router.get('/:gatewayId/mqtt-preset', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId, true);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const { passwd: _blankPassword, ...data } = buildHorizonstMqttPreset(gateway.mac_address);
+    return res.json({ source: 'proposed', environment: process.env.GATEWAY_MQTT_PRESET_ENVIRONMENT, data });
+  } catch (error) {
+    if (error instanceof GatewayMqttPresetUnavailableError) return res.status(503).json({
+      message: 'La plantilla MQTT propuesta no está configurada o es inválida. Revisa GATEWAY_MQTT_PRESET_ENVIRONMENT.'
+    });
+    return res.status(500).json({ message: 'MQTT proposal preset temporarily unavailable' });
   }
 });
 
