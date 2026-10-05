@@ -394,6 +394,8 @@ export type GatewayConfigurationReadResult = {
   message: string;
 };
 
+export class GatewayMqttRecoveryRequiredError extends Error {}
+
 export async function executeGatewayConfigurationRead(params: {
   gatewayId: number;
   companyId: string;
@@ -402,6 +404,7 @@ export async function executeGatewayConfigurationRead(params: {
   actorUserId: number;
   requestId?: string;
   timeoutMs: number;
+  confirmRecovery?: boolean;
   deps?: { publish?: PublishMqttJson };
 }): Promise<GatewayConfigurationReadResult> {
   const gatewayMac = normalizeGatewayMac(params.gatewayMac);
@@ -423,17 +426,26 @@ export async function executeGatewayConfigurationRead(params: {
       'SELECT pg_try_advisory_lock($1, $2) AS locked', [7246, params.gatewayId], operationDeadline, 'advisory_lock');
     if (!locked.rows[0]?.locked) throw new GatewayIdentityBusyError('Gateway already has an active operation');
     lockAcquired = true;
-    await queryUntil(managed,
-      `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'read timeout recovered before a new request'
-       WHERE gateway_id = $1 AND status IN ('pending', 'published')
-         AND COALESCE(sent_at, created_at) + (timeout_ms * INTERVAL '1 millisecond') < NOW()`,
-      [params.gatewayId], operationDeadline, 'stale_read_recovery');
     if (definition.msgId === 2030) {
       const prior = await queryUntil(managed,
         `SELECT 1 FROM hardware_gateway_reads WHERE gateway_id = $1 AND msg_id = 2030
          AND status IN ('timed_out', 'pending', 'published', 'publish_error') LIMIT 1`,
         [params.gatewayId], operationDeadline, 'mqtt_uncertain_history');
       if (prior.rows.length) throw new GatewayIdentityBusyError('A previous MQTT read has uncertain completion; automatic repetition is blocked');
+      const completed = await queryUntil<{ status: string }>(managed,
+        `SELECT status FROM hardware_gateway_reads WHERE gateway_id = $1 AND msg_id = 2030
+         AND status IN ('response_observed','invalid_response')
+         ORDER BY COALESCE(response_observed_at,created_at) DESC, created_at DESC, id DESC LIMIT 1`,
+        [params.gatewayId], operationDeadline, 'mqtt_rejected_history');
+      if (completed.rows[0]?.status === 'invalid_response' && params.confirmRecovery !== true) {
+        throw new GatewayMqttRecoveryRequiredError('Rejected MQTT observation requires explicit manual confirmation');
+      }
+    } else {
+      await queryUntil(managed,
+        `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'read timeout recovered before a new request'
+         WHERE gateway_id = $1 AND status IN ('pending', 'published')
+           AND COALESCE(sent_at, created_at) + (timeout_ms * INTERVAL '1 millisecond') < NOW()`,
+        [params.gatewayId], operationDeadline, 'stale_read_recovery');
     }
     const request = buildGatewayConfigurationReadRequest(gatewayMac, params.readType);
     const inserted = await queryUntil<{ id: string }>(managed,

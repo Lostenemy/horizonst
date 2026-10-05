@@ -8,7 +8,7 @@ La guía `guia-referencia-mqtt-mkgw3.pdf`, página 10, confirma la petición 203
 
 ## Contrato y autorización
 
-- `POST /api/gateways/:gatewayId/read-configuration/mqtt_configuration`: cuerpo vacío; permisos técnicos, gateway activa y alcance central de compañía. Backend resuelve MAC y topic. Publica únicamente `{device_info:{mac:MAC_CENTRAL_NORMALIZADA},msg_id:2030}` en `gw/{mac}/subscribe`, QoS 0.
+- `POST /api/gateways/:gatewayId/read-configuration/mqtt_configuration`: cuerpo vacío para lectura ordinaria o exclusivamente `{confirmRecovery:true}` tras confirmación manual; permisos técnicos, gateway activa y alcance central de compañía. Backend resuelve MAC y topic. Publica únicamente `{device_info:{mac:MAC_CENTRAL_NORMALIZADA},msg_id:2030}` en `gw/{mac}/subscribe`, QoS 0. La confirmación no forma parte del payload MQTT.
 - `GET /api/gateways/:gatewayId/mqtt-observation`: consulta pasiva, mismos permisos y ámbito, `Cache-Control: no-store`. Devuelve última observación pública y fecha, o ausencia explícita. Con función deshabilitada no consulta la tabla nueva.
 - Respuesta entrante exclusivamente en `gw/{mac}/publish`; MAC del payload estricta y coincidente, mensaje numérico 2030, validación de esquema/tipos/rangos. MAC contradictoria no confirma la lectura. La inexistencia, inactividad y recursos ajenos mantienen 404. No se habilitan lecturas para gateways sin compañía.
 
@@ -40,11 +40,72 @@ La reproducción utiliza únicamente una identidad y credenciales ficticias. Si 
 
 2030 acepta espacios y saltos de línea en el JSON LWT 3999 de la misma MAC; se compacta y reconstruye antes de exponerlo, y se repite la protección de secretos sobre la representación final. Esto no modifica las reglas de escritura 1030. 2040 sigue siendo la lectura independiente de `scan_switch`.
 
-El diario conserva el rechazo con código fijo y payload reducido a `{msg_id:2030}`. La API pasiva consulta el último resultado completado y oculta observaciones anteriores si fue rechazado, también ante un rechazo antiguo sin código específico. Se conservan las filas históricas. La UI borra los valores observados anteriores, explica el motivo y bloquea nuevas lecturas al reabrir, actualizar o recargar; no publica comandos diagnósticos ni reintenta automáticamente.
+El diario conserva el rechazo con código fijo y payload reducido a `{msg_id:2030}`. La API pasiva consulta el último resultado completado y oculta observaciones anteriores si fue rechazado, también ante un rechazo antiguo sin código específico. Se conservan las filas históricas. La UI borra los valores observados anteriores, explica el motivo y evita nuevas lecturas automáticas al reabrir o recargar; la recuperación manual confirmada se describe a continuación. No publica comandos diagnósticos ni reintenta automáticamente.
 
-Para visualizar la configuración completa de una identidad que también es contraseña, primero se requiere cambiar la credencial mediante un procedimiento autorizado, fuera de esta entrega, y revisar que no aparezca en ningún campo público. Después debe solicitarse explícitamente una nueva lectura técnica autorizada; un resultado público válido sustituye el último rechazo y permite consultarlo en una nueva apertura. No se implementa rotación, desbloqueo automático ni eliminación de timeouts históricos. La revalidación de objetos almacenados comprueba estructura, tipos y LWT, pero no puede probar su seguridad respecto a una credencial actual desconocida: no se guarda ni reconstruye esa credencial. Un cambio externo de contraseña sin una lectura posterior no queda detectado por este mecanismo. Tampoco se certifica la seguridad de identidades mostradas en otros inventarios o propuestas existentes.
+Para visualizar la configuración completa de una identidad que también es contraseña, primero se requiere cambiar la credencial mediante un procedimiento autorizado, fuera de esta entrega, y revisar que no aparezca en ningún campo público. Después debe solicitarse explícitamente una nueva lectura técnica autorizada; un resultado público válido se registra como un resultado nuevo, sin convertir el rechazo histórico en éxito. No se implementa rotación, desbloqueo automático ni eliminación de timeouts históricos. La revalidación de objetos almacenados comprueba estructura, tipos y LWT, pero no puede probar su seguridad respecto a una credencial actual desconocida: no se guarda ni reconstruye esa credencial. Un cambio externo de contraseña sin una lectura posterior no queda detectado por este mecanismo. Tampoco se certifica la seguridad de identidades mostradas en otros inventarios o propuestas existentes.
 
 Validación de esta corrección: Backend 284 pruebas (279 aprobadas, 0 fallidas, 5 omitidas); Horneo 166 (164 aprobadas, 0 fallidas, 2 omitidas). Typecheck y builds aislados correctos. MQTT UI 10/10, contratos de producción 18/18 y artefactos 52/52; sintaxis frontend y `git diff --check` correctos. Se prueban colisión, duplicados de secreto, canonicalización, validación almacenada, códigos HTTP/auditoría, ámbito de compañía y ausencia de reintentos desde la UI. Transporte y base de datos simulados; las suites PostgreSQL opt-in y la nueva consulta pasiva no se han validado en PostgreSQL real en esta entrega. No se cambia ninguna migración ni se incorpora la rama de presencia B5. El flag sigue deshabilitado por defecto; las condiciones pendientes de habilitación y retorno siguientes permanecen vigentes.
+
+### Recuperación manual de un rechazo 2030
+
+El bloqueo permanente detectado en staging era de interfaz: `invalid_response` se añadía al mismo conjunto que un resultado incierto, se retornaba antes del POST y se deshabilitaba el botón. Ahora el rechazo de validación se conserva separado. Un diagnóstico histórico genérico significa **causa desconocida**, no evidencia de colisión. Abrir, recargar, desplegar o cambiar una credencial no solicita otra lectura rechazada.
+
+Después de revisar/corregir la configuración, el técnico autorizado puede pulsar **Recuperar lectura MQTT rechazada…**. La confirmación identifica la gateway por su ID central (no reproduce una identidad potencialmente secreta) y explica que publicará un único 2030. Cancelar, doble clic, reapertura o cambio de gateway durante la confirmación no publican. El botón ordinario de actualización también exige confirmación explícita.
+
+El servidor acepta únicamente la confirmación booleana literal, comprueba rol/compañía/actividad y, bajo el mismo bloqueo asesor `(7246,gatewayId)`, revisa el historial antes de insertar el nuevo intento. Sin confirmación, un rechazo previo devuelve HTTP 409 con `mqtt_observation_recovery_required`, sin publicación. `timed_out`, `pending`, `published` y `publish_error` siguen bloqueando incluso con confirmación. Para 2030 no se reconvierten filas `pending/published` antiguas en timeout para recuperar: se conservan literalmente. La recuperación de estados antiguos de otras lecturas permanece igual. Los resultados completados se ordenan por recepción o, si no existe, creación; no se ignora un rechazo histórico por carecer de fecha de recepción.
+
+Cada recuperación crea su propio diario y vuelve a pasar todos los filtros de esquema, MAC/topic, privacidad y persistencia. Si persiste la colisión, termina otra vez en 422, oculta los valores anteriores y vuelve a requerir revisión y confirmación. Si recibe un objeto público válido, guarda solo ese objeto, registra el nuevo resultado y audita `manualRecoveryConfirmed:true`. No se modifica el rechazo anterior. Continúan los límites de correlación sin identificador del fabricante: `response_observed` no garantiza frescura ni atribución inequívoca, y una respuesta tardía puede confundirse con un intento posterior. Esta recuperación no resuelve ese límite ni desbloquea timeouts.
+
+Validación de la recuperación: Backend 294 pruebas (288 aprobadas, 0 fallidas, 6 omitidas); Horneo 166 (164 aprobadas, 0 fallidas, 2 omitidas), con typecheck y builds aislados. MQTT UI 10/10, contratos 18/18, artefactos 52/52 y sintaxis frontend correctos. La nueva `gatewayMqttRecovery.postgres.test.ts` está pendiente de ejecución real: Docker local no tiene daemon. Comprueba PostgreSQL 15, aplica las migraciones originales 009/010/011/014 en un esquema propio, conserva tres rechazos, exige confirmación, persiste éxito y nuevo rechazo, comprueba bloqueo asesor y los cuatro estados inciertos sin alterar sus filas. MQTT está simulado también en esa prueba. No se cambia ninguna migración, 1030, RSSI, alarmas ni presencia B5.
+
+#### Prueba PostgreSQL desechable para el operador (no ejecutada aquí)
+
+Ejecutar desde una copia aislada del commit, con Backend ya compilado y dependencias disponibles; no usar los artefactos de un servicio desplegado. Este ejemplo Linux no publica puertos, no monta `.env` ni volúmenes de datos y no lee credenciales de staging. Copia únicamente compilación, dependencias y migraciones a un directorio temporal propio. La contraseña y JWT son efímeros. No habilitar trazas MQTT.
+
+```bash
+set -euo pipefail
+task_runner=$(mktemp -d /tmp/horizonst-mqtt-recovery-XXXXXX)
+cp -R backend/dist backend/node_modules backend/migrations "$task_runner/"
+task_pg="horizonst-mqtt-recovery-$(node -p 'require("crypto").randomUUID()')"
+task_password=$(node -p 'require("crypto").randomBytes(32).toString("hex")')
+task_jwt=$(node -p 'require("crypto").randomBytes(32).toString("hex")')
+task_created=false
+trap 'if [ "$task_created" = true ]; then docker rm -f "$task_pg" >/dev/null; fi' EXIT
+docker run -d --rm --network none --name "$task_pg" \
+  -e POSTGRES_DB=horizonst_mqtt_recovery_test -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD="$task_password" postgres:15-alpine >/dev/null
+task_created=true
+task_ready=false
+for task_attempt in $(seq 1 60); do
+  if docker logs "$task_pg" 2>&1 | grep -q 'PostgreSQL init process complete; ready for start up.' \
+    && docker exec "$task_pg" psql -X -v ON_ERROR_STOP=1 -U postgres -d horizonst_mqtt_recovery_test -c 'SELECT 1' >/dev/null 2>&1; then
+    sleep 1
+    if docker exec "$task_pg" psql -X -v ON_ERROR_STOP=1 -U postgres -d horizonst_mqtt_recovery_test -c 'SELECT 1' >/dev/null 2>&1; then
+      task_ready=true; break
+    fi
+  fi
+  sleep 1
+done
+[ "$task_ready" = true ] || { echo 'PostgreSQL temporal no alcanzó estabilidad'; exit 1; }
+docker run --rm --network "container:$task_pg" \
+  --mount "type=bind,src=$task_runner,dst=/runner,readonly" -w /runner \
+  -e DB_HOST=127.0.0.1 -e DB_PORT=5432 -e DB_NAME=horizonst_mqtt_recovery_test \
+  -e DB_USER=postgres -e DB_PASSWORD="$task_password" -e JWT_SECRET="$task_jwt" \
+  -e MAIL_ENABLED=false -e MQTT_REQUIRED=false \
+  -e GATEWAY_MQTT_RECOVERY_ALLOW_DATABASE_TESTS=true \
+  node:20 node --test dist/__tests__/gatewayMqttRecovery.postgres.test.js
+unset task_password task_jwt
+```
+
+Esperado: 1 prueba aprobada, 0 fallidas, 0 omitidas; no ejecutar con la bandera deshabilitada y confundir un skip con validación. El contenedor PostgreSQL solo se elimina si se adquirió correctamente; el directorio `$task_runner` permanece para revisión y retirada explícita de esa ruta exacta. No queda ninguna base compartida afectada. La nueva prueba no es una captura ni una recuperación física real.
+
+#### Validación de staging y retorno, con autorización independiente
+
+1. Mantener el flag deshabilitado hasta cerrar los pendientes de migración/filtros ya descritos y ejecutar la prueba aislada anterior.
+2. Tras un despliegue y una lectura real expresamente autorizados, abrir una gateway con rechazo histórico: no debe crear fila ni publicar; no debe mostrar observaciones anteriores ni afirmar colisión si el diagnóstico era genérico.
+3. Revisar/corregir la configuración o credencial por el procedimiento autorizado. Cancelar la confirmación: cero intentos. Confirmar **Publicar una lectura 2030**: una fila nueva, un resultado independiente y auditoría saneada. No copiar cuerpos crudos ni secretos. Comprobar estados y conteos, no interpretar un ACK como conexión al destino.
+4. Con resultado rechazado, reapertura y recarga siguen sin repetir; con incertidumbre, el servidor rechaza incluso una petición directa confirmada. No limpiar historial para hacer avanzar la prueba.
+5. Para retornar, deshabilitar primero el flag, conservar filtros contra respuestas tardías y volver al artefacto anterior revisado si se decide retirar esta recuperación manual. El retorno a `7e20619` restaura el bloqueo manual permanente, no modifica datos ni hace nuevas lecturas; conservar diario y observaciones. No hubo estas acciones en la entrega local.
 
 Nueva `backend/migrations/014_gateway_mqtt_observations.sql`, aplicada transaccionalmente por el runner con ledger/checksum: amplía el CHECK de tipos del diario conservando los anteriores y crea una tabla separada de última observación pública. FK compuesta a gateway/compañía; CHECK JSONB con las 15 claves exactas, sin `passwd`. No modifica filas de inventario ni migraciones publicadas. El helper y esta migración preexistentes de la implementación parcial se conservaron sin editar.
 

@@ -26,6 +26,7 @@ import {
 } from '../services/gatewayIdentity';
 import {
   executeGatewayConfigurationRead,
+  GatewayMqttRecoveryRequiredError,
   isGatewayConfigurationReadType
 } from '../services/gatewayObservedReads';
 import { buildGatewayMqttConfiguration, buildHorizonstMqttPreset, GatewayMqttPresetUnavailableError } from '../services/gatewayMqttConfiguration';
@@ -330,8 +331,10 @@ router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeH
   if (!isGatewayConfigurationReadType(readType) || readType === 'ble_connected_devices') {
     return res.status(400).json({ message: 'Unsupported gateway configuration read' });
   }
-  if (readType === 'mqtt_configuration' && Object.keys(req.body || {}).length !== 0) {
-    return res.status(400).json({ message: 'MQTT observation accepts no client parameters' });
+  const confirmRecovery = req.body?.confirmRecovery === true;
+  if (readType === 'mqtt_configuration' && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+      || (Object.keys(req.body).length !== 0 && !(Object.keys(req.body).length === 1 && confirmRecovery)))) {
+    return res.status(400).json({ message: 'MQTT observation accepts only an empty object or explicit recovery confirmation' });
   }
   try {
     const gateway = await gatewayForCommand(req, gatewayId);
@@ -341,20 +344,26 @@ router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeH
     }
     const result = await executeGatewayConfigurationRead({
       gatewayId, companyId: gateway.company_id, gatewayMac: gateway.mac_address, readType,
-      actorUserId: req.user!.id, requestId: req.requestId, timeoutMs: commandTimeoutMs()
+      actorUserId: req.user!.id, requestId: req.requestId, timeoutMs: commandTimeoutMs(),
+      ...(readType === 'mqtt_configuration' ? { confirmRecovery } : {})
     });
     await appendTechnicalAudit({
       actorUserId: req.user!.id, action: `gateway.configuration.read.${readType}`,
       entityType: 'gateway', entityId: gatewayId, companyId: gateway.company_id, requestId: req.requestId,
       result: result.status === 'response_observed' ? 'unverified' : 'failure',
       after: { readId: result.readId, msgId: result.msgId, status: result.status, message: result.message,
-        ...(result.errorCode ? { errorCode: result.errorCode } : {}) }
+        ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+        ...(readType === 'mqtt_configuration' ? { manualRecoveryConfirmed: confirmRecovery } : {}) }
     });
     const status = result.status === 'response_observed' ? 200
       : result.status === 'invalid_response' ? 422
         : result.status === 'timed_out' ? 504 : 502;
     return res.status(status).json(result);
   } catch (error) {
+    if (error instanceof GatewayMqttRecoveryRequiredError) {
+      return res.status(409).json({ errorCode: 'mqtt_observation_recovery_required',
+        message: 'Rejected MQTT observation requires explicit manual confirmation after configuration review' });
+    }
     if (error instanceof GatewayIdentityOperationTimeoutError) {
       return res.status(504).json({
         status: 'timed_out', message: 'Gateway configuration read exceeded its timeout',
@@ -383,7 +392,7 @@ router.get('/:gatewayId/mqtt-observation', authenticate, authorizeHardware('tech
       `SELECT status, error_message FROM hardware_gateway_reads
        WHERE gateway_id = $1 AND company_id = $2 AND msg_id = 2030
          AND status IN ('response_observed','invalid_response')
-       ORDER BY response_observed_at DESC NULLS LAST, created_at DESC LIMIT 1`, [gatewayId,gateway.company_id]);
+       ORDER BY COALESCE(response_observed_at,created_at) DESC, created_at DESC, id DESC LIMIT 1`, [gatewayId,gateway.company_id]);
     const last = lastRead.rows[0];
     if (last?.status === 'invalid_response') {
       const errorCode = [

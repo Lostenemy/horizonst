@@ -109,7 +109,7 @@ export const apiPost = async (path, body) => {
     const error = new Error(errorBody.message || `Request failed with status ${response.status}`);
     error.status = response.status;
     // Only fixed observation codes, never arbitrary response fields.
-    if (['mqtt_observation_identity_secret_collision', 'mqtt_observation_secret_in_public_field',
+    if (['mqtt_observation_recovery_required', 'mqtt_observation_identity_secret_collision', 'mqtt_observation_secret_in_public_field',
       'mqtt_observation_invalid_response'].includes(errorBody.errorCode)) error.code = errorBody.errorCode;
     throw error;
   }
