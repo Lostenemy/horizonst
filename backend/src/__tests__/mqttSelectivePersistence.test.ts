@@ -10,6 +10,24 @@ const originalConnect = pool.connect.bind(pool);
 
 afterEach(() => { (pool as any).query = originalQuery; (pool as any).connect = originalConnect; });
 
+test('2030 on a wrong topic or malformed JSON never reaches raw capture, ACKs or error logs', async () => {
+  const operations: unknown[] = []; const logs: unknown[] = [];
+  const previous = process.env.GATEWAY_MQTT_OBSERVATION_ENABLED; const originalError = console.error;
+  process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = 'true';
+  (pool as any).query = async (...args: unknown[]) => { operations.push(args); return { rows: [] }; };
+  (pool as any).connect = async () => { throw new Error('unexpected database connection'); };
+  console.error = (...args: unknown[]) => { logs.push(args); };
+  try {
+    await processMqttMessage('devices/MK4', Buffer.from(JSON.stringify({ msg_id: 2030, data: { passwd: 'fake-sensitive-2030' } })));
+    await processMqttMessage('devices/MK4', Buffer.from('{"msg_id":2030,"passwd":"fake-sensitive-2030"'));
+    assert.deepEqual(operations, []); assert.deepEqual(logs, []);
+  } finally {
+    console.error = originalError;
+    if (previous === undefined) delete process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
+    else process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = previous;
+  }
+});
+
 test('backend subscriptions are exactly MK4 and the canonical MKGW3 publish wildcard', () => {
   assert.deepEqual(OFFICIAL_TOPICS, ['devices/MK4', 'gw/+/publish']);
   for (const retired of ['devices/MK1', 'devices/MK2', 'devices/MK3', 'devices/MK3/+/send']) {

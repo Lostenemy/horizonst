@@ -29,6 +29,7 @@ import {
   isGatewayConfigurationReadType
 } from '../services/gatewayObservedReads';
 import { buildGatewayMqttConfiguration, buildHorizonstMqttPreset, GatewayMqttPresetUnavailableError } from '../services/gatewayMqttConfiguration';
+import { storedPublicMqttObservation } from '../services/gatewayMqttObservationIngress';
 import {
   GatewayOnboardingConflictError,
   onboardGateway,
@@ -329,9 +330,15 @@ router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeH
   if (!isGatewayConfigurationReadType(readType) || readType === 'ble_connected_devices') {
     return res.status(400).json({ message: 'Unsupported gateway configuration read' });
   }
+  if (readType === 'mqtt_configuration' && Object.keys(req.body || {}).length !== 0) {
+    return res.status(400).json({ message: 'MQTT observation accepts no client parameters' });
+  }
   try {
     const gateway = await gatewayForCommand(req, gatewayId);
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    if (readType === 'mqtt_configuration' && process.env.GATEWAY_MQTT_OBSERVATION_ENABLED !== 'true') {
+      return res.status(503).json({ message: 'MQTT observation disabled until all consumers and migration are validated' });
+    }
     const result = await executeGatewayConfigurationRead({
       gatewayId, companyId: gateway.company_id, gatewayMac: gateway.mac_address, readType,
       actorUserId: req.user!.id, requestId: req.requestId, timeoutMs: commandTimeoutMs()
@@ -356,9 +363,33 @@ router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeH
     if (error instanceof GatewayIdentityBusyError || (error as any)?.code === '23505') {
       return res.status(409).json({ message: 'Gateway already has an active operation' });
     }
-    console.error('Failed to read gateway configuration', error);
+    if (readType === 'mqtt_configuration') console.error('Failed to read gateway MQTT configuration');
+    else console.error('Failed to read gateway configuration', error);
     return res.status(500).json({ message: 'Failed to read gateway configuration' });
   }
+});
+
+router.get('/:gatewayId/mqtt-observation', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isInteger(gatewayId) || gatewayId <= 0) return res.status(400).json({ message: 'Invalid gateway id' });
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const enabled = process.env.GATEWAY_MQTT_OBSERVATION_ENABLED === 'true';
+    if (!enabled) return res.json({ source: 'observed', enabled: false, observation: null, correlation: 'unverified' });
+    const result = await pool.query(
+      `SELECT public_value, observed_at FROM hardware_gateway_mqtt_observations
+       WHERE gateway_id = $1 AND company_id = $2`, [gatewayId, gateway.company_id]);
+    const observation = result.rows[0];
+    const publicValue = observation ? storedPublicMqttObservation(gateway.mac_address, observation.public_value) : null;
+    if (observation && (!publicValue || !Number.isFinite(Date.parse(observation.observed_at)))) {
+      return res.status(503).json({ message: 'Stored MQTT observation is invalid' });
+    }
+    return res.json({ source: 'observed', enabled: true, correlation: 'unverified', observation: observation ? {
+      public_value: publicValue, observed_at: observation.observed_at
+    } : null });
+  } catch { return res.status(503).json({ message: 'MQTT observation temporarily unavailable' }); }
 });
 
 router.post('/:gatewayId/read-ble-connected-devices', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {

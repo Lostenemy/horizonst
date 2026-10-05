@@ -62,10 +62,10 @@ export const getMqttStatus = () => ({
   reconnectDelay
 });
 
-export const publishMqttJson = async (topic: string, payload: Record<string, unknown>): Promise<void> => {
+export const publishMqttJson = async (topic: string, payload: Record<string, unknown>, options: { qos: 0 | 1 } = { qos: 1 }): Promise<void> => {
   if (!client || !mqttConnected) throw new Error('MQTT client is not connected');
   await new Promise<void>((resolve, reject) => {
-    client!.publish(topic, JSON.stringify(payload), { qos: 1 }, (error?: Error) => {
+    client!.publish(topic, JSON.stringify(payload), { qos: options.qos }, (error?: Error) => {
       if (error) reject(error);
       else resolve();
     });
@@ -78,6 +78,16 @@ export const processMqttMessage = async (
   packet: Pick<IPublishPacket, 'qos' | 'retain'> = { qos: 0, retain: false }
 ): Promise<void> => {
   const payloadText = messageBuffer.toString();
+  // Sensitive 2030 reports are consumed exclusively by the whitelisting reader.
+  // They must never reach generic ACK, MK4 capture or broadcast paths.
+  let sensitiveReport = false;
+  try { sensitiveReport = Number(JSON.parse(payloadText)?.msg_id) === 2030; }
+  catch { sensitiveReport = /"msg_id"\s*:\s*"?2030\b/.test(payloadText); }
+  if (sensitiveReport) {
+    try { await handleGatewayConfigurationReport(topic, payloadText); }
+    catch { console.error('MQTT configuration observation processing failed'); }
+    return;
+  }
   const payloadBase64 = messageBuffer.toString('base64');
   let records: ProcessedDeviceRecord[] = [];
   try {

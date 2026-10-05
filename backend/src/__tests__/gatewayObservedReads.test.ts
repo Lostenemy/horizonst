@@ -4,6 +4,8 @@ import path from 'node:path';
 import { afterEach, test } from 'node:test';
 import { pool } from '../db/pool';
 import { normalizeHardwareGatewayAck } from '../services/gatewayAck';
+import { buildHorizonstMqttPreset } from '../services/gatewayMqttConfiguration';
+import { processMqttMessage } from '../services/mqttService';
 import { GatewayIdentityBusyError, GatewayIdentityOperationTimeoutError } from '../services/gatewayIdentity';
 import {
   buildGatewayConfigurationReadRequest,
@@ -15,6 +17,7 @@ import {
 } from '../services/gatewayObservedReads';
 
 const originalConnect = pool.connect.bind(pool);
+const originalObservationFlag = process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
 const TOPIC = 'gw/2805a55efb68/publish';
 const COMPANY_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const reports = {
@@ -28,6 +31,8 @@ const reports = {
 } as const;
 
 afterEach(() => {
+  if (originalObservationFlag === undefined) delete process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
+  else process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = originalObservationFlag;
   (pool as any).connect = originalConnect;
   resetGatewayConfigurationWaitersForTests();
 });
@@ -39,6 +44,7 @@ const deferred = () => {
 };
 
 function mockDatabase(options: {
+  priorUncertain?: boolean;
   busy?: boolean;
   gatewayExists?: boolean;
   connectGate?: Promise<void>;
@@ -70,6 +76,8 @@ function mockDatabase(options: {
           return { rows: options.gatewayExists === false ? [] : [{ id: 41 }] };
         }
         if (sql.includes('INSERT INTO hardware_gateway_observed_settings')) return { rows: [], rowCount: 1 };
+        if (sql.includes('INSERT INTO hardware_gateway_mqtt_observations')) return { rows: [], rowCount: 1 };
+        if (sql.includes('SELECT 1 FROM hardware_gateway_reads')) return { rows: options.priorUncertain ? [{ exists: 1 }] : [] };
         if (sql.includes('INSERT INTO hardware_gateway_ble_snapshots')) {
           options.snapshotStarted?.();
           if (options.snapshotGate) await options.snapshotGate;
@@ -102,8 +110,90 @@ const execute = (readType: GatewayConfigurationReadType, publish: (topic: string
     actorUserId: 2, timeoutMs, deps: { publish }
   });
 
+const MQTT_SECRET = 'fictional-mqtt-secret-2030-do-not-retain';
+const mqttReport = () => ({ msg_id: 2030, device_info: { mac: '2805a55efb68' },
+  data: { ...buildHorizonstMqttPreset('2805a55efb68', 'production'), passwd: MQTT_SECRET } });
+
+test('2030 uses the exact observed request/QoS and persists only public observation and safe journal metadata', async () => {
+  process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = 'true';
+  const operations = mockDatabase();
+  const captured: unknown[] = []; const originalError = console.error;
+  console.error = (...args: unknown[]) => { captured.push(args); };
+  try {
+    const result = await executeGatewayConfigurationRead({ gatewayId: 41, companyId: COMPANY_A,
+      gatewayMac: '2805a55efb68', readType: 'mqtt_configuration', actorUserId: 2, timeoutMs: 200,
+      deps: { publish: async (topic, payload, options) => {
+        assert.equal(topic, 'gw/2805a55efb68/subscribe'); assert.deepEqual(options, { qos: 0 });
+        assert.deepEqual(payload, { msg_id: 2030, device_info: { mac: '2805a55efb68' } });
+        const report = mqttReport(); (report.data as any).unknown_secret = MQTT_SECRET;
+        await processMqttMessage(TOPIC, Buffer.from(JSON.stringify(report)));
+      } } });
+    assert.equal(result.status, 'response_observed'); assert.equal(result.msgId, 2030);
+    assert.equal('passwd' in result.data!, false);
+    assert.equal('unknown_secret' in result.data!, false);
+    assert.ok(operations.some(item => item.sql.includes('INSERT INTO hardware_gateway_mqtt_observations')));
+    assert.doesNotMatch(JSON.stringify({ operations, captured, result }), new RegExp(MQTT_SECRET));
+    assert.ok(!operations.some(item => item.sql.includes('mqtt_messages')));
+  } finally { console.error = originalError; }
+});
+
+test('2030 rejects contradictory topic/MAC and invalid schema, drops secret-bearing text and unknown fields', () => {
+  const report = mqttReport();
+  assert.equal(parseGatewayConfigurationReport('devices/MK4', report), null);
+  assert.equal(parseGatewayConfigurationReport('gw/ffffffffffff/publish', report), null);
+  for (const data of [{ ...report.data, port: '8883' }, { ...report.data, host: MQTT_SECRET },
+    { ...report.data, username: Buffer.from(MQTT_SECRET).toString('base64') },
+    { ...report.data, lwt_payload: JSON.stringify({ msg_id: 3999, device_info: { mac: `zzzz${report.device_info.mac}` }, data: {} }) }]) {
+    assert.equal(parseGatewayConfigurationReport(TOPIC, { ...report, data }), null);
+  }
+  const valid = parseGatewayConfigurationReport(TOPIC, report)!;
+  assert.equal(normalizeHardwareGatewayAck(TOPIC, report), null);
+  assert.doesNotMatch(JSON.stringify(valid), /fictional-mqtt-secret|passwd/);
+});
+
+test('2030 timeout keeps late reports separate and uncertain history blocks another publication', async () => {
+  process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = 'true';
+  const operations = mockDatabase();
+  let publications = 0;
+  const result = await execute('mqtt_configuration', async () => { publications++; }, 30);
+  assert.equal(result.status, 'timed_out');
+  await handleGatewayConfigurationReport(TOPIC, JSON.stringify(mqttReport()));
+  assert.equal(result.status, 'timed_out');
+  assert.ok(operations.some(item => item.sql.includes('hardware_gateway_mqtt_observations')));
+  mockDatabase({ priorUncertain: true });
+  await assert.rejects(() => execute('mqtt_configuration', async () => { publications++; }), GatewayIdentityBusyError);
+  assert.equal(publications, 1);
+});
+
+test('2030 concurrency shares advisory lock and never publishes when disabled or busy', async () => {
+  const options = { busy: false }; mockDatabase(options);
+  process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = 'true';
+  const started = deferred(); const done = deferred(); let publications = 0;
+  const first = execute('mqtt_configuration', async () => { publications++; started.resolve(); await done.promise;
+    await handleGatewayConfigurationReport(TOPIC, JSON.stringify(mqttReport())); }, 200);
+  await started.promise; options.busy = true;
+  await assert.rejects(() => execute('mqtt_configuration', async () => { publications++; }), GatewayIdentityBusyError);
+  done.resolve(); assert.equal((await first).status, 'response_observed'); assert.equal(publications, 1);
+  delete process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
+  await assert.rejects(() => execute('mqtt_configuration', async () => { publications++; }), /disabled/);
+  assert.equal(publications, 1);
+});
+
+test('2030 publication errors and invalid reports never leak the fictional password', async () => {
+  process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = 'true'; const operations = mockDatabase();
+  const failed = await execute('mqtt_configuration', async () => { throw new Error(MQTT_SECRET); });
+  assert.equal(failed.status, 'publish_error');
+  assert.doesNotMatch(JSON.stringify({ failed, operations }), new RegExp(MQTT_SECRET));
+  const invalid = await execute('mqtt_configuration', async () => {
+    await handleGatewayConfigurationReport(TOPIC, JSON.stringify({ ...mqttReport(), data: { passwd: MQTT_SECRET } }));
+  });
+  assert.equal(invalid.status, 'invalid_response');
+  assert.doesNotMatch(JSON.stringify({ invalid, operations }), new RegExp(MQTT_SECRET));
+});
+
 test('the observed schemas and requests are exact and are not ACKs', () => {
   const expectedIds: Record<GatewayConfigurationReadType, number> = {
+    mqtt_configuration: 2030,
     led_state: 2011, ble_scan_switch: 2040, filter_relation: 2041, duplicate_rule: 2057,
     ble_connected_devices: 2201
   };

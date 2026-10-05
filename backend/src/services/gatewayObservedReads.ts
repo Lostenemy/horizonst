@@ -3,18 +3,21 @@ import { pool } from '../db/pool';
 import { normalizeGatewayMac } from '../utils/mac';
 import { redactHardwarePayload } from './hardwarePayloadRedaction';
 import { GatewayIdentityBusyError, GatewayIdentityOperationTimeoutError } from './gatewayIdentity';
+import { PublicMqttObservation } from './gatewayMqttObservation';
+import { publicMqttObservation } from './gatewayMqttObservationIngress';
 
-type PublishMqttJson = (topic: string, payload: Record<string, unknown>) => Promise<void>;
+type PublishMqttJson = (topic: string, payload: Record<string, unknown>, options?: { qos: 0 | 1 }) => Promise<void>;
 
 export type GatewayConfigurationReadType =
   | 'led_state'
+  | 'mqtt_configuration'
   | 'ble_scan_switch'
   | 'filter_relation'
   | 'duplicate_rule'
   | 'ble_connected_devices';
 
 export type GatewayConnectedDevice = { mac: string; type: number };
-export type GatewayConfigurationData = Record<string, number> | { ble_conn_list: GatewayConnectedDevice[] };
+export type GatewayConfigurationData = Record<string, number> | { ble_conn_list: GatewayConnectedDevice[] } | PublicMqttObservation;
 
 export interface ObservedGatewayConfiguration {
   gatewayMac: string;
@@ -32,6 +35,7 @@ type ReadDefinition = {
 };
 
 const READ_DEFINITIONS: readonly ReadDefinition[] = [
+  { msgId: 2030, readType: 'mqtt_configuration' },
   { msgId: 2011, readType: 'led_state', ranges: { net_led: [0, 1], sys_led: [0, 1], server_led: [0, 1] } },
   { msgId: 2040, readType: 'ble_scan_switch', ranges: { scan_switch: [0, 1] } },
   { msgId: 2041, readType: 'filter_relation', ranges: { relation: [0, 8] } },
@@ -178,21 +182,27 @@ const inspectGatewayConfigurationReport = (topic: string, payload: unknown): Rep
   if ('result_code' in root) return null;
   const definition = definitionByMsgId.get(Number(root.msg_id));
   if (!definition) return null;
+  if (definition.msgId === 2030 && root.msg_id !== 2030) return null;
   const topicMac = normalizeGatewayMac(topicMatch[1]);
   if (!topicMac) return null;
-  const invalid = (): ReportInspection => ({ kind: 'invalid', topicMac, definition, payload: root });
+  const invalid = (): ReportInspection => ({ kind: 'invalid', topicMac, definition,
+    payload: definition.msgId === 2030 ? { msg_id: 2030 } : root });
   if (Object.keys(root).sort().join(',') !== 'data,device_info,msg_id'
       || !root.device_info || typeof root.device_info !== 'object' || Array.isArray(root.device_info)
       || Object.keys(root.device_info).join(',') !== 'mac') return invalid();
-  const payloadMac = normalizeGatewayMac((root.device_info as Record<string, unknown>).mac);
-  if (payloadMac !== topicMac) return invalid();
-  const data = definition.snapshot
+  const rawMac = (root.device_info as Record<string, unknown>).mac;
+  const payloadMac = normalizeGatewayMac(rawMac);
+  // A contradictory identity cannot complete even an invalid-response waiter.
+  if (payloadMac !== topicMac) return definition.msgId === 2030 ? null : invalid();
+  if (definition.msgId === 2030 && (typeof rawMac !== 'string' || !/^[0-9a-f]{12}$/i.test(rawMac))) return null;
+  const data = definition.msgId === 2030 ? publicMqttObservation(topicMac, root.data) : definition.snapshot
     ? exactConnectedDevicesData(root.data)
     : exactIntegerData(root.data, definition.ranges!);
   if (!data) return invalid();
   return {
     kind: 'valid',
-    report: { gatewayMac: topicMac, msgId: definition.msgId, readType: definition.readType, data, payload: root }
+    report: { gatewayMac: topicMac, msgId: definition.msgId, readType: definition.readType, data,
+      payload: definition.msgId === 2030 ? { msg_id: 2030, device_info: { mac: topicMac }, data } : root }
   };
 };
 
@@ -204,7 +214,7 @@ export function buildGatewayConfigurationReadRequest(
   const definition = definitionByReadType.get(readType);
   if (!gatewayMac) throw new Error('Invalid gateway MAC');
   if (!definition) throw new Error('Unsupported gateway configuration read');
-  return { msg_id: definition.msgId, device_info: { mac: gatewayMac.toUpperCase() } };
+  return { msg_id: definition.msgId, device_info: { mac: definition.msgId === 2030 ? gatewayMac : gatewayMac.toUpperCase() } };
 }
 
 export function parseGatewayConfigurationReport(topic: string, payload: unknown): ObservedGatewayConfiguration | null {
@@ -228,6 +238,14 @@ const persistLatestValue = async (
     deadline, 'response_gateway_scope', waiter?.readId);
   const row = gateway.rows[0];
   if (!row) return false;
+  if (report.readType === 'mqtt_configuration') {
+    await queryUntil(managed,
+      `INSERT INTO hardware_gateway_mqtt_observations (gateway_id, company_id, public_value, observed_at)
+       VALUES ($1,$2,$3::jsonb,NOW()) ON CONFLICT (gateway_id) DO UPDATE SET
+       company_id = EXCLUDED.company_id, public_value = EXCLUDED.public_value, observed_at = EXCLUDED.observed_at`,
+      [row.id, row.company_id, JSON.stringify(report.data)], deadline, 'mqtt_observation', waiter?.readId);
+    return true;
+  }
   if (report.readType === 'ble_connected_devices') {
     const devices = (report.data as { ble_conn_list: GatewayConnectedDevice[] }).ble_conn_list;
     await queryUntil(managed,
@@ -285,6 +303,7 @@ const persistJournalResult = async (
 export async function handleGatewayConfigurationReport(topic: string, payloadText: string): Promise<boolean> {
   let payload: unknown;
   try { payload = JSON.parse(payloadText); } catch { return false; }
+  if (Number((payload as any)?.msg_id) === 2030 && process.env.GATEWAY_MQTT_OBSERVATION_ENABLED !== 'true') return false;
   const inspected = inspectGatewayConfigurationReport(topic, payload);
   if (!inspected) return false;
   const topicMac = inspected.kind === 'valid' ? inspected.report.gatewayMac : inspected.topicMac;
@@ -302,7 +321,7 @@ export async function handleGatewayConfigurationReport(topic: string, payloadTex
     managed = await acquireClientUntil(deadline, 'response_connection', claimedWaiter?.readId);
   } catch (error) {
     if (claimedWaiter?.state === 'observing' && waiters.get(key) === claimedWaiter) claimedWaiter.state = 'waiting';
-    console.error('Failed to acquire database connection for observed gateway configuration', error);
+    console.error('Failed to acquire database connection for observed gateway configuration');
     return false;
   }
   try {
@@ -353,7 +372,7 @@ export async function handleGatewayConfigurationReport(topic: string, payloadTex
     return inspected.kind === 'valid';
   } catch (error) {
     if (claimedWaiter?.state === 'observing' && waiters.get(key) === claimedWaiter) claimedWaiter.state = 'waiting';
-    console.error('Failed to persist observed gateway configuration', error);
+    console.error('Failed to persist observed gateway configuration');
     return false;
   } finally {
     releaseClientOnce(managed);
@@ -383,6 +402,7 @@ export async function executeGatewayConfigurationRead(params: {
   const definition = definitionByReadType.get(params.readType);
   if (!gatewayMac) throw new Error('Invalid gateway MAC');
   if (!definition) throw new Error('Unsupported gateway configuration read');
+  if (definition.msgId === 2030 && process.env.GATEWAY_MQTT_OBSERVATION_ENABLED !== 'true') throw new Error('MQTT observation disabled');
   const operationDeadline = Date.now() + params.timeoutMs;
   const cleanupBudgetMs = Math.max(2, Math.min(100, Math.floor(params.timeoutMs / 2)));
   const observationDeadline = operationDeadline - cleanupBudgetMs;
@@ -402,6 +422,13 @@ export async function executeGatewayConfigurationRead(params: {
        WHERE gateway_id = $1 AND status IN ('pending', 'published')
          AND COALESCE(sent_at, created_at) + (timeout_ms * INTERVAL '1 millisecond') < NOW()`,
       [params.gatewayId], operationDeadline, 'stale_read_recovery');
+    if (definition.msgId === 2030) {
+      const prior = await queryUntil(managed,
+        `SELECT 1 FROM hardware_gateway_reads WHERE gateway_id = $1 AND msg_id = 2030
+         AND status IN ('timed_out', 'pending', 'published', 'publish_error') LIMIT 1`,
+        [params.gatewayId], operationDeadline, 'mqtt_uncertain_history');
+      if (prior.rows.length) throw new GatewayIdentityBusyError('A previous MQTT read has uncertain completion; automatic repetition is blocked');
+    }
     const request = buildGatewayConfigurationReadRequest(gatewayMac, params.readType);
     const inserted = await queryUntil<{ id: string }>(managed,
       `INSERT INTO hardware_gateway_reads
@@ -425,7 +452,8 @@ export async function executeGatewayConfigurationRead(params: {
     const publicationOutcome = (async () => {
       try {
         const publish = params.deps?.publish ?? (await import('./mqttService')).publishMqttJson;
-        await publish(`gw/${gatewayMac}/subscribe`, request);
+        if (definition.msgId === 2030) await publish(`gw/${gatewayMac}/subscribe`, request, { qos: 0 });
+        else await publish(`gw/${gatewayMac}/subscribe`, request);
         return { kind: 'published' as const };
       } catch (error) { return { kind: 'publish_error' as const, error }; }
     })();
@@ -465,7 +493,7 @@ export async function executeGatewayConfigurationRead(params: {
         waiter!.reject(new Error('gateway configuration publication failed'));
       }
       if (waiter!.state === 'timed_out') return await toResult({ kind: 'timed_out' });
-      const message = String((firstOutcome.error as Error).message ?? firstOutcome.error);
+      const message = definition.msgId === 2030 ? 'MQTT read publication failed' : String((firstOutcome.error as Error).message ?? firstOutcome.error);
       await queryUntil(managed,
         `UPDATE hardware_gateway_reads SET status = 'publish_error', error_message = $2
          WHERE id = $1 AND status IN ('pending', 'published')`,

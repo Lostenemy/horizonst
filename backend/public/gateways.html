@@ -100,6 +100,14 @@
             </label>
           </div>
         </div>
+        <section id="gatewayMqttObservationPanel" hidden>
+          <h3>Configuración MQTT observada</h3>
+          <p>2030: fecha de recepción, no prueba de frescura, correlación ni conexión al broker. No contiene contraseña. No se copia a la propuesta.</p>
+          <p id="gatewayMqttReadStatus" role="status" aria-live="polite"></p>
+          <p id="gatewayMqttObservedAt"></p>
+          <dl id="gatewayMqttObservedValue"></dl>
+          <button type="button" id="gatewayMqttRefreshObservation">Actualizar observación MQTT explícitamente</button>
+        </section>
         <section id="gatewayMqttPanel" hidden aria-labelledby="gatewayMqttTitle">
           <h3 id="gatewayMqttTitle">Configuración propuesta — Configurar conexión MQTT (1030)</h3>
           <p>Estos campos son una propuesta editable. No se han leído de la gateway y no representan su conexión actual.</p>

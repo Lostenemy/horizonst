@@ -109,6 +109,7 @@ services:
       MQTT_CLIENT_ID: acces_control_server_backend
       MQTT_REQUIRED: "true"
       GATEWAY_MQTT_PRESET_ENVIRONMENT: production
+      GATEWAY_MQTT_OBSERVATION_ENABLED: "false" # Enable only after 014 and all consumer privacy guards are validated.
       MQTT_PERSISTENCE_MODE: app
       MQTT_RAW_RETENTION_HOURS: ${MQTT_RAW_RETENTION_HOURS:-48}
       MQTT_MAINTENANCE_INTERVAL_MS: ${MQTT_MAINTENANCE_INTERVAL_MS:-60000}
