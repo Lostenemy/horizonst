@@ -121,6 +121,7 @@ export interface ConnectedTagCommandResult {
 export interface PhysicalAlarmSequenceResult {
   status: 'success' | 'attempted_unverified' | 'skipped';
   selectedGatewayMac?: string;
+  skipReason?: 'excluded_before_dispatch' | 'disabled';
 }
 
 export async function executeConnectedTagCommandSequence(params: {
@@ -235,7 +236,7 @@ export async function executeAlarmSequence(params: {
   alertType: string;
   alertId: string;
 }): Promise<PhysicalAlarmSequenceResult> {
-  if (!env.TAG_ALARM_PHYSICAL_ENABLED) return { status: 'skipped' };
+  if (!env.TAG_ALARM_PHYSICAL_ENABLED) return { status: 'skipped',skipReason:'disabled' };
 
   const actions = resolveAlarmActions({ severity: params.severity, alertType: params.alertType });
   if (!actions.length) return { status: 'skipped' };
@@ -254,16 +255,18 @@ export async function executeAlarmSequence(params: {
 
   if (activeTagAlarms.has(target.tagId)) {
     logger.info({ alertId: params.alertId, tagId: target.tagId }, 'skipped duplicate physical alarm (tag already running)');
-    return { status: 'skipped' };
+    return { status: 'skipped',skipReason:'excluded_before_dispatch' };
   }
 
   const bleActive = await withControlledClient(client => isBleSessionActive({ tagId: target.tagId,
     hardwareDeviceId: target.hardwareDeviceId, query: client.query.bind(client) as typeof db.query }));
   if (bleActive) {
     logger.info({ alertId: params.alertId, tagId: target.tagId }, 'skipped duplicate physical alarm (BLE session already active)');
-    return { status: 'skipped' };
+    return { status: 'skipped',skipReason:'excluded_before_dispatch' };
   }
 
+  // Another local task may have claimed the tag while the lease query was awaiting.
+  if(activeTagAlarms.has(target.tagId))return {status:'skipped',skipReason:'excluded_before_dispatch'};
   activeTagAlarms.add(target.tagId);
   let operation: Awaited<ReturnType<typeof beginControlledPresenceOperation>> = null;
   const controller = new AbortController();
@@ -274,7 +277,7 @@ export async function executeAlarmSequence(params: {
         || candidates.some(candidate => candidate.companyId !== target.companyId)) throw new Error('central_company_mapping_required');
     operation = await beginControlledPresenceOperation({ tagId: target.tagId, hardwareDeviceId: target.hardwareDeviceId,
       companyId: target.companyId, alertId: params.alertId });
-    if (operation === 'busy') return { status: 'skipped' };
+    if (operation === 'busy') return { status: 'skipped',skipReason:'excluded_before_dispatch' };
     if (operation) {
       timer = setTimeout(() => controller.abort(), Math.max(0, operation.deadlineMs - Date.now()));
     }

@@ -12,7 +12,9 @@ function source(relativePath: string): string {
 test('compliance automatic alerts rely on createAlert physical sequence and do not send template commands directly', () => {
   const compliance = source('modules/compliance/compliance.service.ts');
 
-  assert.match(compliance, /alertType: prelimit \? 'continuous_limit_prewarning' : 'continuous_limit_exceeded'/);
+  const effects=source('modules/compliance/presence-close-effects.ts');
+  assert.match(effects, /prelimit\?'continuous_limit_prewarning':'continuous_limit_exceeded'/);
+  assert.match(effects,/INSERT INTO physical_alarm_outbox/);
   assert.doesNotMatch(compliance, /sendPreLimitAlert|sendCriticalExposureAlert|sendEarlyReentryBlockedAlert|sendManDownAlert/);
   assert.doesNotMatch(compliance, /template:pre_limit|template:critical|template:early_reentry_blocked|template:man_down/);
 });
@@ -20,7 +22,7 @@ test('compliance automatic alerts rely on createAlert physical sequence and do n
 test('presence grace and reminder alarms use the connected physical sequence without template duplication', () => {
   const presenceState = source('modules/presence/presence-state.service.ts');
 
-  assert.match(presenceState, /triggerPhysicalAlarmSequence/);
+  assert.match(presenceState, /INSERT INTO physical_alarm_outbox/);
   assert.doesNotMatch(presenceState, /sendCriticalExposureAlert|sendPreLimitAlert|sendEarlyReentryBlockedAlert|sendManDownAlert/);
 });
 

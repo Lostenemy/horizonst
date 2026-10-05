@@ -4,12 +4,14 @@ import { createAlert } from '../alerts/alerts.service';
 import { openIncident } from '../incidents/incidents.service';
 import { ParsedPresenceEvent } from '../presence/types';
 import { logger } from '../../utils/logger';
-import { markPresenceAlarm, markPresenceEnter, markPresenceExit } from '../presence/presence-state.service';
+import { markPresenceAlarm, markPresenceEnter } from '../presence/presence-state.service';
 import { shouldClosePresenceSession } from './presence-timeout-policy';
 import { evaluatePresenceSignal } from './presence-signal-policy';
 import { EventTechnicalIdentity, resolveEventTechnicalIdentity } from '../hardware-manager/event-identity.service';
-import { madridExposureSegments } from '../realtime/workday-duration';
 import { withControlledClient } from '../tag-control/infrastructure/controlled-presence.repository';
+import { persistCanonicalPresenceClose } from './presence-close.repository';
+import { runBoundedPresenceClosures, nonOverlapping } from './presence-sweep';
+import { performance } from 'node:perf_hooks';
 const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
 export function isValidSessionStart(startedAt: string): boolean {
   const startedAtMs = Date.parse(startedAt);
@@ -134,144 +136,42 @@ async function evaluateOperationalAlarmRules(tag: {
   }
 }
 
-async function upsertOpenSession(tag: any, event: ParsedPresenceEvent): Promise<void> {
+async function upsertOpenSession(tag: any, event: ParsedPresenceEvent, query:typeof db.query=db.query.bind(db)): Promise<boolean> {
   if (!isValidSessionStart(event.timestamp)) {
     logger.error({ tagId: tag.id, eventId: event.eventId, startedAt: event.timestamp }, 'rejected session creation due to invalid started_at');
-    return;
+    return false;
   }
   if (!Number.isInteger(tag.hardware_device_id)) {
     throw new Error('central_hardware_mapping_required: cold room sessions require hardwareDeviceId');
   }
-  await db.query(
+  const inserted=await query(
     `INSERT INTO cold_room_sessions(worker_id, tag_id, hardware_device_id, cold_room_id, started_at, source_event_id)
      VALUES($1, $2, $3, $4, $5, $6)
-     ON CONFLICT DO NOTHING`,
+     ON CONFLICT DO NOTHING RETURNING id`,
     [tag.worker_id, tag.id, tag.hardware_device_id, tag.cold_room_id, event.timestamp, event.eventId]
   );
+  return Boolean(inserted.rowCount);
 }
 
 async function finalizeSession(
-  session: SessionContext,
-  endedAt: string,
-  closeEventId: string | null,
-  reason: 'event' | 'timeout',
-  lastDetectionAt: string,
-  timeoutMs: number | null = null
+  session: SessionContext, endedAt: string, closeEventId: string | null,
+  reason: 'event' | 'timeout', lastDetectionAt: string, timeoutMs: number | null = null
 ): Promise<boolean> {
-  const exposureEndedAt = reason === 'timeout' ? lastDetectionAt : endedAt;
-  const closeSql = `UPDATE cold_room_sessions
-     SET ended_at = $1,
-         duration_seconds = CASE WHEN $5::text = 'timeout'
-           THEN FLOOR(GREATEST(0, EXTRACT(EPOCH FROM ($4::timestamptz - started_at))))::int
-           ELSE GREATEST(0, EXTRACT(EPOCH FROM ($1::timestamptz - started_at)))::int
-         END,
-         close_event_id = COALESCE($2, close_event_id)
-     WHERE id = $3 AND ended_at IS NULL
-       AND $1::timestamptz >= started_at
-       AND ($5::text <> 'timeout' OR NOT EXISTS (
-         SELECT 1 FROM controlled_b5_presence_operations op
-         WHERE op.hardware_device_id = cold_room_sessions.hardware_device_id
-           AND op.session_id = cold_room_sessions.id AND op.protect_until > clock_timestamp()
-       ))
-       AND ($5::text <> 'timeout' OR $4::timestamptz + ($6::double precision * INTERVAL '1 millisecond') < clock_timestamp())
-       AND NOT EXISTS (
-         SELECT 1 FROM tag_gateway_presence_state ps
-         JOIN gateways seen_gateway ON ps.hardware_gateway_id = seen_gateway.hardware_gateway_id
-         WHERE ps.hardware_device_id = cold_room_sessions.hardware_device_id
-           AND ps.last_presence_at > $4::timestamptz
-           AND ps.last_presence_at >= cold_room_sessions.started_at
-           AND (cold_room_sessions.cold_room_id IS NULL
-                OR seen_gateway.cold_room_id = cold_room_sessions.cold_room_id)
-       )
-     RETURNING id, started_at, worker_id, cold_room_id, tag_id, hardware_device_id`;
-  const closeValues = [endedAt, closeEventId, session.id, exposureEndedAt, reason, timeoutMs];
-  const updateResult = reason === 'timeout' ? await withControlledClient(async client => {
-    await client.query('BEGIN');
-    await client.query('SELECT id FROM cold_room_sessions WHERE id = $1 FOR UPDATE', [session.id]);
-    const result = await client.query(closeSql, closeValues);
-    await client.query('COMMIT');
-    return result;
-  }) : await db.query(closeSql, closeValues);
-
-  if (!updateResult.rowCount) return false;
-
-  const closed = updateResult.rows[0];
-  await markPresenceExit(closed.tag_id, closed.hardware_device_id, lastDetectionAt);
-  const durationMinutes = (new Date(exposureEndedAt).getTime() - new Date(closed.started_at).getTime()) / 60000;
-
-  const daySegments = madridExposureSegments(closed.started_at, exposureEndedAt);
-  if (daySegments.length) {
-    await db.query(
-      `INSERT INTO workday_accumulators(workday_date, worker_id, cold_room_id, accumulated_seconds)
-       SELECT (segment.value->>'date')::date, $2, $3, (segment.value->>'seconds')::int
-       FROM jsonb_array_elements($1::jsonb) AS segment(value)
-       WHERE TRUE
-       ON CONFLICT (workday_date, worker_id, cold_room_id)
-       DO UPDATE SET accumulated_seconds = workday_accumulators.accumulated_seconds + EXCLUDED.accumulated_seconds,
-                     updated_at = NOW()`,
-      [JSON.stringify(daySegments), closed.worker_id, closed.cold_room_id]
-    );
-  }
-
-  if (durationMinutes >= session.pre_alert_minutes) {
-    const prelimit = durationMinutes < session.max_continuous_minutes;
-    await createAlert({
-      workerId: closed.worker_id ?? undefined,
-      tagId: closed.tag_id,
-      hardwareDeviceId: closed.hardware_device_id,
-      coldRoomId: closed.cold_room_id ?? undefined,
-      severity: prelimit ? 'warning' : 'critical',
-      alertType: prelimit ? 'continuous_limit_prewarning' : 'continuous_limit_exceeded',
-      message: `Permanencia en cámara: ${Math.round(durationMinutes)} min`,
-      metadata: {
-        durationMinutes,
-        limitMinutes: session.max_continuous_minutes,
-        closeReason: reason
-      }
-    });
-
-  }
-
-  if (durationMinutes > session.max_continuous_minutes + env.INCIDENT_GRACE_MINUTES) {
-    await openIncident({
-      workerId: closed.worker_id ?? undefined,
-      tagId: closed.tag_id,
-      hardwareDeviceId: closed.hardware_device_id,
-      coldRoomId: closed.cold_room_id ?? undefined,
-      incidentType: 'continuous_exposure_breach',
-      reason: 'Exceso de permanencia continuada en cámara frigorífica',
-      metadata: { durationMinutes, closeReason: reason }
-    });
-  }
-
-  const dailyTotal = await db.query(
-    `SELECT accumulated_seconds FROM workday_accumulators
-     WHERE workday_date = $1::date
-       AND worker_id = $2 AND cold_room_id = $3`,
-    [daySegments[daySegments.length - 1]?.date ?? null, closed.worker_id, closed.cold_room_id]
-  );
-  const dayMinutes = (dailyTotal.rows[0]?.accumulated_seconds ?? 0) / 60;
-  if (dayMinutes > session.max_daily_minutes) {
-    await createAlert({
-      workerId: closed.worker_id ?? undefined,
-      tagId: closed.tag_id,
-      hardwareDeviceId: closed.hardware_device_id,
-      coldRoomId: closed.cold_room_id ?? undefined,
-      severity: 'critical',
-      alertType: 'daily_limit_exceeded',
-      message: `Límite diario superado (${Math.round(dayMinutes)} min)`,
-      metadata: { dayMinutes, dailyLimitMinutes: session.max_daily_minutes }
-    });
-  }
-
-  return true;
+  return persistCanonicalPresenceClose({
+    sessionId: session.id, endedAt, closeEventId, reason, lastDetectionAt,
+    timeoutMs: timeoutMs ?? Math.max(1000, env.PRESENCE_EXIT_TIMEOUT_MS),
+    limits: { preAlertMinutes: session.pre_alert_minutes,
+      continuousMinutes: session.max_continuous_minutes, dailyMinutes: session.max_daily_minutes }
+  });
 }
 
-export async function closeStaleSessions(): Promise<void> {
+export const closeStaleSessions = nonOverlapping(sweepStaleSessions);
+async function sweepStaleSessions(): Promise<void> {
   const timeoutMs = Math.max(1000, Number(env.PRESENCE_EXIT_TIMEOUT_MS));
   const nowMs = Date.now();
+  const snapshotStarted=performance.now();
   const activeSessions = await withControlledClient(client => client.query<SessionContext & { last_seen_at: string; control_started_at: string | null;
-    control_deadline: string | null; control_until: string | null; timeout_ended_at: string }>(
+    control_deadline: string | null; control_until: string | null; timeout_ended_at: string; snapshot_now_ms:string }>(
     `SELECT s.id,
             s.started_at,
             COALESCE(s.worker_id, wta.worker_id) AS worker_id,
@@ -281,13 +181,15 @@ export async function closeStaleSessions(): Promise<void> {
             COALESCE(cr.max_continuous_minutes, $1) AS max_continuous_minutes,
             COALESCE(cr.pre_alert_minutes, $2) AS pre_alert_minutes,
             COALESCE(cr.max_daily_minutes, $3) AS max_daily_minutes,
+            EXTRACT(EPOCH FROM statement_timestamp())*1000 AS snapshot_now_ms,
             -- Text tokens retain PostgreSQL microseconds across pg/Node. Date
             -- below is only a scheduling hint, never the concurrency frontier.
             COALESCE(MAX(ps.last_presence_at), s.started_at)::text AS last_seen_at,
             MAX(op.started_at)::text AS control_started_at, MAX(op.hard_deadline)::text AS control_deadline,
             MAX(op.protect_until)::text AS control_until,
             GREATEST(COALESCE(MAX(ps.last_presence_at), s.started_at) + ($4::double precision * INTERVAL '1 millisecond'),
-              LEAST($5::timestamptz, COALESCE(MAX(op.protect_until), '-infinity'::timestamptz)))::text AS timeout_ended_at
+              LEAST(statement_timestamp(), COALESCE(MAX(op.protect_until), '-infinity'::timestamptz),
+                COALESCE(MAX(ps.last_presence_at),s.started_at)+INTERVAL '60 seconds'))::text AS timeout_ended_at
      FROM cold_room_sessions s
      LEFT JOIN worker_tag_assignments wta
        ON wta.hardware_device_id = s.hardware_device_id
@@ -306,10 +208,15 @@ export async function closeStaleSessions(): Promise<void> {
      WHERE s.ended_at IS NULL
      GROUP BY s.id, s.started_at, COALESCE(s.worker_id, wta.worker_id), s.cold_room_id,
               s.tag_id, s.hardware_device_id, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes`,
-    [env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES, timeoutMs, new Date(nowMs).toISOString()]
+    [env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES, timeoutMs]
   ));
 
-  for (const session of activeSessions.rows) {
+  const queueStarted=performance.now();
+  logger.debug({activeSessionCount:activeSessions.rows.length,snapshotElapsedMs:queueStarted-snapshotStarted},'presence sweep snapshot');
+  await runBoundedPresenceClosures(activeSessions.rows.sort((a,b)=>Date.parse(a.last_seen_at)-Date.parse(b.last_seen_at)),async session => {
+    const queueWaitMs=performance.now()-queueStarted;
+    const snapshotNowMs=Number(session.snapshot_now_ms);
+    const evaluationNowMs=Number.isFinite(snapshotNowMs)?snapshotNowMs:nowMs;
     let referenceTs = new Date(session.last_seen_at).getTime();
 
     if (!Number.isFinite(referenceTs)) {
@@ -327,21 +234,26 @@ export async function closeStaleSessions(): Promise<void> {
       source: 'tag_gateway_presence_state'
     }, 'presence timeout evaluation');
 
-    if (!shouldClosePresenceSession({ nowMs, lastPresenceAtMs: referenceTs, timeoutMs,
+    if (!shouldClosePresenceSession({ nowMs:evaluationNowMs, lastPresenceAtMs: referenceTs, timeoutMs,
       controlledOperation: session.control_started_at && session.control_deadline && session.control_until ? {
         startedAtMs: new Date(session.control_started_at).getTime(),
         hardDeadlineMs: new Date(session.control_deadline).getTime(),
         protectUntilMs: new Date(session.control_until).getTime()
-      } : undefined })) continue;
+      } : undefined })) return;
 
     // The timeout controls when absence is confirmed. The stored duration and
     // daily exposure stop at the last accepted packet, not at this closure.
     const closedAt = session.timeout_ended_at;
+    const transactionStarted=performance.now();
     const closed = await finalizeSession(session, closedAt, null, 'timeout', session.last_seen_at, timeoutMs);
     if (closed) {
-      logger.info({ sessionId: session.id, tagId: session.tag_id, closedAt, timeoutMs }, 'closed stale session by presence timeout');
+      logger.info({ sessionId: session.id, tagId: session.tag_id, closedAt, timeoutMs,
+        queueWaitMs,transactionElapsedMs:performance.now()-transactionStarted,
+        detectionToCommitMs:Date.now()-referenceTs,within90Seconds:Date.now()-referenceTs<=90000 }, 'closed stale session by presence timeout');
     }
-  }
+  },(session)=>logger.error({sessionId:session.id,overdueMs:Date.now()-Date.parse(session.last_seen_at),
+    exceeds90Seconds:Date.now()-Date.parse(session.last_seen_at)>90000},
+    'presence close failed; open session retained for next sweep'));
 }
 
 export async function processComplianceRules(event: ParsedPresenceEvent, resolvedIdentity?: EventTechnicalIdentity): Promise<void> {
@@ -431,7 +343,18 @@ export async function processComplianceRules(event: ParsedPresenceEvent, resolve
       }
     }
 
-    await db.query(
+    const entered=await withControlledClient(async client=>{
+      await client.query('BEGIN');await client.query("SET LOCAL lock_timeout='500ms'");
+      await client.query("SET LOCAL statement_timeout='1500ms'");
+      // Hold the open-session row while accepting the packet. The closer takes
+      // FOR UPDATE on that row, so it cannot commit between detection and upsert.
+      const current=await client.query(`SELECT id FROM cold_room_sessions
+        WHERE hardware_device_id=$1 AND ended_at IS NULL FOR SHARE`,[tag.hardware_device_id]);
+      if(!current.rowCount&&!evaluatePresenceSignal({gatewayRegistered:Boolean(tag.gateway_id),coldRoomId:tag.cold_room_id??null,
+        hasOpenSession:false,rssi:event.rssi,rssiThreshold:Number(tag.rssi_threshold??-127),entryMarginDb:env.PRESENCE_RSSI_ENTRY_MARGIN_DB}).accepted){
+        await client.query('COMMIT');return null;
+      }
+      await client.query(
       `UPDATE tag_gateway_presence_state
        SET last_presence_at = GREATEST(COALESCE(last_presence_at, '-infinity'::timestamptz), $1::timestamptz),
            hardware_device_id = $2,
@@ -440,14 +363,17 @@ export async function processComplianceRules(event: ParsedPresenceEvent, resolve
        WHERE hardware_device_id = $2
          AND hardware_gateway_id = $3`,
       [event.timestamp, tag.hardware_device_id, tag.hardware_gateway_id]
-    );
+      );
 
     // Publish the new open session before changing the operational state. A
     // concurrent timeout close must not clear a worker who has re-entered.
-    await upsertOpenSession(tag, event);
+      const inserted=await upsertOpenSession(tag,event,client.query.bind(client) as typeof db.query);
+      await client.query('COMMIT');return {inserted};
+    });
+    if(!entered)return;
 
     if (event.eventType === 'enter' || event.eventType === 'heartbeat') {
-      if (!activeSession.rowCount) {
+      if (!activeSession.rowCount||entered.inserted) {
         await markPresenceEnter(tag, event.timestamp);
       }
     }
@@ -541,7 +467,10 @@ export function startPresenceTimeoutLoop(): void {
     logger.warn({ configured: env.PRESENCE_SWEEP_INTERVAL_MS, effective: intervalMs }, 'presence sweep interval adjusted to avoid delayed timeout closes');
   }
 
+  let expectedAt=Date.now()+intervalMs;
   setInterval(() => {
-    closeStaleSessions().catch((error) => logger.error({ error }, 'presence timeout loop failed'));
+    const processDelayMs=Math.max(0,Date.now()-expectedAt);expectedAt=Date.now()+intervalMs;
+    if(processDelayMs>1000)logger.warn({processDelayMs,intervalMs},'presence sweep callback delayed; SLA risk');
+    closeStaleSessions().catch(() => logger.error('presence timeout snapshot failed; open sessions retained for retry'));
   }, intervalMs).unref();
 }

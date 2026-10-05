@@ -1,7 +1,6 @@
 import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
-import { triggerPhysicalAlarmSequence } from '../alerts/alerts.service';
 import { graceWindow } from './grace-window';
 
 interface PresenceStateTag {
@@ -55,14 +54,6 @@ async function resolveOperationalGraceMinutes(): Promise<number> {
   return Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : Math.max(1, Number(env.OPERATIONAL_GRACE_MINUTES));
 }
 
-function dispatchPhysicalAlarm(params: Parameters<typeof triggerPhysicalAlarmSequence>[0], logMessage: string): void {
-  setImmediate(() => {
-    triggerPhysicalAlarmSequence(params).catch((error) => {
-      logger.warn({ error, tagId: params.tagId, alertId: params.alertId }, logMessage);
-    });
-  });
-}
-
 export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string): Promise<{ isGraceReentry: boolean }> {
   if (!Number.isInteger(tag.hardware_device_id)) {
     throw new Error('central_hardware_mapping_required: presence state requires hardwareDeviceId');
@@ -87,7 +78,7 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
 
   if (graceActive) {
     await db.query(
-      `INSERT INTO presence_operational_state(
+      `WITH entered AS (INSERT INTO presence_operational_state(
         tag_id, hardware_device_id, worker_id, cold_room_id, inside, in_alarm, in_grace, grace_until, grace_started_at, last_alarm_at, reminder_sent_at, updated_at
       )
       VALUES($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, NULL, $5, NULL, NOW())
@@ -103,18 +94,16 @@ export async function markPresenceEnter(tag: PresenceStateTag, eventTs: string):
                     grace_started_at = NULL,
                     last_alarm_at = EXCLUDED.last_alarm_at,
                     reminder_sent_at = NULL,
-                    updated_at = NOW()`,
-      [tag.id, tag.hardware_device_id, tag.worker_id, tag.cold_room_id, eventTs]
+                    updated_at = NOW()
+      RETURNING hardware_device_id,tag_id,worker_id)
+      INSERT INTO physical_alarm_outbox(dispatch_key,hardware_device_id,payload)
+      SELECT $6,hardware_device_id,jsonb_build_object('alertId',$6::text,'tagId',tag_id,
+        'hardwareDeviceId',hardware_device_id,'workerId',worker_id,'severity','critical','alertType','alarm_rule_alarm')
+      FROM entered WHERE TRUE ON CONFLICT(dispatch_key) DO NOTHING`,
+      [tag.id, tag.hardware_device_id, tag.worker_id, tag.cold_room_id, eventTs, `grace-reentry:${tag.id}:${eventTs}`]
     );
 
-    dispatchPhysicalAlarm({
-      alertId: `grace-reentry:${tag.id}:${Date.parse(eventTs) || Date.now()}`,
-      workerId: tag.worker_id ?? undefined,
-      tagId: tag.id,
-      hardwareDeviceId: tag.hardware_device_id,
-      severity: 'critical',
-      alertType: 'alarm_rule_alarm'
-    }, 'failed to run immediate physical alarm for grace reentry');
+
 
     return { isGraceReentry: true };
   }
@@ -200,7 +189,7 @@ export async function clearExpiredGrace(): Promise<void> {
 
 export async function sendGraceReentryReminders(): Promise<void> {
   const cadenceMs = Math.max(60000, Number(env.REENTRY_REMINDER_INTERVAL_MS ?? 180000));
-  const due = await db.query<PresenceOperationalState>(
+  await db.query(
     `WITH claim AS (
       UPDATE presence_operational_state pos
       SET reminder_sent_at = NOW(),
@@ -230,22 +219,15 @@ export async function sendGraceReentryReminders(): Promise<void> {
                 pos.last_alarm_at,
                 pos.reminder_sent_at
     )
-    SELECT *
-    FROM claim`,
+    INSERT INTO physical_alarm_outbox(dispatch_key,hardware_device_id,payload)
+    SELECT 'reentry-reminder:'||tag_id::text||':'||reminder_sent_at::text,hardware_device_id,
+      jsonb_build_object('alertId','reentry-reminder:'||tag_id::text||':'||reminder_sent_at::text,
+        'tagId',tag_id,'hardwareDeviceId',hardware_device_id,'workerId',worker_id,
+        'severity','critical','alertType','alarm_rule_alarm')
+    FROM claim WHERE TRUE ON CONFLICT(dispatch_key) DO NOTHING`,
     [cadenceMs]
   );
 
-  for (const row of due.rows) {
-    dispatchPhysicalAlarm({
-      alertId: `reentry-reminder:${row.tag_id}:${Math.floor(Date.now() / cadenceMs)}`,
-      workerId: row.worker_id ?? undefined,
-      tagId: row.tag_id,
-      hardwareDeviceId: row.hardware_device_id,
-      severity: 'critical',
-      alertType: 'alarm_rule_alarm'
-    }, 'failed to run physical reminder alarm sequence');
-
-  }
 }
 
 export function startPresenceGraceLoop(): void {

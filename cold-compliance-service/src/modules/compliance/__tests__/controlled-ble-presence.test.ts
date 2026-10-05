@@ -24,7 +24,7 @@ const tagId = '22222222-2222-4222-8222-222222222222';
 const companyId = '33333333-3333-4333-8333-333333333333';
 const candidate = { tagId, tagUid: 'c65b52531bdc', gatewayId: 'gw-1', gatewayMac: '142b2fe271b4', hardwareDeviceId: 13, hardwareGatewayId: 41 };
 
-function databaseFixture() {
+function databaseFixture(followupDelayMs=35000) {
   const originalQuery = db.query; const originalConnect = db.connect;
   let lastPresence = START; let open = true; let opens = 1; let closes = 0;
   const detections = new Map<number, number>([[41, START]]);
@@ -33,24 +33,24 @@ function databaseFixture() {
     worker_id: null, cold_room_id: null, max_continuous_minutes: 10000, pre_alert_minutes: 10000, max_daily_minutes: 10000 });
   const query = async (sql: string, params: any[] = []) => {
     const result = (rows: unknown[]) => ({ rows, rowCount: rows.length });
-    if (['BEGIN','COMMIT'].includes(sql)) return result([]);
+    if (['BEGIN','COMMIT'].includes(sql)||sql.startsWith('SET LOCAL')) return result([]);
     if (sql.startsWith('SELECT id FROM cold_room_sessions')) return result(open ? [{ id: sessionId }] : []);
     if (sql.includes('INSERT INTO controlled_b5_presence_operations')) {
       assert.match(sql, /ON CONFLICT \(hardware_device_id\)/);
       assert.match(sql, /last_presence_at.*protect_until/s);
       if (!open || Date.now() - lastPresence >= env.PRESENCE_EXIT_TIMEOUT_MS
           || (operation && (operation.until > Date.now() || lastPresence <= operation.until))) return result([]);
-      operation = { id: params[1], started: Date.now(), deadline: Date.now() + 120_000, until: Date.now() + 120_000, outcome: 'running' };
+      operation = { id: params[1], started: Date.now(), deadline: Date.now() + 120_000, until: lastPresence + 60_000, outcome: 'running' };
       return result([{ hard_deadline: new Date(operation.deadline) }]);
     }
     if (sql.includes('UPDATE controlled_b5_presence_operations')) {
       if (operation?.id === params[1] && operation.outcome === 'running') {
-        operation.until = Math.min(operation.deadline, Date.now() + 10_000); operation.outcome = params[2];
+        operation.until = Math.min(operation.until,operation.deadline, Date.now() + 10_000); operation.outcome = params[2];
       }
       return result([]);
     }
     if (sql.includes('INSERT INTO ble_alarm_sessions') || sql.includes('UPDATE ble_alarm_sessions')) return result([{}]);
-    if (sql.includes('SELECT physical_alarm_followup_delay_ms')) return result([{ physical_alarm_followup_delay_ms: 35000,
+    if (sql.includes('SELECT physical_alarm_followup_delay_ms')) return result([{ physical_alarm_followup_delay_ms: followupDelayMs,
       physical_alarm_buzzer_duration_ms: 30000, physical_alarm_vibration_duration_ms: 30000 }]);
     if (sql.includes('MAX(ps.last_presence_at)') && sql.includes('FROM cold_room_sessions s')) return result(open ? [{ ...session(),
       last_seen_at: new Date(lastPresence).toISOString(), control_started_at: operation ? new Date(operation.started).toISOString() : null,
@@ -58,8 +58,8 @@ function databaseFixture() {
       control_deadline: operation ? new Date(operation.deadline).toISOString() : null,
       control_until: operation ? new Date(operation.until).toISOString() : null }] : []);
     if (sql.startsWith('UPDATE cold_room_sessions')) {
-      assert.match(sql, /op\.session_id = cold_room_sessions\.id/);
-      assert.match(sql, /\$5::text <> 'timeout'/);
+      assert.match(sql, /op\.session_id\s*=\s*cold_room_sessions\.id/);
+      assert.match(sql, /\$5::text\s*<>\s*'timeout'/);
       if (!open || (operation?.until > Date.now()) || lastPresence > Date.parse(params[3])) return result([]);
       writes.push(params); open = false; closes++; return result([session()]);
     }
@@ -74,7 +74,7 @@ function databaseFixture() {
     if (sql.includes('FROM cold_room_sessions s') && sql.includes('ORDER BY s.started_at')) return result(open ? [session()] : []);
     if (sql.includes('FROM alarm_rules') && sql.includes('SELECT id, description')) return result([]);
     if (sql.includes('grace_minutes')) return result([{ grace_minutes: 15 }]);
-    if (sql.includes('presence_operational_state') || sql.includes('workday_accumulators')) return result([]);
+    if (sql.includes('presence_operational_state') || sql.includes('workday_accumulators')||sql.includes('presence_close_outbox')) return result([]);
     throw new Error('unexpected simulated SQL');
   };
   (db as any).query = query;
@@ -162,12 +162,12 @@ test('failure, ambiguous disconnect and restart retain only bounded recovery; ex
   } finally { fixture.restore(); }
 });
 
-test('an abandoned executor cannot hold presence beyond 120s and the persisted deadline survives restart', async t => {
+test('an abandoned executor cannot hold presence beyond detection plus 60s while its physical deadline remains 120s', async t => {
   t.mock.timers.enable({ apis: ['Date','setTimeout'], now: START });
   const fixture = databaseFixture();
   try {
     assert.ok(await beginControlledPresenceOperation({ tagId, hardwareDeviceId: 13, companyId, alertId: 'first' }));
-    t.mock.timers.tick(119_000); await closeStaleSessions(); assert.equal(fixture.closes, 0);
+    t.mock.timers.tick(59_000); await closeStaleSessions(); assert.equal(fixture.closes, 0);
     t.mock.timers.tick(1000); await closeStaleSessions(); assert.equal(fixture.closes, 1);
   } finally { fixture.restore(); }
 });
@@ -301,4 +301,49 @@ test('stalled query destroys the borrowed connection; ordinary completion releas
     assert.deepEqual(released, [true]);
     assert.equal(await withControlledClient(async () => 42), 42); assert.deepEqual(released, [true,false]);
   } finally { db.connect = originalConnect; }
+});
+
+for(const gap of [38000,43000])test(`complete simulated ${gap/1000}s silence keeps one session without renewing the guard from duplicate/late packets`,async t=>{
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:START});const fixture=databaseFixture();
+  try{
+    t.mock.timers.tick(20000);
+    const operation=await beginControlledPresenceOperation({tagId,hardwareDeviceId:13,companyId,alertId:'gap'});
+    assert.ok(operation&&operation!=='busy');assert.equal(fixture.operation.until,START+60000);
+    assert.equal(operation.deadlineMs,START+140000); // Physical budget still starts at claim.
+    await executeConnectedTagCommandSequence({tagId,tagUid:candidate.tagUid,candidates:[candidate],
+      deps:{connect:async()=> 'accepted_unverified',disconnect:async()=> 'confirmed',markActive:async()=>{},markDisconnected:async()=>{}},
+      runActions:async()=>{
+        t.mock.timers.tick(gap-20000);await closeStaleSessions();assert.equal(fixture.closes,0);
+        await heartbeat(START,-75);await heartbeat(START-1000,-75);
+        assert.equal(fixture.lastPresence,START);assert.equal(fixture.operation.until,START+60000);
+        await heartbeat(START+gap,-75,42);return 'confirmed';
+      }});
+    await finishControlledPresenceOperation(operation,'unverified');
+    assert.equal(fixture.opens,1);assert.equal(fixture.closes,0);
+  }finally{fixture.restore();}
+});
+
+test('presence expiry at 60s does not cancel the original physical followup or its remaining actions',async t=>{
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:START});const fixture=databaseFixture(65000);
+  const repository=require('../../tag-control/infrastructure/tag-control.repository');
+  const ble=require('../../tag-control/infrastructure/ble-session.repository');
+  const transport=require('../../hardware-manager/hardware-command.client');
+  const originals=[repository.resolveTagTargets,ble.isBleSessionActive,transport.executeHardwareB5Command];
+  const enabled=env.TAG_ALARM_PHYSICAL_ENABLED;(env as any).TAG_ALARM_PHYSICAL_ENABLED=true;
+  const calls:string[]=[];repository.resolveTagTargets=async()=>[{...candidate,companyId}];ble.isBleSessionActive=async()=>false;
+  transport.executeHardwareB5Command=async(args:any)=>{calls.push(args.command);return 'confirmed';};
+  const flush=async()=>{for(let i=0;i<80;i++)await Promise.resolve();};
+  try{
+    const running=executeAlarmSequence({tagId,severity:'critical',alertType:'alarm_rule_alarm',alertId:'long'});
+    await flush();t.mock.timers.tick(env.TAG_ALARM_POST_CONNECT_DELAY_MS);await flush();
+    assert.deepEqual(calls,['connect','buzzer']);
+    t.mock.timers.tick(60001-env.TAG_ALARM_POST_CONNECT_DELAY_MS);await closeStaleSessions();assert.equal(fixture.closes,1);
+    assert.equal(fixture.operation.outcome,'running');assert.equal(fixture.operation.deadline,START+120000);
+    t.mock.timers.tick(10000);await flush();assert.equal((await running).status,'success');
+    assert.deepEqual(calls,['connect','buzzer','vibration','disconnect']);
+    assert.ok(fixture.operation.until<=START+60000);
+  }finally{
+    [repository.resolveTagTargets,ble.isBleSessionActive,transport.executeHardwareB5Command]=originals;
+    (env as any).TAG_ALARM_PHYSICAL_ENABLED=enabled;fixture.restore();
+  }
 });

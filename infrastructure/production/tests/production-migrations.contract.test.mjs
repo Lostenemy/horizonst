@@ -23,6 +23,15 @@ import {
 } from './postgres-container-lifecycle.mjs';
 
 const scriptPath = path.resolve(import.meta.dirname, 'production-migrations.postgres.mjs');
+test('Horneo migration ledger covers the current files and durable outboxes without a fixed historical count',()=>{
+  const script=readFileSync(scriptPath,'utf8');
+  assert.match(script,/expectedColdMigrations\.join\('\\n'\)/);
+  assert.match(script,/String\(expectedColdMigrations\.length\)/);
+  assert.match(script,/coldLedgerBeforeRepeat/);
+  assert.match(script,/FROM presence_close_outbox/);
+  assert.match(script,/FROM physical_alarm_outbox/);
+  assert.doesNotMatch(script,/count\(\*\) FROM cold_compliance_migrations'\), '21'/);
+});
 const source = readFileSync(scriptPath, 'utf8');
 const lifecycleSource = readFileSync(path.resolve(import.meta.dirname, 'postgres-container-lifecycle.mjs'), 'utf8');
 const productionDir = path.resolve(import.meta.dirname, '..');

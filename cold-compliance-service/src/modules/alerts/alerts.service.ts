@@ -1,6 +1,8 @@
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
 import { executeAlarmSequence, PhysicalAlarmSequenceResult } from '../tag-control/application/tag-physical-alarm.service';
+import { enqueuePhysicalAlarm } from './physical-alarm-outbox';
+import { withControlledClient } from '../tag-control/infrastructure/controlled-presence.repository';
 
 interface QueryClient {
   query: typeof db.query;
@@ -21,6 +23,10 @@ export async function executeAndRecordPhysicalAlarm(
 ): Promise<PhysicalAlarmSequenceResult> {
   const execute = deps?.execute ?? executeAlarmSequence;
   const query = deps?.query ?? db.query.bind(db);
+  if(!deps&&params.tagId&&Number.isInteger(params.hardwareDeviceId)){
+    await withControlledClient(client=>enqueuePhysicalAlarm(params,client.query.bind(client) as typeof db.query));
+    return {status:'attempted_unverified'}; // Accepted durable work, not a physical ACK.
+  }
   let outcome: PhysicalAlarmSequenceResult;
   try {
     outcome = await execute(params);
@@ -62,6 +68,13 @@ export async function createAlert(params: {
   if (params.tagId && !Number.isInteger(params.hardwareDeviceId)) {
     throw new Error('central_hardware_mapping_required: tagged alerts require hardwareDeviceId');
   }
+  if(params.dispatchPhysicalAlarm!==false&&params.tagId&&!params.queryClient){
+    return withControlledClient(async client=>{
+      await client.query('BEGIN');
+      const alert=await createAlert({...params,queryClient:{query:client.query.bind(client) as typeof db.query}});
+      await client.query('COMMIT');return alert;
+    });
+  }
   const queryClient = params.queryClient ?? db;
   const inserted = await queryClient.query<CreatedAlert>(
     `INSERT INTO alerts(worker_id, tag_id, hardware_device_id, cold_room_id, severity, alert_type, message, metadata)
@@ -80,6 +93,11 @@ export async function createAlert(params: {
   );
 
   const alert = inserted.rows[0];
+  if(params.dispatchPhysicalAlarm!==false&&alert.tag_id&&Number.isInteger(alert.hardware_device_id)){
+    await enqueuePhysicalAlarm({alertId:alert.id,workerId:alert.worker_id??undefined,tagId:alert.tag_id,
+      hardwareDeviceId:alert.hardware_device_id??undefined,severity:alert.severity,alertType:alert.alert_type},queryClient.query.bind(queryClient));
+    return alert;
+  }
   if (params.dispatchPhysicalAlarm !== false) setImmediate(() => {
     logger.info({
       alertId: alert.id,

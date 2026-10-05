@@ -4,9 +4,9 @@
 
 Base: `2aab0fa81d861bbb40db841a0a6478f3dd686365`, rama
 `codex/gateway-rssi-mqtt-b5-integration`. **Despliegue bloqueado.** El operador
-rechaza la cota anterior. Esta entrega documenta el diagnóstico y una propuesta
-pendiente de decisión; no reduce el temporizador físico ni cambia runtime,
-migraciones, datos, MQTT o RSSI. No implementa ni garantiza el máximo de 90 s.
+rechaza la cota anterior. Este documento conserva el diagnóstico inicial.
+La implementación posterior se detalla al final y en su informe de validación;
+no garantiza todavía el máximo TOTAL de 90 s ni autoriza despliegue.
 
 El operador informa de cinco ejecuciones satisfactorias en PostgreSQL 15 de
 la base indicada. Es evidencia aportada, no una ejecución realizada aquí;
@@ -105,12 +105,14 @@ todo silencio físico de duración arbitraria y garantizar ausencia confirmada
 en 90 s sin nuevas detecciones. El inicio de gracia y exposición se mantienen
 en la última detección, no se fabrican heartbeats. Salidas explícitas prevalecen.
 
-**Decisión solicitada:** autorizar el recorrido adicional de cierre/efectos
-posteriores y definir las condiciones de carga/latencia que sostienen el SLA
-de 90 s; o aceptar expresamente un presupuesto nominal con monitorización,
-sin llamarlo máximo garantizado. También confirmar el riesgo de reentrada y
-aviso omitido si el silencio continúa más allá de la protección reducida.
-No se aplica una alternativa sin esa decisión.
+**Decisión recibida:** el operador autoriza ampliar el recorrido de cierre y
+los efectos posteriores para sostener el objetivo de 90 s dentro de un sobre
+de carga explícito. Exige transacción canónica con estado fuera y outbox,
+consumidor recuperable/idempotente, barrido no solapado con concurrencia y
+pool acotados y avisos omitidos durables. Acepta salida/reentrada si el
+silencio supera 60 s mientras continúa el ciclo físico. No autoriza despliegue.
+Queda por acordar el máximo de sesiones y las condiciones de latencia para
+la prueba de SLA, sin convertir disponibilidad en una garantía de tiempo real.
 
 ## Validación y siguiente acción
 
@@ -133,5 +135,20 @@ reinicio, concurrencia, UUID obsoleto y paquetes ±1 microsegundo en fronteras.
 Después, cinco repeticiones en PostgreSQL 15 desechable y suite completa.
 Mantener todas las aserciones y las migraciones publicadas.
 
-Checkpoint: diagnóstico completo; sin implementación operativa; siguiente
-acción es resolver la decisión anterior. No desplegar esta rama.
+## Checkpoint de implementación y evidencia pendiente
+
+Se conserva el commit diagnóstico `c7c52ce06fdab9d2b530e6cbf480e6f5c26a38d4`.
+La implementación ahora conecta cierre canónico/outbox, efectos transaccionales,
+cola física durable, aceptación de paquetes con lock compartido y barrido
+concurrente no solapado. Se mantiene la protección D+60 separada del deadline
+físico. No se acepta el límite sugerido de 16 sesiones.
+
+El estado actualizado, las mediciones locales y las limitaciones están en
+[b5-presence-outbox-validation.md](b5-presence-outbox-validation.md). Los
+apartados previos conservan el cálculo/diagnóstico inicial; ya no representan
+la ausencia de implementación. La garantía TOTAL de 90 s sigue sin validarse.
+
+Siguiente acción obligatoria antes de despliegue: cinco ejecuciones PostgreSQL
+15 desechable de la prueba ampliada, medición de capacidad representativa y
+aceptación del sobre operativo respaldado por esa evidencia. No extrapolar
+mocks ni las ejecuciones PostgreSQL anteriores. No hay push ni despliegue.

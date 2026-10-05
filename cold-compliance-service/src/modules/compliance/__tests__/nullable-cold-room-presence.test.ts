@@ -11,7 +11,7 @@ test('registered gateway without cold room accepts valid RSSI and can open a nul
   const decision = evaluatePresenceSignal({ gatewayRegistered: true, coldRoomId: null, hasOpenSession: false, rssi: -84, rssiThreshold: -90, entryMarginDb: 5 });
   assert.deepEqual(decision, { accepted: true, requiredRssi: -85 });
   assert.doesNotMatch(complianceSource, /!tag\.gateway_id \|\| !tag\.cold_room_id/);
-  assert.match(complianceSource, /await upsertOpenSession\(tag, event\)/);
+  assert.match(complianceSource, /await upsertOpenSession\(tag,event,client\.query\.bind\(client\)/);
   assert.match(complianceSource, /INSERT INTO cold_room_sessions\(worker_id, tag_id, hardware_device_id, cold_room_id/);
 });
 

@@ -36,10 +36,13 @@ test('failed vibration and disconnect close operational BLE state without claimi
   assert.deepEqual(outcomes, [{ tagId: 'b63980f2-1f0e-422c-aa18-a0ce3db38402', confirmed: false, error: 'disconnect timeout' }]);
 });
 
-test('grace reentry dispatches BLE work after the presence transition', () => {
+test('grace reentry records durable BLE work atomically with the presence transition', () => {
   const source = readFileSync(join(process.cwd(), 'src/modules/presence/presence-state.service.ts'), 'utf8');
-  assert.match(source, /function dispatchPhysicalAlarm/);
-  assert.match(source, /setImmediate/);
+  assert.match(source, /WITH entered AS \(INSERT INTO presence_operational_state/);
+  assert.match(source, /INSERT INTO physical_alarm_outbox/);
+  assert.match(source, /FROM entered WHERE TRUE ON CONFLICT\(dispatch_key\) DO NOTHING/);
+  assert.match(source, /FROM claim WHERE TRUE ON CONFLICT\(dispatch_key\) DO NOTHING/);
+  assert.doesNotMatch(source, /setImmediate/);
   assert.doesNotMatch(source, /await triggerPhysicalAlarmSequence/);
 });
 

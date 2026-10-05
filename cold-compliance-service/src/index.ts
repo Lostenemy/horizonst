@@ -7,6 +7,8 @@ import { startComplianceRuleLoop, startPresenceTimeoutLoop } from './modules/com
 import { startPresenceGraceLoop } from './modules/presence/presence-state.service';
 import { logger } from './utils/logger';
 import { startPresenceMaintenanceLoop } from './modules/maintenance/maintenance.service';
+import { startCloseEffectsLoop } from './modules/compliance/presence-close-effects';
+import { startPhysicalAlarmOutboxLoop } from './modules/alerts/physical-alarm-outbox';
 
 async function bootstrap() {
   await runMigrations();
@@ -16,6 +18,8 @@ async function bootstrap() {
   startPresenceTimeoutLoop();
   startPresenceGraceLoop();
   startPresenceMaintenanceLoop();
+  startCloseEffectsLoop();
+  startPhysicalAlarmOutboxLoop();
 
   const app = buildApp();
   app.listen(env.PORT, () => {

@@ -10,6 +10,6 @@ export function shouldClosePresenceSession(params: {
       && operation.startedAtMs <= params.nowMs && operation.hardDeadlineMs > operation.startedAtMs
       && operation.hardDeadlineMs <= operation.startedAtMs + 120_000
       && operation.protectUntilMs >= operation.startedAtMs && operation.protectUntilMs <= operation.hardDeadlineMs
-      && params.nowMs < operation.protectUntilMs) return false;
+      && params.nowMs < Math.min(operation.protectUntilMs,params.lastPresenceAtMs+60_000)) return false;
   return params.nowMs - params.lastPresenceAtMs > Math.max(1000, params.timeoutMs);
 }

@@ -336,7 +336,13 @@ try {
     "runMigrations().then(() => db.end()).catch(async e => { console.error(e); await db.end(); process.exit(1); });"
   ].join('');
   runNode({ serviceName: 'cold-compliance-service', code: coldRunner, database: 'cold_compliance' });
-  assert.equal(scalar('cold_compliance', 'SELECT count(*) FROM cold_compliance_migrations'), '21');
+  const expectedColdMigrations = readdirSync(path.join(root, 'cold-compliance-service', 'migrations'))
+    .filter((file) => /^\d{3}_.*\.sql$/.test(file)).sort();
+  assert.equal(scalar('cold_compliance', 'SELECT filename FROM cold_compliance_migrations ORDER BY filename'), expectedColdMigrations.join('\n'));
+  assert.equal(scalar('cold_compliance', 'SELECT count(*) FROM cold_compliance_migrations'), String(expectedColdMigrations.length));
+  const coldLedgerBeforeRepeat = scalar('cold_compliance', 'SELECT filename,applied_at FROM cold_compliance_migrations ORDER BY filename');
+  assert.equal(scalar('cold_compliance', `SELECT concat_ws(',',
+    (SELECT count(*) FROM presence_close_outbox),(SELECT count(*) FROM physical_alarm_outbox))`), '0,0');
   assert.equal(scalar('cold_compliance', `SELECT concat_ws(',',
     (SELECT count(*) FROM tags),(SELECT count(*) FROM gateways),(SELECT count(*) FROM worker_tag_assignments),
     (SELECT count(*) FROM cold_room_sessions),(SELECT count(*) FROM alerts),(SELECT count(*) FROM incidents),
@@ -346,7 +352,8 @@ try {
   assert.equal(scalar('cold_compliance', `SELECT count(*) FROM tags WHERE hardware_device_id IS NULL`) ,'0');
   assert.equal(scalar('cold_compliance', `SELECT count(*) FROM gateways WHERE hardware_gateway_id IS NULL`) ,'0');
   runNode({ serviceName: 'cold-compliance-service', code: coldRunner, database: 'cold_compliance' });
-  assert.equal(scalar('cold_compliance', 'SELECT count(*) FROM cold_compliance_migrations'), '21');
+  assert.equal(scalar('cold_compliance', 'SELECT count(*) FROM cold_compliance_migrations'), String(expectedColdMigrations.length));
+  assert.equal(scalar('cold_compliance', 'SELECT filename,applied_at FROM cold_compliance_migrations ORDER BY filename'), coldLedgerBeforeRepeat);
 
   // Store: production already has normal migrations 001-015; apply only isolated security 016.
   const storeNormalMigrations = readdirSync(path.join(root, 'horizonst-store', 'migrations'))

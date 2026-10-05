@@ -5,6 +5,7 @@ import { env } from '../../../config/env';
 
 export const CONTROLLED_BLE_MAX_MS = 120_000;
 export const CONTROLLED_BLE_RECOVERY_MS = 10_000;
+export const CONTROLLED_PRESENCE_FROM_DETECTION_MS = 60_000;
 export interface ControlledPresenceOperation { operationId: string; hardwareDeviceId: number; deadlineMs: number }
 
 // A stalled database must not leave the executor waiting or a session lock borrowed.
@@ -50,7 +51,7 @@ export async function beginControlledPresenceOperation(params: {
          (hardware_device_id, operation_id, session_id, company_id, alert_reference,
           started_at, hard_deadline, protect_until, completed_at, outcome)
        SELECT $1,$2,$3,$4,$5,statement_timestamp(),statement_timestamp() + INTERVAL '120 seconds',
-              statement_timestamp() + INTERVAL '120 seconds',NULL,'running'
+              LEAST(last_presence_at + INTERVAL '60 seconds',statement_timestamp() + INTERVAL '120 seconds'),NULL,'running'
        FROM detection WHERE last_presence_at > clock_timestamp() - $6::interval
        ON CONFLICT (hardware_device_id) DO UPDATE SET
          operation_id = EXCLUDED.operation_id, session_id = EXCLUDED.session_id, company_id = EXCLUDED.company_id,
@@ -74,7 +75,7 @@ export async function finishControlledPresenceOperation(operation: ControlledPre
   await withControlledClient(async client => {
     await client.query(
       `UPDATE controlled_b5_presence_operations SET completed_at = clock_timestamp(), outcome = $3,
-       protect_until = LEAST(hard_deadline, clock_timestamp() + INTERVAL '10 seconds')
+       protect_until = LEAST(protect_until, hard_deadline, clock_timestamp() + INTERVAL '10 seconds')
        WHERE hardware_device_id = $1 AND operation_id = $2 AND outcome = 'running'`,
       [operation.hardwareDeviceId, operation.operationId, outcome]);
   });
