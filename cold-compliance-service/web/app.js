@@ -49,7 +49,6 @@ const TAG_MIN_ACTION_DURATION_MS = 100;
 const TAG_MAX_ACTION_DURATION_MS = 60000;
 const TAG_MIN_ACTION_DURATION_SECONDS = TAG_MIN_ACTION_DURATION_MS / 1000;
 const TAG_MAX_ACTION_DURATION_SECONDS = TAG_MAX_ACTION_DURATION_MS / 1000;
-const GATEWAY_DEFAULT_RSSI_THRESHOLD = -127;
 const GATEWAY_MIN_RSSI_THRESHOLD = -127;
 const GATEWAY_MAX_RSSI_THRESHOLD = 0;
 
@@ -123,9 +122,14 @@ function validateTagDurationSecondsAsMs(value, label) {
 }
 
 
+function storedGatewayRssi(value) {
+  return typeof value === 'number' && Number.isInteger(value) && value >= -127 && value <= 0
+    ? `${value} dBm` : 'No disponible (dato ausente o inválido)';
+}
+
 function validateGatewayRssiThreshold(value) {
   const rssi = Number(value);
-  if (value === '' || !Number.isInteger(rssi) || rssi < GATEWAY_MIN_RSSI_THRESHOLD || rssi > GATEWAY_MAX_RSSI_THRESHOLD) {
+  if (value == null || String(value).trim() === '' || !Number.isInteger(rssi) || rssi < GATEWAY_MIN_RSSI_THRESHOLD || rssi > GATEWAY_MAX_RSSI_THRESHOLD) {
     toast(`RSSI mínimo debe ser un entero entre ${GATEWAY_MIN_RSSI_THRESHOLD} y ${GATEWAY_MAX_RSSI_THRESHOLD}.`, 'error');
     return null;
   }
@@ -800,9 +804,10 @@ async function renderInventory() {
       ];
     }))}
     <h3 class="mt-12">Listado de gateways</h3>
-    ${table(['MAC', 'Nombre', 'Ubicación', 'RSSI mínimo'], gateways.map((g) => {
-      const rssiThreshold = g.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD;
-      return [g.gateway_mac, g.hardware_name || g.description || '', g.hardware_place_name || '', rssiThreshold];
+    <p>Umbral local: política de presencia de Horneo, no señal medida. Filtro físico: valor guardado en Administración, no lectura de la gateway. Pueden diferir; no se sincronizan. Solicitar 1042 requiere una acción técnica explícita en Administración.</p>
+    ${table(['MAC', 'Nombre', 'Ubicación', 'Umbral local de presencia (dBm)', 'Filtro físico guardado central (dBm)'], gateways.map((g) => {
+      return [g.gateway_mac, g.hardware_name || g.description || '', g.hardware_place_name || '', storedGatewayRssi(g.rssi_threshold),
+        g.hardware_rssi_state === 'saved_unverified' ? `${storedGatewayRssi(g.hardware_rssi_threshold)} · Sin lectura física` : 'No disponible · Sin lectura física'];
     }))}
   `;
 }
@@ -853,7 +858,7 @@ async function beginGatewayInlineEdit(id) {
   startInlineEdit('gateways', id, {
     mac: gateway.gateway_mac,
     descripcion: gateway.description || '',
-    rssiThreshold: gateway.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD
+    rssiThreshold: gateway.rssi_threshold ?? ''
   });
   renderInventory();
 }
@@ -862,20 +867,23 @@ async function saveGatewayInlineEdit(id) {
   const d = inlineEdit.gateways.draft;
   const rssiThreshold = validateGatewayRssiThreshold(d.rssiThreshold);
   if (rssiThreshold == null) return;
-  await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ mac: d.mac, descripcion: d.descripcion, rssiThreshold }) });
+  await api(`/gateways/${id}`, { method: 'PATCH', body: JSON.stringify({ rssiThreshold }) });
   cancelInlineEdit('gateways');
-  toast('Gateway actualizado');
+  toast('Umbral local de presencia guardado. No se ha enviado un filtro físico.');
   renderInventory();
 }
 async function applyGatewayRssi(id) {
   const gateways = await api('/gateways');
   const gateway = gateways.find((g) => g.id === id);
   if (!gateway) return;
-  const draft = inlineEdit.gateways.id === id ? inlineEdit.gateways.draft : null;
-  const rssi = validateGatewayRssiThreshold(draft ? draft.rssiThreshold : (gateway.rssi_threshold ?? GATEWAY_DEFAULT_RSSI_THRESHOLD));
+  const requested = prompt('Filtro físico solicitado (dBm, -127 a 0). Es independiente del umbral local de presencia; no es una lectura física.');
+  if (requested == null) return;
+  const rssi = validateGatewayRssiThreshold(requested);
   if (rssi == null) return;
-  await api(`/gateways/${id}/apply-rssi`, { method: 'POST', body: JSON.stringify({ rssi }) });
-  toast('Comando RSSI enviado. Pendiente de confirmación por el gateway.');
+  if (!confirm(`Solicitar filtro físico ${rssi} dBm a ${gateway.gateway_mac}? No modifica el umbral local de presencia.`)) return;
+  const result = await api(`/gateways/${id}/apply-rssi`, { method: 'POST', body: JSON.stringify({ rssi }) });
+  toast(result.status === 'success' ? 'ACK satisfactorio del filtro solicitado; no es una lectura física.' : 'Sin ACK satisfactorio del filtro físico.', result.status === 'success' ? undefined : 'error');
+  await renderInventory();
 }
 async function configureEmergencyButton(id) {
   if (!confirm('¿Publicar la configuración de doble pulsación B5 en este gateway?')) return;

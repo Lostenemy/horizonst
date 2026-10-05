@@ -216,6 +216,33 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
 const commandPath = '/api/gateways/41/bluetooth/scan';
 const validCommand = { method: 'POST', body: JSON.stringify({ scan_switch: 1 }) };
 
+test('RSSI physical command retains authorization, scope and explicit input without publication on rejection', async () => {
+  const observed = fakeDatabase();
+  const path = '/api/gateways/41/apply-rssi';
+  const body = { method: 'POST', body: JSON.stringify({ rssi: -60 }) };
+  assert.equal((await api(path, undefined, undefined, body)).status, 401);
+  assert.equal((await api(path, 1, 'hardware_readonly', body)).status, 403);
+  assert.equal((await api(path, 3, 'hardware_technician', body)).status, 404);
+  assert.equal((await api(path, 2, 'hardware_technician', { method: 'POST', body: '{}' })).status, 400);
+  assert.equal(observed.published.length, 0); assert.equal(observed.commandInserts, 0);
+});
+
+test('command history exposes only the requested RSSI scalar with existing company scope and ACK status', async () => {
+  const observed = fakeDatabase(); const originalFakeQuery = pool.query;
+  (pool as any).query = async (sql: string, params: any[] = []) => {
+    if (!sql.includes('FROM hardware_gateway_commands c')) return (originalFakeQuery as any)(sql, params);
+    assert.match(sql, /CASE WHEN c\.msg_id = 1042 THEN c\.payload->'data'->'rssi' END AS requested_rssi/);
+    assert.match(sql, /c\.company_id = g\.company_id/);
+    return { rows: params[1]?.includes(COMPANY_A) ? [{ msg_id: 1042, requested_rssi: -60, status: 'ack_success', result_code: 0, ack_at: '2026-10-05T08:00:00Z' }] : [] };
+  };
+  const path = '/api/gateways/41/commands';
+  const rows = await (await api(path, 2, 'hardware_technician')).json();
+  assert.equal(rows[0].requested_rssi, -60); assert.equal(rows[0].status, 'ack_success');
+  assert.equal('payload' in rows[0], false);
+  assert.deepEqual(await (await api(path, 3, 'hardware_technician')).json(), []);
+  assert.equal(observed.published.length, 0);
+});
+
 test('Bluetooth command rejects anonymous and readonly users without publication', async () => {
   const observed = fakeDatabase();
   assert.equal((await api(commandPath, undefined, undefined, validCommand)).status, 401);

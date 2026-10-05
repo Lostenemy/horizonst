@@ -172,7 +172,8 @@ router.get('/:gatewayId/commands', authenticate, async (req: AuthenticatedReques
               c.ack_msg_id, c.result_code, c.result_message, c.timeout_ms,
               c.connection_state, c.connection_report_at,
               CASE WHEN c.msg_id = 1030 THEN c.payload->'data'->>'host' END AS destination_host,
-              CASE WHEN c.msg_id = 1030 THEN c.payload->'data'->>'port' END AS destination_port
+              CASE WHEN c.msg_id = 1030 THEN c.payload->'data'->>'port' END AS destination_port,
+              CASE WHEN c.msg_id = 1042 THEN c.payload->'data'->'rssi' END AS requested_rssi
        FROM hardware_gateway_commands c
        JOIN gateways g ON g.id = c.gateway_id
        LEFT JOIN users u ON u.id = c.actor_user_id

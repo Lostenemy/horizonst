@@ -146,3 +146,32 @@ test('request failure never echoes the password in UI and still clears the ephem
   assert.doesNotMatch(f.get('gatewayMqttFeedback').textContent, /ephemeral-test-password/);
   assert.match(f.get('gatewayMqttFeedback').textContent, /No se pudo completar/);
 });
+
+test('RSSI form shows saved central data separately, opens without commands and rejects blank input', async () => {
+  const f = await fixture();
+  f.context.gatewayFixture.rssi_threshold = -60;
+  await f.open();
+  assert.equal(f.get('gatewayRssi').value, -60);
+  assert.match(f.get('gatewayRssiSaved').textContent, /guardado central: -60.*No verificado/);
+  assert.equal(f.posts.length, 0);
+  f.context.gatewayFixture.rssi_threshold = null; await f.open();
+  assert.equal(f.get('gatewayRssi').value, '');
+  assert.match(f.get('gatewayRssiSaved').textContent, /ausente o inválido/);
+  await f.get('gatewayApplyRssi').listeners.click(); assert.equal(f.posts.length, 0);
+});
+
+test('explicit physical RSSI updates saved indication only after successful ACK, never claims readback', async () => {
+  const f = await fixture(); await f.open();
+  f.get('gatewayRssi').value = '-65';
+  let status = 'error';
+  f.context.apiPost = async (url: string, body: unknown) => { f.posts.push({ url, body }); return { status }; };
+  await f.get('gatewayApplyRssi').listeners.click();
+  assert.match(f.get('gatewayRssiSaved').textContent, /ausente/);
+  assert.match(f.get('gatewayMqttPresetStatus').textContent, /No leída/);
+  status = 'success'; await f.get('gatewayApplyRssi').listeners.click();
+  assert.equal(f.posts[1].url, '/gateways/17/apply-rssi');
+  assert.equal(f.posts[1].body.rssi, -65);
+  assert.match(f.confirmations[1].message, /-65.*1042.*No cambia el umbral local/);
+  assert.match(f.get('gatewayRssiSaved').textContent, /-65.*tras ACK.*No verificado/);
+  assert.match(f.get('gatewayTechnicalFeedback').textContent, /No demuestra el filtro físico actual/);
+});

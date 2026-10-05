@@ -4,7 +4,7 @@ import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { logger } from '../../utils/logger';
-import { listHardwareGateways, LocalGatewayReference, normalizeHorneoGatewayMac, resolveHardwareGateway } from './hardware-manager.client';
+import { hardwareGatewayRssiFields, listHardwareGateways, LocalGatewayReference, normalizeHorneoGatewayMac, resolveHardwareGateway } from './hardware-manager.client';
 import { executeHardwareGatewayManagementCommand } from '../hardware-manager/hardware-command.client';
 
 export const gatewaysRouter = Router();
@@ -33,11 +33,11 @@ function normalizeRssiThreshold(input: { rssiThreshold?: number; rssi_threshold?
 gatewaysRouter.get('/', async (_req, res, next) => {
   try {
     const localRows = (await db.query('SELECT * FROM gateways ORDER BY created_at DESC')).rows;
-    if (!env.HARDWARE_MANAGER_ENABLED) return res.json(localRows.map((row) => ({ ...row, hardware_source: 'local_disabled' })));
+    if (!env.HARDWARE_MANAGER_ENABLED) return res.json(localRows.map((row) => ({ ...row, ...hardwareGatewayRssiFields(), hardware_source: 'local_disabled' })));
     const central = await listHardwareGateways();
     if (central.kind === 'unavailable') {
       logger.warn({ error: central.error }, 'Hardware Manager unavailable; listing local gateways');
-      return res.json(localRows.map((row) => ({ ...row, hardware_source: 'local_fallback' })));
+      return res.json(localRows.map((row) => ({ ...row, ...hardwareGatewayRssiFields(), hardware_source: 'local_fallback' })));
     }
     const byId = new Map((central.kind === 'found' ? central.value : []).map((gateway) => [gateway.id, gateway]));
     return res.json(localRows.map((row) => {
@@ -51,8 +51,9 @@ gatewaysRouter.get('/', async (_req, res, next) => {
         hardware_company_id: hardware.company_id,
         hardware_place_id: hardware.place_id,
         hardware_place_name: hardware.place_name,
+        ...hardwareGatewayRssiFields(hardware),
         hardware_source: 'central'
-      } : { ...row, hardware_source: 'central_not_found', hardware_active: false };
+      } : { ...row, ...hardwareGatewayRssiFields(), hardware_source: 'central_not_found', hardware_active: false };
     }));
   } catch (error) {
     next(error);
@@ -117,7 +118,8 @@ gatewaysRouter.post('/:id/apply-rssi', requireRoles(['superadministrador']), asy
     if (!gateway.rowCount) return res.status(404).json({ error: 'not_found' });
     if (!gateway.rows[0].hardware_gateway_id) return res.status(409).json({ error: 'hardware_manager_mapping_required' });
 
-    const rssi = parsed.rssi ?? normalizeRssiThreshold(parsed) ?? gateway.rows[0].rssi_threshold;
+    const rssi = parsed.rssi ?? normalizeRssiThreshold(parsed);
+    if (rssi === undefined) return res.status(400).json({ error: 'explicit_physical_rssi_required', message: 'Indica el filtro físico solicitado; el umbral local de presencia no se copia automáticamente.' });
     const result = await executeHardwareGatewayManagementCommand({
       hardwareGatewayId: gateway.rows[0].hardware_gateway_id,
       action: 'apply-rssi',

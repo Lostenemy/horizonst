@@ -345,7 +345,8 @@ const refreshTechnicalHistory = async () => {
       (item) => item.actor_name || item.actor_code || item.actor_type,
       (item) => item.destination_host ? `${item.destination_host}:${item.destination_port}` : '—',
       (item) => item.connection_state ? `${item.status} · BLE ${item.connection_state}` : item.status,
-      (item) => item.result_code == null ? item.result_message : `${item.result_code}: ${item.result_message || ''}`
+      (item) => item.result_code == null ? item.result_message : `${item.result_code}: ${item.result_message || ''}`,
+      (item) => item.msg_id === 1042 && Number.isInteger(item.requested_rssi) && item.requested_rssi >= -127 && item.requested_rssi <= 0 ? `${item.requested_rssi} dBm (solicitado)` : '—'
     ];
     renderHistory(commandsBody, commands, commandColumns);
     renderHistory(mqttHistoryBody, commands.filter((item) => item.msg_id === 1030 || item.msg_id === 1000), [
@@ -422,7 +423,12 @@ const selectGateway = async (gateway) => {
   mqttConfirmationMac.textContent = normalizedCentralMac(gateway);
   refreshFirmwareControls(gateway);
   renderReportedIdentity(gateway);
-  gatewayRssi.value = gateway.rssi_threshold ?? -127;
+  const savedRssi = gateway.rssi_threshold;
+  const validRssi = Number.isInteger(savedRssi) && savedRssi >= -127 && savedRssi <= 0;
+  gatewayRssi.value = validRssi ? savedRssi : '';
+  document.getElementById('gatewayRssiSaved').textContent = validRssi
+    ? `Valor guardado central: ${savedRssi} dBm. No verificado mediante lectura física.`
+    : 'Valor guardado central ausente o inválido. Introduce una propuesta explícita; no se usa un valor de respaldo.';
   technicalFeedback.textContent = '';
   await Promise.all([mqttPanel.hidden ? Promise.resolve() : applyMqttPreset(), refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
 };
@@ -549,15 +555,20 @@ const refreshGatewayDevices = async (gatewayId) => {
 
 document.getElementById('gatewayApplyRssi').addEventListener('click', async () => {
   const rssi = Number(gatewayRssi.value);
-  if (!Number.isInteger(rssi) || rssi < -127 || rssi > 0) {
+  if (gatewayRssi.value.trim() === '' || !Number.isInteger(rssi) || rssi < -127 || rssi > 0) {
     technicalFeedback.textContent = 'El RSSI debe ser un entero entre -127 y 0 dBm.';
     return;
   }
-  if (!selectedGateway || !await confirmAction({ title: 'Aplicar filtro BLE', message: `Aplicar RSSI ${rssi} dBm a ${selectedGateway.mac_address}?`, confirmText: 'Aplicar' })) return;
+  const gateway = selectedGateway;
+  if (!gateway || !await confirmAction({ title: 'Solicitar filtro físico BLE', message: `Solicitar filtro RSSI ${rssi} dBm a ${gateway.mac_address} mediante 1042? No cambia el umbral local de presencia de Horneo. El ACK no es una lectura física.`, confirmText: 'Solicitar' }) || selectedGateway?.id !== gateway.id) return;
   try {
     technicalFeedback.textContent = 'Esperando confirmación de la gateway…';
-    const result = await apiPost(`/gateways/${selectedGateway.id}/apply-rssi`, { rssi });
-    technicalFeedback.textContent = result.status === 'success' ? 'RSSI aplicado y confirmado.' : `No confirmado: ${result.resultMessage || result.status}`;
+    const result = await apiPost(`/gateways/${gateway.id}/apply-rssi`, { rssi });
+    technicalFeedback.textContent = result.status === 'success' ? `ACK satisfactorio para filtro solicitado ${rssi} dBm. No demuestra el filtro físico actual.` : `Sin ACK satisfactorio: ${result.resultMessage || result.status}`;
+    if (result.status === 'success' && selectedGateway?.id === gateway.id) {
+      selectedGateway.rssi_threshold = rssi;
+      document.getElementById('gatewayRssiSaved').textContent = `Valor guardado central: ${rssi} dBm tras ACK. No verificado mediante lectura física.`;
+    }
     await refreshTechnicalHistory();
   } catch (error) {
     technicalFeedback.textContent = `No se pudo aplicar RSSI: ${error.message}`;

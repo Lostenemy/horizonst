@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { env } from '../../../config/env';
 import {
-  normalizeHorneoGatewayMac,
+  hardwareGatewayRssiFields, normalizeHorneoGatewayMac,
   resolveHardwareGateway
 } from '../hardware-manager.client';
 
@@ -65,7 +65,7 @@ test('dual-read resolves central gateway by hardware_gateway_id', async () => {
   assert.deepEqual(result.divergences, []);
 });
 
-test('dual-read reports RSSI drift without changing local behavior', async () => {
+test('different physical and local presence thresholds are not an identity divergence', async () => {
   const result = await resolveHardwareGateway(localGateway, {
     fetch: (async () => new Response(JSON.stringify({
       id: 10,
@@ -78,8 +78,16 @@ test('dual-read reports RSSI drift without changing local behavior', async () =>
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch
   });
   assert.equal(result.source, 'central');
-  assert.deepEqual(result.divergences, ['rssi_threshold']);
+  assert.deepEqual(result.divergences, []);
   assert.equal(result.local.rssi_threshold, -70);
+  assert.equal(hardwareGatewayRssiFields(result.central!).hardware_rssi_threshold, -60);
+});
+
+test('missing or invalid central filter never falls back to the local presence threshold', () => {
+  assert.deepEqual(hardwareGatewayRssiFields(), { hardware_rssi_threshold: null, hardware_rssi_state: 'not_available' });
+  for (const value of [undefined, null, '-60', -128, 1, -60.5]) {
+    assert.equal(hardwareGatewayRssiFields({ rssi_threshold: value } as any).hardware_rssi_threshold, null);
+  }
 });
 
 test('dual-read falls back locally when Hardware Manager is unavailable', async () => {

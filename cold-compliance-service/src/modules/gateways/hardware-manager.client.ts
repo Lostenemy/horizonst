@@ -29,6 +29,17 @@ export type HardwareGatewayResolution = {
   divergences: string[];
 };
 
+// Separate the saved central physical filter from the local presence policy.
+// Neither a saved threshold nor its command ACK is a physical readback.
+export function hardwareGatewayRssiFields(hardware?: HardwareGateway) {
+  const value = hardware?.rssi_threshold;
+  const valid = typeof value === 'number' && Number.isInteger(value) && value >= -127 && value <= 0;
+  return {
+    hardware_rssi_threshold: valid ? value : null,
+    hardware_rssi_state: valid ? 'saved_unverified' as const : 'not_available' as const
+  };
+}
+
 export function normalizeHorneoGatewayMac(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.replace(/[^0-9a-f]/gi, '').toLowerCase();
@@ -104,7 +115,6 @@ export async function resolveHardwareGateway(
 
     if (local.hardware_gateway_id && central.id !== local.hardware_gateway_id) divergences.push('hardware_gateway_id');
     if (normalizeHorneoGatewayMac(central.mac_address) !== localMac) divergences.push('gateway_mac');
-    if (central.rssi_threshold !== local.rssi_threshold) divergences.push('rssi_threshold');
     if (divergences.length) {
       logger.warn({ localGatewayId: local.id, hardwareGatewayId: central.id, gatewayMac: localMac, divergences }, 'hardware gateway dual-read divergence');
     }
