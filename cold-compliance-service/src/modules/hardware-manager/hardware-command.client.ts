@@ -16,10 +16,14 @@ export async function executeHardwareB5Command(params: {
   command: HardwareB5Command;
   durationMs?: number;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<HardwareB5CommandOutcome> {
   if (!env.HARDWARE_MANAGER_ENABLED) throw new Error('Hardware Manager command execution is disabled');
   if (!params.hardwareGatewayId || !params.hardwareDeviceId) throw new Error('Central hardware mapping is required');
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  params.signal?.addEventListener('abort', abort, { once: true });
+  if (params.signal?.aborted) controller.abort();
   const timer = setTimeout(() => controller.abort(), env.HARDWARE_MANAGER_COMMAND_TIMEOUT_MS);
   timer.unref();
   try {
@@ -61,6 +65,7 @@ export async function executeHardwareB5Command(params: {
     return 'confirmed';
   } finally {
     clearTimeout(timer);
+    params.signal?.removeEventListener('abort', abort);
   }
 }
 

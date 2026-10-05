@@ -9,6 +9,7 @@ import { shouldClosePresenceSession } from './presence-timeout-policy';
 import { evaluatePresenceSignal } from './presence-signal-policy';
 import { EventTechnicalIdentity, resolveEventTechnicalIdentity } from '../hardware-manager/event-identity.service';
 import { madridExposureSegments } from '../realtime/workday-duration';
+import { withControlledClient } from '../tag-control/infrastructure/controlled-presence.repository';
 const MIN_SESSION_START_MS = Date.parse('2025-01-01T00:00:00.000Z');
 export function isValidSessionStart(startedAt: string): boolean {
   const startedAtMs = Date.parse(startedAt);
@@ -157,8 +158,7 @@ async function finalizeSession(
   lastDetectionAt: string | Date
 ): Promise<boolean> {
   const exposureEndedAt = reason === 'timeout' ? lastDetectionAt : endedAt;
-  const updateResult = await db.query(
-    `UPDATE cold_room_sessions
+  const closeSql = `UPDATE cold_room_sessions
      SET ended_at = $1,
          duration_seconds = CASE WHEN $5::text = 'timeout'
            THEN FLOOR(GREATEST(0, EXTRACT(EPOCH FROM ($4::timestamptz - started_at))))::int
@@ -167,6 +167,11 @@ async function finalizeSession(
          close_event_id = COALESCE($2, close_event_id)
      WHERE id = $3 AND ended_at IS NULL
        AND $1::timestamptz >= started_at
+       AND ($5::text <> 'timeout' OR NOT EXISTS (
+         SELECT 1 FROM controlled_b5_presence_operations op
+         WHERE op.hardware_device_id = cold_room_sessions.hardware_device_id
+           AND op.session_id = cold_room_sessions.id AND op.protect_until > clock_timestamp()
+       ))
        AND NOT EXISTS (
          SELECT 1 FROM tag_gateway_presence_state ps
          JOIN gateways seen_gateway ON ps.hardware_gateway_id = seen_gateway.hardware_gateway_id
@@ -176,9 +181,15 @@ async function finalizeSession(
            AND (cold_room_sessions.cold_room_id IS NULL
                 OR seen_gateway.cold_room_id = cold_room_sessions.cold_room_id)
        )
-     RETURNING id, started_at, worker_id, cold_room_id, tag_id, hardware_device_id`,
-    [endedAt, closeEventId, session.id, exposureEndedAt, reason]
-  );
+     RETURNING id, started_at, worker_id, cold_room_id, tag_id, hardware_device_id`;
+  const closeValues = [endedAt, closeEventId, session.id, exposureEndedAt, reason];
+  const updateResult = reason === 'timeout' ? await withControlledClient(async client => {
+    await client.query('BEGIN');
+    await client.query('SELECT id FROM cold_room_sessions WHERE id = $1 FOR UPDATE', [session.id]);
+    const result = await client.query(closeSql, closeValues);
+    await client.query('COMMIT');
+    return result;
+  }) : await db.query(closeSql, closeValues);
 
   if (!updateResult.rowCount) return false;
 
@@ -254,9 +265,10 @@ async function finalizeSession(
   return true;
 }
 
-async function closeStaleSessions(): Promise<void> {
+export async function closeStaleSessions(): Promise<void> {
   const timeoutMs = Math.max(1000, Number(env.PRESENCE_EXIT_TIMEOUT_MS));
-  const activeSessions = await db.query<SessionContext & { last_seen_at: string }>(
+  const activeSessions = await withControlledClient(client => client.query<SessionContext & { last_seen_at: string; control_started_at: string | null;
+    control_deadline: string | null; control_until: string | null }>(
     `SELECT s.id,
             s.started_at,
             COALESCE(s.worker_id, wta.worker_id) AS worker_id,
@@ -266,12 +278,16 @@ async function closeStaleSessions(): Promise<void> {
             COALESCE(cr.max_continuous_minutes, $1) AS max_continuous_minutes,
             COALESCE(cr.pre_alert_minutes, $2) AS pre_alert_minutes,
             COALESCE(cr.max_daily_minutes, $3) AS max_daily_minutes,
-            COALESCE(MAX(ps.last_presence_at), s.started_at) AS last_seen_at
+            COALESCE(MAX(ps.last_presence_at), s.started_at) AS last_seen_at,
+            MAX(op.started_at) AS control_started_at, MAX(op.hard_deadline) AS control_deadline,
+            MAX(op.protect_until) AS control_until
      FROM cold_room_sessions s
      LEFT JOIN worker_tag_assignments wta
        ON wta.hardware_device_id = s.hardware_device_id
       AND wta.active = true
      LEFT JOIN cold_rooms cr ON cr.id = s.cold_room_id
+     LEFT JOIN controlled_b5_presence_operations op
+       ON op.hardware_device_id = s.hardware_device_id AND op.session_id = s.id
      LEFT JOIN tag_gateway_presence_state ps
        ON ps.hardware_device_id = s.hardware_device_id
       AND ps.last_presence_at >= s.started_at
@@ -284,7 +300,7 @@ async function closeStaleSessions(): Promise<void> {
      GROUP BY s.id, s.started_at, COALESCE(s.worker_id, wta.worker_id), s.cold_room_id,
               s.tag_id, s.hardware_device_id, cr.max_continuous_minutes, cr.pre_alert_minutes, cr.max_daily_minutes`,
     [env.MAX_CONTINUOUS_MINUTES, env.PRE_ALERT_MINUTES, env.MAX_DAILY_MINUTES]
-  );
+  ));
 
   const nowMs = Date.now();
 
@@ -306,11 +322,17 @@ async function closeStaleSessions(): Promise<void> {
       source: 'tag_gateway_presence_state'
     }, 'presence timeout evaluation');
 
-    if (!shouldClosePresenceSession({ nowMs, lastPresenceAtMs: referenceTs, timeoutMs })) continue;
+    if (!shouldClosePresenceSession({ nowMs, lastPresenceAtMs: referenceTs, timeoutMs,
+      controlledOperation: session.control_started_at && session.control_deadline && session.control_until ? {
+        startedAtMs: new Date(session.control_started_at).getTime(),
+        hardDeadlineMs: new Date(session.control_deadline).getTime(),
+        protectUntilMs: new Date(session.control_until).getTime()
+      } : undefined })) continue;
 
     // The timeout controls when absence is confirmed. The stored duration and
     // daily exposure stop at the last accepted packet, not at this closure.
-    const closedAt = new Date(referenceTs + timeoutMs).toISOString();
+    const controlledUntil = session.control_until ? new Date(session.control_until).getTime() : 0;
+    const closedAt = new Date(Math.max(referenceTs + timeoutMs, Math.min(nowMs, controlledUntil || 0))).toISOString();
     const closed = await finalizeSession(session, closedAt, null, 'timeout', session.last_seen_at);
     if (closed) {
       logger.info({ sessionId: session.id, tagId: session.tag_id, closedAt, timeoutMs }, 'closed stale session by presence timeout');

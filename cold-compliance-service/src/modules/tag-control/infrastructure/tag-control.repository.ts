@@ -19,6 +19,7 @@ export interface ResolvedTargetCandidate extends ResolvedTarget {
   sameColdRoom?: boolean;
   hardwareDeviceId?: number | null;
   hardwareGatewayId?: number | null;
+  companyId?: string;
 }
 
 type GatewayStrategy = 'last_seen' | 'camera_assigned' | 'hybrid';
@@ -65,17 +66,19 @@ export async function validateTechnicalTargets(
       logger.warn({ tagId: candidate.tagId, gatewayId: candidate.gatewayId }, 'Hardware Manager unavailable; rejecting command target without central validation');
       return null;
     }
-    if (device.kind !== 'found' || gateway.kind !== 'found' || !isOperationalB5(device.value) || !gateway.value.active) {
+    if (device.kind !== 'found' || gateway.kind !== 'found' || !isOperationalB5(device.value) || !gateway.value.active
+        || !device.value.company_id || device.value.company_id !== gateway.value.company_id) {
       logger.warn({ tagId: candidate.tagId, gatewayId: candidate.gatewayId, deviceResult: device.kind, gatewayResult: gateway.kind }, 'tag command target rejected by central technical state');
       return null;
     }
     return {
       ...candidate,
+      companyId: device.value.company_id,
       tagUid: normalizeHorneoDeviceMac(device.value.ble_mac)!.toLowerCase(),
       gatewayMac: normalizeHorneoGatewayMac(gateway.value.mac_address)!
     };
   }));
-  return validated.filter((candidate): candidate is ResolvedTargetCandidate => candidate !== null);
+  return validated.filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
 }
 
 export async function resolveTagTargets(params: {

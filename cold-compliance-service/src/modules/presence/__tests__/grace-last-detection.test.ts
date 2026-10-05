@@ -48,8 +48,8 @@ test('timeout uses the latest relevant gateway packet and stale exits cannot clo
 
 test('timeout closure remains delayed while stored exposure, daily accumulation and grace use the packet time', () => {
   const source = readFileSync(join(process.cwd(), 'src/modules/compliance/compliance.service.ts'), 'utf8');
-  assert.match(source, /shouldClosePresenceSession\(\{ nowMs, lastPresenceAtMs: referenceTs, timeoutMs \}\)/);
-  assert.match(source, /const closedAt = new Date\(referenceTs \+ timeoutMs\)\.toISOString\(\)/);
+  assert.match(source, /shouldClosePresenceSession\(\{ nowMs, lastPresenceAtMs: referenceTs, timeoutMs,/);
+  assert.match(source, /Math\.max\(referenceTs \+ timeoutMs, Math\.min\(nowMs, controlledUntil \|\| 0\)\)/);
   assert.match(source, /const exposureEndedAt = reason === 'timeout' \? lastDetectionAt : endedAt/);
   assert.match(source, /duration_seconds = CASE WHEN \$5::text = 'timeout'[\s\S]*\$4::timestamptz - started_at[\s\S]*ELSE GREATEST\(0, EXTRACT\(EPOCH FROM \(\$1::timestamptz - started_at\)\)\)::int/);
   assert.match(source, /madridExposureSegments\(closed\.started_at, exposureEndedAt\)/);
