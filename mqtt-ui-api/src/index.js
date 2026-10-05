@@ -213,6 +213,8 @@ gattMqttClient.on("message", (topic, payloadBuffer) => {
   if (!payload || typeof payload !== "object") {
     return;
   }
+  // 2030 contains the gateway password: never resolve GATT waiters, log or SSE it.
+  if (Number(payload.msg_id) === 2030) return;
 
   const gatewayMacFromTopic = parseGatewayMacFromTopic(topic, gattResponseTopicTemplate);
   const gatewayMacFromPayload = toGatewayMac(payload?.device_info?.mac || "");

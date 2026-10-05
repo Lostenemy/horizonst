@@ -123,6 +123,7 @@ export function parseGatewayPayload(topic: string, payloadRaw: Buffer, receivedA
   const gatewayMac = normalizeMac(gatewayMacRaw) ?? String(gatewayMacRaw ?? '').toLowerCase();
 
   const payload = JSON.parse(payloadRaw.toString('utf8'));
+  if (numericValue(payload?.msg_id) === 2030) return [];
   const list = toItems(payload);
   const events: ParsedPresenceEvent[] = [];
 

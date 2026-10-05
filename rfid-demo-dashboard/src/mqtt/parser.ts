@@ -115,10 +115,13 @@ const parseReaderPayload = (parsed: Record<string, unknown>): ParsedRead[] => {
 export const parseRfidMessage = (payload: Buffer): ParsedRead[] => {
   const raw = payload.toString('utf8').trim();
   if (!raw) return [];
+  if (/"msg_id"\s*:\s*"?2030\b/.test(raw)) return [];
 
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (!parsed || typeof parsed !== 'object') return [];
+    // A broad subscription must not route sensitive MQTT configuration to RFID storage.
+    if (Number(parsed.msg_id) === 2030) return [];
 
     const fromReaderPayload = parseReaderPayload(parsed);
     if (fromReaderPayload.length > 0) {

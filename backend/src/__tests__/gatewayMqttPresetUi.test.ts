@@ -27,10 +27,13 @@ const publicPreset = (environment: 'staging' | 'production' = 'production') => {
 async function fixture() {
   const nodes = new Map<string, Element>();
   const get = (id: string) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id)!; };
-  const calls: string[] = []; const posts: any[] = []; const confirmations: any[] = [];
+  const calls: string[] = []; const posts: any[] = []; const reads: any[] = []; const confirmations: any[] = [];
   let presetFetch = async (): Promise<any> => publicPreset();
   let confirm = async () => true;
   let postFailure: Error | null = null;
+  let observationFetch = async () => ({ source: 'observed', correlation: 'unverified', enabled: true,
+    observation: { public_value: publicPreset().data, observed_at: '2026-10-05T08:00:00Z' } });
+  let readPost = async (): Promise<any> => ({ status: 'response_observed' });
   const gateway = { id: 17, mac_address: MAC, active: true, name: 'Fixture gateway', company_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' };
   const context = vm.createContext({
     document: { readyState: 'complete', hidden: false, getElementById: get, querySelector: get,
@@ -40,13 +43,17 @@ async function fixture() {
       calls.push(url);
       if (url.endsWith('/mqtt-preset')) return presetFetch();
       if (url === '/gateways') return [gateway];
+      if (url.endsWith('/mqtt-observation')) return observationFetch();
       if (url.endsWith('/commands')) return [{ created_at: '2026-01-01T00:00:00Z', msg_id: 1030,
         command_type: 'mqtt_connection_1030', destination_host: 'old-destination.invalid', destination_port: 1883,
         payload: { data: { passwd: 'not-real-history-password' } } }];
       if (url.endsWith('/ble-connected-devices')) return null;
       return [];
     },
-    apiPost: async (url: string, body: unknown) => { posts.push({ url, body: structuredClone(body) }); if (postFailure) throw postFailure; return { message: 'ACK: conexión no verificada' }; },
+    apiPost: async (url: string, body: unknown) => {
+      if (url.endsWith('/read-configuration/mqtt_configuration')) { reads.push({ url, body }); return readPost(); }
+      posts.push({ url, body: structuredClone(body) }); if (postFailure) throw postFailure; return { message: 'ACK: conexión no verificada' };
+    },
     apiPut() {}, apiDelete() {}, openFormModal() {},
     confirmAction: async (options: unknown) => { confirmations.push(options); return confirm(); },
     setInterval() {}, TextEncoder, console
@@ -56,15 +63,17 @@ async function fixture() {
   vm.runInContext(js('gateways.js').replace(/^import .*;\r?\n/gm, ''), context);
   await new Promise(setImmediate);
   context.gatewayFixture = gateway;
-  return { get, context, calls, posts, confirmations, field: (name: string) => get('gatewayMqttForm').elements.namedItem(name),
+  return { get, context, calls, posts, reads, confirmations, field: (name: string) => get('gatewayMqttForm').elements.namedItem(name),
     setPreset: (fetch: typeof presetFetch) => { presetFetch = fetch; }, setConfirm: (callback: typeof confirm) => { confirm = callback; },
     failPost: (error: Error) => { postFailure = error; },
+    setRead: (read: typeof readPost) => { readPost = read; },
+    setObservation: (read: typeof observationFetch) => { observationFetch = read; },
     open: () => vm.runInContext('selectGateway(gatewayFixture)', context),
     restore: () => get('gatewayMqttRestorePreset').listeners.click(),
     submit: () => get('gatewayMqttForm').listeners.submit({ preventDefault() {} }) };
 }
 
-test('opening/restoring uses the public environment proposal, not history, and never starts physical reads/commands', async () => {
+test('opening reads 2030 once separately, restoring the public proposal never reads or writes', async () => {
   const f = await fixture();
   await f.open();
   assert.equal(f.field('host').value, 'mqtt.horizonst.es');
@@ -78,6 +87,8 @@ test('opening/restoring uses the public environment proposal, not history, and n
   f.setPreset(async () => publicPreset('staging'));
   await f.restore(); assert.equal(f.field('host').value, 'mqtt.horizonst.com.es');
   assert.equal(f.posts.length, 0);
+  assert.equal(f.reads.length, 1); assert.equal(f.reads[0].url, '/gateways/17/read-configuration/mqtt_configuration');
+  assert.match(f.get('gatewayMqttObservedAt').textContent, /Última recepción guardada/);
   assert(!f.calls.some(url => /read-identity|read-configuration|read-ble|configure-mqtt/.test(url)));
   assert.match(f.get('gatewayMqttPresetStatus').textContent, /No leída/);
 });
@@ -145,4 +156,56 @@ test('request failure never echoes the password in UI and still clears the ephem
   assert.equal(f.field('passwd').value, '');
   assert.doesNotMatch(f.get('gatewayMqttFeedback').textContent, /ephemeral-test-password/);
   assert.match(f.get('gatewayMqttFeedback').textContent, /No se pudo completar/);
+});
+
+test('manual MQTT observation update blocks double clicks and keeps proposal/password separate', async () => {
+  const f = await fixture(); await f.open();
+  let done!: () => void;
+  f.setRead(() => new Promise(resolve => { done = () => resolve({ status: 'response_observed' }); }));
+  f.field('host').value = 'editable-proposal.invalid'; f.field('passwd').value = 'ephemeral-write-secret';
+  f.get('gatewayMqttRefreshObservation').listeners.click();
+  await new Promise(setImmediate);
+  f.get('gatewayMqttRefreshObservation').listeners.click();
+  assert.equal(f.reads.length, 2); assert.equal(f.get('gatewayMqttRefreshObservation').disabled, true);
+  assert.match(f.get('gatewayMqttReadStatus').textContent, /en curso/);
+  assert.match(f.get('gatewayMqttObservedAt').textContent, /Última recepción guardada/);
+  done(); await new Promise(setImmediate);
+  assert.equal(f.field('host').value, 'editable-proposal.invalid'); assert.equal(f.field('passwd').value, 'ephemeral-write-secret');
+  assert.equal(f.posts.length, 0);
+});
+
+test('MQTT timeout keeps prior observation dated and blocks blind repeats on reopen', async () => {
+  const f = await fixture();
+  f.setRead(async () => { throw Object.assign(new Error('fictional secret from server'), { status: 504 }); });
+  await f.open();
+  assert.match(f.get('gatewayMqttReadStatus').textContent, /Timeout/);
+  assert.match(f.get('gatewayMqttObservedAt').textContent, /Última recepción guardada/);
+  assert.equal(f.get('gatewayMqttRefreshObservation').disabled, true);
+  await f.open(); assert.equal(f.reads.length, 1);
+  assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent, /fictional secret/);
+});
+
+test('a pending MQTT observation cannot repaint another gateway panel', async () => {
+  const f = await fixture(); let done!: () => void;
+  f.setRead(() => new Promise(resolve => { done = () => resolve({ status: 'response_observed' }); }));
+  const open = f.open(); await new Promise(setImmediate);
+  f.context.gatewayFixture = { ...f.context.gatewayFixture, id: 18, active: false };
+  await f.open(); f.get('gatewayMqttReadStatus').textContent = 'Other gateway';
+  done(); await open;
+  assert.equal(f.get('gatewayMqttReadStatus').textContent, 'Other gateway');
+  assert.equal(f.reads.length, 1);
+});
+
+test('disabled, malformed and failed observation states do not write or expose untrusted text', async () => {
+  const f = await fixture();
+  f.setObservation(async () => ({ source: 'observed', correlation: 'unverified', enabled: false, observation: null } as any));
+  await f.open(); assert.equal(f.reads.length, 0);
+  assert.match(f.get('gatewayMqttReadStatus').textContent, /deshabilitada/);
+  f.setObservation(async () => ({ source: 'observed', correlation: 'unverified', enabled: true,
+    observation: { observed_at: 'bad', public_value: { ...publicPreset().data, passwd: 'fictional-secret' } } } as any));
+  await f.open(); assert.equal(f.reads.length, 0); assert.match(f.get('gatewayMqttReadStatus').textContent, /Error/);
+  assert.equal(f.get('gatewayMqttObservedValue').children.length, 0);
+  f.setObservation(async () => { throw new Error('fictional-secret'); });
+  await f.open(); assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent, /fictional-secret/);
+  assert.equal(f.posts.length, 0);
 });

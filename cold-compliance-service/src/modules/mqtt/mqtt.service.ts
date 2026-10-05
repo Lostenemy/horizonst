@@ -72,7 +72,7 @@ function parsePayloadTimestampMs(value: unknown): number | null {
 function isGatewayCommandReply(payload: unknown): boolean {
   if (!payload || typeof payload !== 'object') return false;
   const p = payload as Record<string, unknown>;
-  return typeof p.msg_id === 'number' && typeof p.result_code === 'number';
+  return Number(p.msg_id) === 2030 || (typeof p.msg_id === 'number' && typeof p.result_code === 'number');
 }
 
 export function startMqttConsumer(): void {
@@ -101,7 +101,9 @@ export function startMqttConsumer(): void {
     try {
       if (topic.endsWith('/publish')) {
         let asJson: unknown = null;
-        try { asJson = JSON.parse(payload.toString('utf8')); } catch { asJson = null; }
+        try { asJson = JSON.parse(payload.toString('utf8')); } catch {
+          if (/"msg_id"\s*:\s*"?2030\b/.test(payload.toString('utf8'))) return;
+        }
         if (!isGatewayCommandReply(asJson)) {
           const receivedAt = new Date();
           const manualEmergencies = parseManualEmergencyPayload(topic, payload, receivedAt);
