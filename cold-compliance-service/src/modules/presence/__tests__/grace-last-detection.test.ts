@@ -40,16 +40,18 @@ test('timeout uses the latest relevant gateway packet and stale exits cannot clo
   assert.match(source, /MAX\(ps\.last_presence_at\)/);
   assert.match(source, /ps\.last_presence_at >= s\.started_at/);
   assert.match(source, /seen_gateway\.cold_room_id = s\.cold_room_id/);
-  assert.match(source, /finalizeSession\(session, closedAt, null, 'timeout', session\.last_seen_at\)/);
+  assert.match(source, /finalizeSession\(session, closedAt, null, 'timeout', session\.last_seen_at, timeoutMs\)/);
   assert.match(source, /ps\.last_presence_at > \$4::timestamptz/);
-  assert.match(source, /new Date\(event\.timestamp\)\.getTime\(\) <= new Date\(latestClosed\.rows\[0\]\.ended_at\)\.getTime\(\)/);
+  assert.match(source, /\$2::timestamptz <= ended_at AS stale_event/);
+  assert.match(source, /latestClosed\.rows\[0\]\.stale_event/);
   assert.ok(source.indexOf('await upsertOpenSession(tag, event);') < source.indexOf('await markPresenceEnter(tag, event.timestamp);'));
 });
 
 test('timeout closure remains delayed while stored exposure, daily accumulation and grace use the packet time', () => {
   const source = readFileSync(join(process.cwd(), 'src/modules/compliance/compliance.service.ts'), 'utf8');
-  assert.match(source, /shouldClosePresenceSession\(\{ nowMs, lastPresenceAtMs: referenceTs, timeoutMs \}\)/);
-  assert.match(source, /const closedAt = new Date\(referenceTs \+ timeoutMs\)\.toISOString\(\)/);
+  assert.match(source, /shouldClosePresenceSession\(\{ nowMs, lastPresenceAtMs: referenceTs, timeoutMs,/);
+  assert.match(source, /const closedAt = session\.timeout_ended_at/);
+  assert.match(source, /COALESCE\(MAX\(ps\.last_presence_at\), s\.started_at\)::text AS last_seen_at/);
   assert.match(source, /const exposureEndedAt = reason === 'timeout' \? lastDetectionAt : endedAt/);
   assert.match(source, /duration_seconds = CASE WHEN \$5::text = 'timeout'[\s\S]*\$4::timestamptz - started_at[\s\S]*ELSE GREATEST\(0, EXTRACT\(EPOCH FROM \(\$1::timestamptz - started_at\)\)\)::int/);
   assert.match(source, /madridExposureSegments\(closed\.started_at, exposureEndedAt\)/);
