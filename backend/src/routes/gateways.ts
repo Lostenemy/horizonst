@@ -26,7 +26,6 @@ import {
 } from '../services/gatewayIdentity';
 import {
   executeGatewayConfigurationRead,
-  GatewayMqttRecoveryRequiredError,
   isGatewayConfigurationReadType
 } from '../services/gatewayObservedReads';
 import { buildGatewayMqttConfiguration, buildHorizonstMqttPreset, GatewayMqttPresetUnavailableError } from '../services/gatewayMqttConfiguration';
@@ -360,10 +359,6 @@ router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeH
         : result.status === 'timed_out' ? 504 : 502;
     return res.status(status).json(result);
   } catch (error) {
-    if (error instanceof GatewayMqttRecoveryRequiredError) {
-      return res.status(409).json({ errorCode: 'mqtt_observation_recovery_required',
-        message: 'Rejected MQTT observation requires explicit manual confirmation after configuration review' });
-    }
     if (error instanceof GatewayIdentityOperationTimeoutError) {
       return res.status(504).json({
         status: 'timed_out', message: 'Gateway configuration read exceeded its timeout',

@@ -216,7 +216,7 @@ test('integration keeps saved physical RSSI separate from proposed and observed 
     await f.open();
     assert.equal(f.get('gatewayRssi').value, -60);
     assert.match(f.get('gatewayRssiSaved').textContent, /guardado central: -60.*No verificado/);
-    assert.equal(f.field('host').value, 'mqtt.horizonst.es');
+    assert.equal(f.field('host').value, enabled ? 'observed.example.invalid' : 'mqtt.horizonst.es');
     assert.equal(f.field('passwd').value, '');
     assert.equal(f.posts.length, 0, 'opening never requests RSSI, MQTT writes, restart or alarms');
     assert.equal(f.reads.length, enabled ? 1 : 0);
@@ -284,40 +284,39 @@ test('disabled, malformed and failed observation states do not write or expose u
   assert.equal(f.posts.length, 0);
 });
 
-test('credential rejection clears prior observation, explains identity collision and requires a confirmed manual recovery', async () => {
+test('a rejected response stays hidden but another explicit opening may read again without recovery confirmation', async () => {
   for(const code of ['mqtt_observation_identity_secret_collision','mqtt_observation_secret_in_public_field']) {
     const f=await fixture(true);
     f.setRead(async()=>{throw Object.assign(new Error('fictional-secret-must-not-render'),{status:422,code});});
     await f.open();
     assert.equal(f.reads.length,1);assert.equal(f.posts.length,0);
     assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
-    assert.match(f.get('gatewayMqttReadStatus').textContent,/credencial/);
-    if(code.includes('identity'))assert.match(f.get('gatewayMqttReadStatus').textContent,/identidad pública.*cambia previamente/);
+    assert.match(f.get('gatewayMqttReadStatus').textContent,code.includes('identity') ? /Rechazo histórico/ : /credencial/);
     assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent,/fictional-secret/);
     assert.equal(f.get('gatewayMqttRefreshObservation').disabled,false);
     f.setConfirm(async()=>false);
     await f.open(); f.get('gatewayMqttRefreshObservation').listeners.click();
     await new Promise(setImmediate);
-    assert.equal(f.reads.length,1);assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
+    assert.equal(f.reads.length,2);assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
     assert.equal(f.field('host').value,'mqtt.horizonst.es');assert.equal(f.field('passwd').value,'');
   }
 });
 
-test('generic historical rejection never implies collision; cancelled recovery and double click publish nothing extra', async()=>{
+test('generic historical rejection allows opening reads without confirmation and manual refresh remains single-flight', async()=>{
   const f=await fixture(true);
   f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,observation:null,
     errorCode:'mqtt_observation_invalid_response'} as any));
-  await f.open();await f.open();assert.equal(f.reads.length,0);
+  await f.open();await f.open();assert.equal(f.reads.length,2);assert.equal(f.confirmations.length,0);
   assert.match(f.get('gatewayMqttReadStatus').textContent,/sin diagnóstico específico/);
   assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent,/coincide con la identidad/);
   let confirm!: (value:boolean)=>void;
   f.setConfirm(()=>new Promise(resolve=>{confirm=resolve;}));
   const click=f.get('gatewayMqttRefreshObservation').listeners.click();
   f.get('gatewayMqttRefreshObservation').listeners.click();
-  assert.equal(f.confirmations.length,1);assert.equal(f.reads.length,0);
+  assert.equal(f.confirmations.length,1);assert.equal(f.reads.length,2);
   assert.match(f.confirmations[0].message,/Gateway #17.*publicará un único 2030.*revisado/);
   assert.equal(f.confirmations[0].confirmText,'Publicar una lectura 2030');
-  confirm(false);await click;assert.equal(f.reads.length,0);
+  confirm(false);await click;assert.equal(f.reads.length,2);
   f.setConfirm(async()=>true);
   f.setRead(async()=>{
     f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,
@@ -325,22 +324,22 @@ test('generic historical rejection never implies collision; cancelled recovery a
     return {status:'response_observed'};
   });
   await f.get('gatewayMqttRefreshObservation').listeners.click();
-  assert.equal(f.reads.length,1);assert.equal(JSON.stringify(f.reads[0].body),'{"confirmRecovery":true}');
+  assert.equal(f.reads.length,3);assert.equal(JSON.stringify(f.reads[2].body),'{}');
   assert.equal(f.posts.length,0);assert.equal(f.get('gatewayMqttObservedValue').children.length,30);
   assert.match(f.get('gatewayMqttReadStatus').textContent,/guardada/);assert.equal(f.field('passwd').value,'');
 });
 
-test('manual recovery revalidates a persistent collision and never reveals previous values', async()=>{
+test('a legacy collision diagnosis does not block opening attempts or reflect error text', async()=>{
   const f=await fixture(true);
   f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,observation:null,
     errorCode:'mqtt_observation_identity_secret_collision'} as any));
   f.setRead(async()=>{throw Object.assign(new Error('fictional-must-never-render'),{status:422,code:'mqtt_observation_identity_secret_collision'});});
-  await f.open();assert.equal(f.reads.length,0);
-  await f.get('gatewayMqttRefreshObservation').listeners.click();
-  assert.equal(f.reads.length,1);assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
-  assert.match(f.get('gatewayMqttReadStatus').textContent,/cambia previamente/);
-  assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent,/fictional-must-never-render/);
   await f.open();assert.equal(f.reads.length,1);
+  await f.get('gatewayMqttRefreshObservation').listeners.click();
+  assert.equal(f.reads.length,2);assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
+  assert.match(f.get('gatewayMqttReadStatus').textContent,/Rechazo histórico/);
+  assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent,/fictional-must-never-render/);
+  await f.open();assert.equal(f.reads.length,3);
 });
 
 test('changing or reopening gateway while confirmation is pending cancels the requested publication', async()=>{
@@ -353,7 +352,7 @@ test('changing or reopening gateway while confirmation is pending cancels the re
     const click=f.get('gatewayMqttRefreshObservation').listeners.click();
     if(changeGateway)f.context.gatewayFixture={...f.context.gatewayFixture,id:18};
     await f.open();done();await click;
-    assert.equal(f.reads.length,0);
+    assert.equal(f.reads.length,2);
   }
 });
 
@@ -374,17 +373,52 @@ test('failing availability check during manual recovery never publishes or re-en
     errorCode:'mqtt_observation_invalid_response'} as any));
   await f.open();f.setObservation(async()=>{throw new Error('fictional-untrusted-error');});
   await f.get('gatewayMqttRefreshObservation').listeners.click();
-  assert.equal(f.reads.length,0);assert.equal(f.get('gatewayMqttRefreshObservation').disabled,true);
+  assert.equal(f.reads.length,1);assert.equal(f.get('gatewayMqttRefreshObservation').disabled,true);
   assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent,/fictional-untrusted-error/);
 });
 
-test('stored rejection blocks automatic 2030 and rendering even in a new screen', async () => {
+test('stored rejection hides old values but allows one opening read in a new screen', async () => {
   const f=await fixture(true);
   f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,observation:null,
     errorCode:'mqtt_observation_identity_secret_collision'} as any));
-  await f.open();assert.equal(f.reads.length,0);assert.equal(f.posts.length,0);
+  await f.open();assert.equal(f.reads.length,1);assert.equal(f.posts.length,0);assert.equal(f.confirmations.length,0);
   assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
-  assert.match(f.get('gatewayMqttReadStatus').textContent,/identidad pública/);
+  assert.match(f.get('gatewayMqttReadStatus').textContent,/Rechazo histórico/);
+});
+
+test('opening after legacy rejection loads received public values into a distinct editable draft with empty password', async()=>{
+  const f=await fixture(true);
+  f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,observation:null,
+    errorCode:'mqtt_observation_invalid_response'} as any));
+  const received={...publicPreset().data,host:'observed-broker.example.invalid',port:1883,security_type:0,keepalive:120};
+  f.setRead(async()=>{
+    f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,
+      observation:{public_value:received,observed_at:'2026-10-05T11:00:00Z'}}));
+    return {status:'response_observed'};
+  });
+  await f.open();assert.equal(f.reads.length,1);assert.equal(JSON.stringify(f.reads[0].body),'{}');
+  assert.equal(f.confirmations.length,0);assert.equal(f.posts.length,0);
+  assert.equal(f.field('host').value,received.host);assert.equal(f.field('port').value,'1883');
+  assert.equal(f.field('passwd').value,'');assert.equal(f.field('client_id').value,MAC);
+  assert.equal(f.field('pub_topic').value,`gw/${MAC}/publish`);
+  assert.match(f.get('gatewayMqttPresetStatus').textContent,/Borrador editable iniciado con datos públicos observados/);
+  assert.equal(f.get('gatewayMqttObservedValue').children.length,30);
+  await f.restore();assert.equal(f.field('host').value,'mqtt.horizonst.es');
+  assert.match(f.get('gatewayMqttPresetStatus').textContent,/Propuesta del entorno/);
+  assert.equal(f.reads.length,1);assert.equal(f.posts.length,0);
+});
+
+test('overlapping openings share a single 2030 and a late response does not overwrite edits made while waiting', async()=>{
+  const f=await fixture(true);let finish!:()=>void;
+  f.setRead(()=>new Promise(resolve=>{finish=()=>resolve({status:'response_observed'});}));
+  const first=f.open();await new Promise(setImmediate);
+  const second=f.open();await new Promise(setImmediate);
+  assert.equal(f.reads.length,1);assert.equal(f.posts.length,0);
+  f.field('host').value='operator-draft.example.invalid';f.field('passwd').value='ephemeral-manual-input';
+  finish();await Promise.all([first,second]);
+  assert.equal(f.field('host').value,'operator-draft.example.invalid');
+  assert.equal(f.field('passwd').value,'ephemeral-manual-input');
+  assert.equal(f.get('gatewayMqttObservedValue').children.length,30);assert.equal(f.posts.length,0);
 });
 
 test('real apiPost forwards status and only stable observation codes to the UI', async () => {

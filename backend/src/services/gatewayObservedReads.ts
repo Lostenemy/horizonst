@@ -394,8 +394,6 @@ export type GatewayConfigurationReadResult = {
   message: string;
 };
 
-export class GatewayMqttRecoveryRequiredError extends Error {}
-
 export async function executeGatewayConfigurationRead(params: {
   gatewayId: number;
   companyId: string;
@@ -432,14 +430,6 @@ export async function executeGatewayConfigurationRead(params: {
          AND status IN ('timed_out', 'pending', 'published', 'publish_error') LIMIT 1`,
         [params.gatewayId], operationDeadline, 'mqtt_uncertain_history');
       if (prior.rows.length) throw new GatewayIdentityBusyError('A previous MQTT read has uncertain completion; automatic repetition is blocked');
-      const completed = await queryUntil<{ status: string }>(managed,
-        `SELECT status FROM hardware_gateway_reads WHERE gateway_id = $1 AND msg_id = 2030
-         AND status IN ('response_observed','invalid_response')
-         ORDER BY COALESCE(response_observed_at,created_at) DESC, created_at DESC, id DESC LIMIT 1`,
-        [params.gatewayId], operationDeadline, 'mqtt_rejected_history');
-      if (completed.rows[0]?.status === 'invalid_response' && params.confirmRecovery !== true) {
-        throw new GatewayMqttRecoveryRequiredError('Rejected MQTT observation requires explicit manual confirmation');
-      }
     } else {
       await queryUntil(managed,
         `UPDATE hardware_gateway_reads SET status = 'timed_out', error_message = 'read timeout recovered before a new request'

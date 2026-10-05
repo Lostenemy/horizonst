@@ -19,7 +19,8 @@ function observationData(input: Record<string, unknown>): Record<string, unknown
 }
 
 // Called at ingress, before all journals, ACK handlers and raw capture paths.
-// Unknown fields are discarded. Invalid/secret-bearing text never leaves here.
+// Unknown fields and passwd are discarded. Public identity values are retained
+// by the observation contract even when the credential equals that identity.
 export function inspectMqttObservation(macInput: string, input: unknown): MqttObservationInspection {
   const invalid = (): MqttObservationInspection => ({ ok: false, errorCode: 'mqtt_observation_invalid_response' });
   const mac = normalizeGatewayMac(macInput);
@@ -30,13 +31,13 @@ export function inspectMqttObservation(macInput: string, input: unknown): MqttOb
   let data: Record<string,unknown>;
   try { data=observationData(raw); buildGatewayMqttConfiguration(mac,data); } catch { return invalid(); }
   const publicData = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'passwd'));
-  // Identity being public elsewhere does NOT make it safe when it is a secret.
-  if (secret === mac || secret === data.client_id || secret === data.username) {
-    return { ok: false, errorCode: 'mqtt_observation_identity_secret_collision' };
-  }
-  // Never expose the password even if duplicated into another allowed text field.
+  const identityCollision = secret === mac || secret === data.client_id || secret === data.username;
+  const identityFields = new Set(['client_id','username','sub_topic','pub_topic','lwt_topic','lwt_payload']);
+  // Still reject unrelated credential material. Retaining a public identifier
+  // that is also the credential is NOT a confidentiality guarantee (see docs).
   const forbidden = [secret, encodeURIComponent(secret), Buffer.from(secret).toString('base64')];
-  if (Object.values(publicData).some(value => typeof value === 'string' && forbidden.some(part => part && value.includes(part)))) {
+  if (Object.entries(publicData).some(([key,value]) => !(identityCollision && identityFields.has(key))
+      && typeof value === 'string' && forbidden.some(part => part && value.includes(part)))) {
     return { ok: false, errorCode: 'mqtt_observation_secret_in_public_field' };
   }
   return { ok: true, value: publicData as PublicMqttObservation };

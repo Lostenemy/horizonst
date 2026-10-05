@@ -7,7 +7,7 @@ import { Client, Pool } from 'pg';
 
 const enabled=process.env.GATEWAY_MQTT_RECOVERY_ALLOW_DATABASE_TESTS === 'true';
 
-test('PostgreSQL 15: confirmed 2030 recovery preserves rejected history, privacy, locks and uncertain outcomes', {
+test('PostgreSQL 15: opening 2030 after rejection retains identity but excludes passwd and preserves history/locks', {
   skip:enabled ? false : 'requires an explicit disposable PostgreSQL 15 database'
 },async()=>{
   // Never target the application's default database or a remote/shared server.
@@ -59,26 +59,25 @@ test('PostgreSQL 15: confirmed 2030 recovery preserves rejected history, privacy
       actorUserId:1,timeoutMs:2000,deps:{publish:async()=>{publications++;
         await service.handleGatewayConfigurationReport(`gw/${mac}/publish`,JSON.stringify({msg_id:2030,
           device_info:{mac},data:{...buildHorizonstMqttPreset(mac,'production'),passwd:secret}}));}}};
-    await assert.rejects(service.executeGatewayConfigurationRead(params),service.GatewayMqttRecoveryRequiredError);
-    assert.equal(publications,0);
-    const result=await service.executeGatewayConfigurationRead({...params,confirmRecovery:true});
+    const result=await service.executeGatewayConfigurationRead(params);
     assert.equal(result.status,'response_observed');assert.equal(publications,1);
     assert.deepEqual((await admin.query('SELECT * FROM hardware_gateway_reads WHERE id = ANY($1::uuid[]) ORDER BY id',
       [history.map(row=>row.id)])).rows,history);
     const saved=(await admin.query('SELECT public_value FROM hardware_gateway_mqtt_observations')).rows;
     assert.equal(saved.length,1);assert.equal(Object.keys(saved[0].public_value).length,15);
     assert.doesNotMatch(JSON.stringify({result,saved}),new RegExp(secret));
-    // A fresh manual attempt still rejects a colliding credential; prior rows never become success.
+    // Identity equality is explicitly permitted, without retaining passwd.
     const collision=await service.executeGatewayConfigurationRead({...params,confirmRecovery:true,deps:{publish:async()=>{
       publications++;await service.handleGatewayConfigurationReport(`gw/${mac}/publish`,JSON.stringify({msg_id:2030,
         device_info:{mac},data:{...buildHorizonstMqttPreset(mac,'production'),passwd:mac}}));}}});
-    assert.equal(collision.status,'invalid_response');
-    assert.equal(collision.errorCode,'mqtt_observation_identity_secret_collision');
-    assert.equal(JSON.stringify(collision).includes(mac),false);
+    assert.equal(collision.status,'response_observed');
+    assert.equal(collision.errorCode,undefined);
+    assert.equal((collision.data as any).client_id,mac);assert.equal('passwd' in collision.data!,false);
     const rejected=(await admin.query('SELECT status,response_payload,error_message FROM hardware_gateway_reads WHERE id=$1',
       [collision.readId])).rows[0];
-    assert.deepEqual(rejected,{status:'invalid_response',response_payload:{msg_id:2030},
-      error_message:'mqtt_observation_identity_secret_collision'});
+    assert.equal(rejected.status,'response_observed');assert.equal(rejected.error_message,null);
+    assert.equal('passwd' in rejected.response_payload.data,false);
+    assert.equal(rejected.response_payload.data.client_id,mac);
     const holder=await testPool.connect();
     try {
       await holder.query('SELECT pg_advisory_lock(7246,1)');

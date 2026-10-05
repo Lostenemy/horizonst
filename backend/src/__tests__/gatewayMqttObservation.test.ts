@@ -8,11 +8,20 @@ const secret = 'fictional-observation-credential%only';
 const response = () => ({ ...buildHorizonstMqttPreset(identity,'production'), passwd:secret,
   lwt_payload: JSON.stringify({msg_id:3999,device_info:{mac:identity},data:{}},null,2) });
 
-test('2030 explicitly rejects fictional identity/secret collision without exposing the identity or credential', () => {
+test('2030 retains public identity/topics/LWT when the fictional password equals identity but excludes passwd', () => {
   const data = {...response(),passwd:identity};
   const result = inspectPublicMqttObservation(identity,data);
-  assert.deepEqual(result,{ok:false,errorCode:'mqtt_observation_identity_secret_collision'});
-  assert.equal(JSON.stringify(result).includes(identity),false);
+  assert.equal(result.ok,true);
+  if(!result.ok)throw new Error('expected public observation');
+  assert.equal('passwd' in result.value,false);
+  assert.equal(result.value.client_id,identity);assert.equal(result.value.username,identity);
+  assert.equal(result.value.pub_topic,`gw/${identity}/publish`);
+  assert.equal(JSON.parse(result.value.lwt_payload).device_info.mac,identity);
+  for(const key of ['client_id','username']) {
+    const independent=inspectPublicMqttObservation(identity,{...response(),[key]:'fictional-public-id',passwd:'fictional-public-id'});
+    assert.equal(independent.ok,true);
+    if(independent.ok)assert.equal('passwd' in independent.value,false);
+  }
   // 1030 remains a separate contract: observation privacy does not relax or
   // silently change a valid write. No command is actually published here.
   assert.throws(()=>buildGatewayMqttConfiguration(identity,data),/Invalid MQTT configuration/);

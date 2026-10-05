@@ -232,7 +232,7 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
 const commandPath = '/api/gateways/41/bluetooth/scan';
 const validCommand = { method: 'POST', body: JSON.stringify({ scan_switch: 1 }) };
 
-test('HTTP 2030 returns a stable collision rejection and safe audit with fictional identity, preserving scope and no retry', async () => {
+test('HTTP 2030 accepts fictional identity equality but excludes passwd from HTTP, persistence, audit and logs', async () => {
   const previous=process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;const identity='a1b2c3d4e5f6';
   const logs:unknown[]=[];const originalError=console.error;console.error=(...args:unknown[])=>{logs.push(args);};
   try {
@@ -245,12 +245,11 @@ test('HTTP 2030 returns a stable collision rejection and safe audit with fiction
     };
     const path='/api/gateways/41/read-configuration/mqtt_configuration';const post={method:'POST',body:'{}'};
     assert.equal((await api(path,3,'hardware_technician',post)).status,404);
-    const response=await api(path,2,'hardware_technician',post);assert.equal(response.status,422);
-    const result=await response.json();assert.equal(result.errorCode,'mqtt_observation_identity_secret_collision');
-    assert.equal(result.status,'invalid_response');assert.equal('data' in result,false);
+    const response=await api(path,2,'hardware_technician',post);assert.equal(response.status,200);
+    const result=await response.json();assert.equal(result.errorCode,undefined);
+    assert.equal(result.status,'response_observed');assert.equal(result.data.client_id,identity);
     assert.equal(observed.published.length,1);assert.equal(observed.published[0].payload.msg_id,2030);
-    assert.equal(JSON.stringify({result,audit:observed.auditPayloads,logs}).includes(identity),false);
-    assert(observed.auditPayloads.some(value=>value.includes('mqtt_observation_identity_secret_collision')));
+    assert.equal(JSON.stringify({result,persisted:observed.persisted,audit:observed.auditPayloads,logs}).includes('passwd'),false);
   } finally {console.error=originalError;if(previous===undefined)delete process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
     else process.env.GATEWAY_MQTT_OBSERVATION_ENABLED=previous;}
 });
@@ -285,7 +284,7 @@ test('stored MQTT observation is withheld after a credential rejection without r
     else process.env.GATEWAY_MQTT_OBSERVATION_ENABLED=previous; }
 });
 
-test('manual MQTT recovery is confirmed, scoped, freshly validated and cannot override uncertain history', async()=>{
+test('MQTT read after rejected history is scoped and needs no recovery confirmation; uncertainty remains blocking', async()=>{
   const previous=process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
   process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';
   const observed=fakeDatabase(); const connect=pool.connect;
@@ -307,10 +306,6 @@ test('manual MQTT recovery is confirmed, scoped, freshly validated and cannot ov
     for(const body of [[],{confirmRecovery:false},{confirmRecovery:'true'},{confirmRecovery:true,passwd:'fictional-untrusted'}]) {
       assert.equal((await api(path,2,'hardware_technician',{method:'POST',body:JSON.stringify(body)})).status,400);
     }
-    const unconfirmed=await api(path,2,'hardware_technician',{method:'POST',body:'{}'});
-    assert.equal(unconfirmed.status,409);
-    assert.equal((await unconfirmed.json()).errorCode,'mqtt_observation_recovery_required');
-    assert.equal(observed.published.length,0);assert.equal(observed.readInserts,0);
     uncertain=true;
     assert.equal((await api(path,2,'hardware_technician',post)).status,409);
     assert.equal(observed.published.length,0);

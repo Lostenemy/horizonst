@@ -69,10 +69,10 @@ const mqttObservedAt = document.getElementById('gatewayMqttObservedAt');
 const mqttObservedValue = document.getElementById('gatewayMqttObservedValue');
 const mqttRefreshObservation = document.getElementById('gatewayMqttRefreshObservation');
 const mqttObservationErrorText = (code) => code === 'mqtt_observation_identity_secret_collision'
-  ? 'Observación oculta: la credencial coincide con la identidad pública. Para visualizar la configuración completa, cambia previamente la credencial mediante un procedimiento autorizado. No se repetirá esta lectura automáticamente.'
+  ? 'Rechazo histórico por colisión de identidad. Se permite una nueva consulta 2030; los datos antiguos permanecen ocultos.'
   : code === 'mqtt_observation_secret_in_public_field'
     ? 'Observación oculta: un campo público contiene material de la credencial. Revisa la credencial y la configuración antes de solicitar otra lectura. No se repetirá automáticamente.'
-    : 'Respuesta rechazada sin diagnóstico específico; no se conoce su causa. Revisa la configuración antes de solicitar una recuperación manual. No se repetirá automáticamente.';
+    : 'Respuesta rechazada sin diagnóstico específico; no se conoce su causa. Se permite una nueva consulta 2030.';
 
 const renderMqttObservation = (saved, gateway) => {
   if (['mqtt_observation_identity_secret_collision', 'mqtt_observation_secret_in_public_field',
@@ -95,9 +95,10 @@ const renderMqttObservation = (saved, gateway) => {
   }
 };
 
-const loadMqttObservation = async (gateway, requestRead = true, confirmRecovery = false) => {
+const loadMqttObservation = async (gateway, requestRead = true, populateForm = false) => {
   const generation = ++mqttObservationGeneration;
   const current = () => selectedGateway?.id === gateway.id && generation === mqttObservationGeneration;
+  const draft = mqttFieldNames.map(name => mqttForm.elements.namedItem(name).value).join('\u0000');
   let available = false;
   mqttReadStatus.textContent = 'Consultando disponibilidad de lectura y última observación guardada…';
   mqttObservedAt.textContent = 'Consultando última observación guardada; no es una lectura recién recibida.';
@@ -118,7 +119,7 @@ const loadMqttObservation = async (gateway, requestRead = true, confirmRecovery 
       mqttReadRejections.set(gateway.id,code);
       mqttObservedValue.replaceChildren(); mqttObservedAt.textContent = 'Observación anterior oculta por seguridad.';
       mqttReadStatus.textContent = mqttObservationErrorText(code);
-      if (!confirmRecovery) return;
+      if (!requestRead) return;
     } else renderMqttObservation(saved, gateway);
     if (!requestRead) return;
     if (mqttReadBlocked.has(gateway.id)) {
@@ -128,7 +129,7 @@ const loadMqttObservation = async (gateway, requestRead = true, confirmRecovery 
     let pending = mqttReadPending.get(gateway.id);
     mqttReadStatus.textContent = 'Lectura 2030 en curso; sin reintentos automáticos. Los valores visibles son la última observación guardada.';
     if (!pending) {
-      pending = apiPost(`/gateways/${gateway.id}/read-configuration/mqtt_configuration`, confirmRecovery ? {confirmRecovery:true} : {});
+      pending = apiPost(`/gateways/${gateway.id}/read-configuration/mqtt_configuration`, {});
       mqttReadPending.set(gateway.id, pending);
       pending.finally(() => { if (mqttReadPending.get(gateway.id) === pending) mqttReadPending.delete(gateway.id); }).catch(() => {});
     }
@@ -139,6 +140,14 @@ const loadMqttObservation = async (gateway, requestRead = true, confirmRecovery 
     if (!current()) return;
     renderMqttObservation(latest, gateway);
     mqttReadRejections.delete(gateway.id);
+    if (populateForm && latest.observation && !mqttSubmitting
+        && draft === mqttFieldNames.map(name => mqttForm.elements.namedItem(name).value).join('\u0000')) {
+      const data = latest.observation.public_value;
+      for (const name of mqttFieldNames) mqttForm.elements.namedItem(name).value = name === 'passwd' ? '' : String(data[name]);
+      mqttForm.elements.namedItem('confirmationMac').value = '';
+      setMqttFormAvailability(true);
+      mqttPresetStatus.textContent = `Borrador editable iniciado con datos públicos observados (${new Date(latest.observation.observed_at).toLocaleString('es-ES')}). Contraseña excluida; ningún cambio aplicado. La observación no demuestra frescura ni conexión.`;
+    }
     mqttReadStatus.textContent = 'Respuesta pública recibida y guardada. Sin correlación inequívoca ni garantía de frescura.';
   } catch (error) {
     const rejected = error.status === 422 || error.code === 'mqtt_observation_recovery_required';
@@ -153,8 +162,7 @@ const loadMqttObservation = async (gateway, requestRead = true, confirmRecovery 
         : error.status === 409 ? 'Gateway ocupada o lectura anterior incierta; no se repite.' : 'Error de lectura. La observación guardada no es una consulta nueva.';
   } finally { if (current()) {
     mqttRefreshObservation.dataset.available = String(available);
-    mqttRefreshObservation.textContent = mqttReadRejections.has(gateway.id)
-      ? 'Recuperar lectura MQTT rechazada…' : 'Actualizar observación MQTT explícitamente';
+    mqttRefreshObservation.textContent = 'Actualizar observación MQTT explícitamente';
     mqttRefreshObservation.disabled = !available || mqttReadPending.has(gateway.id)
       || mqttReadConfirming.has(gateway.id) || mqttReadBlocked.has(gateway.id);
   } }
@@ -170,7 +178,7 @@ mqttRefreshObservation.addEventListener('click', async () => {
       message:`Gateway #${gateway.id}. Esta acción publicará un único 2030 para consultar su configuración MQTT. Confirma que has revisado/corregido la configuración o credencial. Una respuesta no demuestra frescura ni conexión al broker.`,
       confirmText:'Publicar una lectura 2030'});
     if (!confirmed || selectedGateway?.id !== gateway.id || generation !== mqttObservationGeneration) return;
-    await loadMqttObservation(gateway,true,true);
+    await loadMqttObservation(gateway);
   } finally {
     mqttReadConfirming.delete(gateway.id);
     if (selectedGateway?.id === gateway.id) mqttRefreshObservation.disabled = mqttRefreshObservation.dataset.available !== 'true'
@@ -550,7 +558,7 @@ const selectGateway = async (gateway) => {
     : 'Valor guardado central ausente o inválido. Introduce una propuesta explícita; no se usa un valor de respaldo.';
   technicalFeedback.textContent = '';
   await Promise.all([mqttPanel.hidden ? Promise.resolve() : applyMqttPreset(), refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
-  if (!document.getElementById('gatewayMqttObservationPanel').hidden && selectedGateway?.id === gateway.id) await loadMqttObservation(gateway);
+  if (!document.getElementById('gatewayMqttObservationPanel').hidden && selectedGateway?.id === gateway.id) await loadMqttObservation(gateway,true,true);
 };
 
 firmwareRecordButton.addEventListener('click', async () => {

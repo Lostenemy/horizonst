@@ -10,7 +10,6 @@ import { GatewayIdentityBusyError, GatewayIdentityOperationTimeoutError } from '
 import {
   buildGatewayConfigurationReadRequest,
   executeGatewayConfigurationRead,
-  GatewayMqttRecoveryRequiredError,
   handleGatewayConfigurationReport,
   parseGatewayConfigurationReport,
   resetGatewayConfigurationWaitersForTests,
@@ -117,14 +116,12 @@ const MQTT_SECRET = 'fictional-mqtt-secret-2030-do-not-retain';
 const mqttReport = () => ({ msg_id: 2030, device_info: { mac: '2805a55efb68' },
   data: { ...buildHorizonstMqttPreset('2805a55efb68', 'production'), passwd: MQTT_SECRET } });
 
-test('rejected 2030 history requires confirmation under advisory lock and preserves all historical rows', async () => {
+test('rejected 2030 history permits a fresh read without confirmation and preserves all historical rows', async () => {
   process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';
   const operations=mockDatabase({priorRejected:true}); let publications=0;
   const params={gatewayId:41,companyId:COMPANY_A,gatewayMac:'2805a55efb68',readType:'mqtt_configuration' as const,
     actorUserId:2,timeoutMs:150,deps:{publish:async()=>{publications++; await handleGatewayConfigurationReport(TOPIC,JSON.stringify(mqttReport()));}}};
-  await assert.rejects(executeGatewayConfigurationRead(params),GatewayMqttRecoveryRequiredError);
-  assert.equal(publications,0);
-  const result=await executeGatewayConfigurationRead({...params,confirmRecovery:true});
+  const result=await executeGatewayConfigurationRead(params);
   assert.equal(result.status,'response_observed');assert.equal(publications,1);
   assert.equal(operations.filter(op=>op.sql.includes('INSERT INTO hardware_gateway_reads')).length,1);
   assert.equal(operations.some(op=>op.sql.includes('stale') || op.sql.includes('DELETE FROM hardware_gateway_reads')
@@ -144,7 +141,7 @@ test('manual recovery does not bypass uncertain history or gateway concurrency',
   }
 });
 
-test('confirmed recovery with an unchanged colliding credential produces a new safe rejection', async()=>{
+test('new attempt after rejection retains fictional identity but never persists passwd', async()=>{
   process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';
   const operations=mockDatabase({priorRejected:true});const mac='a1b2c3d4e5f6';let publications=0;
   const result=await executeGatewayConfigurationRead({gatewayId:41,companyId:COMPANY_A,gatewayMac:mac,
@@ -152,15 +149,15 @@ test('confirmed recovery with an unchanged colliding credential produces a new s
       publications++;await handleGatewayConfigurationReport(`gw/${mac}/publish`,JSON.stringify({msg_id:2030,
         device_info:{mac},data:{...buildHorizonstMqttPreset(mac,'production'),passwd:mac}}));
     }}});
-  assert.equal(publications,1);assert.equal(result.status,'invalid_response');
-  assert.equal(result.errorCode,'mqtt_observation_identity_secret_collision');assert.equal(JSON.stringify(result).includes(mac),false);
+  assert.equal(publications,1);assert.equal(result.status,'response_observed');
+  assert.equal(result.errorCode,undefined);assert.equal((result.data as any).client_id,mac);
   assert.equal(operations.filter(op=>op.sql.includes('INSERT INTO hardware_gateway_reads')).length,1);
-  assert.equal(operations.some(op=>op.sql.includes('INSERT INTO hardware_gateway_mqtt_observations')),false);
+  assert.equal(operations.some(op=>op.sql.includes('INSERT INTO hardware_gateway_mqtt_observations')),true);
   const journal=operations.find(op=>op.sql.includes('response_payload'))!;
-  assert.equal(journal.params[2],'{"msg_id":2030}');assert.equal(journal.params[3],'mqtt_observation_identity_secret_collision');
+  assert.equal('passwd' in JSON.parse(String(journal.params[2])).data,false);assert.equal(journal.params[3],null);
 });
 
-test('fictional identity collision is journaled as a stable safe rejection, not persisted as public data or retried', async () => {
+test('fictional identity equality is accepted through MQTT ingress without raw passwd in journal/HTTP/logs', async () => {
   process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';
   const identity='a1b2c3d4e5f6'; const operations=mockDatabase(); let publications=0;
   const logs: unknown[]=[]; const originalError=console.error;
@@ -172,14 +169,14 @@ test('fictional identity collision is journaled as a stable safe rejection, not 
         await processMqttMessage(`gw/${identity}/publish`,Buffer.from(JSON.stringify({msg_id:2030,device_info:{mac:identity},
           data:{...buildHorizonstMqttPreset(identity,'production'),passwd:identity}})));
       }}});
-    assert.equal(result.status,'invalid_response');
-    assert.equal(result.errorCode,'mqtt_observation_identity_secret_collision');
-    assert.equal('data' in result,false); assert.equal(publications,1);
-    assert.equal(operations.some(item=>item.sql.includes('INSERT INTO hardware_gateway_mqtt_observations')),false);
+    assert.equal(result.status,'response_observed');
+    assert.equal(result.errorCode,undefined);
+    assert.equal('passwd' in result.data!,false); assert.equal(publications,1);
+    assert.equal(operations.some(item=>item.sql.includes('INSERT INTO hardware_gateway_mqtt_observations')),true);
     const journal=operations.find(item=>item.sql.includes('response_payload'))!;
-    assert.equal(journal.params[3],result.errorCode);
-    assert.equal(journal.params[2],JSON.stringify({msg_id:2030}));
-    assert.equal(JSON.stringify({result,logs,response:journal.params[2]}).includes(identity),false);
+    assert.equal(journal.params[3],null);
+    assert.equal(JSON.parse(String(journal.params[2])).data.client_id,identity);
+    assert.equal(JSON.stringify({result,logs,response:journal.params[2]}).includes('passwd'),false);
   } finally {console.error=originalError;}
 });
 
