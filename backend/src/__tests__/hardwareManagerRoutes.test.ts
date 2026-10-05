@@ -58,7 +58,7 @@ const api = (path: string, id?: number, role?: Parameters<typeof signToken>[0]['
     }
   });
 
-function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned = false, inactive = false) {
+function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned = false, inactive = false, gatewayMac = '2805a55efb68') {
   const idempotencyKeys = new Set<string>();
   const observations = { published: [] as Array<{ topic: string; payload: any }>, persisted: [] as string[],
     auditPayloads: [] as string[], auditQueries: 0, readQueries: 0, observedQueries: 0,
@@ -70,6 +70,8 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
       if (sql.includes('UPDATE gateways SET') && sql.includes('reported_device_name')) return { rows: [{ id: 41 }] };
       if (sql.includes('SELECT id, company_id FROM gateways')) return { rows: [{ id: 41, company_id: COMPANY_A }] };
+      if (sql.includes('SELECT id FROM gateways WHERE id = $1')) return {rows:
+        params[0] === 41 && params[1] === COMPANY_A && params[2] === gatewayMac && !inactive ? [{id:41}] : []};
       if (sql.includes('SELECT 1 FROM hardware_gateway_reads')) return { rows: [] };
       if (sql.includes('INSERT INTO hardware_gateway_observed_settings')) return { rows: [], rowCount: 1 };
       if (sql.includes('INSERT INTO hardware_gateway_mqtt_observations')) { observations.persisted.push(JSON.stringify(params)); return { rows: [], rowCount: 1 }; }
@@ -99,6 +101,7 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
     release: () => undefined
   });
   (pool as any).query = async (sql: string, params: unknown[] = []) => {
+    if (sql.includes('SELECT status, error_message FROM hardware_gateway_reads')) return {rows:[]};
     if (sql === 'SELECT id, role, password_hash FROM users WHERE id = $1') {
       const id = Number(params[0]);
       const role = id === 1 ? 'hardware_readonly' : id === 5 ? 'hardware_superadmin' : 'hardware_technician';
@@ -112,7 +115,7 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
       const allowed = Number(params[0]) === 41 && !(inactive && sql.includes('g.active = TRUE')) && (sql.includes('g.company_id = ANY')
         ? Array.isArray(scopedCompanies) && scopedCompanies.includes(COMPANY_A) && !unassigned
         : sql.includes('AND TRUE') && (!unassigned || params[1] === true));
-      return { rows: allowed ? [{ id: 41, mac_address: '2805a55efb68', company_id: unassigned ? null : COMPANY_A, rssi_threshold: -70,
+      return { rows: allowed ? [{ id: 41, mac_address: gatewayMac, company_id: unassigned ? null : COMPANY_A, rssi_threshold: -70,
         product_model: verifiedFirmware ? 'MKGW3' : null,
         firmware_version: verifiedFirmware ? 'V2.4' : null,
         firmware_evidence: verifiedFirmware ? 'inspection:ticket-12345678' : null,
@@ -227,6 +230,59 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
 
 const commandPath = '/api/gateways/41/bluetooth/scan';
 const validCommand = { method: 'POST', body: JSON.stringify({ scan_switch: 1 }) };
+
+test('HTTP 2030 returns a stable collision rejection and safe audit with fictional identity, preserving scope and no retry', async () => {
+  const previous=process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;const identity='a1b2c3d4e5f6';
+  const logs:unknown[]=[];const originalError=console.error;console.error=(...args:unknown[])=>{logs.push(args);};
+  try {
+    process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';
+    const observed=fakeDatabase(false,false,false,false,identity);
+    (mqttService as any).publishMqttJson=async(topic:string,payload:any)=>{
+      observed.published.push({topic,payload});
+      await handleGatewayConfigurationReport(`gw/${identity}/publish`,JSON.stringify({msg_id:2030,device_info:{mac:identity},
+        data:{...buildHorizonstMqttPreset(identity,'production'),passwd:identity}}));
+    };
+    const path='/api/gateways/41/read-configuration/mqtt_configuration';const post={method:'POST',body:'{}'};
+    assert.equal((await api(path,3,'hardware_technician',post)).status,404);
+    const response=await api(path,2,'hardware_technician',post);assert.equal(response.status,422);
+    const result=await response.json();assert.equal(result.errorCode,'mqtt_observation_identity_secret_collision');
+    assert.equal(result.status,'invalid_response');assert.equal('data' in result,false);
+    assert.equal(observed.published.length,1);assert.equal(observed.published[0].payload.msg_id,2030);
+    assert.equal(JSON.stringify({result,audit:observed.auditPayloads,logs}).includes(identity),false);
+    assert(observed.auditPayloads.some(value=>value.includes('mqtt_observation_identity_secret_collision')));
+  } finally {console.error=originalError;if(previous===undefined)delete process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
+    else process.env.GATEWAY_MQTT_OBSERVATION_ENABLED=previous;}
+});
+
+test('stored MQTT observation is withheld after a credential rejection without reading its old values or publishing', async () => {
+  const previous=process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
+  try {
+    process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';
+    const observed=fakeDatabase(); const query=pool.query;
+    (pool as any).query=async(sql:string,params:any[])=>{
+      if(sql.includes('SELECT status, error_message FROM hardware_gateway_reads')) {
+        assert.deepEqual(params,[41,COMPANY_A]);
+        return {rows:[{status:'invalid_response',error_message:'mqtt_observation_identity_secret_collision'}]};
+      }
+      assert.equal(sql.includes('FROM hardware_gateway_mqtt_observations'),false);
+      return (query as any)(sql,params);
+    };
+    const response=await api('/api/gateways/41/mqtt-observation',2,'hardware_technician');
+    assert.equal(response.status,200); const result=await response.json();
+    assert.equal(result.observation,null);assert.equal(result.errorCode,'mqtt_observation_identity_secret_collision');
+    assert.equal(result.enabled,true);assert.equal(response.headers.get('cache-control'),'no-store');
+    assert.equal((await api('/api/gateways/41/mqtt-observation',3,'hardware_technician')).status,404);
+    assert.equal(observed.published.length,0);
+    const rejectingQuery=pool.query;
+    (pool as any).query=async(sql:string,params:any[])=>sql.includes('SELECT status, error_message FROM hardware_gateway_reads')
+      ? {rows:[{status:'invalid_response',error_message:'legacy unsafe diagnostic text must not be reflected'}]}
+      : (rejectingQuery as any)(sql,params);
+    const legacy=await (await api('/api/gateways/41/mqtt-observation',2,'hardware_technician')).json();
+    assert.equal(legacy.observation,null);assert.equal(legacy.errorCode,'mqtt_observation_invalid_response');
+    assert.equal(JSON.stringify(legacy).includes('legacy unsafe diagnostic'),false);
+  } finally { if(previous===undefined)delete process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
+    else process.env.GATEWAY_MQTT_OBSERVATION_ENABLED=previous; }
+});
 
 test('RSSI physical command retains authorization, scope and explicit input without publication on rejection', async () => {
   const observed = fakeDatabase();

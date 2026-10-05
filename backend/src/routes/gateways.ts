@@ -347,7 +347,8 @@ router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeH
       actorUserId: req.user!.id, action: `gateway.configuration.read.${readType}`,
       entityType: 'gateway', entityId: gatewayId, companyId: gateway.company_id, requestId: req.requestId,
       result: result.status === 'response_observed' ? 'unverified' : 'failure',
-      after: { readId: result.readId, msgId: result.msgId, status: result.status, message: result.message }
+      after: { readId: result.readId, msgId: result.msgId, status: result.status, message: result.message,
+        ...(result.errorCode ? { errorCode: result.errorCode } : {}) }
     });
     const status = result.status === 'response_observed' ? 200
       : result.status === 'invalid_response' ? 422
@@ -378,6 +379,21 @@ router.get('/:gatewayId/mqtt-observation', authenticate, authorizeHardware('tech
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
     const enabled = process.env.GATEWAY_MQTT_OBSERVATION_ENABLED === 'true';
     if (!enabled) return res.json({ source: 'observed', enabled: false, observation: null, correlation: 'unverified' });
+    const lastRead = await pool.query(
+      `SELECT status, error_message FROM hardware_gateway_reads
+       WHERE gateway_id = $1 AND company_id = $2 AND msg_id = 2030
+         AND status IN ('response_observed','invalid_response')
+       ORDER BY response_observed_at DESC NULLS LAST, created_at DESC LIMIT 1`, [gatewayId,gateway.company_id]);
+    const last = lastRead.rows[0];
+    if (last?.status === 'invalid_response') {
+      const errorCode = [
+        'mqtt_observation_identity_secret_collision', 'mqtt_observation_secret_in_public_field', 'mqtt_observation_invalid_response'
+      ].includes(last.error_message) ? last.error_message : 'mqtt_observation_invalid_response';
+      // Keep historical rows, but never serve an older public object after a
+      // credential-safety rejection. No credential is read or reconstructed.
+      return res.json({ source: 'observed', enabled: true, observation: null,
+        correlation: 'unverified', errorCode });
+    }
     const result = await pool.query(
       `SELECT public_value, observed_at FROM hardware_gateway_mqtt_observations
        WHERE gateway_id = $1 AND company_id = $2`, [gatewayId, gateway.company_id]);

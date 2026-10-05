@@ -61,13 +61,23 @@ let mqttPresetReady = false;
 let mqttSubmitting = false;
 const mqttReadPending = new Map();
 const mqttReadBlocked = new Set();
+const mqttReadRejections = new Map();
 let mqttObservationGeneration = 0;
 const mqttReadStatus = document.getElementById('gatewayMqttReadStatus');
 const mqttObservedAt = document.getElementById('gatewayMqttObservedAt');
 const mqttObservedValue = document.getElementById('gatewayMqttObservedValue');
 const mqttRefreshObservation = document.getElementById('gatewayMqttRefreshObservation');
+const mqttObservationErrorText = (code) => code === 'mqtt_observation_identity_secret_collision'
+  ? 'Observación oculta: la credencial coincide con la identidad pública. Para visualizar la configuración completa, cambia previamente la credencial mediante un procedimiento autorizado. No se repetirá esta lectura automáticamente.'
+  : code === 'mqtt_observation_secret_in_public_field'
+    ? 'Observación oculta: un campo público contiene material de la credencial. Revisa la credencial y la configuración antes de solicitar otra lectura. No se repetirá automáticamente.'
+    : 'Respuesta inválida; no se guarda como observación válida ni se repetirá automáticamente.';
 
 const renderMqttObservation = (saved, gateway) => {
+  if (['mqtt_observation_identity_secret_collision', 'mqtt_observation_secret_in_public_field',
+    'mqtt_observation_invalid_response'].includes(saved.errorCode)) {
+    throw Object.assign(new Error('mqtt_observation_withheld'), {status:422,code:saved.errorCode});
+  }
   if (saved.source !== 'observed' || saved.correlation !== 'unverified') throw new Error('invalid_observation_contract');
   mqttObservedValue.replaceChildren();
   if (!saved.observation) { mqttObservedAt.textContent = 'Sin observación MQTT guardada.'; return; }
@@ -98,6 +108,15 @@ const loadMqttObservation = async (gateway, requestRead = true) => {
       mqttObservedAt.textContent = 'No se ha publicado ninguna consulta 2030.';
       return;
     }
+    if (['mqtt_observation_identity_secret_collision', 'mqtt_observation_secret_in_public_field',
+      'mqtt_observation_invalid_response'].includes(saved.errorCode) || mqttReadRejections.has(gateway.id)) {
+      mqttReadBlocked.add(gateway.id);
+      const code=mqttReadRejections.get(gateway.id) || saved.errorCode;
+      mqttReadRejections.set(gateway.id,code);
+      mqttObservedValue.replaceChildren(); mqttObservedAt.textContent = 'Observación anterior oculta por seguridad.';
+      mqttReadStatus.textContent = mqttObservationErrorText(code);
+      return;
+    }
     renderMqttObservation(saved, gateway);
     if (!requestRead) return;
     if (mqttReadBlocked.has(gateway.id)) {
@@ -119,9 +138,13 @@ const loadMqttObservation = async (gateway, requestRead = true) => {
     renderMqttObservation(latest, gateway);
     mqttReadStatus.textContent = 'Respuesta pública recibida y guardada. Sin correlación inequívoca ni garantía de frescura.';
   } catch (error) {
-    if ([504, 502, 409].includes(error.status)) mqttReadBlocked.add(gateway.id);
+    if ([504, 502, 409, 422].includes(error.status)) mqttReadBlocked.add(gateway.id);
+    if (current() && error.status === 422) {
+      mqttReadRejections.set(gateway.id,error.code || 'mqtt_observation_invalid_response');
+      mqttObservedValue.replaceChildren(); mqttObservedAt.textContent = 'Observación anterior oculta tras rechazo de la lectura.';
+    }
     if (current()) mqttReadStatus.textContent = error.status === 504 ? 'Timeout de lectura; no se repetirá automáticamente.'
-      : error.status === 422 ? 'Respuesta inválida; no se guarda como observación válida.'
+      : error.status === 422 ? mqttObservationErrorText(error.code)
         : error.status === 409 ? 'Gateway ocupada o lectura anterior incierta; no se repite.' : 'Error de lectura. La observación guardada no es una consulta nueva.';
   } finally { if (current()) mqttRefreshObservation.disabled = mqttReadPending.has(gateway.id) || mqttReadBlocked.has(gateway.id); }
 };

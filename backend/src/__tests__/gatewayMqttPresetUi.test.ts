@@ -283,3 +283,44 @@ test('disabled, malformed and failed observation states do not write or expose u
   await f.open(); assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent, /fictional-secret/);
   assert.equal(f.posts.length, 0);
 });
+
+test('credential rejection clears prior observation, explains identity collision and never retries on reopen or refresh', async () => {
+  for(const code of ['mqtt_observation_identity_secret_collision','mqtt_observation_secret_in_public_field']) {
+    const f=await fixture(true);
+    f.setRead(async()=>{throw Object.assign(new Error('fictional-secret-must-not-render'),{status:422,code});});
+    await f.open();
+    assert.equal(f.reads.length,1);assert.equal(f.posts.length,0);
+    assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
+    assert.match(f.get('gatewayMqttReadStatus').textContent,/credencial/);
+    if(code.includes('identity'))assert.match(f.get('gatewayMqttReadStatus').textContent,/identidad pública.*cambia previamente/);
+    assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent,/fictional-secret/);
+    assert.equal(f.get('gatewayMqttRefreshObservation').disabled,true);
+    await f.open(); f.get('gatewayMqttRefreshObservation').listeners.click();
+    await new Promise(setImmediate);
+    assert.equal(f.reads.length,1);assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
+    assert.equal(f.field('host').value,'mqtt.horizonst.es');assert.equal(f.field('passwd').value,'');
+  }
+});
+
+test('stored rejection blocks automatic 2030 and rendering even in a new screen', async () => {
+  const f=await fixture(true);
+  f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,observation:null,
+    errorCode:'mqtt_observation_identity_secret_collision'} as any));
+  await f.open();assert.equal(f.reads.length,0);assert.equal(f.posts.length,0);
+  assert.equal(f.get('gatewayMqttObservedValue').children.length,0);
+  assert.match(f.get('gatewayMqttReadStatus').textContent,/identidad pública/);
+});
+
+test('real apiPost forwards status and only stable observation codes to the UI', async () => {
+  const source=readFileSync(path.join(process.cwd(),'public/js/api.js'),'utf8');
+  const body=source.slice(source.indexOf('export const apiPost'),source.indexOf('export const apiPut')).replace('export const apiPost','globalThis.post');
+  let payload:any={message:'Safe fixed rejection',errorCode:'mqtt_observation_identity_secret_collision',passwd:'fictional-extra-secret'};
+  const context=vm.createContext({callApi:async()=>({status:422,ok:false,json:async()=>payload}),defaultHeaders:()=>({}),handleUnauthorized:()=>{}});
+  vm.runInContext(body,context);
+  await assert.rejects(context.post('/gateways/17/read-configuration/mqtt_configuration',{}),(error:any)=>{
+    assert.equal(error.status,422);assert.equal(error.code,payload.errorCode);
+    assert.equal(JSON.stringify(error).includes('fictional-extra-secret'),false);return true;
+  });
+  payload={message:'Safe fixed rejection',errorCode:'fictional-untrusted-code'};
+  await assert.rejects(context.post('/same',{}),(error:any)=>{assert.equal(error.code,undefined);return true;});
+});

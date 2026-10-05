@@ -3,8 +3,8 @@ import { pool } from '../db/pool';
 import { normalizeGatewayMac } from '../utils/mac';
 import { redactHardwarePayload } from './hardwarePayloadRedaction';
 import { GatewayIdentityBusyError, GatewayIdentityOperationTimeoutError } from './gatewayIdentity';
-import { PublicMqttObservation } from './gatewayMqttObservation';
-import { publicMqttObservation } from './gatewayMqttObservationIngress';
+import { PublicMqttObservation, MqttObservationErrorCode } from './gatewayMqttObservation';
+import { inspectPublicMqttObservation } from './gatewayMqttObservationIngress';
 
 type PublishMqttJson = (topic: string, payload: Record<string, unknown>, options?: { qos: 0 | 1 }) => Promise<void>;
 
@@ -54,7 +54,7 @@ export const isGatewayConfigurationReadType = (value: unknown): value is Gateway
 type WaiterState = 'waiting' | 'observing' | 'response_observed' | 'invalid_response' | 'timed_out' | 'publish_error';
 type ReadObservation =
   | { kind: 'response_observed'; report: ObservedGatewayConfiguration }
-  | { kind: 'invalid_response' };
+  | { kind: 'invalid_response'; errorCode?: MqttObservationErrorCode };
 type ReadWaiter = {
   readId: string;
   gatewayId: number;
@@ -68,7 +68,7 @@ type ReadWaiter = {
 };
 type ReportInspection =
   | { kind: 'valid'; report: ObservedGatewayConfiguration }
-  | { kind: 'invalid'; topicMac: string; definition: ReadDefinition; payload: Record<string, unknown> };
+  | { kind: 'invalid'; topicMac: string; definition: ReadDefinition; payload: Record<string, unknown>; errorCode?: MqttObservationErrorCode };
 
 const waiters = new Map<string, ReadWaiter>();
 const UNCLAIMED_REPORT_TIMEOUT_MS = 10_000;
@@ -185,7 +185,8 @@ const inspectGatewayConfigurationReport = (topic: string, payload: unknown): Rep
   if (definition.msgId === 2030 && root.msg_id !== 2030) return null;
   const topicMac = normalizeGatewayMac(topicMatch[1]);
   if (!topicMac) return null;
-  const invalid = (): ReportInspection => ({ kind: 'invalid', topicMac, definition,
+  const invalid = (errorCode?: MqttObservationErrorCode): ReportInspection => ({ kind: 'invalid', topicMac, definition,
+    ...(definition.msgId === 2030 ? { errorCode: errorCode ?? 'mqtt_observation_invalid_response' } : {}),
     payload: definition.msgId === 2030 ? { msg_id: 2030 } : root });
   if (Object.keys(root).sort().join(',') !== 'data,device_info,msg_id'
       || !root.device_info || typeof root.device_info !== 'object' || Array.isArray(root.device_info)
@@ -195,7 +196,9 @@ const inspectGatewayConfigurationReport = (topic: string, payload: unknown): Rep
   // A contradictory identity cannot complete even an invalid-response waiter.
   if (payloadMac !== topicMac) return definition.msgId === 2030 ? null : invalid();
   if (definition.msgId === 2030 && (typeof rawMac !== 'string' || !/^[0-9a-f]{12}$/i.test(rawMac))) return null;
-  const data = definition.msgId === 2030 ? publicMqttObservation(topicMac, root.data) : definition.snapshot
+  const mqttInspection = definition.msgId === 2030 ? inspectPublicMqttObservation(topicMac, root.data) : null;
+  if (mqttInspection && !mqttInspection.ok) return invalid(mqttInspection.errorCode);
+  const data = mqttInspection?.ok ? mqttInspection.value : definition.snapshot
     ? exactConnectedDevicesData(root.data)
     : exactIntegerData(root.data, definition.ranges!);
   if (!data) return invalid();
@@ -286,7 +289,8 @@ const persistJournalResult = async (
   waiter: ReadWaiter,
   status: 'response_observed' | 'invalid_response',
   payload: Record<string, unknown>,
-  deadline: number
+  deadline: number,
+  errorCode?: MqttObservationErrorCode
 ): Promise<boolean> => {
   const result = await queryUntil(managed,
     `UPDATE hardware_gateway_reads SET status = $2, response_observed_at = NOW(),
@@ -294,7 +298,7 @@ const persistJournalResult = async (
      WHERE id = $1 AND gateway_id = $5 AND company_id = $6 AND msg_id = $7
        AND read_type = $8 AND status IN ('pending', 'published')`,
     [waiter.readId, status, JSON.stringify(redactHardwarePayload(payload)),
-      status === 'invalid_response' ? 'observed response failed strict schema validation' : null,
+      status === 'invalid_response' ? errorCode ?? 'observed response failed strict schema validation' : null,
       waiter.gatewayId, waiter.companyId, waiter.definition.msgId, waiter.definition.readType],
     deadline, 'response_journal', waiter.readId);
   return Boolean(result.rowCount);
@@ -359,7 +363,8 @@ export async function handleGatewayConfigurationReport(topic: string, payloadTex
     }
     const status = inspected.kind === 'valid' ? 'response_observed' : 'invalid_response';
     const journalUpdated = await persistJournalResult(managed, claimedWaiter, status,
-      inspected.kind === 'valid' ? inspected.report.payload : inspected.payload, deadline);
+      inspected.kind === 'valid' ? inspected.report.payload : inspected.payload, deadline,
+      inspected.kind === 'invalid' ? inspected.errorCode : undefined);
     if (!journalUpdated || claimedWaiter.state !== 'observing' || waiters.get(key) !== claimedWaiter) {
       return inspected.kind === 'valid';
     }
@@ -368,7 +373,7 @@ export async function handleGatewayConfigurationReport(topic: string, payloadTex
     removeCurrentWaiter(key, claimedWaiter);
     claimedWaiter.resolve(inspected.kind === 'valid'
       ? { kind: 'response_observed', report: inspected.report }
-      : { kind: 'invalid_response' });
+      : { kind: 'invalid_response', errorCode: inspected.errorCode });
     return inspected.kind === 'valid';
   } catch (error) {
     if (claimedWaiter?.state === 'observing' && waiters.get(key) === claimedWaiter) claimedWaiter.state = 'waiting';
@@ -385,6 +390,7 @@ export type GatewayConfigurationReadResult = {
   msgId: number;
   status: 'response_observed' | 'invalid_response' | 'timed_out' | 'publish_error';
   data?: GatewayConfigurationData;
+  errorCode?: MqttObservationErrorCode;
   message: string;
 };
 
@@ -465,7 +471,12 @@ export async function executeGatewayConfigurationRead(params: {
       };
       if (outcome.kind === 'invalid_response') return {
         readId: readId!, readType: params.readType, msgId: definition.msgId,
-        status: 'invalid_response', message: 'Gateway response was observed but failed strict schema validation'
+        status: 'invalid_response', ...(outcome.errorCode ? { errorCode: outcome.errorCode } : {}),
+        message: outcome.errorCode === 'mqtt_observation_identity_secret_collision'
+          ? 'Public observation withheld: credential collides with public identity; credential review required'
+          : outcome.errorCode === 'mqtt_observation_secret_in_public_field'
+            ? 'Public observation withheld: a public field contains credential material'
+            : 'Gateway response was observed but failed strict schema validation'
       };
       try {
         await queryUntil(managed!,

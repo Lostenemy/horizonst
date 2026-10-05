@@ -114,6 +114,29 @@ const MQTT_SECRET = 'fictional-mqtt-secret-2030-do-not-retain';
 const mqttReport = () => ({ msg_id: 2030, device_info: { mac: '2805a55efb68' },
   data: { ...buildHorizonstMqttPreset('2805a55efb68', 'production'), passwd: MQTT_SECRET } });
 
+test('fictional identity collision is journaled as a stable safe rejection, not persisted as public data or retried', async () => {
+  process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';
+  const identity='a1b2c3d4e5f6'; const operations=mockDatabase(); let publications=0;
+  const logs: unknown[]=[]; const originalError=console.error;
+  console.error=(...args: unknown[])=>{logs.push(args);};
+  try {
+    const result=await executeGatewayConfigurationRead({gatewayId:41,companyId:COMPANY_A,gatewayMac:identity,
+      readType:'mqtt_configuration',actorUserId:2,timeoutMs:200,deps:{publish:async () => {
+        publications++;
+        await processMqttMessage(`gw/${identity}/publish`,Buffer.from(JSON.stringify({msg_id:2030,device_info:{mac:identity},
+          data:{...buildHorizonstMqttPreset(identity,'production'),passwd:identity}})));
+      }}});
+    assert.equal(result.status,'invalid_response');
+    assert.equal(result.errorCode,'mqtt_observation_identity_secret_collision');
+    assert.equal('data' in result,false); assert.equal(publications,1);
+    assert.equal(operations.some(item=>item.sql.includes('INSERT INTO hardware_gateway_mqtt_observations')),false);
+    const journal=operations.find(item=>item.sql.includes('response_payload'))!;
+    assert.equal(journal.params[3],result.errorCode);
+    assert.equal(journal.params[2],JSON.stringify({msg_id:2030}));
+    assert.equal(JSON.stringify({result,logs,response:journal.params[2]}).includes(identity),false);
+  } finally {console.error=originalError;}
+});
+
 test('2030 uses the exact observed request/QoS and persists only public observation and safe journal metadata', async () => {
   process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = 'true';
   const operations = mockDatabase();
