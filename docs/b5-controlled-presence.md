@@ -1,5 +1,12 @@
 # B5: presencia durante una alarma física controlada
 
+> **Actualización operativa:** el operador no acepta el presupuesto temporal
+> descrito abajo y no autoriza su despliegue. Véase
+> [revisión del presupuesto total](b5-presence-total-budget-review.md): la
+> cifra anterior de 161,5 s omite espera en cola y no constituye una garantía.
+> Los apartados siguientes conservan la descripción de la implementación
+> actual; no representan aceptación del nuevo requisito de 90 s.
+
 ## Diagnóstico y evidencia
 
 Base verificada: `origin/main` = `0dd1da6b438115fa49008f78453108625fdb76aa`. Rama local: `codex/b5-presence-controlled-operation`. Trabajo independiente de RSSI de formularios y lectura MQTT 2030; ninguno de esos cambios se incorpora.
