@@ -214,6 +214,48 @@ Diff propio de esta corrección: `presence-close.repository.ts`,
 `presence-close.repository.test.ts`, `controlled-ble-presence.postgres.test.ts`
 y este documento. Sin nueva migración ni cambios de políticas o plazos.
 
+## Aislamiento del fixture PostgreSQL (2026-10-06)
+
+Sobre `c7a6ef19ea5611098dfd39f10878223dbce6f697`, el operador reprodujo
+`23505` en `uq_cold_room_sessions_one_open_per_hardware_device`: el reset
+global reabría las sesiones cerradas de carga y la sesión creada por reentrada.
+Además, una lectura de la primera fila y updates globales de detecciones
+podían atribuir al fixture original datos de otros casos.
+
+La corrección afecta solo a pruebas y documentación:
+
+- `resetExpired` modifica exclusivamente el UUID de sesión original y su
+  dispositivo 13; elimina solo su operación y su job. La detección se identifica
+  por dispositivo 13 y gateway 41. Se comprueba que existe la fila esperada.
+- `isOpen`, consultas de precisión, leases y operaciones se acotan por sus
+  identidades. Los contadores de reentrada se acotan al tag/dispositivo, porque
+  deben contar también la nueva sesión, no solo la original.
+- El caso de reentrada conserva todas sus aserciones y finaliza explícitamente
+  la sesión que acaba de crear, mediante el cierre canónico. Conserva su fila
+  y job, sin borrar datos ni permitir que otro caso la reescriba.
+- Los 18 fixtures de carga permanecen presentes. El último caso compara un
+  snapshot JSONB de las otras sesiones/detecciones/operaciones/jobs/estados
+  antes y después del reset y del recorrido de bloqueo compartido. El snapshot
+  conserva microsegundos; exige también que sigan cerradas las 18 sesiones.
+- Un contrato estático ejecutable revisa los SQL literales del fixture y
+  rechaza las mutaciones amplias antiguas. No sustituye PostgreSQL real.
+
+Evidencia aportada por el operador: **una ejecución aislada** cerró las 18
+sesiones, con un bloqueo de 2,1 s, en aproximadamente **71,7 s desde detección**.
+No se extrapola a otras cargas ni al SLA general. La suite completa aún falló
+después por contaminación del fixture; no se cuentan cinco ejecuciones válidas.
+
+Validación local de esta corrección: typecheck/build aislado correctos; suite
+Horneo **198 aprobadas, 0 fallidas, 3 omitidas** (201 casos), incluyendo el
+contrato nuevo. Contratos de producción **19/19**, artefactos **52/52**,
+sintaxis frontend y diff correctos. Los 14 subcasos PostgreSQL conservan sus
+nombres y orden. PostgreSQL local no está disponible (sin daemon Docker ni
+binarios locales): quedan pendientes **cinco ejecuciones reales completas**
+del bloque desechable de `b5-presence-precision-integration.md` con este commit.
+No se cambian índices, restricciones, migraciones ni código operativo;
+MQTT/RSSI, plazos y acciones físicas permanecen intactos. La rama continúa
+bloqueada para despliegue y el SLA de 90 s no se declara validado.
+
 ## Operaciones y retorno, sin ejecutar
 
 Consultar por acceso autorizado de solo lectura: `cold_room_sessions`,

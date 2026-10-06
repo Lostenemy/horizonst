@@ -51,48 +51,56 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
       companyId: company, alertId: `test-${index}` })));
     assert.equal(results.filter(value => value === 'busy').length, 1);
     const operation = results.find(value => value && value !== 'busy'); assert.ok(operation && operation !== 'busy');
-    const saved = (await pool.query('SELECT * FROM controlled_b5_presence_operations')).rows[0];
+    const saved = (await pool.query('SELECT * FROM controlled_b5_presence_operations WHERE session_id=$1 AND hardware_device_id=13',[session])).rows[0];
     assert.equal(saved.session_id, session); assert.equal(saved.company_id, company);
     assert.equal(saved.hard_deadline.getTime() - saved.started_at.getTime(), 120000);
     assert.equal((await pool.query(`SELECT protect_until=last_presence_at+INTERVAL '60 seconds' AS exact
-      FROM controlled_b5_presence_operations CROSS JOIN tag_gateway_presence_state`)).rows[0].exact,true);
-    await assert.rejects(pool.query("UPDATE controlled_b5_presence_operations SET protect_until = hard_deadline + INTERVAL '1 second'"), { code: '23514' });
-    await assert.rejects(pool.query('UPDATE controlled_b5_presence_operations SET session_id = $1', [randomUUID()]), { code: '23503' });
-    await pool.query("UPDATE tag_gateway_presence_state SET last_presence_at = NOW() - INTERVAL '31 seconds'");
+      FROM controlled_b5_presence_operations op JOIN tag_gateway_presence_state ps ON ps.hardware_device_id=op.hardware_device_id
+      WHERE op.session_id=$1 AND op.hardware_device_id=13 AND ps.hardware_gateway_id=41`,[session])).rows[0].exact,true);
+    await assert.rejects(pool.query("UPDATE controlled_b5_presence_operations SET protect_until = hard_deadline + INTERVAL '1 second' WHERE session_id=$1 AND hardware_device_id=13",[session]), { code: '23514' });
+    await assert.rejects(pool.query('UPDATE controlled_b5_presence_operations SET session_id = $1 WHERE session_id=$2 AND hardware_device_id=13', [randomUUID(),session]), { code: '23503' });
+    await pool.query("UPDATE tag_gateway_presence_state SET last_presence_at = NOW() - INTERVAL '31 seconds' WHERE hardware_device_id=13 AND hardware_gateway_id=41");
     await closeStaleSessions();
-    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE ended_at IS NULL')).rows[0].count, 1);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE id=$1 AND hardware_device_id=13 AND ended_at IS NULL',[session])).rows[0].count, 1);
     await markBleSessionActive({ tagId: tag, hardwareDeviceId: 13, tagUid: 'c65b52531bdc', gatewayMac: '142b2fe271b4', operationId: operation.operationId });
-    const lease = (await pool.query('SELECT lease_expires_at FROM ble_alarm_sessions')).rows[0];
+    const lease = (await pool.query('SELECT lease_expires_at FROM ble_alarm_sessions WHERE tag_id=$1 AND hardware_device_id=13',[tag])).rows[0];
     assert.ok(lease.lease_expires_at <= saved.hard_deadline);
     await markBleSessionDisconnected({ tagId: tag, hardwareDeviceId: 13, operationId: randomUUID(), confirmed: true });
-    assert.equal((await pool.query('SELECT is_active FROM ble_alarm_sessions')).rows[0].is_active, true);
+    assert.equal((await pool.query('SELECT is_active FROM ble_alarm_sessions WHERE tag_id=$1 AND hardware_device_id=13',[tag])).rows[0].is_active, true);
     await finishControlledPresenceOperation(operation, 'unverified');
     await finishControlledPresenceOperation({ ...operation, operationId: randomUUID() }, 'failed');
-    const finished = (await pool.query('SELECT outcome, protect_until, hard_deadline FROM controlled_b5_presence_operations')).rows[0];
+    const finished = (await pool.query('SELECT outcome, protect_until, hard_deadline FROM controlled_b5_presence_operations WHERE session_id=$1 AND hardware_device_id=13',[session])).rows[0];
     assert.equal(finished.outcome, 'unverified'); assert.ok(finished.protect_until <= finished.hard_deadline);
-    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE ended_at IS NULL')).rows[0].count, 1);
-    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM ble_alarm_sessions')).rows[0].count, 1);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE id=$1 AND hardware_device_id=13 AND ended_at IS NULL',[session])).rows[0].count, 1);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM ble_alarm_sessions WHERE tag_id=$1 AND hardware_device_id=13',[tag])).rows[0].count, 1);
     // A restart needs no reconciliation to expire protection: the reader uses the persisted time predicate.
     await pool.query(`UPDATE controlled_b5_presence_operations SET started_at = NOW()-INTERVAL '121 seconds',
-      hard_deadline=NOW()-INTERVAL '1 second', protect_until=NOW()-INTERVAL '1 second'`);
-    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM controlled_b5_presence_operations WHERE protect_until > clock_timestamp()')).rows[0].count, 0);
+      hard_deadline=NOW()-INTERVAL '1 second', protect_until=NOW()-INTERVAL '1 second'
+      WHERE session_id=$1 AND hardware_device_id=13`,[session]);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM controlled_b5_presence_operations WHERE session_id=$1 AND hardware_device_id=13 AND protect_until > clock_timestamp()',[session])).rows[0].count, 0);
     await closeStaleSessions();
-    const closed = (await pool.query('SELECT ended_at, close_event_id, duration_seconds FROM cold_room_sessions')).rows[0];
+    const closed = (await pool.query('SELECT ended_at, close_event_id, duration_seconds FROM cold_room_sessions WHERE id=$1 AND hardware_device_id=13',[session])).rows[0];
     assert.ok(closed.ended_at); assert.equal(closed.close_event_id, null); assert.ok(closed.duration_seconds < 35);
 
     // Reuse only this owned fixture. Force six fractional digits, independently
     // of pg's Date parser and of the machine's clock precision.
     const resetExpired = async () => {
-      await pool.query('DELETE FROM controlled_b5_presence_operations');
+      await pool.query('DELETE FROM controlled_b5_presence_operations WHERE session_id=$1 AND hardware_device_id=13',[session]);
       await pool.query('DELETE FROM presence_close_outbox WHERE session_id=$1',[session]);
-      await pool.query("UPDATE cold_room_sessions SET ended_at=NULL, duration_seconds=NULL, close_event_id=NULL, started_at=clock_timestamp()-INTERVAL '1 minute'");
+      const reset=await pool.query("UPDATE cold_room_sessions SET ended_at=NULL, duration_seconds=NULL, close_event_id=NULL, started_at=clock_timestamp()-INTERVAL '1 minute' WHERE id=$1 AND hardware_device_id=13",[session]);
+      assert.equal(reset.rowCount,1);
       const row = (await pool.query(`UPDATE tag_gateway_presence_state SET
         last_presence_at = date_trunc('second',clock_timestamp())-INTERVAL '31 seconds'+INTERVAL '0.123456 seconds'
+        WHERE hardware_device_id=13 AND hardware_gateway_id=41
         RETURNING last_presence_at::text AS exact, last_presence_at AS lossy`)).rows[0];
+      assert.ok(row);
       assert.equal((await pool.query('SELECT $1::timestamptz > $2::timestamptz AS lost', [row.exact,row.lossy])).rows[0].lost, true);
       return row.exact as string;
     };
-    const isOpen = async () => (await pool.query('SELECT ended_at IS NULL AS open FROM cold_room_sessions')).rows[0].open;
+    const isOpen = async () => {
+      const result=await pool.query('SELECT ended_at IS NULL AS open FROM cold_room_sessions WHERE id=$1 AND hardware_device_id=13',[session]);
+      assert.equal(result.rowCount,1);return result.rows[0].open;
+    };
     const textCloseInput = async (reason:'event'|'timeout',closeEventId:string|null) => {
       const exact=await resetExpired();
       await pool.query(`INSERT INTO presence_operational_state(tag_id,hardware_device_id,inside,in_alarm)
@@ -170,31 +178,31 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
       const exact = await resetExpired(); await closeStaleSessions(); assert.equal(await isOpen(), false);
       const result = (await pool.query(`SELECT ended_at = $1::timestamptz + INTERVAL '30 seconds' AS exact_end,
         duration_seconds = FLOOR(EXTRACT(EPOCH FROM ($1::timestamptz-started_at)))::int AS exact_duration
-        FROM cold_room_sessions`, [exact])).rows[0];
+        FROM cold_room_sessions WHERE id=$2 AND hardware_device_id=13`, [exact,session])).rows[0];
       assert.equal(result.exact_end,true); assert.equal(result.exact_duration,true);
     });
     await t.test('a truly later detection in the same millisecond rejects the obsolete close', async () => {
       const exact = await resetExpired();
-      await sweepWithConcurrent(async () => { await pool.query("UPDATE tag_gateway_presence_state SET last_presence_at=$1::timestamptz+INTERVAL '1 microsecond'",[exact]); });
+      await sweepWithConcurrent(async () => { await pool.query("UPDATE tag_gateway_presence_state SET last_presence_at=$1::timestamptz+INTERVAL '1 microsecond' WHERE hardware_device_id=13 AND hardware_gateway_id=41",[exact]); });
       assert.equal(await isOpen(),true);
       await closeStaleSessions(); assert.equal(await isOpen(),false);
     });
     await t.test('a concurrent fresh detection prevents closure', async () => {
       await resetExpired();
-      await sweepWithConcurrent(async () => { await pool.query('UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp()'); });
+      await sweepWithConcurrent(async () => { await pool.query('UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp() WHERE hardware_device_id=13 AND hardware_gateway_id=41'); });
       assert.equal(await isOpen(),true);
     });
     await t.test('concurrent claim takes the session lock and prevents obsolete closure until exact expiry', async () => {
       await resetExpired(); let claim: any;
       await sweepWithConcurrent(async () => {
-        await pool.query('UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp()');
+        await pool.query('UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp() WHERE hardware_device_id=13 AND hardware_gateway_id=41');
         // Use the real pool directly to avoid reinjecting this callback.
         const intercept = db.connect; (db as any).connect = () => pool.connect();
         try { claim = await beginControlledPresenceOperation({tagId:tag,hardwareDeviceId:13,companyId:company,alertId:'concurrent-claim'}); }
         finally { db.connect = intercept; }
       });
       assert.ok(claim && claim !== 'busy'); assert.equal(await isOpen(),true);
-      await pool.query("UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp()-INTERVAL '31 seconds'");
+      await pool.query("UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp()-INTERVAL '31 seconds' WHERE hardware_device_id=13 AND hardware_gateway_id=41");
       await closeStaleSessions(); assert.equal(await isOpen(),true);
       // Derive all constraint boundaries from one PostgreSQL instant, preserving microseconds.
       await pool.query(`WITH fixture_clock AS MATERIALIZED (SELECT clock_timestamp() AS instant)
@@ -202,10 +210,10 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
         SET started_at=fixture_clock.instant-INTERVAL '121 seconds',
             hard_deadline=fixture_clock.instant-INTERVAL '1 second',
             protect_until=fixture_clock.instant-INTERVAL '1 second'
-        FROM fixture_clock`);
+        FROM fixture_clock WHERE session_id=$1 AND hardware_device_id=13`,[session]);
       await closeStaleSessions(); assert.equal(await isOpen(),false);
       await finishControlledPresenceOperation({...claim,operationId:randomUUID()},'failed');
-      assert.equal((await pool.query('SELECT outcome FROM controlled_b5_presence_operations')).rows[0].outcome,'running');
+      assert.equal((await pool.query('SELECT outcome FROM controlled_b5_presence_operations WHERE session_id=$1 AND hardware_device_id=13',[session])).rows[0].outcome,'running');
     });
     await t.test('canonical close atomically stores outside state and an idempotent durable job; restart applies effects once',async()=>{
       const exact=await resetExpired();
@@ -243,10 +251,11 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
     });
     await t.test('PostgreSQL protection boundaries retain plus/minus one microsecond and expire while physical deadline remains live',async()=>{
       await resetExpired();
-      await pool.query("UPDATE cold_room_sessions SET started_at=clock_timestamp()-INTERVAL '2 minutes'");
+      await pool.query("UPDATE cold_room_sessions SET started_at=clock_timestamp()-INTERVAL '2 minutes' WHERE id=$1 AND hardware_device_id=13",[session]);
       await pool.query(`WITH instant AS MATERIALIZED(SELECT clock_timestamp() AS at)
-        UPDATE tag_gateway_presence_state SET last_presence_at=instant.at-INTERVAL '61 seconds' FROM instant`);
-      const detection=(await pool.query('SELECT last_presence_at::text AS at FROM tag_gateway_presence_state')).rows[0].at;
+        UPDATE tag_gateway_presence_state SET last_presence_at=instant.at-INTERVAL '61 seconds' FROM instant
+        WHERE hardware_device_id=13 AND hardware_gateway_id=41`);
+      const detection=(await pool.query('SELECT last_presence_at::text AS at FROM tag_gateway_presence_state WHERE hardware_device_id=13 AND hardware_gateway_id=41')).rows[0].at;
       await pool.query(`INSERT INTO controlled_b5_presence_operations
         (hardware_device_id,operation_id,session_id,company_id,alert_reference,started_at,hard_deadline,protect_until,outcome)
         VALUES(13,$1,$2,$3,'finite',$4::timestamptz,$4::timestamptz+INTERVAL '120 seconds',
@@ -255,23 +264,34 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
         protect_until>($1::timestamptz+INTERVAL '60 seconds'-INTERVAL '1 microsecond') AS before,
         protect_until>($1::timestamptz+INTERVAL '60 seconds') AS exact,
         protect_until>($1::timestamptz+INTERVAL '60 seconds'+INTERVAL '1 microsecond') AS after,
-        hard_deadline>clock_timestamp() AS physical_live FROM controlled_b5_presence_operations`,[detection])).rows[0];
+        hard_deadline>clock_timestamp() AS physical_live FROM controlled_b5_presence_operations
+        WHERE session_id=$2 AND hardware_device_id=13`,[detection,session])).rows[0];
       assert.deepEqual(boundaries,{before:true,exact:false,after:false,physical_live:true});
       await closeStaleSessions();assert.equal(await isOpen(),false);
-      assert.equal((await pool.query('SELECT outcome FROM controlled_b5_presence_operations')).rows[0].outcome,'running');
+      assert.equal((await pool.query('SELECT outcome FROM controlled_b5_presence_operations WHERE session_id=$1 AND hardware_device_id=13',[session])).rows[0].outcome,'running');
     });
     await t.test('reentry strictly after the microsecond confirmation is not discarded by Date truncation', async () => {
       await resetExpired(); await closeStaleSessions();
-      const next = (await pool.query("SELECT (ended_at+INTERVAL '1 microsecond')::text AS timestamp FROM cold_room_sessions")).rows[0].timestamp;
+      const next = (await pool.query("SELECT (ended_at+INTERVAL '1 microsecond')::text AS timestamp FROM cold_room_sessions WHERE id=$1 AND hardware_device_id=13",[session])).rows[0].timestamp;
       const event = {eventId:randomUUID(),tagId:'c65b52531bdc',gatewayMac:'142b2fe271b4',eventType:'heartbeat' as const,
         timestamp:next,rssi:-60,rawPayload:{}};
       const identity = {source:'central' as const,tagMac:'c65b52531bdc',gatewayMac:'142b2fe271b4',hardwareDeviceId:13,
         hardwareGatewayId:41,device:null,gateway:null};
-      const prior = (await pool.query("SELECT (ended_at-INTERVAL '1 microsecond')::text AS timestamp FROM cold_room_sessions")).rows[0].timestamp;
+      const prior = (await pool.query("SELECT (ended_at-INTERVAL '1 microsecond')::text AS timestamp FROM cold_room_sessions WHERE id=$1 AND hardware_device_id=13",[session])).rows[0].timestamp;
       await processComplianceRules({...event,eventId:randomUUID(),timestamp:prior},identity);
-      assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE ended_at IS NULL')).rows[0].count,0);
+      assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE tag_id=$1 AND hardware_device_id=13 AND ended_at IS NULL',[tag])).rows[0].count,0);
       await processComplianceRules(event,identity);
-      assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE ended_at IS NULL')).rows[0].count,1);
+      assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE tag_id=$1 AND hardware_device_id=13 AND ended_at IS NULL',[tag])).rows[0].count,1);
+      // The reentry owns a different session. Finish it explicitly without
+      // deleting its row or asking resetExpired to rewrite another case.
+      const reentered=(await pool.query('SELECT id FROM cold_room_sessions WHERE tag_id=$1 AND hardware_device_id=13 AND ended_at IS NULL',[tag])).rows[0].id;
+      assert.notEqual(reentered,session);
+      const reentryEnd=(await pool.query("SELECT ($1::timestamptz+INTERVAL '1 microsecond')::text AS at",[next])).rows[0].at;
+      assert.equal(await persistCanonicalPresenceClose({sessionId:reentered,endedAt:reentryEnd,lastDetectionAt:next,
+        closeEventId:'fixture/reentry-case:exit',reason:'event',timeoutMs:30000,
+        limits:{preAlertMinutes:110,continuousMinutes:120,dailyMinutes:360}}),true);
+      assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE tag_id=$1 AND hardware_device_id=13 AND ended_at IS NULL',[tag])).rows[0].count,0);
+      assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM cold_room_sessions WHERE id=$1 AND ended_at IS NOT NULL',[reentered])).rows[0].count,1);
     });
     await t.test('measured real PostgreSQL: 18 eligible sessions including a lock held over 2s recover before detection plus 90s',async()=>{
       const ids:string[]=[];
@@ -287,7 +307,7 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
         await pool.query(`INSERT INTO controlled_b5_presence_operations
           (hardware_device_id,operation_id,session_id,company_id,alert_reference,started_at,hard_deadline,protect_until,outcome)
           SELECT $1,$2,$3,$4,'load',last_presence_at,last_presence_at+INTERVAL '120 seconds',
-            last_presence_at+INTERVAL '60 seconds','running' FROM tag_gateway_presence_state WHERE hardware_device_id=$1`,
+            last_presence_at+INTERVAL '60 seconds','running' FROM tag_gateway_presence_state WHERE hardware_device_id=$1 AND hardware_gateway_id=41`,
         [hardwareId,randomUUID(),sessionId,company]);
       }
       const blocker=await pool.connect();const started=Date.now();let released=false;
@@ -301,7 +321,7 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
         const measured=(await pool.query(`SELECT count(*)::int AS closed,
           bool_and(clock_timestamp()<ps.last_presence_at+INTERVAL '90 seconds') AS all_visible_before90,
           MAX(EXTRACT(EPOCH FROM (clock_timestamp()-ps.last_presence_at))*1000) AS upper_commit_ms
-          FROM cold_room_sessions s JOIN tag_gateway_presence_state ps ON ps.hardware_device_id=s.hardware_device_id
+          FROM cold_room_sessions s JOIN tag_gateway_presence_state ps ON ps.hardware_device_id=s.hardware_device_id AND ps.hardware_gateway_id=41
           WHERE s.id=ANY($1::uuid[]) AND s.ended_at IS NOT NULL`,[ids])).rows[0];
         assert.equal(measured.closed,18);assert.equal(measured.all_visible_before90,true);
         assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM presence_close_outbox WHERE session_id=ANY($1::uuid[])',[ids])).rows[0].n,18);
@@ -311,14 +331,28 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
     });
     await t.test('a packet transaction holding the shared session lock prevents closure; committed fresh detection defeats the stale snapshot',async()=>{
       // Use only the original fixture; load-test sessions are already closed.
+      // jsonb keeps timestamp fractions intact, unlike pg's Date parser.
+      const otherFixtures=async()=>(await pool.query(`SELECT jsonb_build_object(
+        'sessions',(SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id) FROM cold_room_sessions s WHERE s.id<>$1),
+        'detections',(SELECT jsonb_agg(to_jsonb(ps) ORDER BY ps.hardware_device_id,ps.hardware_gateway_id)
+          FROM tag_gateway_presence_state ps WHERE ps.hardware_device_id<>13 OR ps.hardware_gateway_id<>41),
+        'operations',(SELECT jsonb_agg(to_jsonb(op) ORDER BY op.hardware_device_id)
+          FROM controlled_b5_presence_operations op WHERE op.session_id<>$1 OR op.hardware_device_id<>13),
+        'jobs',(SELECT jsonb_agg(to_jsonb(job) ORDER BY job.session_id) FROM presence_close_outbox job WHERE job.session_id<>$1),
+        'states',(SELECT jsonb_agg(to_jsonb(pos) ORDER BY pos.hardware_device_id)
+          FROM presence_operational_state pos WHERE pos.hardware_device_id<>13)) AS snapshot`,[session])).rows[0].snapshot;
+      const before=await otherFixtures();
       await resetExpired();
+      assert.deepEqual(await otherFixtures(),before);
+      assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM cold_room_sessions WHERE hardware_device_id BETWEEN 1000 AND 1017 AND ended_at IS NOT NULL')).rows[0].n,18);
       const packet=await pool.connect();
       try{
         await packet.query('BEGIN');await packet.query('SELECT id FROM cold_room_sessions WHERE id=$1 FOR SHARE',[session]);
         await closeStaleSessions();assert.equal(await isOpen(),true);
-        await packet.query('UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp() WHERE hardware_device_id=13');
+        await packet.query('UPDATE tag_gateway_presence_state SET last_presence_at=clock_timestamp() WHERE hardware_device_id=13 AND hardware_gateway_id=41');
         await packet.query('COMMIT');
         await closeStaleSessions();assert.equal(await isOpen(),true);
+        assert.deepEqual(await otherFixtures(),before);
       }finally{await packet.query('ROLLBACK').catch(()=>undefined);packet.release();}
     });
   } finally {
