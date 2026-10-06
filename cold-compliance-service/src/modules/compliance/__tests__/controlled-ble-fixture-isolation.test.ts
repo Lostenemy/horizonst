@@ -44,3 +44,15 @@ test('PostgreSQL fixture mutations are scoped; broad legacy resets fail the cont
   assert.match(source,/SELECT ended_at IS NULL AS open FROM cold_room_sessions WHERE id=\$1 AND hardware_device_id=13/);
   assert.match(source,/assert\.deepEqual\(await otherFixtures\(\),before\)/);
 });
+
+test('real-time scheduler PostgreSQL test requires explicit opt-in and never ages detections or invokes sweeps manually',()=>{
+  const source=readFileSync(join(process.cwd(),'src/modules/compliance/__tests__/presence-scheduler.postgres.test.ts'),'utf8');
+  assert.match(source,/CONTROLLED_B5_SCHEDULER_REAL_TIME_TESTS==='true'/);
+  assert.match(source,/for\(const count of \[6,12\]\)/);
+  assert.match(source,/SELECT clock_timestamp\(\)::text AS at/);
+  assert.match(source,/try\{startPresenceTimeoutLoop\(\);\}/);
+  assert.match(source,/nativeInterval\(/);
+  assert.match(source,/recovered\.sweep>failed\.sweep/);
+  assert.doesNotMatch(source,/closeStaleSessions\s*\(|mock\.timers|setSystemTime|clock_timestamp\(\)\s*-\s*INTERVAL/);
+  assert.doesNotMatch(source,/from ['"][^'"]*mqtt|startPhysicalAlarmOutboxLoop|executeAlarmSequence/);
+});
