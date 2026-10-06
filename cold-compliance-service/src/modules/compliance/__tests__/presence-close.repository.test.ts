@@ -22,6 +22,8 @@ test('canonical close commits session, outside state and durable outbox together
     assert.equal(await persistCanonicalPresenceClose(input),true);
     const close=calls.find(call=>call.sql.startsWith('UPDATE cold_room_sessions'))!;
     assert.equal(close.values[0],input.endedAt); assert.equal(close.values[3],input.lastDetectionAt);
+    assert.match(close.sql,/close_event_id=COALESCE\(\$2::text,cold_room_sessions\.close_event_id\)/);
+    assert.doesNotMatch(close.sql,/\$2::uuid/);
     assert.match(close.sql,/ps\.last_presence_at > \$4::timestamptz/);
     assert.match(close.sql,/LEAST\(op\.protect_until,\$4::timestamptz\+INTERVAL '60 seconds'\)/);
     assert.match(calls.find(call=>call.sql.includes('INSERT INTO presence_operational_state'))!.sql,
@@ -32,6 +34,21 @@ test('canonical close commits session, outside state and durable outbox together
     assert.equal(calls.at(-1)!.sql,'COMMIT'); assert.deepEqual(released,[false]);
     assert.ok(calls.findIndex(call=>call.sql.includes('presence_operational_state'))<calls.indexOf(outbox));
   } finally {db.connect=original;}
+});
+
+test('an explicit textual event identifier is passed unchanged to the TEXT close frontier', async () => {
+  const original=db.connect;const eventId='fixture/gateway:exit#packet-42';let observed:unknown;
+  (db as any).connect=async()=>({query:async(sql:string,values:unknown[]=[])=>{
+    if(sql.startsWith('UPDATE cold_room_sessions')){
+      assert.match(sql,/close_event_id=COALESCE\(\$2::text,cold_room_sessions\.close_event_id\)/);
+      observed=values[1];return {rows:[closed],rowCount:1};
+    }
+    return {rows:[],rowCount:0};
+  },release(){}});
+  try{
+    assert.equal(await persistCanonicalPresenceClose({...input,reason:'event',closeEventId:eventId}),true);
+    assert.equal(observed,eventId);
+  }finally{db.connect=original;}
 });
 
 test('a concurrent newer detection or an already closed session creates no outbox or state update', async () => {

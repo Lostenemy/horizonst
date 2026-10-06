@@ -85,7 +85,7 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
     const resetExpired = async () => {
       await pool.query('DELETE FROM controlled_b5_presence_operations');
       await pool.query('DELETE FROM presence_close_outbox WHERE session_id=$1',[session]);
-      await pool.query("UPDATE cold_room_sessions SET ended_at=NULL, duration_seconds=NULL, started_at=clock_timestamp()-INTERVAL '1 minute'");
+      await pool.query("UPDATE cold_room_sessions SET ended_at=NULL, duration_seconds=NULL, close_event_id=NULL, started_at=clock_timestamp()-INTERVAL '1 minute'");
       const row = (await pool.query(`UPDATE tag_gateway_presence_state SET
         last_presence_at = date_trunc('second',clock_timestamp())-INTERVAL '31 seconds'+INTERVAL '0.123456 seconds'
         RETURNING last_presence_at::text AS exact, last_presence_at AS lossy`)).rows[0];
@@ -93,6 +93,63 @@ test('PostgreSQL 15: additive migration, session locking, fixed deadlines, concu
       return row.exact as string;
     };
     const isOpen = async () => (await pool.query('SELECT ended_at IS NULL AS open FROM cold_room_sessions')).rows[0].open;
+    const textCloseInput = async (reason:'event'|'timeout',closeEventId:string|null) => {
+      const exact=await resetExpired();
+      await pool.query(`INSERT INTO presence_operational_state(tag_id,hardware_device_id,inside,in_alarm)
+        VALUES($1,13,TRUE,TRUE) ON CONFLICT(hardware_device_id) WHERE hardware_device_id IS NOT NULL
+        DO UPDATE SET inside=TRUE,in_alarm=TRUE`,[tag]);
+      const ended=(await pool.query("SELECT ($1::timestamptz+INTERVAL '30 seconds')::text AS at",[exact])).rows[0].at;
+      return {sessionId:session,endedAt:ended,lastDetectionAt:exact,reason,closeEventId,timeoutMs:30000,
+        limits:{preAlertMinutes:110,continuousMinutes:120,dailyMinutes:360}};
+    };
+    const assertTextClose = async (input:Awaited<ReturnType<typeof textCloseInput>>,expected:string|null) => {
+      const result=(await pool.query(`SELECT s.ended_at=$2::timestamptz AS exact_end,
+        pg_typeof(s.close_event_id)::text AS event_type,s.close_event_id,pos.inside,
+        pos.grace_started_at=$3::timestamptz AS exact_grace,job.session_id AS job_id,
+        job.payload->>'lastDetectionAt' AS detection,job.completed_at
+        FROM cold_room_sessions s JOIN presence_operational_state pos ON pos.hardware_device_id=s.hardware_device_id
+        JOIN presence_close_outbox job ON job.session_id=s.id WHERE s.id=$1`,
+      [session,input.endedAt,input.lastDetectionAt])).rows[0];
+      assert.ok(result);assert.equal(result.event_type,'text');assert.equal(result.close_event_id,expected);
+      assert.equal(result.exact_end,true);assert.equal(result.inside,false);assert.equal(result.exact_grace,true);
+      assert.equal(result.job_id,session);assert.equal(result.detection,input.lastDetectionAt);
+      assert.equal(result.completed_at,null);
+      assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM presence_close_outbox WHERE session_id=$1',[session])).rows[0].n,1);
+    };
+    await t.test('TEXT event frontier: timeout with null closes session, outside state and outbox atomically',async()=>{
+      const input=await textCloseInput('timeout',null);
+      assert.equal(await persistCanonicalPresenceClose(input),true);
+      await assertTextClose(input,null);
+    });
+    await t.test('TEXT event frontier: explicit non-UUID identifier is stored unchanged and terminal close is not overwritten',async()=>{
+      const input=await textCloseInput('event','fixture/gateway:exit#packet-42');
+      assert.equal(await persistCanonicalPresenceClose(input),true);
+      await assertTextClose(input,input.closeEventId);
+      assert.equal(await persistCanonicalPresenceClose({...input,closeEventId:'fixture/obsolete-exit'}),false);
+      await assertTextClose(input,input.closeEventId);
+    });
+    await t.test('TEXT event frontier: null input preserves an existing textual identifier for timeout and explicit close',async()=>{
+      for(const reason of ['timeout','event'] as const){
+        const input=await textCloseInput(reason,null);
+        await pool.query('UPDATE cold_room_sessions SET close_event_id=$2::text WHERE id=$1',
+          [session,'fixture/historical-exit:preserved']);
+        assert.equal(await persistCanonicalPresenceClose(input),true);
+        await assertTextClose(input,'fixture/historical-exit:preserved');
+      }
+    });
+    await t.test('TEXT event frontier: outbox failure rolls back explicit identifier, session and outside state',async()=>{
+      const input=await textCloseInput('event','fixture/new-exit:must-rollback');
+      await pool.query('UPDATE cold_room_sessions SET close_event_id=$2::text WHERE id=$1',[session,'fixture/prior-exit']);
+      await pool.query('ALTER TABLE presence_close_outbox ADD CONSTRAINT fixture_reject_text_job CHECK (FALSE) NOT VALID');
+      try{
+        await assert.rejects(persistCanonicalPresenceClose(input),{code:'23514'});
+        const row=(await pool.query(`SELECT s.ended_at,s.duration_seconds,s.close_event_id,pos.inside,
+          (SELECT COUNT(*)::int FROM presence_close_outbox WHERE session_id=s.id) AS jobs
+          FROM cold_room_sessions s JOIN presence_operational_state pos ON pos.hardware_device_id=s.hardware_device_id
+          WHERE s.id=$1`,[session])).rows[0];
+        assert.deepEqual(row,{ended_at:null,duration_seconds:null,close_event_id:'fixture/prior-exit',inside:true,jobs:0});
+      }finally{await pool.query('ALTER TABLE presence_close_outbox DROP CONSTRAINT fixture_reject_text_job');}
+    });
     // Inject a committed concurrent event after the sweep snapshot but before
     // its locking UPDATE. All comparisons and mutations below run in real PG.
     const sweepWithConcurrent = async (change: () => Promise<void>) => {

@@ -156,7 +156,7 @@ proponer un sobre de carga con evidencia para aceptación, no imponerlo.
 El harness general usa ledger Horneo actual en lugar del viejo conteo 21;
 contratos/artefactos estáticos no demuestran que las migraciones se aplican.
 
-## Validaciones locales de esta entrega
+## Validaciones locales de f39906b
 
 - Horneo: typecheck y build aislado correctos; suite completa **196 aprobadas,
   0 fallidas, 3 omitidas** (199 casos). Las omitidas requieren PostgreSQL real.
@@ -172,6 +172,47 @@ contratos/artefactos estáticos no demuestran que las migraciones se aplican.
 
 Estas validaciones corresponden a compilación, simulaciones y contratos locales.
 No acreditan capacidad bajo PostgreSQL real ni cumplimiento del SLA total.
+
+## Corrección del identificador de cierre TEXT (2026-10-06)
+
+El operador reprodujo `42804` en PostgreSQL 15 desechable: el cierre nuevo
+mezclaba `$2::uuid` con `cold_room_sessions.close_event_id`, definido como TEXT
+en 001. Se cambia únicamente ese cast a `$2::text`. No se migran columnas ni
+eventos, ni se restringen sus identificadores a UUID. Un parámetro nulo conserva
+el valor previo; una sesión ya finalizada no admite sobreescritura.
+
+Regresiones preparadas en `controlled-ble-presence.postgres.test.ts`:
+timeout con parámetro nulo, salida explícita con ID textual no UUID,
+conservación del ID previo tanto en timeout como salida explícita, rechazo
+de finalización obsoleta y rollback del ID/sesión/estado ante fallo del outbox.
+Las comprobaciones verifican el tipo real TEXT, timestamps exactos y el job
+único junto con estado fuera; usan exclusivamente el schema UUID propio.
+
+Revisión estática de las demás consultas nuevas: IDs de sesión/tag/worker/
+cámara y propietario son UUID; referencias centrales son INTEGER; claves de
+despacho y eventos son TEXT; timestamps son TIMESTAMPTZ y payloads JSONB.
+El cast UUID en el recorder físico corresponde a `alerts.id`, no a eventos.
+No se encontró otro cast de evento UUID en las consultas revisadas. Esta
+revisión no sustituye el parseo y ejecución real de todas las consultas.
+
+Validación de esta corrección: typecheck/build aislado Horneo correctos;
+**197 aprobadas, 0 fallidas, 3 omitidas** (200 casos). La regresión local falló
+antes de cambiar el cast (2 fallidas / 3 aprobadas) y pasa después. Contratos
+**19/19**, artefactos **52/52**, sintaxis frontend y diff correctos.
+Backend/MQTT/RSSI y migraciones no cambian; no se repite su compilación.
+
+Docker local sigue sin daemon y no hay PostgreSQL local disponible: las cuatro
+regresiones PostgreSQL nuevas y las **cinco ejecuciones reales completas quedan
+pendientes**. Repetir el bloque desechable de
+`docs/b5-presence-precision-integration.md` con el nuevo commit, conservando sus
+protecciones (sin puertos/volúmenes, red sin acceso exterior y limpieza propia).
+La reproducción aportada por el operador demuestra el defecto anterior, no
+valida este cambio ni el SLA. La rama continúa bloqueada para despliegue y no
+se declara validado el límite TOTAL de 90 segundos.
+
+Diff propio de esta corrección: `presence-close.repository.ts`,
+`presence-close.repository.test.ts`, `controlled-ble-presence.postgres.test.ts`
+y este documento. Sin nueva migración ni cambios de políticas o plazos.
 
 ## Operaciones y retorno, sin ejecutar
 

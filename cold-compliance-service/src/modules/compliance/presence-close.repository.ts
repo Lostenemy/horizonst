@@ -28,7 +28,7 @@ export async function persistCanonicalPresenceClose(input: PresenceCloseInput): 
           duration_seconds=CASE WHEN $5::text='timeout'
             THEN FLOOR(GREATEST(0,EXTRACT(EPOCH FROM ($4::timestamptz-cold_room_sessions.started_at))))::int
             ELSE GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-cold_room_sessions.started_at)))::int END,
-          close_event_id=COALESCE($2::uuid,cold_room_sessions.close_event_id)
+          close_event_id=COALESCE($2::text,cold_room_sessions.close_event_id)
       WHERE cold_room_sessions.id=$3 AND cold_room_sessions.ended_at IS NULL AND $1::timestamptz>=cold_room_sessions.started_at
         AND ($5::text<>'timeout' OR (
           $4::timestamptz + ($6::double precision * INTERVAL '1 millisecond') < clock_timestamp()
