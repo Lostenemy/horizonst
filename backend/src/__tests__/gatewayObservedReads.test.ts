@@ -16,7 +16,7 @@ import {
   type GatewayConfigurationReadType
 } from '../services/gatewayObservedReads';
 
-const originalConnect = pool.connect.bind(pool);
+const originalConnect = pool.connect;
 const originalObservationFlag = process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
 const TOPIC = 'gw/2805a55efb68/publish';
 const COMPANY_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -33,8 +33,8 @@ const reports = {
 afterEach(() => {
   if (originalObservationFlag === undefined) delete process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;
   else process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = originalObservationFlag;
-  (pool as any).connect = originalConnect;
   resetGatewayConfigurationWaitersForTests();
+  (pool as any).connect = originalConnect;
 });
 
 const deferred = () => {
@@ -352,17 +352,45 @@ test('an immediate response during publication is observed and scoped to gateway
   assert.ok(operations.some((item) => item.sql.includes('INSERT INTO hardware_gateway_observed_settings')));
 });
 
-test('a delayed valid response completes while timeout and wrong topic remain bounded', async () => {
+test('a delayed valid response completes while timeout and wrong topic remain bounded', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1_000 });
+  const payload = JSON.stringify(reports.ble_connected_devices);
+  const published = deferred();
+  let completed = false;
   mockDatabase();
-  const delayed = await execute('ble_connected_devices', async () => {
-    setTimeout(() => { void handleGatewayConfigurationReport(TOPIC, JSON.stringify(reports.ble_connected_devices)); }, 5);
-  });
-  assert.equal(delayed.status, 'response_observed');
-  mockDatabase();
-  const wrongTopic = await execute('ble_connected_devices', async () => {
-    await handleGatewayConfigurationReport('gw/2805a55efb68/publish/extra', JSON.stringify(reports.ble_connected_devices));
-  }, 25);
-  assert.equal(wrongTopic.status, 'timed_out');
+  const operation = execute('ble_connected_devices', async () => { published.resolve(); });
+  let wrongOperation: ReturnType<typeof execute> | undefined;
+  void operation.then(() => { completed = true; }, () => { completed = true; });
+  try {
+    await published.promise;
+    assert.equal(completed, false);
+    t.mock.timers.tick(5);
+    // Deliver only after publication, and await all persistence rather than orphaning a timer callback.
+    assert.equal(await handleGatewayConfigurationReport(TOPIC, payload), true);
+    const delayed = await operation;
+    assert.equal(delayed.status, 'response_observed');
+    t.mock.timers.tick(100);
+    assert.equal(delayed.status, 'response_observed');
+
+    const operations = mockDatabase();
+    const wrongPublished = deferred();
+    wrongOperation = execute('ble_connected_devices', async () => { wrongPublished.resolve(); }, 25);
+    void wrongOperation.catch(() => undefined);
+    await wrongPublished.promise;
+    assert.equal(await handleGatewayConfigurationReport(`${TOPIC}/extra`, payload), false);
+    // 25 ms total minus 12 ms reserved for cleanup: the actual observation deadline is 13 ms.
+    t.mock.timers.tick(13);
+    const wrongTopic = await wrongOperation;
+    assert.equal(wrongTopic.status, 'timed_out');
+    assert.equal(await handleGatewayConfigurationReport(TOPIC, payload), true);
+    assert.equal(wrongTopic.status, 'timed_out');
+    assert.equal(operations.filter(item => item.sql.includes('response_payload')).length, 0);
+  } finally {
+    resetGatewayConfigurationWaitersForTests();
+    await operation.catch(() => undefined);
+    await wrongOperation?.catch(() => undefined);
+    t.mock.timers.reset();
+  }
 });
 
 test('a late response refreshes latest state but cannot revive a timed-out read', async () => {

@@ -1,0 +1,923 @@
+[
+  {
+    "id": "0d36e03b0c33",
+    "service": "app",
+    "test": "a delayed valid response completes while timeout and wrong topic remain bounded",
+    "category": "timing_unproven_root_cause",
+    "correction": "explicit events and virtual clock; preserve deadline, wrong topic and late response assertions",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "17177be2ea33",
+    "service": "app",
+    "test": "internal command route derives company from service principal and requires hardware.command",
+    "category": "missing_resource",
+    "resource": "/usr/src/app/src/routes/internalHardware.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "18937a3103df",
+    "service": "app",
+    "test": "gateway onboarding uses the repository-proven VerneMQ bcrypt contract",
+    "category": "missing_resource",
+    "resource": "/usr/src/docker-compose.yml",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "1bec9fe10507",
+    "service": "app",
+    "test": "Bluetooth mutations require technician role, scoped active gateway, validation and central journal execution",
+    "category": "missing_resource",
+    "resource": "/usr/src/app/src/routes/gateways.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "360928788aa3",
+    "service": "app",
+    "test": "dist/__tests__/securityRateLimit.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "/usr/src/scripts/auth-rate-limit-contract.cjs",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "3efad56e8b52",
+    "service": "app",
+    "test": "service scopes accept validated read/command sets and command is never the default",
+    "category": "missing_resource",
+    "resource": "/usr/src/app/src/routes/servicePrincipals.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "3fbdfa13bb56",
+    "service": "app",
+    "test": "MK4 remains decoded while retired model decoders are not wired into MQTT ingestion",
+    "category": "missing_resource",
+    "resource": "/usr/src/app/src/services/mqttService.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "615bc250feb3",
+    "service": "app",
+    "test": "migración 015 añade referencia lógica idempotente, única y sin FK cross-database",
+    "category": "missing_resource",
+    "resource": "/usr/src/cold-compliance-service/migrations/015_hardware_device_reference.sql",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "9a473eb133c3",
+    "service": "app",
+    "test": "dist/__tests__/trustedProxy.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "/usr/src/scripts/trusted-proxy-contract.cjs",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "ab2a70dd85bd",
+    "service": "app",
+    "test": "dist/__tests__/mqttObservationCapture.contract.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "typescript",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "ad06863c7f86",
+    "service": "app",
+    "test": "unattributed negative 3151 or wrong tag MAC cannot reject a new 1150 attempt",
+    "category": "missing_resource",
+    "resource": "/usr/src/app/src/services/gatewayAck.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "b464c93c319d",
+    "service": "app",
+    "test": "MQTT raw retention is configurable and deletes in bounded batches",
+    "category": "missing_resource",
+    "resource": "/usr/src/app/src/config.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "ccf18af02266",
+    "service": "app",
+    "test": "gateway audit endpoint checks the scoped gateway before returning metadata",
+    "category": "missing_resource",
+    "resource": "/usr/src/app/src/routes/gateways.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "f990eef51696",
+    "service": "app",
+    "test": "gateway onboarding asks only for MAC and describes broker preparation without claiming connectivity",
+    "category": "missing_resource",
+    "resource": "/usr/src/docs/hardware-manager-mqtt-1030.md",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "fc5fb6ed1db4",
+    "service": "app",
+    "test": "Phase B migrations create Horneo idempotently and add only the cross-database logical reference",
+    "category": "missing_resource",
+    "resource": "/usr/src/cold-compliance-service/migrations/013_hardware_gateway_reference.sql",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "app-pre-security-20261022.tap",
+      "app-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "017abcfafd59",
+    "service": "cold_compliance_service",
+    "test": "CRUD técnico local queda bloqueado y PATCH de tags conserva solo los tres tiempos físicos",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tags/tags.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "0f9f6120faa9",
+    "service": "cold_compliance_service",
+    "test": "BLE UPSERT uses central identity without lazy legacy repair",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/infrastructure/ble-session.repository.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "14e8b8e8ee09",
+    "service": "cold_compliance_service",
+    "test": "presence state reads and writes by central identity only",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/presence-state.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "15a2788d1b92",
+    "service": "cold_compliance_service",
+    "test": "resolveTagTargets preserves strategies while central ids drive normal joins",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/infrastructure/tag-control.repository.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "169e1a0449fd",
+    "service": "cold_compliance_service",
+    "test": "physical alarm orchestration has no direct MQTT execution and keeps fallback, finally disconnect and timing semantics",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/application/tag-physical-alarm.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "21539f773386",
+    "service": "cold_compliance_service",
+    "test": "the migration runner applies each SQL migration transactionally",
+    "category": "missing_resource",
+    "resource": "/app/src/db/migrate.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "21863d360970",
+    "service": "cold_compliance_service",
+    "test": "presence grace and reminder alarms use the connected physical sequence without template duplication",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/presence-state.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "22d30ea5306a",
+    "service": "cold_compliance_service",
+    "test": "manual emergency disables physical dispatch while existing alerts keep default dispatch",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/alerts/manual-emergency.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "2469d117d4e3",
+    "service": "cold_compliance_service",
+    "test": "manual emergency invariants and no physical feedback remain exact",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/payload-parser.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "25eef68671c0",
+    "service": "cold_compliance_service",
+    "test": "worker assignment replacement is central-only and preserves the HTTP and dual-write contracts",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/workers/workers.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "26cb9745b476",
+    "service": "cold_compliance_service",
+    "test": "BLE lookups and writes use central identity while tag_id remains metadata",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/infrastructure/ble-session.repository.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "2715c86c6b9c",
+    "service": "cold_compliance_service",
+    "test": "dist/modules/auth/__tests__/rate-limit.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "/scripts/auth-rate-limit-contract.cjs",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "2a092e9a1e3b",
+    "service": "cold_compliance_service",
+    "test": "MQTT and manual B5 emergency invariants are unchanged",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/mqtt/mqtt.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "37ba7dd9f39c",
+    "service": "cold_compliance_service",
+    "test": "createAlert logs and dispatches the robust physical alarm sequence once per alert",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/alerts/alerts.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "3bdf859b612e",
+    "service": "cold_compliance_service",
+    "test": "RSSI and B5 routes delegate central ids to Hardware Manager without local MAC execution",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/gateways/gateways.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "3fb99c5929db",
+    "service": "cold_compliance_service",
+    "test": "E.3 runtime has no null-only local hardware identity fallback or lazy repair",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/alerts/alerts.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "43e0c3924b03",
+    "service": "cold_compliance_service",
+    "test": "API snapshots and presentation lookups prefer central identity without changing output fields",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/realtime/realtime.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "44bebfce12d0",
+    "service": "cold_compliance_service",
+    "test": "presence operational UPSERTs use central identity without lazy legacy repair",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/presence-state.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "485900e97baf",
+    "service": "cold_compliance_service",
+    "test": "dashboard places grace below inside and shows the six-hour total in the former grace column",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/realtime/realtime.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "48dc1ac90538",
+    "service": "cold_compliance_service",
+    "test": "orphaned BLE state cannot extend the 45 second presence timeout",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "49d807ffe8a2",
+    "service": "cold_compliance_service",
+    "test": "maintenance uses bounded deletes and configurable retention",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/maintenance/maintenance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "4f23ddd96905",
+    "service": "cold_compliance_service",
+    "test": "database constraint serializes concurrent attempts to open a session",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "4f8c739190cc",
+    "service": "cold_compliance_service",
+    "test": "compliance now uses central operational identity exclusively",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "50a19886f523",
+    "service": "cold_compliance_service",
+    "test": "E.1 and B5/MQTT invariants remain in place",
+    "category": "missing_resource",
+    "resource": "/app/src/app.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "55c16962b670",
+    "service": "cold_compliance_service",
+    "test": "E.2.2 leaves local overlays, command history and receive-only MQTT intact",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "5e7f68091c67",
+    "service": "cold_compliance_service",
+    "test": "timeout uses the latest relevant gateway packet and stale exits cannot close a newer presence",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "64d4a701236b",
+    "service": "cold_compliance_service",
+    "test": "panel, report rows and report summary share the same exposure endpoint",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/realtime/realtime.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "6947dccac045",
+    "service": "cold_compliance_service",
+    "test": "cold room sessions retain central uniqueness with unchanged conflict handling",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "711e0c6281a5",
+    "service": "cold_compliance_service",
+    "test": "manual emergency service requires central identity and preserves ordered camera resolution",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/alerts/manual-emergency.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "78482eaecd46",
+    "service": "cold_compliance_service",
+    "test": "tags and gateways remain Horneo overlays with protected HTTP contracts",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tags/tags.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "81ea435d1944",
+    "service": "cold_compliance_service",
+    "test": "endpoint diagnóstico está protegido por el router y es de solo lectura",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tags/tags.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "8441c0d21427",
+    "service": "cold_compliance_service",
+    "test": "Horneo no monta ni conserva el router HTTP /tag-control",
+    "category": "missing_resource",
+    "resource": "/app/src/app.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "853b60d5b356",
+    "service": "cold_compliance_service",
+    "test": "migration preserves nullable untagged alerts/incidents, local metadata and command history",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/alerts/alerts.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "8f3209cb10ce",
+    "service": "cold_compliance_service",
+    "test": "dist/modules/auth/__tests__/security.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "/scripts/reset-transaction-fixture.cjs",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "8f393340d90b",
+    "service": "cold_compliance_service",
+    "test": "compliance automatic alerts rely on createAlert physical sequence and do not send template commands directly",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "9aa4d5068b29",
+    "service": "cold_compliance_service",
+    "test": "E.2.2 central-first reads, D.2 receive-only MQTT and B5 emergency invariants remain intact",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/infrastructure/tag-control.repository.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "a872f140a079",
+    "service": "cold_compliance_service",
+    "test": "physical alarm delegates in Hardware Manager without direct MQTT execution",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/application/tag-physical-alarm.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "a8c52c5bea21",
+    "service": "cold_compliance_service",
+    "test": "dist/modules/auth/__tests__/trusted-proxy.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "/scripts/trusted-proxy-contract.cjs",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "a99306327fc5",
+    "service": "cold_compliance_service",
+    "test": "ordinary telemetry creates neither permanent audit nor sync duplication by default",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/presence.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "ae42151c767e",
+    "service": "cold_compliance_service",
+    "test": "heartbeat upserts one technical state per central device and gateway pair",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/presence.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "b3d2b9306561",
+    "service": "cold_compliance_service",
+    "test": "deduplication is transactional across gateways and scoped by trigger count and time",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/alerts/manual-emergency.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "b5bdfdb7e0cc",
+    "service": "cold_compliance_service",
+    "test": "clean MQTT reconnect rebuilds exact subscriptions and never restores a wildcard",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/mqtt/mqtt.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "ba8e1cb1fb20",
+    "service": "cold_compliance_service",
+    "test": "Horneo displays central gateway and device names while keeping the local model separate",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/gateways/gateways.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "cb0f873da5a4",
+    "service": "cold_compliance_service",
+    "test": "realtime snapshot enriches active alerts for the global emergency banner",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/realtime/realtime.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "ce8c7c9ddb08",
+    "service": "cold_compliance_service",
+    "test": "timeout closure remains delayed while stored exposure, daily accumulation and grace use the packet time",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "cf21d013ff35",
+    "service": "cold_compliance_service",
+    "test": "dist/modules/compliance/__tests__/nullable-cold-room-presence.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "cf7e5d4ee3a7",
+    "service": "cold_compliance_service",
+    "test": "battery and BLE gateway candidates read bounded current state",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tags/tags.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "d12dc6737201",
+    "service": "cold_compliance_service",
+    "test": "grace reentry records durable BLE work atomically with the presence transition",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/presence-state.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "d74a389e6deb",
+    "service": "cold_compliance_service",
+    "test": "all six active writers retain dual-write after central conflict keys are adopted",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/workers/workers.routes.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "d7ba4de17e75",
+    "service": "cold_compliance_service",
+    "test": "manual emergency correlates and deduplicates by central identity first",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/alerts/manual-emergency.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "e24c9f8402de",
+    "service": "cold_compliance_service",
+    "test": "tag-control preserves last_seen, camera_assigned and hybrid selection while correlating central ids",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/infrastructure/tag-control.repository.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "e5847dbfbce6",
+    "service": "cold_compliance_service",
+    "test": "stale-session correlation uses central hardware ids exclusively",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/compliance/compliance.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "e78a35080648",
+    "service": "cold_compliance_service",
+    "test": "dist/modules/compliance/__tests__/controlled-ble-fixture-isolation.test.js",
+    "category": "missing_resource_at_module_load",
+    "resource": "typescript",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "ea9b3087d3c1",
+    "service": "cold_compliance_service",
+    "test": "resolveTagTargets preserves functional gateway selection strategies and signals",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/tag-control/infrastructure/tag-control.repository.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "f4ab1577d248",
+    "service": "cold_compliance_service",
+    "test": "presence current state resolves once and writes the central device/gateway pair from the start",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/presence/presence.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  },
+  {
+    "id": "f75e449841ca",
+    "service": "cold_compliance_service",
+    "test": "central inventory outages reject operational resolution instead of using overlay MACs",
+    "category": "missing_resource",
+    "resource": "/app/src/modules/hardware-manager/event-identity.service.ts",
+    "correction": "dedicated complete test workspace, never enlarge runtime",
+    "validation": "Complete corrected service suite passed on Windows Node 22.23.4; see docs/security-tests-node22.md. Linux image reproduction remains pending.",
+    "logs": [
+      "cold_compliance_service-pre-security-20261022.tap",
+      "cold_compliance_service-security-20261022.tap"
+    ]
+  }
+]

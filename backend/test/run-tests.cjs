@@ -1,25 +1,12 @@
-const { readdirSync } = require('node:fs');
 const { join } = require('node:path');
 const { spawnSync } = require('node:child_process');
-
-function collectTests(directory) {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return collectTests(path);
-    return entry.name.endsWith('.test.js') ? [path] : [];
-  });
-}
-
-const env = {
-  ...process.env,
-  JWT_SECRET: 'test-only-jwt-secret-with-at-least-32-characters',
-  DB_PASSWORD: 'test-only-database-password',
-  MAIL_ENABLED: 'false',
-  MQTT_REQUIRED: 'false'
-};
-const tests = collectTests(join(process.cwd(), 'dist'));
-const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...tests], {
-  env,
-  stdio: 'inherit'
+const { environment, collect } = require('../../infrastructure/testing/run-suites.cjs');
+const tests = collect(join(process.cwd(), 'dist'));
+const result = spawnSync(process.execPath, [
+  '--require', join(__dirname, '../../infrastructure/testing/offline-preload.cjs'),
+  '--test', '--test-concurrency=1', '--test-reporter=tap', ...tests
+], {
+  env: environment(),
+  stdio: 'inherit', timeout: 150_000, windowsHide: true
 });
 process.exit(result.status ?? 1);
