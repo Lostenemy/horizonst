@@ -212,7 +212,8 @@ services:
   vernemq_observer:
     init: true
     build:
-      context: ./vernemq-observer
+      context: .
+      dockerfile: vernemq-observer/Dockerfile.maintained
     environment:
       - OBSERVER_PORT=4040
       - VMQ_ADMIN_TIMEOUT_SECONDS=${VMQ_ADMIN_TIMEOUT_SECONDS:-3}
@@ -290,7 +291,12 @@ services:
       - horizonst
 
   postgres:
-    image: postgres:15-alpine
+    image: horizonst-postgres
+    build:
+      context: .
+      dockerfile: infrastructure/security/postgres-ca.Dockerfile
+      args:
+        POSTGRES_BASE: postgres:15-alpine@sha256:fce81730e71c11f029bfa28f91f43adaeffdc686c25cb4dd6426ac27e7556f35
     env_file:
       - ./.env
     environment:
@@ -341,7 +347,7 @@ services:
   vernemq:
     build:
       context: .
-      dockerfile: vernemq/Dockerfile
+      dockerfile: vernemq/Dockerfile.maintained
     hostname: vernemq.local
     tty: true
     stdin_open: true
@@ -363,6 +369,7 @@ services:
       - DOCKER_VERNEMQ_VMQ_DIVERSITY__AUTH_POSTGRES__ENABLED=on
     volumes:
       - vernemq_data:/vernemq/data
+      - vernemq_etc:/vernemq/etc
       - vernemq_log:/vernemq/log
     ulimits:
       nofile:
@@ -496,4 +503,8 @@ volumes:
   dkim_conf:
   webmail_data:
   vernemq_data:
+    name: horizonst_vernemq_maintained_data_20261024
+  vernemq_etc:
+    name: horizonst_vernemq_maintained_etc_20261024
   vernemq_log:
+    name: horizonst_vernemq_maintained_log_20261024

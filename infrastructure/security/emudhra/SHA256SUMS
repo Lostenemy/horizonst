@@ -18,5 +18,5 @@ de597b4e346d6e84d264a6bc62f5cb5bf4a4d64ec5e587edc446016e4aa693c5  chains/dv-g3b-
 c80265d7a38b7378544488d35c317598d5d8b9a1444468f68aa96b134d561d0b  chains/ov-g3b-emudhra.we-have-a-problem.com.pem
 4cf2e52ff28f08d690046a75def341abf6508d18c197c6825c7820e0899e1c63  chains/ov-g3c-aaa-emudhra.we-have-a-problem.com.pem
 45e16413868da62601227eb792c9d8a2172f0765fde3e7f21524e188bd3a1f41  chains/ov-g3c-emudhra.we-have-a-problem.com.pem
-176f8268b328d91508a29d8ff094225498f51f675e63a8760e528583e0086484  install-vernemq-trust.sh
+41dc78e0a2cc6e2729b0d7b6190a48f179014f04225062a9e2dc2fab17336994  install-vernemq-trust.sh
 7bca12c22fdb0b103bb500371ad39deb8ebd3e7b147bac07ecc1cd09b0b2367c  verify-bundle.sh

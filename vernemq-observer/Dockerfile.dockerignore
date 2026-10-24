@@ -1,0 +1,7 @@
+**
+!vernemq-observer/
+!vernemq-observer/app.py
+!infrastructure/
+!infrastructure/security/
+!infrastructure/security/emudhra/
+!infrastructure/security/emudhra/**
