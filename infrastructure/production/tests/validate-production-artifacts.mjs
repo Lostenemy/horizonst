@@ -42,8 +42,13 @@ for (const [name, [published, target]] of Object.entries(loopbackPorts)) {
 assert.equal(config.networks['horizonst-production'].name, 'horizonst-production');
 assert.equal(config.networks['horizonst-production'].external, true);
 assert.equal(config.volumes.postgres_data.name, 'horizonst-production-postgres-data');
-assert.equal(config.volumes.vernemq_data.name, 'horizonst-production-vernemq-data');
-assert.equal(config.volumes.vernemq_log.name, 'horizonst-production-vernemq-log');
+assert.equal(config.volumes.vernemq_data.name, 'horizonst-production-vernemq-maintained-data-20261024');
+assert.equal(config.volumes.vernemq_log.name, 'horizonst-production-vernemq-maintained-log-20261024');
+
+assert.equal(config.volumes.vernemq_etc.name, 'horizonst-production-vernemq-maintained-etc-20261024');
+assert.equal(config.volumes.vernemq_etc.external, true);
+assert.equal(config.services.vernemq.build.dockerfile, 'vernemq/Dockerfile.maintained');
+assert.equal(config.services.vernemq.volumes.find(v => v.target === '/vernemq/etc').source, 'vernemq_etc');
 
 const app = config.services.app;
 assert.equal(app.build.context, '/opt/horizonst/backend');
@@ -105,4 +110,4 @@ assert.match(runbook, /Las dos bases no comparten una transacción/);
 assert.match(runbook, /modo explícito `0600`/);
 assert.match(runbook, /No ejecutar `npm run migrate`/);
 
-console.log('production artifact checks: 52 assertions passed');
+console.log('production artifact checks: assertions passed');

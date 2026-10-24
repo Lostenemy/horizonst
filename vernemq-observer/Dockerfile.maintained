@@ -1,0 +1,15 @@
+FROM vernemq/vernemq:2.2.1@sha256:d6333975f7c887cfd8943074b084114c033425d61017e1f985e1ef6887610d9f
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends python3 wget ca-certificates openssl \
+ && rm -rf /var/lib/apt/lists/*
+COPY infrastructure/security/emudhra/ /tmp/horizonst-security/
+RUN cd /tmp/horizonst-security && sha256sum -c SHA256SUMS \
+ && sh install-vernemq-trust.sh && rm -rf /tmp/horizonst-security
+COPY vernemq/vernemq.conf /opt/horizonst/vernemq.conf
+# Reuse the existing accepted, secret-free configuration and broker DNS name.
+RUN install -m 0600 /opt/horizonst/vernemq.conf /vernemq/etc/vernemq.conf \
+ && sed -i 's/^-name .*/-name VerneMQ@vernemq.local/' /vernemq/etc/vm.args
+WORKDIR /observer
+COPY vernemq-observer/app.py /observer/app.py
+EXPOSE 4040
+CMD ["python3", "/observer/app.py"]

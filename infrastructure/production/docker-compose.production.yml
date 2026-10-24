@@ -49,7 +49,7 @@ services:
     <<: *common
     build:
       context: /opt/horizonst
-      dockerfile: vernemq/Dockerfile
+      dockerfile: vernemq/Dockerfile.maintained
     hostname: vernemq.local
     tty: true
     stdin_open: true
@@ -71,6 +71,7 @@ services:
       DOCKER_VERNEMQ_VMQ_DIVERSITY__AUTH_POSTGRES__ENABLED: "on"
     volumes:
       - vernemq_data:/vernemq/data
+      - vernemq_etc:/vernemq/etc
       - vernemq_log:/vernemq/log
     ulimits:
       nofile:
@@ -256,7 +257,10 @@ volumes:
     name: horizonst-production-postgres-data
   vernemq_data:
     external: true
-    name: horizonst-production-vernemq-data
+    name: horizonst-production-vernemq-maintained-data-20261024
+  vernemq_etc:
+    external: true
+    name: horizonst-production-vernemq-maintained-etc-20261024
   vernemq_log:
     external: true
-    name: horizonst-production-vernemq-log
+    name: horizonst-production-vernemq-maintained-log-20261024

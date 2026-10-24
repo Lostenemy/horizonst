@@ -1,0 +1,10 @@
+**
+!vernemq/
+!vernemq/Dockerfile
+!vernemq/vernemq.conf
+!vernemq/start-vernemq.sh
+!vernemq/validate-runtime.sh
+!infrastructure/
+!infrastructure/security/
+!infrastructure/security/emudhra/
+!infrastructure/security/emudhra/**

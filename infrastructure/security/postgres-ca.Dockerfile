@@ -1,4 +1,5 @@
-FROM postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f AS ca-patched
+ARG POSTGRES_BASE=postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f
+FROM ${POSTGRES_BASE} AS ca-patched
 RUN apk add --no-cache --upgrade 'ca-certificates-bundle>=20261020-r0'
 
 FROM ca-patched AS trust-test

@@ -1,0 +1,13 @@
+FROM vernemq/vernemq:2.2.1@sha256:d6333975f7c887cfd8943074b084114c033425d61017e1f985e1ef6887610d9f
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl \
+ && rm -rf /var/lib/apt/lists/*
+COPY infrastructure/security/emudhra/ /tmp/horizonst-security/
+RUN cd /tmp/horizonst-security && sha256sum -c SHA256SUMS \
+ && sh install-vernemq-trust.sh && rm -rf /tmp/horizonst-security
+COPY --chown=vernemq:vernemq vernemq/vernemq.conf /opt/horizonst/vernemq.conf
+COPY --chown=vernemq:vernemq vernemq/start-vernemq.sh /usr/local/bin/start-horizonst-vernemq
+COPY --chown=vernemq:vernemq vernemq/validate-runtime.sh /usr/local/bin/validate-vernemq-runtime
+RUN chmod 0755 /usr/local/bin/start-horizonst-vernemq /usr/local/bin/validate-vernemq-runtime
+USER vernemq
+CMD ["/usr/local/bin/start-horizonst-vernemq"]

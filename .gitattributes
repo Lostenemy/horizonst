@@ -1,2 +1,6 @@
 horizonst-store/web/public/recursos/*.pdf binary
 vernemq/*.sh text eol=lf
+
+infrastructure/security/emudhra/** text eol=lf
+vernemq/** text eol=lf
+vernemq-observer/Dockerfile* text eol=lf
