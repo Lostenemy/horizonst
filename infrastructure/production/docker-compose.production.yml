@@ -23,6 +23,9 @@ services:
   postgres:
     <<: *common
     image: postgres:15-alpine
+    build:
+      context: /opt/horizonst
+      dockerfile: infrastructure/security/postgres-ca.Dockerfile
     environment:
       POSTGRES_USER: ${DB_USER:?DB_USER must be set}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}

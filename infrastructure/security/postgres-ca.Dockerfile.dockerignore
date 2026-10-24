@@ -1,0 +1,6 @@
+**
+!infrastructure/
+!infrastructure/security/
+!infrastructure/security/postgres-ca.Dockerfile
+!infrastructure/security/emudhra/
+!infrastructure/security/emudhra/**
