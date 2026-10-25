@@ -28,3 +28,29 @@ test('container validation is opt-in, isolated, has no published ports and clean
   assert.equal((docker.match(/CMD \["node"/g) || []).length, 3);
   assert.doesNotMatch(docker, /CMD \["npm"/);
 });
+
+test('SMTP journal isolation, privacy and no automatic replay contracts', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const harness = read('infrastructure/testing/smtp-journal-docker.mjs');
+  assert.match(harness, /--run-disposable-docker/);
+  assert.match(harness, /'network','create','--internal'/);
+  assert.match(harness, /owned\.push\(id\)/);
+  assert.match(harness, /\['rm','-f',id\]/);
+  assert.doesNotMatch(harness, /['"](?:-p|-P|--publish|--publish-all|--env-file|--volumes-from)['"]|docker compose/);
+  assert.match(harness, /randomBytes\(32\)/);
+  const journal = read('horizonst-store/src/modules/shared/notification-journal.ts');
+  assert.match(read('horizonst-store/src/modules/shared/mail.ts'), /budgetMs = 15_000/);
+  assert.match(journal, /budgetMs = 2000/);
+  assert.match(journal, /state='pending' FOR UPDATE SKIP LOCKED/);
+  assert.match(journal, /attempt_id=\$2::uuid AND state='dispatching'/);
+  const recover = journal.slice(journal.indexOf('recover():'), journal.indexOf('dispatch(id:'));
+  assert.doesNotMatch(recover, /deliver\(|SET state='pending'/);
+  const migration = read('horizonst-store/migrations/017_notification_deliveries.sql');
+  assert.doesNotMatch(migration, /ON DELETE CASCADE|\b(?:body|password|recipient_email|payload)\s+(?:TEXT|JSONB)/i);
+  for (const name of ['quotes/quotes.routes.ts','admin/quotes.routes.ts']) {
+    const source = read('horizonst-store/src/modules/' + name);
+    assert.ok(source.indexOf('await insertIntent(') < source.indexOf("await client.query('COMMIT')"));
+    assert.ok(source.indexOf('void journal.dispatch(') > source.indexOf("await client.query('COMMIT')"));
+    assert.doesNotMatch(source, /console\.(?:error|warn).*\bto\b/);
+  }
+});

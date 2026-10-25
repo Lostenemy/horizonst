@@ -11,10 +11,10 @@ export const insertQuoteStatusHistory = async (input: {
   newStatus: QuoteStatus;
   comment?: string | null;
   changedBy: string;
-}, client: Queryable): Promise<void> => {
-  await client.query(
+}, client: Queryable): Promise<string> => {
+  const result = await client.query(
     `INSERT INTO store.quote_status_history (quote_id, old_status, new_status, comment, changed_by)
-     VALUES ($1, $2, $3, $4, $5)`,
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
     [input.quoteId, input.oldStatus, input.newStatus, input.comment ?? null, input.changedBy]
   );
 
@@ -25,4 +25,6 @@ export const insertQuoteStatusHistory = async (input: {
     entityId: input.quoteId,
     payload: { previous_status: input.oldStatus, status: input.newStatus, comment: input.comment ?? null }
   }, client);
+  if (!result.rows[0]?.id) throw new Error('quote_history_not_created');
+  return result.rows[0].id;
 };

@@ -1,5 +1,4 @@
 import type { RequestHandler } from 'express';
-import { lifecycle } from '../../lifecycle.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
@@ -9,7 +8,8 @@ import { generateQuotePdf as defaultGenerateQuotePdf } from './quotes/pdf.js';
 import { quotePdfSelectForAdmin } from '../quotes/quotes.routes.js';
 import { canTransitionQuoteStatus, quoteStatuses, quoteStatusChangeSchema, type QuoteStatus } from './quotes/status.js';
 import { createOrderFromAcceptedQuote as defaultCreateOrderFromAcceptedQuote } from '../orders/order.service.js';
-import { sanitizeMailError, sendOrderConfirmationEmail as defaultSendOrderConfirmationEmail, sendQuoteAvailableEmail as defaultSendQuoteAvailableEmail } from '../shared/mail.js';
+import { buildOrderConfirmationEmail, buildQuoteAvailableEmail, deliverNotificationMail, type NotificationOutcome, type OrderConfirmationEmailInput, type QuoteEmailInput } from '../shared/mail.js';
+import { insertNotificationIntent, notificationJournal } from '../shared/notification-journal.js';
 import { commercialDocumentFilename } from '../shared/commercial-document-pdf.js';
 
 type QueryResult = { rows: any[] };
@@ -24,12 +24,10 @@ export type AdminQuotesRouterDependencies = {
   insertQuoteStatusHistory?: typeof defaultInsertQuoteStatusHistory;
   generateQuotePdf?: typeof defaultGenerateQuotePdf;
   createOrderFromAcceptedQuote?: typeof defaultCreateOrderFromAcceptedQuote;
-  sendQuoteAvailableEmail?: typeof defaultSendQuoteAvailableEmail;
-  sendOrderConfirmationEmail?: typeof defaultSendOrderConfirmationEmail;
-};
-
-const logMailFailure = (event: string, to: string, error: unknown) => {
-  console.error('store_mail_failed', { event, to, error: sanitizeMailError(error) });
+  sendQuoteAvailableEmail?: (input: QuoteEmailInput) => Promise<NotificationOutcome | void>;
+  sendOrderConfirmationEmail?: (input: OrderConfirmationEmailInput) => Promise<NotificationOutcome | void>;
+  insertNotificationIntent?: typeof insertNotificationIntent;
+  notificationJournal?: Pick<typeof notificationJournal, 'dispatch'>;
 };
 
 const idSchema = z.string().uuid();
@@ -40,8 +38,10 @@ const pool = dependencies.pool ?? defaultPool;
 const insertQuoteStatusHistory = dependencies.insertQuoteStatusHistory ?? defaultInsertQuoteStatusHistory;
 const generateQuotePdf = dependencies.generateQuotePdf ?? defaultGenerateQuotePdf;
 const createOrderFromAcceptedQuote = dependencies.createOrderFromAcceptedQuote ?? defaultCreateOrderFromAcceptedQuote;
-const sendQuoteAvailableEmail = dependencies.sendQuoteAvailableEmail ?? defaultSendQuoteAvailableEmail;
-const sendOrderConfirmationEmail = dependencies.sendOrderConfirmationEmail ?? defaultSendOrderConfirmationEmail;
+const sendQuoteAvailableEmail = dependencies.sendQuoteAvailableEmail ?? (input => deliverNotificationMail(buildQuoteAvailableEmail(input)));
+const sendOrderConfirmationEmail = dependencies.sendOrderConfirmationEmail ?? (input => deliverNotificationMail(buildOrderConfirmationEmail(input)));
+const insertIntent = dependencies.insertNotificationIntent ?? insertNotificationIntent;
+const journal = dependencies.notificationJournal ?? notificationJournal;
 
 router.use(dependencies.authMiddleware ?? requireAuth, dependencies.roleMiddleware ?? requireRole('admin'));
 
@@ -84,7 +84,9 @@ router.get('/quotes/:id/pdf', async (req, res, next) => {
 });
 
 router.patch('/quotes/:id/status', async (req, res, next) => {
-  const client = await pool.connect();
+  let client: Client;
+  try { client = await pool.connect(); }
+  catch { res.status(503).json({ error: 'notification_database_unavailable' }); return; }
   try {
     const id = idSchema.parse(req.params.id); const input = quoteStatusChangeSchema.parse(req.body);
     await client.query('BEGIN');
@@ -96,15 +98,17 @@ router.patch('/quotes/:id/status', async (req, res, next) => {
     const acceptedAtSql = input.status === 'accepted' ? 'now()' : input.status === 'rejected' ? 'NULL' : 'accepted_at';
     const rejectedAtSql = input.status === 'rejected' ? 'now()' : input.status === 'accepted' ? 'NULL' : 'rejected_at';
     const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), accepted_at = ${acceptedAtSql}, rejected_at = ${rejectedAtSql}, reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
-    await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: input.status, comment: input.comment ?? null, changedBy: req.user!.sub }, client);
+    const historyId = await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: input.status, comment: input.comment ?? null, changedBy: req.user!.sub }, client);
     const orderResult = input.status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user!.sub }) : null;
+    const availableId = oldStatus === 'in_review' && input.status === 'sent' ? await insertIntent(client, { historyId, type: 'quote_available' }) : null;
+    const confirmationId = orderResult?.order ? await insertIntent(client, { historyId, type: 'order_confirmation', orderId: orderResult.order.id }) : null;
     await client.query('COMMIT');
     const quoteForEmail = { ...existing.rows[0], ...rows[0], email: existing.rows[0].email, full_name: existing.rows[0].full_name };
     if (oldStatus === 'in_review' && input.status === 'sent') {
-      void lifecycle.track(sendQuoteAvailableEmail({ quote: quoteForEmail })).catch((error) => logMailFailure('quote_available', quoteForEmail.email, error));
+      void journal.dispatch(availableId!, () => sendQuoteAvailableEmail({ quote: quoteForEmail }));
     }
     if (input.status === 'accepted' && orderResult?.order) {
-      void lifecycle.track(sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order })).catch((error) => logMailFailure('order_confirmation', quoteForEmail.email, error));
+      void journal.dispatch(confirmationId!, () => sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order }));
     }
     res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }

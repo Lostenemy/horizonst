@@ -29,6 +29,8 @@ import { ordersRouter } from './modules/orders/orders.routes.js';
 import { contactRouter } from './modules/contact/contact.routes.js';
 import { lifecycle } from './lifecycle.js';
 import { databaseLifecycle } from './db/pool.js';
+import { notificationJournal } from './modules/shared/notification-journal.js';
+import { notificationsRouter } from './modules/shared/notifications.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
@@ -43,6 +45,7 @@ export const createServer = (staticRoot = webDist) => {
   app.use(cors({ origin: env.corsOrigin, credentials: false }));
   app.use('/api/contact', contactRouter);
   app.use(express.json({ limit: '16kb' }));
+  app.use('/api', notificationsRouter);
 
   app.use('/health', healthRouter);
   app.use('/api/health', healthRouter);
@@ -86,6 +89,7 @@ export const createServer = (staticRoot = webDist) => {
 
 export const app = createServer();
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  notificationJournal.start();
   const server = app.listen(env.port, '0.0.0.0', () => console.log(`HorizonST Store listening on ${env.port}`));
   lifecycle.install(server, async () => undefined, () => databaseLifecycle.close());
 }

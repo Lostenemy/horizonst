@@ -1,0 +1,88 @@
+{
+  "status": "implementation_and_isolated_validation_complete_staging_pending",
+  "baseCommit": "b12a5f36cfb4998cdde6168a22e0c0fd6ec627cc",
+  "branch": "codex/graceful-shutdown-postgres",
+  "decision": "references_only_no_snapshot_no_automatic_resend",
+  "previousEvidenceUnchanged": "docs/shutdown-validation-results.json",
+  "archive": "C:/Users/User/Documents/horizonst/smtp-validation-evidence-2ef57e58fe0c446b928f7fd2d9f65fd6",
+  "archiveLogAndJsonFiles": 219,
+  "archiveManifest": "SHA256SUMS.csv",
+  "archiveManifestSha256": "b8bd38bc4b6023b3fdd9c9c9e6235fbc1c0b80f0c75ed5b0a59baa20585d7885",
+  "finalDockerEvidence": "horizonst-smtp-journal-0l5m4U/results.json",
+  "versions": {
+    "node": "22.23.4",
+    "docker": "29.8.2",
+    "dockerContext": "desktop-linux",
+    "postgres": "15.19",
+    "runtimeImage": "sha256:c3ca08c1356de4d45eed92b4b9130ab73e03d1910c7b18afdbf5503e55bd73c5"
+  },
+  "windowsSuites": {
+    "backend": { "total": 306, "passed": 300, "failed": 0, "skipped": 6 },
+    "horneo": { "total": 211, "passed": 207, "failed": 0, "skipped": 4 },
+    "skips": "Existing non-SMTP PostgreSQL opt-ins; not enabled in the normal offline suites. Not claimed validated here.",
+    "backendHorneoTypecheckBuildExitCode": 0,
+    "backendTimingFreshProcesses": { "passed": 20, "failed": 0 },
+    "storeModules": { "passed": 44, "failed": 0, "skipped": 0 },
+    "storeLifecycle": { "passed": 24, "failed": 0, "skipped": 0, "processes": 3 },
+    "storeTypecheckBackendBuildFrontendBuildExitCode": 0,
+    "storeEvidence": "horizonst-store-lifecycle-evidence-cVabUA/summary.json",
+    "backendHorneoEvidence": "horizonst-tests-evidence-mdONIE/summary.json",
+    "contracts": { "passed": 7, "failed": 0, "skipped": 0 }
+  },
+  "dockerLinux": {
+    "protocolDatabaseGroups": { "perRound": 17, "rounds": 3, "passed": 51, "failed": 0, "skipped": 0 },
+    "gracefulStops": [
+      { "round": 1, "databaseDown": false, "elapsedMs": 14868, "exitCode": 0 },
+      { "round": 1, "databaseDown": true, "elapsedMs": 18697, "exitCode": 0 },
+      { "round": 2, "databaseDown": false, "elapsedMs": 14546, "exitCode": 0 },
+      { "round": 2, "databaseDown": true, "elapsedMs": 18844, "exitCode": 0 },
+      { "round": 3, "databaseDown": false, "elapsedMs": 14809, "exitCode": 0 },
+      { "round": 3, "databaseDown": true, "elapsedMs": 19169, "exitCode": 0 }
+    ],
+    "maximumShutdownMs": 19169,
+    "restartRecoveryWithoutResend": { "passed": 6, "failed": 0 },
+    "oomOr137": 0,
+    "cleanup": { "ownedResources": 25, "removed": 25, "failed": 0 },
+    "publishedPorts": 0,
+    "sharedVolumes": 0,
+    "commercialLedger": "Only 001-010 installed; 017 installed by dedicated SHA-256 ledger; 011-016 not applied or falsely marked."
+  },
+  "failedEvidencePreserved": [
+    {
+      "path": "horizonst-smtp-journal-4Zijoj/results.json",
+      "cause": "Harness JSON parser picked stderr warning instead of stdout summary. Fourteen fixture groups passed before parser failure; resources cleaned."
+    }
+  ],
+  "checks": { "syntax": "passed", "gitDiffCheck": "passed", "secretPatternFindings": 0 },
+  "remaining": [
+    "Operations review, approved migration and deployment in staging; not performed.",
+    "Real SMTP provider and mailbox acceptance/delivery are not validated by fictitious SMTP.",
+    "Rebuild pending native Backend Brotli protection on the final application image.",
+    "No universal exactly-once delivery or absolute time bound under an unresponsive event loop/daemon.",
+    "Pending and uncertain notifications require human review; no original body snapshot or automatic resend.",
+    "Lost database result is simulated after real SQL writes; not an exhaustive TCP COMMIT-ack fault-injection proof."
+  ],
+  "files": [
+    "docs/graceful-shutdown-postgres.md",
+    "docs/store-notification-journal-design.md",
+    "docs/store-notification-journal.md",
+    "docs/store-notification-validation-results.json",
+    "horizonst-store/migrations/017_notification_deliveries.sql",
+    "horizonst-store/src/db/migrate-notifications.ts",
+    "horizonst-store/src/modules/admin/quotes.routes.ts",
+    "horizonst-store/src/modules/admin/quotes/history.ts",
+    "horizonst-store/src/modules/quotes/quotes.routes.ts",
+    "horizonst-store/src/modules/shared/mail.ts",
+    "horizonst-store/src/modules/shared/notification-journal.ts",
+    "horizonst-store/src/modules/shared/notifications.routes.ts",
+    "horizonst-store/src/server.ts",
+    "horizonst-store/test/admin-orders-quotes-modules.test.ts",
+    "horizonst-store/test/client-quotes-modules.test.ts",
+    "horizonst-store/test/notification-journal.test.ts",
+    "horizonst-store/test/smtp-notification.test.ts",
+    "infrastructure/testing/lifecycle-contracts.test.cjs",
+    "infrastructure/testing/smtp-journal-docker.mjs",
+    "infrastructure/testing/smtp-journal.fixture.mjs"
+  ],
+  "notPerformed": ["push", "merge", "deployment", "shared_database_access", "production_physical_alarm_outbox_access", "real_email", "real_MQTT", "hardware_commands", "runtime_version_change", "production_Dockerfile_change"]
+}

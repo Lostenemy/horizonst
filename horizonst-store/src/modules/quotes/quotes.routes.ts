@@ -1,5 +1,4 @@
 import type { RequestHandler } from 'express';
-import { lifecycle } from '../../lifecycle.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
@@ -9,7 +8,8 @@ import { generateQuotePdf as defaultGenerateQuotePdf } from '../admin/quotes/pdf
 import type { QuoteStatus } from '../admin/quotes/status.js';
 import { writeAuditLog as defaultWriteAuditLog } from '../shared/audit.js';
 import { createOrderFromAcceptedQuote as defaultCreateOrderFromAcceptedQuote } from '../orders/order.service.js';
-import { commercialMailRecipient, sanitizeMailError, sendOrderConfirmationEmail as defaultSendOrderConfirmationEmail, sendQuoteAcceptedCommercialEmail as defaultSendQuoteAcceptedCommercialEmail } from '../shared/mail.js';
+import { buildOrderConfirmationEmail, buildQuoteAcceptedCommercialEmail, deliverNotificationMail, type NotificationOutcome, type OrderConfirmationEmailInput, type QuoteAcceptedCommercialEmailInput } from '../shared/mail.js';
+import { insertNotificationIntent, notificationJournal } from '../shared/notification-journal.js';
 import { commercialDocumentFilename } from '../shared/commercial-document-pdf.js';
 
 const idSchema = z.string().uuid();
@@ -28,12 +28,10 @@ export type QuotesRouterDependencies = {
   writeAuditLog?: typeof defaultWriteAuditLog;
   generateQuotePdf?: typeof defaultGenerateQuotePdf;
   createOrderFromAcceptedQuote?: typeof defaultCreateOrderFromAcceptedQuote;
-  sendQuoteAcceptedCommercialEmail?: typeof defaultSendQuoteAcceptedCommercialEmail;
-  sendOrderConfirmationEmail?: typeof defaultSendOrderConfirmationEmail;
-};
-
-const logMailFailure = (event: string, to: string, error: unknown) => {
-  console.error('store_mail_failed', { event, to, error: sanitizeMailError(error) });
+  sendQuoteAcceptedCommercialEmail?: (input: QuoteAcceptedCommercialEmailInput) => Promise<NotificationOutcome | void>;
+  sendOrderConfirmationEmail?: (input: OrderConfirmationEmailInput) => Promise<NotificationOutcome | void>;
+  insertNotificationIntent?: typeof insertNotificationIntent;
+  notificationJournal?: Pick<typeof notificationJournal, 'dispatch'>;
 };
 
 const publicQuoteColumns = `q.id, q.user_id, q.quote_number, q.status, q.subtotal_cents, q.discount_cents, q.tax_cents, q.total_cents, q.notes, q.created_at, q.updated_at, q.submitted_at, q.accepted_at, q.rejected_at`;
@@ -51,8 +49,10 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
   const writeAuditLog = dependencies.writeAuditLog ?? defaultWriteAuditLog;
   const generateQuotePdf = dependencies.generateQuotePdf ?? defaultGenerateQuotePdf;
   const createOrderFromAcceptedQuote = dependencies.createOrderFromAcceptedQuote ?? defaultCreateOrderFromAcceptedQuote;
-  const sendQuoteAcceptedCommercialEmail = dependencies.sendQuoteAcceptedCommercialEmail ?? defaultSendQuoteAcceptedCommercialEmail;
-  const sendOrderConfirmationEmail = dependencies.sendOrderConfirmationEmail ?? defaultSendOrderConfirmationEmail;
+  const sendQuoteAcceptedCommercialEmail = dependencies.sendQuoteAcceptedCommercialEmail ?? (input => deliverNotificationMail(buildQuoteAcceptedCommercialEmail(input)));
+  const sendOrderConfirmationEmail = dependencies.sendOrderConfirmationEmail ?? (input => deliverNotificationMail(buildOrderConfirmationEmail(input)));
+  const insertIntent = dependencies.insertNotificationIntent ?? insertNotificationIntent;
+  const journal = dependencies.notificationJournal ?? notificationJournal;
 
   router.use(dependencies.authMiddleware ?? requireAuth, dependencies.roleMiddleware ?? requireRole('customer', 'distributor'));
 
@@ -90,7 +90,9 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
   });
 
   const decideQuote = (status: DecisionStatus) => async (req: any, res: any, next: any) => {
-    const client = await quotePool.connect();
+    let client: Client;
+    try { client = await quotePool.connect(); }
+    catch { res.status(503).json({ error: 'notification_database_unavailable' }); return; }
     try {
       const id = idSchema.parse(req.params.id); const input = quoteDecisionSchema.parse(req.body ?? {});
       await client.query('BEGIN');
@@ -101,14 +103,16 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
       const acceptedAtSql = status === 'accepted' ? 'now()' : 'NULL';
       const rejectedAtSql = status === 'rejected' ? 'now()' : 'NULL';
       const { rows } = await client.query(`UPDATE store.quotes q SET status = $2, accepted_at = ${acceptedAtSql}, rejected_at = ${rejectedAtSql}, updated_at = now() WHERE q.id = $1 AND q.user_id = $3 RETURNING ${publicQuoteColumns}`, [id, status, req.user.sub]);
-      await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: status, comment: input.comment ?? null, changedBy: req.user.sub }, client);
+      const historyId = await insertQuoteStatusHistory({ quoteId: id, oldStatus, newStatus: status, comment: input.comment ?? null, changedBy: req.user.sub }, client);
       await writeAuditLog({ actorUserId: req.user.sub, action: status === 'accepted' ? 'quote_accepted' : 'quote_rejected', entityType: 'quote', entityId: id, payload: { previous_status: oldStatus, status, comment: input.comment ?? null } }, client);
       const orderResult = status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user.sub, writeAuditLog }) : null;
+      const commercialId = orderResult?.order ? await insertIntent(client, { historyId, type: 'quote_accepted_commercial', orderId: orderResult.order.id }) : null;
+      const customerId = orderResult?.order ? await insertIntent(client, { historyId, type: 'order_confirmation', orderId: orderResult.order.id }) : null;
       await client.query('COMMIT');
       if (status === 'accepted' && orderResult?.order) {
         const quoteForEmail = { ...existing.rows[0], ...rows[0], email: existing.rows[0].email, full_name: existing.rows[0].full_name };
-        void lifecycle.track(sendQuoteAcceptedCommercialEmail({ quote: quoteForEmail, order: orderResult.order })).catch((error) => logMailFailure('quote_accepted_commercial', commercialMailRecipient, error));
-        void lifecycle.track(sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order })).catch((error) => logMailFailure('order_confirmation', quoteForEmail.email, error));
+        void journal.dispatch(commercialId!, () => sendQuoteAcceptedCommercialEmail({ quote: quoteForEmail, order: orderResult.order }));
+        void journal.dispatch(customerId!, () => sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order }));
       }
       res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
     } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }

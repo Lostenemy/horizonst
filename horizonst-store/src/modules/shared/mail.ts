@@ -67,6 +67,9 @@ const defaultConnector: SmtpConnector = (config) => ({
 
 export class SmtpClient {
   private socket: SmtpSocket | null = null;
+  private socketFailed = false;
+  dataStarted = false;
+  accepted = false;
 
   constructor(private readonly config: StoreMailConfig = env.mail, private readonly connector: SmtpConnector = defaultConnector) {}
 
@@ -74,14 +77,24 @@ export class SmtpClient {
     if (!this.config.enabled) throw new Error('mail_disabled');
     const connection = this.connector(this.config);
     this.socket = connection.socket;
+    // A socket can fail between response waiters (including during write). Never leave an
+    // unhandled error event or depend on replaying transport operations to recover it.
+    this.socketFailed = false;
 
     await new Promise<void>((resolve, reject) => {
       const socket = this.ensureSocket();
       const timer = setTimeout(() => onError(new Error('smtp_connect_timeout')), SMTP_TIMEOUT_MS);
-      const onReady = () => { clearTimeout(timer); socket.off('error', onError); resolve(); };
-      const onError = (error: Error) => { clearTimeout(timer); socket.off(connection.readyEvent, onReady); socket.off('error', onError); reject(error); };
+      const cleanup = () => { clearTimeout(timer); socket.off(connection.readyEvent, onReady); socket.off('error', onError); socket.off('close', onClose); };
+      const onReady = () => {
+        cleanup();
+        socket.on('error', () => { this.socketFailed = true; });
+        resolve();
+      };
+      const onError = (error: Error) => { cleanup(); reject(error); };
+      const onClose = () => onError(new Error('smtp_connection_closed'));
       socket.once(connection.readyEvent, onReady);
       socket.once('error', onError);
+      socket.once('close', onClose);
     });
 
     this.expect(await this.readResponse(), [220]);
@@ -121,8 +134,16 @@ export class SmtpClient {
       message = [...messageHeaders, `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`, '', `--${mixedBoundary}`, alternative, ...attachmentParts, `--${mixedBoundary}--`].join('\r\n');
     }
     const dotStuffedMessage = message.replace(/^\./gm, '..');
+    // Once DATA might have reached the peer, a lost reply cannot prove non-delivery.
+    this.dataStarted = true;
     await this.write(`${dotStuffedMessage}\r\n.\r\n`);
     this.expect(await this.readResponse(), [250]);
+    this.accepted = true;
+  }
+
+  abort() {
+    // No QUIT round-trip on the bounded journal path; acceptance was already recorded above.
+    this.socket?.destroy();
   }
 
   async close() {
@@ -135,11 +156,12 @@ export class SmtpClient {
 
   private ensureSocket() {
     if (!this.socket) throw new Error('smtp_socket_not_initialized');
+    if (this.socketFailed || this.socket.destroyed || this.socket.readableEnded) throw new Error('smtp_connection_closed');
     return this.socket;
   }
 
   private expect(response: SmtpResponse, codes: number[]) {
-    if (!codes.includes(response.code)) throw new Error(`smtp_${response.code}_${response.message}`);
+    if (!codes.includes(response.code)) throw new SmtpRejection(response.code);
   }
 
   private async send(command: string) {
@@ -160,10 +182,13 @@ export class SmtpClient {
         socket.off('data', onData);
         socket.off('error', onError);
         socket.off('timeout', onTimeout);
+        socket.off('close', onClose);
+        socket.off('end', onClose);
         socket.setTimeout(0);
       };
       const onError = (error: Error) => { cleanup(); reject(error); };
       const onTimeout = () => { cleanup(); reject(new Error('smtp_timeout')); };
+      const onClose = () => { cleanup(); reject(new Error('smtp_connection_closed')); };
       const onData = (chunk: any) => {
         buffer += chunk.toString('utf-8');
         if (!buffer.endsWith('\r\n')) return;
@@ -176,9 +201,45 @@ export class SmtpClient {
       socket.on('data', onData);
       socket.once('error', onError);
       socket.once('timeout', onTimeout);
+      socket.once('close', onClose);
+      socket.once('end', onClose);
       socket.setTimeout(SMTP_TIMEOUT_MS);
     });
   }
+}
+
+class SmtpRejection extends Error {
+  constructor(readonly code: number) { super(`smtp_${code}`); }
+}
+
+export type NotificationOutcome = {
+  state: 'smtp_accepted' | 'rejected_temporary' | 'rejected_permanent' | 'failed_before_send' | 'uncertain';
+  resultCode: 'accepted' | 'smtp_rejected' | 'before_data' | 'transport_uncertain';
+  smtpCode?: number;
+};
+
+// Absolute transport bound, unlike the generic client's per-response inactivity timeout.
+// The journal calls this only AFTER its durable claim; no SMTP configuration is logged.
+export async function deliverNotificationMail(content: MailContent,
+  client = new SmtpClient(), budgetMs = 15_000): Promise<NotificationOutcome> {
+  let timer: NodeJS.Timeout;
+  const send = (async () => {
+    await client.connect();
+    await client.sendMail(content.to, content.subject, content.text, content.html, content.attachments, content.replyTo);
+  })();
+  try {
+    await Promise.race([send, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { client.abort(); reject(new Error('smtp_absolute_deadline')); }, budgetMs);
+    })]);
+    return { state: 'smtp_accepted', resultCode: 'accepted', smtpCode: 250 };
+  } catch (error) {
+    if (client.accepted) return { state: 'smtp_accepted', resultCode: 'accepted', smtpCode: 250 };
+    if (error instanceof SmtpRejection && error.code >= 400 && error.code <= 599) {
+      return { state: error.code < 500 ? 'rejected_temporary' : 'rejected_permanent', resultCode: 'smtp_rejected', smtpCode: error.code };
+    }
+    return client.dataStarted ? { state: 'uncertain', resultCode: 'transport_uncertain' }
+      : { state: 'failed_before_send', resultCode: 'before_data' };
+  } finally { clearTimeout(timer!); client.abort(); }
 }
 
 const textHtml = (text: string) => `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#08233f">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</div>`;

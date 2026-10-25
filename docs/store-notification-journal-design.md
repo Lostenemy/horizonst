@@ -1,6 +1,9 @@
 # Tienda: diseño de registro durable de notificaciones
 
-Estado: DISEÑO autorizado por el usuario el 25/10/2026. No implementado.
+Estado histórico: DISEÑO autorizado por el usuario el 25/10/2026.
+Continuación: el usuario confirmó referencias mínimas, sin snapshot ni reenvío automático.
+Implementación y evidencia posterior en `store-notification-journal.md`; los párrafos siguientes
+conservan el diagnóstico y las condiciones de la propuesta original.
 No incluye migración, datos nuevos, worker de envío, reintentos ni endpoints nuevos en esta entrega.
 Su implementación necesita una entrega separada revisable. El cierre queda bloqueado para
 despliegue mientras se exija recuperación durable de todos los correos en curso.

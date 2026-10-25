@@ -1,5 +1,9 @@
 # Cierre y recuperación PostgreSQL — diagnóstico y progreso
 
+**Continuación SMTP, 25/10/2026:** ver `store-notification-journal.md` y sus resultados nuevos.
+Este documento conserva la evidencia histórica de b12a5f3; sus pendientes SMTP describen aquel
+corte, no sustituyen el estado de la continuación. No se autoriza despliegue mediante este documento.
+
 Rama: `codex/graceful-shutdown-postgres`, desde `origin/main`
 `8b6ca76f4161b462ee70b1e99f0e1999eefb917f`, actualizado mediante fetch el 24/10/2026.
 Estado: cierre/recuperación PostgreSQL implementados y probados localmente, también en Docker/Linux.
