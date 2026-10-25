@@ -90,6 +90,7 @@ services:
         condition: service_healthy
 
   app:
+    stop_grace_period: 30s
     <<: *common
     build:
       context: /opt/horizonst/backend
@@ -140,6 +141,7 @@ services:
       retries: 10
 
   cold_compliance_service:
+    stop_grace_period: 30s
     <<: *common
     build:
       context: /opt/horizonst/cold-compliance-service
@@ -201,6 +203,7 @@ services:
       retries: 5
 
   horizonst_store:
+    stop_grace_period: 30s
     <<: *common
     build:
       context: /opt/horizonst/horizonst-store

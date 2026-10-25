@@ -1,6 +1,7 @@
 FROM vernemq/vernemq:2.2.1@sha256:d6333975f7c887cfd8943074b084114c033425d61017e1f985e1ef6887610d9f
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl libbrotli1 \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 \
  && rm -rf /var/lib/apt/lists/*
 COPY infrastructure/security/emudhra/ /tmp/horizonst-security/
 RUN cd /tmp/horizonst-security && sha256sum -c SHA256SUMS \

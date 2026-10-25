@@ -14,6 +14,7 @@ services:
       - horizonst
 
   app:
+    stop_grace_period: 30s
     build:
       context: ./backend
     env_file:
@@ -69,6 +70,7 @@ services:
       - horizonst
 
   cold_compliance_service:
+    stop_grace_period: 30s
     build:
       context: ./cold-compliance-service
     env_file:
@@ -239,6 +241,7 @@ services:
       - horizonst
 
   horizonst_store:
+    stop_grace_period: 30s
     build:
       context: ./horizonst-store
     environment:
