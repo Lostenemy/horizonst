@@ -1,8 +1,8 @@
 import dayjs from 'dayjs';
 import { pool } from '../db/pool';
+import { lifecycle } from '../lifecycle';
 
 const CHECK_INTERVAL = 30_000;
-let timer: NodeJS.Timeout | null = null;
 
 interface AlarmConfigRow {
   id: number;
@@ -16,11 +16,7 @@ interface AlarmConfigRow {
 }
 
 export const startAlarmMonitor = () => {
-  if (timer) {
-    return;
-  }
-  timer = setInterval(checkAlarms, CHECK_INTERVAL);
-  void checkAlarms();
+  lifecycle.periodic('alarm-monitor', CHECK_INTERVAL, checkAlarms, true);
 };
 
 const checkAlarms = async () => {

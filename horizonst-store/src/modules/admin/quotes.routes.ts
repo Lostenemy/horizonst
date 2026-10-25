@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { lifecycle } from '../../lifecycle.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
@@ -100,10 +101,10 @@ router.patch('/quotes/:id/status', async (req, res, next) => {
     await client.query('COMMIT');
     const quoteForEmail = { ...existing.rows[0], ...rows[0], email: existing.rows[0].email, full_name: existing.rows[0].full_name };
     if (oldStatus === 'in_review' && input.status === 'sent') {
-      void sendQuoteAvailableEmail({ quote: quoteForEmail }).catch((error) => logMailFailure('quote_available', quoteForEmail.email, error));
+      void lifecycle.track(sendQuoteAvailableEmail({ quote: quoteForEmail })).catch((error) => logMailFailure('quote_available', quoteForEmail.email, error));
     }
     if (input.status === 'accepted' && orderResult?.order) {
-      void sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order }).catch((error) => logMailFailure('order_confirmation', quoteForEmail.email, error));
+      void lifecycle.track(sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order })).catch((error) => logMailFailure('order_confirmation', quoteForEmail.email, error));
     }
     res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }

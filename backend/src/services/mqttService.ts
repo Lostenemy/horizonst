@@ -1,5 +1,6 @@
 import mqtt, { type IPublishPacket, type ISubscriptionGrant, IClientOptions, MqttClient } from 'mqtt';
 import { config } from '../config';
+import { lifecycle } from '../lifecycle';
 import { decodeMk2 } from './decoders/mk2Decoder';
 import { handleDeviceRecord } from './deviceProcessor';
 import { pool } from '../db/pool';
@@ -15,6 +16,7 @@ let reconnectDelay = config.mqtt.reconnectPeriod;
 let subscriptionRetryTimer: NodeJS.Timeout | undefined;
 let connectionGeneration = 0;
 let subscriptionAttempt = 0;
+let cancelStartup: (() => void) | undefined;
 
 export const OFFICIAL_TOPICS = ['devices/MK4', 'gw/+/publish'];
 
@@ -118,6 +120,7 @@ export const processMqttMessage = async (
 };
 
 export const initMqtt = async (): Promise<void> => {
+  if (lifecycle.stopping) return;
   if (client) {
     return;
   }
@@ -167,6 +170,7 @@ export const initMqtt = async (): Promise<void> => {
         reject(error);
       }
     };
+    cancelStartup = () => settleReject(new Error('MQTT startup cancelled by shutdown'));
 
     client = mqtt.connect(url, options);
     const activeClient = client;
@@ -217,6 +221,7 @@ export const initMqtt = async (): Promise<void> => {
     };
 
     activeClient.on('connect', () => {
+      if (client !== activeClient || lifecycle.stopping) return;
       clearSubscriptionRetry();
       const generation = ++connectionGeneration;
       subscriptionAttempt += 1;
@@ -228,6 +233,7 @@ export const initMqtt = async (): Promise<void> => {
     });
 
     activeClient.on('close', () => {
+      if (client !== activeClient) return;
       clearSubscriptionRetry();
       connectionGeneration += 1;
       subscriptionAttempt += 1;
@@ -235,6 +241,7 @@ export const initMqtt = async (): Promise<void> => {
     });
 
     activeClient.on('reconnect', () => {
+      if (client !== activeClient || lifecycle.stopping) return;
       clearSubscriptionRetry();
       connectionGeneration += 1;
       subscriptionAttempt += 1;
@@ -245,6 +252,7 @@ export const initMqtt = async (): Promise<void> => {
     });
 
     activeClient.on('error', (error: Error) => {
+      if (client !== activeClient) return;
       clearSubscriptionRetry();
       connectionGeneration += 1;
       subscriptionAttempt += 1;
@@ -268,13 +276,28 @@ export const initMqtt = async (): Promise<void> => {
     }
 
     activeClient.on('message', async (topic: string, messageBuffer: Buffer, packet: IPublishPacket) => {
+      if (lifecycle.stopping) return;
       try {
-        await processMqttMessage(topic, messageBuffer, packet);
+        await lifecycle.track(processMqttMessage(topic, messageBuffer, packet));
       } catch (error) {
         console.error('Failed to process MQTT message', error);
       }
     });
   });
+};
+
+export const stopMqtt = async (): Promise<void> => {
+  cancelStartup?.();
+  cancelStartup = undefined;
+  clearSubscriptionRetry();
+  connectionGeneration += 1;
+  subscriptionAttempt += 1;
+  mqttConnected = false;
+  const active = client;
+  client = null;
+  if (!active) return;
+  active.options.reconnectPeriod = 0;
+  await new Promise<void>((resolve) => active.end(true, {}, () => resolve()));
 };
 
 export const resetMqttStateForTests = (): void => {

@@ -2,6 +2,7 @@ import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
 import { graceWindow } from './grace-window';
+import { lifecycle } from '../../lifecycle';
 
 interface PresenceStateTag {
   id: string;
@@ -232,24 +233,33 @@ export async function sendGraceReentryReminders(): Promise<void> {
 
 export function startPresenceGraceLoop(): void {
   const cleanupIntervalMs = Math.max(10000, Math.floor(Number(env.PRESENCE_SWEEP_INTERVAL_MS)));
+  let stopped = false;
+  let wake: () => void = () => undefined;
+  lifecycle.register('presence-grace', () => { stopped = true; wake(); });
 
   const loop = async (): Promise<void> => {
-    while (true) {
+    while (!stopped) {
       try {
         await clearExpiredGrace();
       } catch (error) {
         logger.error({ error }, 'failed to clear expired grace states');
       }
 
+      if (stopped) break;
       try {
         await sendGraceReentryReminders();
       } catch (error) {
         logger.error({ error }, 'failed to send grace reentry reminders');
       }
 
-      await sleepUnref(cleanupIntervalMs);
+      if (stopped) break;
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, cleanupIntervalMs);
+        timer.unref();
+        wake = () => { clearTimeout(timer); resolve(); };
+      });
     }
   };
 
-  void loop();
+  void lifecycle.track(loop());
 }

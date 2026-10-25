@@ -27,11 +27,15 @@ import { cartRouter } from './modules/cart/cart.routes.js';
 import { quotesRouter } from './modules/quotes/quotes.routes.js';
 import { ordersRouter } from './modules/orders/orders.routes.js';
 import { contactRouter } from './modules/contact/contact.routes.js';
+import { lifecycle } from './lifecycle.js';
+import { databaseLifecycle } from './db/pool.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
 export const createServer = (staticRoot = webDist) => {
   const app = express();
+  app.use((_req, res, next) => lifecycle.stopping
+    ? res.status(503).json({ status: 'degraded', service: 'horizonst-store', database: 'unavailable' }) : next());
   configureTrustProxy(app, env.trustedProxyIp);
   const guidePath = path.join(staticRoot, 'recursos', 'guia-appcc-2026.pdf');
 
@@ -81,4 +85,7 @@ export const createServer = (staticRoot = webDist) => {
 };
 
 export const app = createServer();
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) app.listen(env.port, '0.0.0.0', () => console.log(`HorizonST Store listening on ${env.port}`));
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const server = app.listen(env.port, '0.0.0.0', () => console.log(`HorizonST Store listening on ${env.port}`));
+  lifecycle.install(server, async () => undefined, () => databaseLifecycle.close());
+}

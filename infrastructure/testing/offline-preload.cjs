@@ -17,8 +17,11 @@ fs.readFileSync = function (file, ...args) {
 };
 // Permit only HTTP fixtures owned by this process; reject PostgreSQL/MQTT/SMTP/providers.
 const ports = new Set();
+const servers = new Set();
 const listen = net.Server.prototype.listen;
 net.Server.prototype.listen = function (...args) {
+  servers.add(this);
+  this.once('close', () => servers.delete(this));
   this.once('listening', () => {
     const address = this.address();
     if (address && typeof address === 'object') {
@@ -33,8 +36,11 @@ net.Socket.prototype.connect = function (...args) {
   const normalized = Array.isArray(args[0]) ? args[0] : args;
   const options = typeof normalized[0] === 'object' ? normalized[0]
     : { port: normalized[0], host: typeof normalized[1] === 'string' ? normalized[1] : 'localhost' };
-  if (!['localhost', '127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(options.host || 'localhost')
-      || !ports.has(Number(options.port))) {
+  const ownedPort = ports.has(Number(options.port)) || [...servers].some(server => {
+    const address = server.address();
+    return address && typeof address === 'object' && address.port === Number(options.port);
+  });
+  if (!['localhost', '127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(options.host || 'localhost') || !ownedPort) {
     process.exitCode = 1; // A caught accidental connection still fails this test worker.
     console.error('OFFLINE_TEST_NETWORK_DENIED');
     throw new Error('OFFLINE_TEST_NETWORK_DENIED: transport must be mocked');

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { lifecycle } from '../../lifecycle';
 import { PoolClient } from 'pg';
 import { executeAlarmSequence, PhysicalAlarmSequenceResult } from '../tag-control/application/tag-physical-alarm.service';
 import { withControlledClient } from '../tag-control/infrastructure/controlled-presence.repository';
@@ -79,7 +80,7 @@ export async function processOnePhysicalAlarm(execute=executeAlarmSequence,obser
 export function startPhysicalAlarmOutboxLoop():()=>void{
   let stopped=false;const timers=new Set<NodeJS.Timeout>();
   const schedule=(work:()=>Promise<void>,delay:number)=>{
-    if(stopped)return;const timer=setTimeout(()=>{timers.delete(timer);void work();},delay);
+    if(stopped)return;const timer=setTimeout(()=>{timers.delete(timer);if(!stopped)void lifecycle.track(work());},delay);
     timer.unref();timers.add(timer);
   };
   const run=async()=>{
@@ -95,6 +96,6 @@ export function startPhysicalAlarmOutboxLoop():()=>void{
         WHERE state='dispatching' AND lease_until<=clock_timestamp()`);
     });}catch{logger.error('physical outbox lease recovery pending');}finally{schedule(recover,1000);}
   };
-  for(let i=0;i<4;i++)void run();void recover();
+  for(let i=0;i<4;i++)void lifecycle.track(run());void lifecycle.track(recover());
   return()=>{stopped=true;for(const timer of timers)clearTimeout(timer);timers.clear();};
 }

@@ -1,0 +1,571 @@
+{
+  "status": "partial_delivery_smtp_durability_pending",
+  "base": "8b6ca76f4161b462ee70b1e99f0e1999eefb917f",
+  "windows": {
+    "backendAndHorneo": {
+      "runtime": "v22.23.4",
+      "platform": "win32",
+      "workspace": "C:\\Users\\User\\AppData\\Local\\Temp\\horizonst-tests-workspace-XvS6be",
+      "baseline": false,
+      "results": [
+        {
+          "name": "backend-typecheck",
+          "exitCode": 0,
+          "signal": null
+        },
+        {
+          "name": "backend-build",
+          "exitCode": 0,
+          "signal": null
+        },
+        {
+          "name": "backend-suite",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 306,
+          "pass": 300,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 6
+        },
+        {
+          "name": "cold-compliance-service-typecheck",
+          "exitCode": 0,
+          "signal": null
+        },
+        {
+          "name": "cold-compliance-service-build",
+          "exitCode": 0,
+          "signal": null
+        },
+        {
+          "name": "cold-compliance-service-suite",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 211,
+          "pass": 207,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 4
+        },
+        {
+          "name": "timing-01",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-02",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-03",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-04",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-05",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-06",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-07",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-08",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-09",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-10",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-11",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-12",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-13",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-14",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-15",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-16",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-17",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-18",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-19",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "timing-20",
+          "exitCode": 0,
+          "signal": null,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    "store": {
+      "workspace": "C:\\Users\\User\\AppData\\Local\\Temp\\horizonst-store-lifecycle-U3Cnao",
+      "evidence": "C:\\Users\\User\\AppData\\Local\\Temp\\horizonst-store-lifecycle-evidence-Mhb9p3",
+      "runtime": "v22.23.4",
+      "results": [
+        {
+          "name": "typecheck",
+          "exitCode": 0
+        },
+        {
+          "name": "backend-build",
+          "exitCode": 0
+        },
+        {
+          "name": "frontend-build",
+          "exitCode": 0
+        },
+        {
+          "name": "suite",
+          "exitCode": 0
+        },
+        {
+          "name": "lifecycle-1",
+          "exitCode": 0,
+          "tests": 8,
+          "pass": 8,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "lifecycle-2",
+          "exitCode": 0,
+          "tests": 8,
+          "pass": 8,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        {
+          "name": "lifecycle-3",
+          "exitCode": 0,
+          "tests": 8,
+          "pass": 8,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        }
+      ],
+      "completeSuiteModules": 42
+    }
+  },
+  "linux": {
+    "runId": "horizonst-lifecycle-87f5374921334dd1b1ef4bafc8c5c553",
+    "versions": {
+      "images": {
+        "backend": "sha256:5b53953a27ef26dcc79f20072bd669ace9b19187c70569d54d3e3cbd337944f2",
+        "horneo": "sha256:20c1b0b69342698b1f54aee89615707882754b7482ef89cf8d9430c855c938f6",
+        "store": "sha256:21231bc92e84add648c27c42f68cd530c0bc59f8bee7292a87170c8fdb5fd1a8",
+        "broker": "sha256:3cc1e5356425032b56145a5b02adfb8d809957c3a57a8706d76e59414228ab31"
+      },
+      "docker": "29.8.2",
+      "postgres": " current_setting \n-----------------\n 15.19\n(1 row)\n\n",
+      "backend": "v22.23.4",
+      "horneo": "v22.23.4",
+      "store": "v22.23.4"
+    },
+    "results": [
+      {
+        "service": "backend",
+        "scenario": "linux-sse-drain",
+        "passed": true
+      },
+      {
+        "service": "backend",
+        "scenario": "unhandled-idle-pool-negative-control",
+        "exitCode": 1,
+        "errorCode": "57P01"
+      },
+      {
+        "service": "horneo",
+        "scenario": "unhandled-idle-pool-negative-control",
+        "exitCode": 1,
+        "errorCode": "57P01"
+      },
+      {
+        "service": "store",
+        "scenario": "unhandled-idle-pool-negative-control",
+        "exitCode": 1,
+        "errorCode": "57P01"
+      },
+      {
+        "service": "backend",
+        "scenario": "recovered-1",
+        "elapsedMs": 1367,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "horneo",
+        "scenario": "recovered-1",
+        "elapsedMs": 1367,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "store",
+        "scenario": "recovered-1",
+        "elapsedMs": 1393,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "backend",
+        "scenario": "database-down-1",
+        "elapsedMs": 5319,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "horneo",
+        "scenario": "database-down-1",
+        "elapsedMs": 5298,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "store",
+        "scenario": "database-down-1",
+        "elapsedMs": 3647,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "backend",
+        "scenario": "recovered-2",
+        "elapsedMs": 1397,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "horneo",
+        "scenario": "recovered-2",
+        "elapsedMs": 1568,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "store",
+        "scenario": "recovered-2",
+        "elapsedMs": 1319,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "backend",
+        "scenario": "database-down-2",
+        "elapsedMs": 5133,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "horneo",
+        "scenario": "database-down-2",
+        "elapsedMs": 5713,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "store",
+        "scenario": "database-down-2",
+        "elapsedMs": 3740,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "backend",
+        "scenario": "recovered-3",
+        "elapsedMs": 1320,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "horneo",
+        "scenario": "recovered-3",
+        "elapsedMs": 1410,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "store",
+        "scenario": "recovered-3",
+        "elapsedMs": 1290,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "backend",
+        "scenario": "database-down-3",
+        "elapsedMs": 5398,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "horneo",
+        "scenario": "database-down-3",
+        "elapsedMs": 5307,
+        "exitCode": 0,
+        "oomKilled": false
+      },
+      {
+        "service": "store",
+        "scenario": "database-down-3",
+        "elapsedMs": 3549,
+        "exitCode": 0,
+        "oomKilled": false
+      }
+    ],
+    "cleanup": [
+      {
+        "container": "c280a636177736b2d9aa2c91fea993e78b2201f33bfde0ea73df7e9afede7e48",
+        "removed": true
+      },
+      {
+        "container": "dc49268d3028a1a3c2449cd932cef7e777020ae88b65187ca1d2438418ebeb8e",
+        "removed": true
+      },
+      {
+        "container": "2dbfac2a2ffd569d8562b6810b1508bd974e38e5c1c693aa1c83208e372a7992",
+        "removed": true
+      },
+      {
+        "container": "5bd57a42c3bac554dfa3d340099cbdb83fb9d4e40db03bf9144d1f3ad28827d1",
+        "removed": true
+      },
+      {
+        "container": "8ba4c45c8f5a55b142d36d29dcf8b0387534e0d4bdac2e2e9eba6381a281210e",
+        "removed": true
+      },
+      {
+        "container": "1a7b0f3deebaeaedaa9cfd9063154ff2ce3da85bdf65e4c7830264abbaa0bcba",
+        "removed": true
+      },
+      {
+        "container": "330f02f12d40883960f7f473170f2bb3aa6c8a6d86b7ce670992f34f62dc0477",
+        "removed": true
+      },
+      {
+        "container": "1222833f3cae881650c03bd6e8422194b7c1534e44f14d90fa51f199add71358",
+        "removed": true
+      },
+      {
+        "container": "0bd3bafe73bfe9688c090c773bba62a020f76ad82f713c209c521de876184b9d",
+        "removed": true
+      },
+      {
+        "container": "c3b41e3a748ce0e36eaf27a29912df621a329b1e01e70391ee67a8f8822c584c",
+        "removed": true
+      },
+      {
+        "container": "78c1e364e06af5e87359df53b31dc8129adafc89198aaf864119b79b9597fc3b",
+        "removed": true
+      },
+      {
+        "container": "73658d8bce785872d42cd708b6a6d9d5a0eb9163016c6431220e291c9a489d25",
+        "removed": true
+      },
+      {
+        "container": "7fde177e87b368b10ec22b636876b27274ef1d0009eb2d7f98af8956f64b2e19",
+        "removed": true
+      },
+      {
+        "container": "55c5c23857e478081a62bd8defb2f612e4f2f53ed784edfdf829bcf6a1591daa",
+        "removed": true
+      },
+      {
+        "container": "9c0e39786fa4c975cf766543baa53185e8405174caeb8d55e3e7bd3a1a103924",
+        "removed": true
+      },
+      {
+        "container": "48766078f3e06da15eaa463780b33a738db63d79655ecbe003256f8195267e2c",
+        "removed": true
+      },
+      {
+        "container": "b2681578e82be159d2cc09ff9ed4cb3e2718dae3b5da05e265c0932fd4d91812",
+        "removed": true
+      },
+      {
+        "container": "03002e22ecc739375823fdf4b9aa6cc79ed642b8c96f8b602bfcd661d5369f22",
+        "removed": true
+      },
+      {
+        "container": "1a431610ccbf83ce77e6cef10f09b7fd3126eb3430517877904db660e1238964",
+        "removed": true
+      },
+      {
+        "container": "9911d1c2cd80db7183ec3acd62eacda9816705beaf11e3704e40dd993eb343f8",
+        "removed": true
+      },
+      {
+        "container": "5766ec7c4c61ec7a7981990b37ec04871777a8d721671d45eaaeb95154c8da04",
+        "removed": true
+      },
+      {
+        "network": "f251479f7ef62093fb0372bb6f7e2c914f405189090bfc3ff05faea966ec0c85",
+        "removed": true
+      }
+    ],
+    "evidence": "C:\\Users\\User\\AppData\\Local\\Temp\\horizonst-lifecycle-docker-Xp2aEp",
+    "validated": true
+  },
+  "limits": {
+    "smtpJournal": "design_authorized_not_implemented",
+    "historical137": "exact_historical_container_cause_not_proven",
+    "lostCommitAcknowledgement": "not_exhaustively_fault_injected",
+    "hardware": "not_contacted",
+    "deployment": "not_authorized_blocked"
+  }
+}

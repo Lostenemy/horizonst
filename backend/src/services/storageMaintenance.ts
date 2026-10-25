@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { pool } from '../db/pool';
+import { lifecycle } from '../lifecycle';
 
 export async function runMqttStorageMaintenance(): Promise<number> {
   const startedAt = Date.now();
@@ -19,7 +20,5 @@ export async function runMqttStorageMaintenance(): Promise<number> {
 }
 
 export function startMqttStorageMaintenance(): void {
-  const run = () => runMqttStorageMaintenance().catch((error) => console.error('MQTT storage maintenance failed', error));
-  setImmediate(run);
-  setInterval(run, config.maintenance.intervalMs).unref();
+  lifecycle.periodic('mqtt-storage-maintenance', config.maintenance.intervalMs, runMqttStorageMaintenance, true);
 }

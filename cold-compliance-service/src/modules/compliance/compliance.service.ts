@@ -1,4 +1,5 @@
 import { env } from '../../config/env';
+import { lifecycle } from '../../lifecycle';
 import { db } from '../../db/pool';
 import { createAlert } from '../alerts/alerts.service';
 import { openIncident } from '../incidents/incidents.service';
@@ -446,8 +447,8 @@ export async function processComplianceRules(event: ParsedPresenceEvent, resolve
 }
 
 export function startComplianceRuleLoop(): void {
-  setInterval(() => {
-    db.query(
+  lifecycle.periodic('compliance-rules', 60000, async () => {
+    return db.query(
       `SELECT DISTINCT s.tag_id AS id, s.hardware_device_id, wta.worker_id, g.cold_room_id
        FROM cold_room_sessions s
        LEFT JOIN worker_tag_assignments wta
@@ -458,7 +459,7 @@ export function startComplianceRuleLoop(): void {
     )
       .then((result) => Promise.all(result.rows.map((tag) => evaluateOperationalAlarmRules(tag))))
       .catch((error) => logger.error({ error }, 'compliance loop failed'));
-  }, 60000).unref();
+  });
 }
 
 export function startPresenceTimeoutLoop(): void {
@@ -468,9 +469,9 @@ export function startPresenceTimeoutLoop(): void {
   }
 
   let expectedAt=Date.now()+intervalMs;
-  setInterval(() => {
+  lifecycle.periodic('presence-timeout', intervalMs, async () => {
     const processDelayMs=Math.max(0,Date.now()-expectedAt);expectedAt=Date.now()+intervalMs;
     if(processDelayMs>1000)logger.warn({processDelayMs,intervalMs},'presence sweep callback delayed; SLA risk');
-    closeStaleSessions().catch(() => logger.error('presence timeout snapshot failed; open sessions retained for retry'));
-  }, intervalMs).unref();
+    await closeStaleSessions().catch(() => logger.error('presence timeout snapshot failed; open sessions retained for retry'));
+  });
 }

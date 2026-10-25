@@ -1,4 +1,5 @@
 import { env } from '../../config/env';
+import { lifecycle } from '../../lifecycle';
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
 import { reconcileExpiredBleSessions } from '../tag-control/infrastructure/ble-session.repository';
@@ -42,7 +43,5 @@ export async function runPresenceMaintenance(): Promise<void> {
 
 export function startPresenceMaintenanceLoop(): void {
   const intervalMs = Math.max(60000, env.PRESENCE_MAINTENANCE_INTERVAL_MS);
-  const run = () => runPresenceMaintenance().catch((error) => logger.error({ error }, 'presence storage maintenance failed'));
-  setImmediate(run);
-  setInterval(run, intervalMs).unref();
+  lifecycle.periodic('presence-maintenance', intervalMs, runPresenceMaintenance, true);
 }

@@ -12,7 +12,8 @@ import {
   initMqtt,
   OFFICIAL_TOPICS,
   publishMqttJson,
-  resetMqttStateForTests
+  resetMqttStateForTests,
+  stopMqtt
 } from '../services/mqttService';
 
 const originalConnect = mqtt.connect;
@@ -48,6 +49,23 @@ const configureTestMqtt = (required: boolean) => {
   const credentialField = 'password';
   (config.mqtt as any)[credentialField] = ['unit', 'test', 'credential'].join('-');
 };
+
+test('shutdown cancels required MQTT startup and ends the client once without a late reconnect subscription', async () => {
+  configureTestMqtt(true);
+  const fake = new EventEmitter() as any;
+  fake.options = { reconnectPeriod: 10 };
+  let ends = 0, subscriptions = 0;
+  fake.end = (_force: boolean, _options: unknown, done: () => void) => { ends++; done(); };
+  fake.subscribe = () => { subscriptions++; };
+  (mqtt as any).connect = () => fake;
+  const started = initMqtt();
+  const cancelled = assert.rejects(started, /cancelled by shutdown/);
+  await stopMqtt(); await stopMqtt(); await cancelled;
+  fake.emit('connect');
+  assert.equal(ends, 1); assert.equal(subscriptions, 0);
+  assert.equal(fake.options.reconnectPeriod, 0);
+  assert.equal(getMqttStatus().connected, false);
+});
 
 const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void> => {
   const deadline = Date.now() + timeoutMs;

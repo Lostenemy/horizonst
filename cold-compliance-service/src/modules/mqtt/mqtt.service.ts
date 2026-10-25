@@ -1,5 +1,6 @@
 import mqtt, { MqttClient } from 'mqtt';
 import { env } from '../../config/env';
+import { lifecycle } from '../../lifecycle';
 import { logger } from '../../utils/logger';
 import { parseGatewayPayload, parseManualEmergencyPayload } from '../presence/payload-parser';
 import { ingestPresenceEvent } from '../presence/presence.service';
@@ -14,6 +15,7 @@ let client: MqttClient | null = null;
 const MIN_ACCEPTED_TS_MS = Date.parse('2025-01-01T00:00:00.000Z');
 const subscribedTopics = new Set<string>();
 let topicRefreshTimer: NodeJS.Timeout | null = null;
+let refresh: Promise<void> | undefined;
 
 export function buildCentralGatewayPublishTopics(gateways: HardwareGateway[]): string[] {
   return [...new Set(gateways
@@ -39,9 +41,10 @@ async function desiredSubscriptionTopics(): Promise<string[] | null> {
   return buildCentralGatewayPublishTopics(inventory.value);
 }
 
-async function refreshMqttSubscriptions(): Promise<void> {
+async function performMqttSubscriptionRefresh(): Promise<void> {
   if (!client?.connected) return;
   const desired = await desiredSubscriptionTopics();
+  if (!client?.connected || lifecycle.stopping) return;
   if (desired === null) return;
   const desiredSet = new Set(desired);
   const removed = [...subscribedTopics].filter((topic) => !desiredSet.has(topic));
@@ -51,6 +54,11 @@ async function refreshMqttSubscriptions(): Promise<void> {
   removed.forEach((topic) => subscribedTopics.delete(topic));
   added.forEach((topic) => subscribedTopics.add(topic));
   logger.info({ topics: [...subscribedTopics], added, removed }, 'mqtt exact gateway subscriptions refreshed');
+}
+
+function refreshMqttSubscriptions(): Promise<void> {
+  if (!refresh) refresh = lifecycle.track(performMqttSubscriptionRefresh()).finally(() => { refresh = undefined; });
+  return refresh;
 }
 
 function parsePayloadTimestampMs(value: unknown): number | null {
@@ -76,6 +84,7 @@ function isGatewayCommandReply(payload: unknown): boolean {
 }
 
 export function startMqttConsumer(): void {
+  if (client || lifecycle.stopping) return;
   client = mqtt.connect(env.MQTT_URL, {
     username: env.MQTT_USERNAME,
     password: env.MQTT_PASSWORD,
@@ -85,6 +94,7 @@ export function startMqttConsumer(): void {
   });
 
   client.on('connect', () => {
+    if (lifecycle.stopping) return;
     // clean=true means broker subscriptions do not survive reconnects.
     subscribedTopics.clear();
     void refreshMqttSubscriptions().catch((err) => logger.error({ err }, 'mqtt subscription refresh error'));
@@ -93,11 +103,17 @@ export function startMqttConsumer(): void {
         void refreshMqttSubscriptions().catch((err) => logger.error({ err }, 'mqtt subscription refresh error'));
       }, env.HARDWARE_MANAGER_MQTT_TOPIC_REFRESH_MS);
       topicRefreshTimer.unref();
+      lifecycle.register('mqtt-topic-refresh', () => {
+        if (topicRefreshTimer) clearInterval(topicRefreshTimer);
+        topicRefreshTimer = null;
+      });
     }
     logger.info('mqtt connected; refreshing company-scoped exact gateway topics');
   });
 
-  client.on('message', async (topic: string, payload: Buffer) => {
+  client.on('message', (topic: string, payload: Buffer) => {
+    if (lifecycle.stopping) return;
+    void lifecycle.track((async () => {
     try {
       if (topic.endsWith('/publish')) {
         let asJson: unknown = null;
@@ -133,8 +149,21 @@ export function startMqttConsumer(): void {
     } catch (err) {
       logger.error({ err, topic }, 'failed processing mqtt payload as presence');
     }
+    })());
   });
 
   client.on('error', (err) => logger.error({ err }, 'mqtt client error'));
   client.on('reconnect', () => logger.warn('mqtt reconnecting'));
+}
+
+export async function stopMqttConsumer(): Promise<void> {
+  if (topicRefreshTimer) clearInterval(topicRefreshTimer);
+  topicRefreshTimer = null;
+  const active = client;
+  client = null;
+  subscribedTopics.clear();
+  if (active) {
+    active.options.reconnectPeriod = 0;
+    await new Promise<void>(resolve => active.end(true, {}, () => resolve()));
+  }
 }

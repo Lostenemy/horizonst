@@ -1,6 +1,7 @@
 import { env } from '../../config/env';
 import { db } from '../../db/pool';
 import { logger } from '../../utils/logger';
+import { lifecycle } from '../../lifecycle';
 
 interface PendingSyncRow {
   id: string;
@@ -12,7 +13,7 @@ export function startSyncLoop(): void {
     return;
   }
 
-  setInterval(async () => {
+  lifecycle.periodic('sync', 15000, async () => {
     try {
       const pending = await db.query<PendingSyncRow>(
         `SELECT id FROM sync_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT $1`,
@@ -29,5 +30,5 @@ export function startSyncLoop(): void {
     } catch (error) {
       logger.error({ error }, 'sync loop failed');
     }
-  }, 15000);
+  });
 }

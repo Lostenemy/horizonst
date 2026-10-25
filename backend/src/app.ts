@@ -1,4 +1,6 @@
 import express from 'express';
+import { lifecycle } from './lifecycle';
+import { databaseLifecycle } from './db/pool';
 import cors from 'cors';
 import path from 'path';
 import { json, urlencoded } from 'express';
@@ -21,6 +23,8 @@ import { configureTrustProxy } from './config/trustProxy';
 import { requestContext, secureHeaders } from './middleware/requestContext';
 
 const app = express();
+app.use((_req, res, next) => lifecycle.stopping
+  ? res.status(503).json({ status: 'degraded', mqtt: getMqttStatus() }) : next());
 
 configureTrustProxy(app, config.trustedProxyIp);
 
@@ -61,6 +65,12 @@ app.get('/health', (_req, res) => {
     status: statusCode === 200 ? 'ok' : 'degraded',
     mqtt
   });
+});
+app.get('/ready', async (_req, res) => {
+  const database = await databaseLifecycle.ready();
+  const mqtt = getMqttStatus();
+  const ready = database && (!mqtt.required || mqtt.connected);
+  res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'degraded', database: database ? 'ok' : 'unavailable', mqtt });
 });
 
 app.get(adminBasePath, (_req, res) => {

@@ -1,4 +1,5 @@
 import { PoolClient } from 'pg';
+import { lifecycle } from '../../lifecycle';
 import { env } from '../../config/env';
 import { madridExposureSegments } from '../realtime/workday-duration';
 import { withControlledClient } from '../tag-control/infrastructure/controlled-presence.repository';
@@ -87,8 +88,8 @@ export function startCloseEffectsLoop(): ()=>void {
   let stopped=false;let timer:NodeJS.Timeout|undefined;
   const run=async()=>{
     try {await processOneCloseEffect();} finally {
-      if(!stopped){timer=setTimeout(()=>void run(),250);timer.unref();}
+      if(!stopped){timer=setTimeout(()=>{if(!stopped)void lifecycle.track(run());},250);timer.unref();}
     }
   };
-  void run();return()=>{stopped=true;if(timer)clearTimeout(timer);};
+  void lifecycle.track(run());return()=>{stopped=true;if(timer)clearTimeout(timer);};
 }

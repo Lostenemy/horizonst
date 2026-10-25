@@ -1,4 +1,5 @@
 import { PoolClient } from 'pg';
+import { lifecycle } from '../lifecycle';
 import { pool } from '../db/pool';
 import { normalizeGatewayMac } from '../utils/mac';
 import { publishMqttJson } from './mqttService';
@@ -68,15 +69,21 @@ export async function expireStaleGatewayCommands(gatewayId?: number): Promise<nu
   return result.rowCount ?? 0;
 }
 
+let commandSweepTimer: NodeJS.Timeout | undefined;
 export function startGatewayCommandTimeoutSweep(): NodeJS.Timeout {
+  if (commandSweepTimer) return commandSweepTimer;
+  if (lifecycle.stopping) throw new Error('shutdown_in_progress');
   const parsed = Number(process.env.GATEWAY_COMMAND_SWEEP_INTERVAL_MS ?? 5000);
   const intervalMs = Number.isFinite(parsed) ? Math.max(1000, Math.floor(parsed)) : 5000;
   const timer = setInterval(() => {
-    void expireStaleGatewayCommands().catch((error) => {
+    if (lifecycle.stopping) return;
+    void lifecycle.track(expireStaleGatewayCommands()).catch((error) => {
       console.error('Failed to expire stale gateway commands', error);
     });
   }, intervalMs);
   timer.unref();
+  commandSweepTimer = timer;
+  lifecycle.register('gateway-command-sweep', () => { clearInterval(timer); commandSweepTimer = undefined; });
   return timer;
 }
 

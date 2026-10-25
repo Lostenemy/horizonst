@@ -1,7 +1,10 @@
 import { env } from './config/env';
 import { runMigrations } from './db/migrate';
 import { buildApp } from './app';
-import { startMqttConsumer } from './modules/mqtt/mqtt.service';
+import { startMqttConsumer, stopMqttConsumer } from './modules/mqtt/mqtt.service';
+import http from 'node:http';
+import { lifecycle } from './lifecycle';
+import { databaseLifecycle } from './db/pool';
 import { startSyncLoop } from './modules/sync/sync.service';
 import { startComplianceRuleLoop, startPresenceTimeoutLoop } from './modules/compliance/compliance.service';
 import { startPresenceGraceLoop } from './modules/presence/presence-state.service';
@@ -10,24 +13,29 @@ import { startPresenceMaintenanceLoop } from './modules/maintenance/maintenance.
 import { startCloseEffectsLoop } from './modules/compliance/presence-close-effects';
 import { startPhysicalAlarmOutboxLoop } from './modules/alerts/physical-alarm-outbox';
 
+const app = buildApp();
+const server = http.createServer(app);
+lifecycle.install(server, stopMqttConsumer, () => databaseLifecycle.close());
+
 async function bootstrap() {
   await runMigrations();
+  if (lifecycle.stopping) return;
   startMqttConsumer();
   startSyncLoop();
   startComplianceRuleLoop();
   startPresenceTimeoutLoop();
   startPresenceGraceLoop();
   startPresenceMaintenanceLoop();
-  startCloseEffectsLoop();
-  startPhysicalAlarmOutboxLoop();
+  lifecycle.register('close-effects', startCloseEffectsLoop());
+  lifecycle.register('physical-outbox', startPhysicalAlarmOutboxLoop());
 
-  const app = buildApp();
-  app.listen(env.PORT, () => {
+  server.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'cold compliance service started');
   });
 }
 
-bootstrap().catch((error) => {
+void lifecycle.track(bootstrap()).catch((error) => {
+  if (lifecycle.stopping) return;
   logger.error({ error }, 'failed to bootstrap');
   process.exit(1);
 });

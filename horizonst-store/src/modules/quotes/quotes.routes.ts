@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { lifecycle } from '../../lifecycle.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
@@ -106,8 +107,8 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
       await client.query('COMMIT');
       if (status === 'accepted' && orderResult?.order) {
         const quoteForEmail = { ...existing.rows[0], ...rows[0], email: existing.rows[0].email, full_name: existing.rows[0].full_name };
-        void sendQuoteAcceptedCommercialEmail({ quote: quoteForEmail, order: orderResult.order }).catch((error) => logMailFailure('quote_accepted_commercial', commercialMailRecipient, error));
-        void sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order }).catch((error) => logMailFailure('order_confirmation', quoteForEmail.email, error));
+        void lifecycle.track(sendQuoteAcceptedCommercialEmail({ quote: quoteForEmail, order: orderResult.order })).catch((error) => logMailFailure('quote_accepted_commercial', commercialMailRecipient, error));
+        void lifecycle.track(sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order })).catch((error) => logMailFailure('order_confirmation', quoteForEmail.email, error));
       }
       res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
     } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }

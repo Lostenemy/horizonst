@@ -2,7 +2,8 @@ import path from 'node:path';
 import express from 'express';
 import { configureTrustProxy } from './config/trust-proxy';
 import { env } from './config/env';
-import { db } from './db/pool';
+import { databaseLifecycle } from './db/pool';
+import { lifecycle } from './lifecycle';
 import { errorHandler } from './middleware/error-handler';
 import { alarmRulesRouter } from './modules/alarm-rules/alarm-rules.routes';
 import { alertsRouter } from './modules/alerts/alerts.routes';
@@ -20,6 +21,8 @@ import { workersRouter } from './modules/workers/workers.routes';
 
 export function buildApp() {
   const app = express();
+  app.use((_req, res, next) => lifecycle.stopping
+    ? res.status(503).json({ status: 'degraded' }) : next());
   app.disable('x-powered-by');
   configureTrustProxy(app, env.TRUSTED_PROXY_IP);
   app.use((_req, res, next) => {
@@ -34,8 +37,8 @@ export function buildApp() {
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
   app.get('/ready', async (_req, res) => {
-    await db.query('SELECT 1');
-    res.json({ status: 'ready' });
+    const ready = await databaseLifecycle.ready();
+    res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'degraded' });
   });
 
   app.use('/auth', authRouter);
