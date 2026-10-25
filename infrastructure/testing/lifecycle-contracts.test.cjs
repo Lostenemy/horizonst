@@ -49,8 +49,15 @@ test('SMTP journal isolation, privacy and no automatic replay contracts', () => 
   assert.doesNotMatch(migration, /ON DELETE CASCADE|\b(?:body|password|recipient_email|payload)\s+(?:TEXT|JSONB)/i);
   for (const name of ['quotes/quotes.routes.ts','admin/quotes.routes.ts']) {
     const source = read('horizonst-store/src/modules/' + name);
-    assert.ok(source.indexOf('await insertIntent(') < source.indexOf("await client.query('COMMIT')"));
-    assert.ok(source.indexOf('void journal.dispatch(') > source.indexOf("await client.query('COMMIT')"));
+    const commit = source.indexOf('await transaction.commit()');
+    assert.ok(commit > 0);
+    assert.ok(source.indexOf('await insertIntent(') < commit);
+    assert.ok(source.indexOf('void journal.dispatch(') > commit);
+    assert.match(source, /await transaction.failed\(error\); next\(error\)/);
+    assert.match(source, /client.release\(transaction.discard \|\| undefined\)/);
     assert.doesNotMatch(source, /console\.(?:error|warn).*\bto\b/);
   }
+  const cleanup = read('horizonst-store/src/db/transaction-cleanup.ts');
+  assert.match(cleanup, /commitAttempted = true; await client.query\('COMMIT'\)/);
+  assert.match(cleanup, /!commitAttempted && !rollbackAttempted/);
 });

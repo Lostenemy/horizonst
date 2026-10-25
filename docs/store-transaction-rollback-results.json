@@ -1,0 +1,67 @@
+{
+  "status": "isolated_validation_passed_staging_and_brotli_pending",
+  "branch": "codex/graceful-shutdown-postgres",
+  "parent": "88f191a9212f679586933628c901c463d2a6468d",
+  "cause": "A rejected ROLLBACK replaced the query error before next(error), creating an unhandled Express 4 async-handler rejection.",
+  "previousEvidenceUnchanged": ["docs/shutdown-validation-results.json", "docs/store-notification-validation-results.json"],
+  "archive": "C:/Users/User/Documents/horizonst/rollback-validation-evidence-d2b2207073c04705a45401f59ce09ed5",
+  "archiveFiles": 52,
+  "manifestSha256": "9866d477ce20c8261f1586e1b022cdb87268c8e80e9904d82ab14c03ce9799f1",
+  "versions": {"node": "22.23.4", "docker": "29.8.2", "postgres": "15.19", "runtimeImage": "sha256:01f81f54ef9223564a5ca08546da11209c16e75ec86d599bd3ffe31893593cfd"},
+  "baseline": {"platform": "Windows", "pg": "simulated", "customerExitCode": 1, "adminExitCode": 1, "evidence": "horizonst-store-lifecycle-evidence-zC0TtK"},
+  "intermediateFailures": [
+    {"evidence": "horizonst-store-lifecycle-evidence-nNFe9S", "cause": "Fixture /alive endpoint was shadowed by the router /:id path; reordered fixture routes, assertions unchanged."},
+    {"evidence": "horizonst-smtp-journal-Ik3uaH", "cause": "Windows Docker context metadata file temporarily locked before build; no container acquired. Retry passed without Docker configuration changes."}
+  ],
+  "storeSuite": {"modulesPassed": 45, "failed": 0, "skipped": 0, "lifecyclePassed": 24, "lifecycleProcesses": 3, "typecheckExitCode": 0, "backendBuildExitCode": 0, "frontendBuildExitCode": 0, "evidence": "horizonst-store-lifecycle-evidence-qyEmxT/summary.json"},
+  "contracts": {"passed": 7, "failed": 0, "skipped": 0},
+  "dockerLinux": {
+    "evidence": "horizonst-smtp-journal-bdYkip/results.json",
+    "rounds": 3,
+    "groupsPassed": 57,
+    "groupsFailed": 0,
+    "groupsSkipped": 0,
+    "previousSmtpDatabaseGroups": 51,
+    "simulatedPgRouterCases": 30,
+    "simulatedPgRouterGroups": 3,
+    "realPgTerminatedTransactions": 6,
+    "realPgGroups": 3,
+    "realPgAssertions": ["57P01 original error identity", "HTTP 500 controlled", "release(true) once", "rolled back quote state", "no partial order/history/notification", "zero SMTP for failed request", "same HTTP process alive", "new explicit request succeeds with a new loan"],
+    "shutdowns": [
+      {"round": 1, "databaseDown": false, "elapsedMs": 14831, "exitCode": 0},
+      {"round": 1, "databaseDown": true, "elapsedMs": 18943, "exitCode": 0},
+      {"round": 2, "databaseDown": false, "elapsedMs": 14757, "exitCode": 0},
+      {"round": 2, "databaseDown": true, "elapsedMs": 18967, "exitCode": 0},
+      {"round": 3, "databaseDown": false, "elapsedMs": 14531, "exitCode": 0},
+      {"round": 3, "databaseDown": true, "elapsedMs": 19246, "exitCode": 0}
+    ],
+    "maximumShutdownMs": 19246,
+    "recoveryWithoutResendPassed": 6,
+    "oomOr137": 0,
+    "ownedResourcesCleaned": 25,
+    "cleanupFailures": 0,
+    "publishedPorts": 0
+  },
+  "omissionsAndLimits": [
+    "Backend and Horneo suites not rerun: source/dependencies unchanged; previous evidence retained, not represented as new execution.",
+    "Real PG termination test injects a fictitious authenticated identity and an observing error middleware into the real routers. It does not exercise production login.",
+    "COMMIT lost-reply scenario is simulated, not exhaustive real-network COMMIT-ack fault injection. No retry or rollback confirmation is inferred.",
+    "Staging/deployment/provider SMTP validation and rebuilding native Brotli protection on the final image remain with operations."
+  ],
+  "files": [
+    "docs/store-notification-journal.md",
+    "docs/store-transaction-rollback-review.md",
+    "docs/store-transaction-rollback-results.json",
+    "horizonst-store/src/db/transaction-cleanup.ts",
+    "horizonst-store/src/db/migrate-notifications.ts",
+    "horizonst-store/src/modules/quotes/quotes.routes.ts",
+    "horizonst-store/src/modules/admin/quotes.routes.ts",
+    "horizonst-store/src/modules/shared/notifications.routes.ts",
+    "horizonst-store/test/quote-transaction-errors.test.ts",
+    "horizonst-store/integration/quote-rollback.fixture.mjs",
+    "infrastructure/testing/lifecycle-contracts.test.cjs",
+    "infrastructure/testing/smtp-journal-docker.mjs",
+    "infrastructure/testing/smtp-journal.fixture.mjs"
+  ],
+  "notPerformed": ["push", "merge", "deployment", "shared database access", "physical_alarm_outbox access", "real SMTP", "real MQTT", "hardware", "B5/presence/alarm changes", "real credential or .env reads", "migration SQL changes", "production Dockerfile/runtime changes"]
+}

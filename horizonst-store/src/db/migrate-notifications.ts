@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pool, closePool } from './pool.js';
+import { transactionCleanup } from './transaction-cleanup.js';
 
 const filename = '017_notification_deliveries.sql';
 // Dedicated ledger: do NOT mark or apply pending commercial migrations 011–015.
@@ -9,6 +10,7 @@ export async function runNotificationMigration(db = pool) {
   const sql = await readFile(new URL(`../../migrations/${filename}`, import.meta.url), 'utf8');
   const checksum = createHash('sha256').update(sql).digest('hex');
   const client = await db.connect();
+  const transaction = transactionCleanup(client);
   try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout='2s'");
@@ -44,9 +46,9 @@ export async function runNotificationMigration(db = pool) {
       count(*) FILTER (WHERE contype='u' AND pg_get_constraintdef(oid)='UNIQUE (status_history_id, notification_type, recipient_role)')=1 AS event_unique
       FROM pg_constraint WHERE conrelid='store.notification_deliveries'::regclass`);
     if (Object.values(constraints.rows[0]).some(v => v !== true)) throw new Error('notification_constraints_incompatible');
-    await client.query('COMMIT');
-  } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; }
-  finally { client.release(); }
+    await transaction.commit();
+  } catch (error) { await transaction.failed(error); throw error; }
+  finally { client.release(transaction.discard || undefined); }
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(pathToFileURL(process.argv[1]))) {
   runNotificationMigration().then(closePool).catch(async () => {

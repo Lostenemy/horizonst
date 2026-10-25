@@ -1,5 +1,9 @@
 # Registro durable SMTP de Tienda
 
+Continuación de revisión posterior: `store-transaction-rollback-review.md` documenta el
+fallo secundario de ROLLBACK y sus pruebas nuevas. Las cifras y evidencias de este documento
+se conservan como corte de 88f191a; no se sobrescriben con las de la corrección posterior.
+
 ## Alcance y decisión
 
 Continuación de `b12a5f36cfb4998cdde6168a22e0c0fd6ec627cc`, rama

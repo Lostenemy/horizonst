@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { journalConnection } from './notification-journal.js';
+import { transactionCleanup } from '../../db/transaction-cleanup.js';
 
 // No body, address, transport response text or resend operation is exposed.
 export function createNotificationsRouter(db = pool, auth: RequestHandler = requireAuth) {
@@ -29,6 +30,7 @@ export function createNotificationsRouter(db = pool, auth: RequestHandler = requ
     if (!id.success) { res.status(400).json({ error: 'Invalid notification' }); return; }
     try {
       const changed = await journalConnection(db, async c => {
+        const transaction = transactionCleanup(c);
         await c.query('BEGIN');
         try {
           const row = await c.query(`UPDATE store.notification_deliveries SET state='cancelled',
@@ -36,8 +38,8 @@ export function createNotificationsRouter(db = pool, auth: RequestHandler = requ
             WHERE id=$1::uuid AND state='pending' RETURNING id`, [id.data, req.user!.sub]);
           if (row.rows.length) await c.query(`INSERT INTO store.audit_log(actor_user_id,action,entity_type,entity_id,payload)
             VALUES($1,'notification_cancelled','notification',$2,'{"previous_state":"pending","state":"cancelled"}'::jsonb)`, [req.user!.sub, id.data]);
-          await c.query('COMMIT'); return row.rows.length > 0;
-        } catch (error) { await c.query('ROLLBACK'); throw error; }
+          await transaction.commit(); return row.rows.length > 0;
+        } catch (error) { await transaction.failed(error); throw error; }
       });
       res.status(changed ? 200 : 409).json(changed ? { state: 'cancelled' } : { error: 'notification_not_pending' });
     } catch { res.status(503).json({ error: 'notification_journal_unavailable' }); }
@@ -48,6 +50,7 @@ export function createNotificationsRouter(db = pool, auth: RequestHandler = requ
     if (!id.success || !input.success) { res.status(400).json({ error: 'Invalid review' }); return; }
     try {
       const changed = await journalConnection(db, async c => {
+        const transaction = transactionCleanup(c);
         await c.query('BEGIN');
         try {
           const row = await c.query(`UPDATE store.notification_deliveries SET reviewed_by=$2::uuid,reviewed_at=clock_timestamp()
@@ -55,8 +58,8 @@ export function createNotificationsRouter(db = pool, auth: RequestHandler = requ
             AND reviewed_at IS NULL RETURNING id,state`, [id.data, req.user!.sub]);
           if (row.rows.length) await c.query(`INSERT INTO store.audit_log(actor_user_id,action,entity_type,entity_id,payload)
             VALUES($1,'notification_reviewed','notification',$2,'{"decision":"acknowledge_no_resend"}'::jsonb)`, [req.user!.sub, id.data]);
-          await c.query('COMMIT'); return row.rows[0];
-        } catch (error) { await c.query('ROLLBACK'); throw error; }
+          await transaction.commit(); return row.rows[0];
+        } catch (error) { await transaction.failed(error); throw error; }
       });
       res.status(changed ? 200 : 409).json(changed ? { state: changed.state, resend: false } : { error: 'notification_not_reviewable' });
     } catch { res.status(503).json({ error: 'notification_journal_unavailable' }); }

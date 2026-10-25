@@ -232,6 +232,59 @@ if (process.argv.includes('--peer')) {
           } finally {server.closeAllConnections();await new Promise(r=>server.close(r));}
         }
       });
+      await check('Linux runtime: ten simulated router transaction failure cases', async () => {
+        const { default: express } = await import('/app/node_modules/express/index.js');
+        const { createQuotesRouter } = await import('/app/dist/modules/quotes/quotes.routes.js');
+        const { createAdminQuotesRouter } = await import('/app/dist/modules/admin/quotes.routes.js');
+        const { verifyQuoteTransactionErrors } = await import('./quote-rollback.fixture.mjs');
+        const checked=await verifyQuoteTransactionErrors({express,createQuotesRouter,createAdminQuotesRouter});
+        assert.equal(checked.length,10);
+      });
+      await check('real PostgreSQL termination mid-transaction: both routers survive and accept new requests', async () => {
+        const { default: express } = await import('/app/node_modules/express/index.js');
+        const { createQuotesRouter } = await import('/app/dist/modules/quotes/quotes.routes.js');
+        const { createAdminQuotesRouter } = await import('/app/dist/modules/admin/quotes.routes.js');
+        for(const admin of [false,true]) {
+          const q=await quote();await pool.query("UPDATE store.quotes SET status='sent' WHERE id=$1",[q]);
+          let inject=true, original, received;
+          const released=[];
+          const wrapped={query:pool.query.bind(pool),connect:async()=>{
+            const c=await pool.connect();
+            return {query:async(text,values)=>{
+              const result=await c.query(text,values);
+              if(inject && text.startsWith('UPDATE store.quotes')) {
+                inject=false;
+                // Mutation is real and uncommitted. Interrupt an active query from a DIFFERENT connection.
+                const interrupted=c.query('SELECT pg_sleep(10)').then(()=>null,error=>error);
+                const killed=await pool.query('SELECT pg_terminate_backend($1) AS killed',[c.processID]);
+                assert.equal(killed.rows[0].killed,true);
+                original=await interrupted;assert.equal(original?.code,'57P01');throw original;
+              }
+              return result;
+            },release:destroy=>{released.push(!!destroy);c.release(destroy);}};
+          }};
+          const app=express();app.use(express.json());app.get('/alive',(_req,res)=>res.json({alive:true}));
+          const dependencies={pool:wrapped,notificationJournal:journal(),authMiddleware:(req,res,next)=>{req.user={sub:admin?other:owner,role:admin?'admin':'customer'};next();}};
+          app.use(admin?createAdminQuotesRouter(dependencies):createQuotesRouter(dependencies));
+          app.use((error,_req,res,_next)=>{received=error;res.status(500).json({error:'database_operation_failed'});});
+          const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+          const url=`http://127.0.0.1:${server.address().port}`,before=(await peer('success')).received;
+          const request=()=>fetch(url+(admin?`/quotes/${q}/status`:`/${q}/accept`),{method:admin?'PATCH':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(admin?{status:'accepted'}:{})});
+          try {
+            const failed=await request();assert.equal(failed.status,500);assert.equal(received,original);
+            assert.deepEqual(released,[true]);assert.equal((await fetch(url+'/alive')).status,200);
+            assert.equal((await scalar('SELECT status FROM store.quotes WHERE id=$1',[q])).status,'sent');
+            for(const table of ['quote_status_history','orders']) assert.equal((await pool.query(`SELECT 1 FROM store.${table} WHERE quote_id=$1`,[q])).rowCount,0);
+            assert.equal((await pool.query('SELECT 1 FROM store.notification_deliveries d JOIN store.quote_status_history h ON h.id=d.status_history_id WHERE h.quote_id=$1',[q])).rowCount,0);
+            assert.equal((await peer()).received,before,'failed transaction never sent email');
+            // New explicit HTTP request, NOT an automatic transaction retry.
+            assert.equal((await request()).status,200);assert.deepEqual(released,[true,false]);
+            const expected=admin?1:2,deadline=Date.now()+3000;
+            while((await peer()).received!==before+expected && Date.now()<deadline)await sleep(10);
+            assert.equal((await peer()).received,before+expected);
+          } finally {server.closeAllConnections();await new Promise(r=>server.close(r));}
+        }
+      });
       console.log(JSON.stringify({ runtime: process.version, results }));
     }
   } finally { await closePool(); }

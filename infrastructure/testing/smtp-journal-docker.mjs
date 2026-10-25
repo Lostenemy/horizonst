@@ -26,7 +26,10 @@ function docker(args, options = {}) {
 function create(name, args, fixture = false) {
   const id = docker(['create', '--name', name, ...args]).trim();
   assert.match(id, /^[a-f0-9]{64}$/); owned.push(id);
-  if (fixture) docker(['cp', 'infrastructure/testing/smtp-journal.fixture.mjs', `${id}:/tmp/smtp-journal.fixture.mjs`]);
+  if (fixture) {
+    docker(['cp', 'infrastructure/testing/smtp-journal.fixture.mjs', `${id}:/tmp/smtp-journal.fixture.mjs`]);
+    docker(['cp', 'horizonst-store/integration/quote-rollback.fixture.mjs', `${id}:/tmp/quote-rollback.fixture.mjs`]);
+  }
   docker(['start', id]); return id;
 }
 const inspect = id => JSON.parse(docker(['inspect','--format','{{json .State}}',id]));

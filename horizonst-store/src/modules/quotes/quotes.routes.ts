@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
+import { transactionCleanup } from '../../db/transaction-cleanup.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { insertQuoteStatusHistory as defaultInsertQuoteStatusHistory } from '../admin/quotes/history.js';
 import { generateQuotePdf as defaultGenerateQuotePdf } from '../admin/quotes/pdf.js';
@@ -17,7 +18,7 @@ export const quoteDecisionSchema = z.object({ comment: z.string().trim().max(500
 type DecisionStatus = Extract<QuoteStatus, 'accepted' | 'rejected'>;
 type QueryResult = { rows: any[] };
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
-type Client = Queryable & { release: () => void };
+type Client = Queryable & { release: (destroy?: boolean) => void };
 type PoolLike = Queryable & { connect: () => Promise<Client> };
 
 export type QuotesRouterDependencies = {
@@ -93,13 +94,14 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
     let client: Client;
     try { client = await quotePool.connect(); }
     catch { res.status(503).json({ error: 'notification_database_unavailable' }); return; }
+    const transaction = transactionCleanup(client);
     try {
       const id = idSchema.parse(req.params.id); const input = quoteDecisionSchema.parse(req.body ?? {});
       await client.query('BEGIN');
       const existing = await client.query(`SELECT q.id, q.status, q.quote_number, q.total_cents, u.email, u.full_name, u.role FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1 AND q.user_id = $2 FOR UPDATE`, [id, req.user.sub]);
-      if (!existing.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Quote not found' }); return; }
+      if (!existing.rows[0]) { await transaction.rollback(); res.status(404).json({ error: 'Quote not found' }); return; }
       const oldStatus = existing.rows[0].status as QuoteStatus;
-      if (oldStatus !== 'sent') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote must be sent before it can be accepted or rejected', previous_status: oldStatus, status }); return; }
+      if (oldStatus !== 'sent') { await transaction.rollback(); res.status(409).json({ error: 'Quote must be sent before it can be accepted or rejected', previous_status: oldStatus, status }); return; }
       const acceptedAtSql = status === 'accepted' ? 'now()' : 'NULL';
       const rejectedAtSql = status === 'rejected' ? 'now()' : 'NULL';
       const { rows } = await client.query(`UPDATE store.quotes q SET status = $2, accepted_at = ${acceptedAtSql}, rejected_at = ${rejectedAtSql}, updated_at = now() WHERE q.id = $1 AND q.user_id = $3 RETURNING ${publicQuoteColumns}`, [id, status, req.user.sub]);
@@ -108,14 +110,15 @@ export const createQuotesRouter = (dependencies: QuotesRouterDependencies = {}) 
       const orderResult = status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user.sub, writeAuditLog }) : null;
       const commercialId = orderResult?.order ? await insertIntent(client, { historyId, type: 'quote_accepted_commercial', orderId: orderResult.order.id }) : null;
       const customerId = orderResult?.order ? await insertIntent(client, { historyId, type: 'order_confirmation', orderId: orderResult.order.id }) : null;
-      await client.query('COMMIT');
+      await transaction.commit();
       if (status === 'accepted' && orderResult?.order) {
         const quoteForEmail = { ...existing.rows[0], ...rows[0], email: existing.rows[0].email, full_name: existing.rows[0].full_name };
         void journal.dispatch(commercialId!, () => sendQuoteAcceptedCommercialEmail({ quote: quoteForEmail, order: orderResult.order }));
         void journal.dispatch(customerId!, () => sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order }));
       }
       res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
-    } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
+    } catch (error) { await transaction.failed(error); next(error); }
+    finally { client.release(transaction.discard || undefined); }
   };
 
   router.post('/:id/accept', decideQuote('accepted'));

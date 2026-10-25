@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool as defaultPool } from '../../db/pool.js';
+import { transactionCleanup } from '../../db/transaction-cleanup.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { insertQuoteStatusHistory as defaultInsertQuoteStatusHistory } from './quotes/history.js';
 import { generateQuotePdf as defaultGenerateQuotePdf } from './quotes/pdf.js';
@@ -14,7 +15,7 @@ import { commercialDocumentFilename } from '../shared/commercial-document-pdf.js
 
 type QueryResult = { rows: any[] };
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<QueryResult> };
-type Client = Queryable & { release: () => void };
+type Client = Queryable & { release: (destroy?: boolean) => void };
 type PoolLike = Queryable & { connect: () => Promise<Client> };
 
 export type AdminQuotesRouterDependencies = {
@@ -87,14 +88,15 @@ router.patch('/quotes/:id/status', async (req, res, next) => {
   let client: Client;
   try { client = await pool.connect(); }
   catch { res.status(503).json({ error: 'notification_database_unavailable' }); return; }
+  const transaction = transactionCleanup(client);
   try {
     const id = idSchema.parse(req.params.id); const input = quoteStatusChangeSchema.parse(req.body);
     await client.query('BEGIN');
     const existing = await client.query('SELECT q.id, q.status, q.quote_number, q.total_cents, u.email, u.full_name, u.role FROM store.quotes q JOIN store.users u ON u.id = q.user_id WHERE q.id = $1 FOR UPDATE', [id]);
-    if (!existing.rows[0]) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Quote not found' }); return; }
+    if (!existing.rows[0]) { await transaction.rollback(); res.status(404).json({ error: 'Quote not found' }); return; }
     const oldStatus = existing.rows[0].status as QuoteStatus;
-    if (oldStatus === input.status) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Quote status is already set to the requested value' }); return; }
-    if (!canTransitionQuoteStatus(oldStatus, input.status)) { await client.query('ROLLBACK'); res.status(409).json({ error: 'Invalid quote status transition', previous_status: oldStatus, status: input.status }); return; }
+    if (oldStatus === input.status) { await transaction.rollback(); res.status(409).json({ error: 'Quote status is already set to the requested value' }); return; }
+    if (!canTransitionQuoteStatus(oldStatus, input.status)) { await transaction.rollback(); res.status(409).json({ error: 'Invalid quote status transition', previous_status: oldStatus, status: input.status }); return; }
     const acceptedAtSql = input.status === 'accepted' ? 'now()' : input.status === 'rejected' ? 'NULL' : 'accepted_at';
     const rejectedAtSql = input.status === 'rejected' ? 'now()' : input.status === 'accepted' ? 'NULL' : 'rejected_at';
     const { rows } = await client.query(`UPDATE store.quotes SET status = $2, internal_notes = COALESCE($3, internal_notes), accepted_at = ${acceptedAtSql}, rejected_at = ${rejectedAtSql}, reviewed_at = now(), reviewed_by = $4, updated_at = now() WHERE id = $1 RETURNING *`, [id, input.status, input.internal_notes ?? null, req.user!.sub]);
@@ -102,7 +104,7 @@ router.patch('/quotes/:id/status', async (req, res, next) => {
     const orderResult = input.status === 'accepted' ? await createOrderFromAcceptedQuote({ client, quoteId: id, actorUserId: req.user!.sub }) : null;
     const availableId = oldStatus === 'in_review' && input.status === 'sent' ? await insertIntent(client, { historyId, type: 'quote_available' }) : null;
     const confirmationId = orderResult?.order ? await insertIntent(client, { historyId, type: 'order_confirmation', orderId: orderResult.order.id }) : null;
-    await client.query('COMMIT');
+    await transaction.commit();
     const quoteForEmail = { ...existing.rows[0], ...rows[0], email: existing.rows[0].email, full_name: existing.rows[0].full_name };
     if (oldStatus === 'in_review' && input.status === 'sent') {
       void journal.dispatch(availableId!, () => sendQuoteAvailableEmail({ quote: quoteForEmail }));
@@ -111,7 +113,8 @@ router.patch('/quotes/:id/status', async (req, res, next) => {
       void journal.dispatch(confirmationId!, () => sendOrderConfirmationEmail({ quote: quoteForEmail, order: orderResult.order }));
     }
     res.json(orderResult ? { quote: rows[0], order: orderResult.order } : { quote: rows[0] });
-  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
+  } catch (error) { await transaction.failed(error); next(error); }
+  finally { client.release(transaction.discard || undefined); }
 });
 
 return router;
