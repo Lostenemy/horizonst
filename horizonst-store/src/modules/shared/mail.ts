@@ -8,6 +8,7 @@ import { distributorBrochureFilename, distributorBrochurePath } from '../../reso
 import { requiredDistributorDocuments } from '../../resources/distributor-required-documents.js';
 import { PRERESERVATION_END_LABEL } from '../prereservation/prereservation.service.js';
 import { domainEnvironment } from '../../resources/store-domains.js';
+import { corporateEmail, corporateMailFooter } from './email-template.js';
 
 type SmtpResponse = { code: number; message: string };
 type SmtpSocket = Socket | TLSSocket;
@@ -49,7 +50,9 @@ export type PrereservationEmailInput = {
 };
 
 const SMTP_TIMEOUT_MS = 15000;
-const AUTO_FOOTER = 'HorizonST — Este correo ha sido generado automáticamente.';
+const AUTO_FOOTER = corporateMailFooter;
+// MIME transport lines stay <= 76 ASCII bytes, independent of template/URL length.
+const mimeBase64 = (value: string) => Buffer.from(value, 'utf8').toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '';
 
 const formatMoney = (cents: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 const baseUrl = () => env.publicBaseUrl.replace(/\/$/, '');
@@ -121,8 +124,8 @@ export class SmtpClient {
     ];
     const alternativeBoundary = `horizonst-alternative-${randomUUID()}`;
     const alternative = html
-      ? [`Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`, '', `--${alternativeBoundary}`, 'Content-Type: text/plain; charset="utf-8"', 'Content-Transfer-Encoding: 8bit', '', plainText, `--${alternativeBoundary}`, 'Content-Type: text/html; charset="utf-8"', 'Content-Transfer-Encoding: 8bit', '', html.replace(/\r?\n/g, '\r\n'), `--${alternativeBoundary}--`].join('\r\n')
-      : ['Content-Type: text/plain; charset="utf-8"', 'Content-Transfer-Encoding: 8bit', '', plainText].join('\r\n');
+      ? [`Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`, '', `--${alternativeBoundary}`, 'Content-Type: text/plain; charset="utf-8"', 'Content-Transfer-Encoding: base64', '', mimeBase64(plainText), `--${alternativeBoundary}`, 'Content-Type: text/html; charset="utf-8"', 'Content-Transfer-Encoding: base64', '', mimeBase64(html.replace(/\r?\n/g, '\r\n')), `--${alternativeBoundary}--`].join('\r\n')
+      : ['Content-Type: text/plain; charset="utf-8"', 'Content-Transfer-Encoding: base64', '', mimeBase64(plainText)].join('\r\n');
     let message = [...messageHeaders, alternative].join('\r\n');
     if (attachments.length > 0) {
       const mixedBoundary = `horizonst-mixed-${randomUUID()}`;
@@ -280,7 +283,10 @@ export function buildQuoteAvailableEmail({ quote }: QuoteEmailInput): MailConten
       `Puedes revisarlo, descargar el PDF, aceptarlo o rechazarlo en: ${quotesUrl()}`,
       '',
       AUTO_FOOTER
-    ].join('\n'), html: textHtml(`Hola ${name},\n\nTu presupuesto ${quote.quote_number} ya está disponible en HorizonST Store.`)
+    ].join('\n'), html: corporateEmail({title:'Presupuesto disponible', paragraphs:[`Hola ${name},`,
+      `Tu presupuesto ${quote.quote_number} ya está disponible en HorizonST Store.`,
+      `Importe total: ${formatMoney(quote.total_cents)}.`, 'Puedes revisarlo, descargar el PDF, aceptarlo o rechazarlo desde tu cuenta.'],
+      button:{label:'Consultar presupuesto',url:quotesUrl()}})
   };
 }
 
@@ -298,7 +304,10 @@ export function buildQuoteAcceptedCommercialEmail({ quote, order }: QuoteAccepte
       `Pedido administrativo: ${adminOrderUrl(order.id)}`,
       '',
       AUTO_FOOTER
-    ].filter((line) => line !== null).join('\n'), html: textHtml(`Presupuesto aceptado: ${quote.quote_number}\nPedido: ${order.order_number}`)
+    ].filter((line) => line !== null).join('\n'), html: corporateEmail({title:'Presupuesto aceptado', paragraphs:[
+      `Cliente: ${quote.full_name || quote.email}`, `Email: ${quote.email}`, ...(quote.role ? [`Rol: ${quote.role}`] : []),
+      `Presupuesto: ${quote.quote_number}`, `Pedido: ${order.order_number}`, `Importe total: ${formatMoney(quote.total_cents)}.`],
+      button:{label:'Consultar pedido',url:adminOrderUrl(order.id)}})
   };
 }
 
@@ -316,7 +325,10 @@ export function buildOrderConfirmationEmail({ quote, order }: OrderConfirmationE
       'Nuestro equipo comercial contactará contigo para los siguientes pasos.',
       '',
       AUTO_FOOTER
-    ].join('\n'), html: textHtml(`Hola ${name},\n\nHemos registrado tu pedido ${order.order_number}.`)
+    ].join('\n'), html: corporateEmail({title:'Pedido confirmado', paragraphs:[`Hola ${name},`,
+      `Hemos registrado tu pedido ${order.order_number} a partir del presupuesto ${quote.quote_number}.`,
+      `Importe total: ${formatMoney(quote.total_cents)}.`], button:{label:'Consultar pedidos',url:ordersUrl()},
+      after:['Nuestro equipo comercial contactará contigo para los siguientes pasos.']})
   };
 }
 
@@ -347,12 +359,14 @@ export function buildAppccGuideEmail({ email }: AppccGuideEmailInput, guideUrl =
 
 export function buildEmailVerificationEmail({ email, fullName, verificationUrl, expiresInSeconds }: EmailVerificationEmailInput): MailContent {
   const hours = Math.max(1, Math.ceil(expiresInSeconds / 3600));
-  const safeName = escapeHtml(fullName);
   return {
     to: email,
     subject: 'Verifica tu cuenta de HorizonST',
     text: [`Hola ${fullName},`, '', 'Hemos creado tu cuenta de HorizonST. Verifica tu dirección de correo para activarla:', verificationUrl, '', `El enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}. Si no solicitaste el alta, puedes ignorar este correo.`, '', AUTO_FOOTER].join('\n'),
-    html: `<!doctype html><html lang="es"><body style="margin:0;padding:24px;background:#edf4f6;font-family:Arial,Helvetica,sans-serif;color:#08233f"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px"><tr><td style="padding:28px;background:#08233f;color:#fff;font-size:22px;font-weight:bold">HorizonST</td></tr><tr><td style="padding:32px"><h1 style="margin:0 0 16px;font-size:26px">Verifica tu cuenta</h1><p>Hola ${safeName},</p><p>Hemos creado tu cuenta de HorizonST. Verifica tu dirección de correo para activarla.</p><p style="margin:28px 0"><a href="${verificationUrl}" style="display:inline-block;padding:14px 22px;background:#008d99;color:#fff;text-decoration:none;font-weight:bold;border-radius:6px">Verificar mi cuenta</a></p><p>Este enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}. Si no solicitaste el alta, puedes ignorar este correo.</p><p style="word-break:break-all;color:#536471">${verificationUrl}</p></td></tr><tr><td style="padding:18px 32px;background:#f5f8f9;color:#536471;font-size:12px">${AUTO_FOOTER}</td></tr></table></td></tr></table></body></html>`
+    html: corporateEmail({title:'Verifica tu cuenta', paragraphs:[`Hola ${fullName},`,
+      'Hemos creado tu cuenta de HorizonST. Verifica tu dirección de correo para activarla.'],
+      button:{label:'Verificar mi cuenta',url:verificationUrl},
+      after:[`Este enlace caduca en ${hours} hora${hours === 1 ? '' : 's'}. Si no solicitaste el alta, puedes ignorar este correo.`], showUrl:true})
   };
 }
 

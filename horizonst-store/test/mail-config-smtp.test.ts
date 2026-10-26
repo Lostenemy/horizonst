@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { decodeMimeText } from '../integration/email-mime.fixture.mjs';
 import { validateStoreMailConfig, type StoreMailConfig } from '../src/config/env.js';
 import { automaticMailFooter, buildAppccGuideEmail, buildDistributorWelcomeEmail, buildEmailVerificationEmail, buildOrderConfirmationEmail, buildPrereservationCommercialEmail, buildPrereservationConfirmationEmail, buildQuoteAcceptedCommercialEmail, buildQuoteAvailableEmail, sendAppccGuideEmail, sanitizeMailError, SmtpClient } from '../src/modules/shared/mail.js';
 
@@ -191,7 +192,10 @@ class FakeSocket extends EventEmitter {
   await connectPromise;
   await client.sendMail('comercial@horizonst.es', 'Subject', '.line', '<strong>HTML</strong>', [{ filename: 'HorizonST_Frio.pdf', contentType: 'application/pdf', content: Buffer.from('%PDF-test') }], 'validated@example.test');
   await client.close();
-  assert.ok(socket.writes.some((write) => write.includes('\r\n..line\r\n--')), 'DATA applies dot-stuffing');
+  const capturedMime = socket.writes.find(write => write.endsWith('\r\n.\r\n'))!;
+  assert.equal(decodeMimeText(capturedMime,'plain'),'.line','base64 preserves a leading dot without SMTP terminator ambiguity');
+  assert.equal(decodeMimeText(capturedMime,'html'),'<strong>HTML</strong>','HTML is identical after MIME decoding');
+  assert.ok(capturedMime.split('\r\n').every(line => Buffer.byteLength(line)<=998),'bounded SMTP lines');
   assert.ok(socket.writes.some((write) => write.includes('multipart/alternative')), 'DATA includes HTML alternative');
   assert.ok(socket.writes.includes(`MAIL FROM:<${mailConfig.from}>\r\n`), 'configured server sender, not visitor');
   assert.ok(socket.writes.includes('RCPT TO:<comercial@horizonst.es>\r\n'), 'fixed contact recipient');

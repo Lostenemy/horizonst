@@ -71,6 +71,17 @@ const compile = directory => {
 };
 for (const item of ['src', 'web/src', 'test', 'integration']) compile(path.join(service, item));
 const preload = path.join(__dirname, 'offline-preload.cjs');
+if (process.argv.includes('--email-previews')) run('email-previews', ['--require', preload, '--input-type=module', '-e', `
+  import fs from 'node:fs'; import path from 'node:path';
+  import * as mail from './src/modules/shared/mail.js'; import {env} from './src/config/env.js';
+  import {verifyTransactionalEmails} from './integration/email-mime.fixture.mjs';
+  const directory=${JSON.stringify(path.join(evidence, 'previews'))};
+  fs.mkdirSync(directory); const artifacts=await verifyTransactionalEmails(mail,env);
+  for(const item of artifacts) for(const [extension,key] of [['eml','mime'],['html','html'],['txt','text']])
+    fs.writeFileSync(path.join(directory,item.name+'.'+extension),item[key]);
+  fs.writeFileSync(path.join(directory,'index.html'),'<!doctype html><html lang="es"><meta charset="utf-8"><title>Correos ficticios HorizonST</title><h1>Vistas previas ficticias</h1><p>No se ha enviado correo real. No abrir enlaces externos de las plantillas.</p><ul>'+artifacts.map(item=>'<li><a href="'+item.name+'.html">'+item.name+'</a> · <a href="'+item.name+'.eml">MIME</a> · <a href="'+item.name+'.txt">Texto plano</a></li>').join('')+'</ul></html>');
+  console.log(JSON.stringify({directory,messages:artifacts.length,fictitious:true}));
+`]);
 run('suite', ['--require', preload, '--input-type=module', '-e', `
   import {readdir} from 'node:fs/promises'; import {pathToFileURL} from 'node:url'; import path from 'node:path';
   const files=(await readdir('test')).filter(n=>n.endsWith('.test.js')).sort();

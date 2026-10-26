@@ -1,0 +1,42 @@
+{
+  "status": "local_implementation_and_isolated_validation_passed_real_mail_clients_pending",
+  "branch": "codex/store-transactional-email-presentation",
+  "base": "8e471a3c607deba6eb003a6b27e76bd884eb7f79",
+  "confirmed": [
+    "Three commercial HTML templates were minimal and did not share the existing corporate verification structure.",
+    "Historical source button label was exactly Verificar mi cuenta without invisible characters.",
+    "Historical HTML measured 1380 bytes on one physical line with fictitious data; transport used 8bit.",
+    "New base64 UTF-8 parts decode exactly, preserve attachments and bound content lines to 76 characters."
+  ],
+  "notConfirmed": "The production screenshot alone cannot establish which layer introduced cue nta; original received MIME was not accessed.",
+  "versions": {"node":"22.23.4","docker":"29.8.2","postgres":"15.19","browser":"Chrome 156 Windows"},
+  "windows": {"storeModulesPassed":46,"failed":0,"skipped":0,"lifecyclePassed":24,"typecheckExitCode":0,"backendBuildExitCode":0,"frontendBuildExitCode":0,"contractsPassed":7,"fictitiousMimeMessages":8,"environments":["production","staging"],"additionalCoverage":["HTML escaping","long Unicode content and URL","PDF byte identity","exact decoded button label"]},
+  "browser": {"screenshots":8,"reviewedWidths":[375,1280],"layoutMeasurements":24,"measuredWidths":[320,375,1280],"horizontalOverflows":0,"splitButtonLabels":0,"htmlMatchesFinalDecodedMime":true,"externalLinkClicks":0,"leftOpen":true},
+  "dockerLinux": {"runtimeImage":"sha256:cf3157314b4cd7d3f3f5ec53d16146d5dd401b6f9871fdbbe3459ed6bf93d022","groupsPassed":57,"failed":0,"skipped":0,"previousSmtpDatabaseGroups":51,"simulatedPgRouterGroups":3,"simulatedPgRouterCases":30,"realPgCutGroups":3,"realPgCuts":6,"shutdownsPassed":6,"maximumShutdownMs":18507,"exitCodes":[0],"recoveryWithoutResendPassed":6,"ownedResourcesCleaned":25,"cleanupFailures":0,"dockerPublishedPorts":0},
+  "archive":"C:/Users/User/Documents/horizonst/email-presentation-evidence-e07516eed9af4eb2bea5ef9332774c2a",
+  "archiveFiles":109,
+  "manifestSha256":"87f6aab8c64dfbadf8b7addfb73b4052ff60032e4edbd09ac292cab7ac7d959f",
+  "storeEvidence":"horizonst-store-lifecycle-evidence-Kq2Pvh/summary.json",
+  "dockerEvidence":"horizonst-smtp-journal-JzQi5i/results.json",
+  "files":[
+    "horizonst-store/src/modules/shared/mail.ts",
+    "horizonst-store/src/modules/shared/email-template.ts",
+    "horizonst-store/integration/email-mime.fixture.mjs",
+    "horizonst-store/test/mail-config-smtp.test.ts",
+    "horizonst-store/test/transactional-email-presentation.test.ts",
+    "infrastructure/testing/store-lifecycle-suites.cjs",
+    "infrastructure/testing/email-preview-server.cjs",
+    "docs/store-transactional-email-presentation.md",
+    "docs/store-transactional-email-results.json",
+    "docs/store-email-previews/desktop-verification.png",
+    "docs/store-email-previews/mobile-verification.png",
+    "docs/store-email-previews/desktop-quote.png",
+    "docs/store-email-previews/mobile-quote.png",
+    "docs/store-email-previews/desktop-order.png",
+    "docs/store-email-previews/mobile-order.png",
+    "docs/store-email-previews/desktop-commercial.png",
+    "docs/store-email-previews/mobile-commercial.png"
+  ],
+  "limits":["No real-mail-client compatibility claim from browser previews.","Backend/Horneo not rerun because unchanged.","Staging and native Brotli rebuild remain with operations.","No historical notifications modified or resent; no received production MIME or screenshot token reused."],
+  "notPerformed":["push","merge","deployment","shared services/databases","real email","MQTT","hardware","physical queues","real credentials or .env reads","business policy changes","dependency changes"]
+}
