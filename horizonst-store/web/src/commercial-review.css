@@ -1,0 +1,86 @@
+/* Scoped to the commercial site; authenticated Store layout is unchanged. */
+.public-landing { line-height: 1.6; }
+.public-landing a:not(.btn) { color: #d8fbff; text-underline-offset: .2em; }
+.public-landing .lp-section { padding-block: clamp(2rem, 4.5vw, 3.75rem); }
+.public-landing .lp-section h1 { font-size: clamp(2rem, 3.6vw, 3rem); line-height: 1.15; }
+.public-landing .lp-section h2 { font-size: clamp(1.65rem, 2.8vw, 2.3rem); line-height: 1.2; }
+.public-landing .eyebrow { font-size: .78rem; }
+.public-landing .lp-nav-links { gap: .4rem; }
+.public-landing .lp-nav-links a { padding: .5rem .7rem; border-radius: .5rem; text-decoration: none; }
+.public-landing .lp-nav-links a[aria-current="page"] { color: #fff; background: #164251; box-shadow: inset 0 -3px #86f2ea; font-weight: 800; }
+.public-landing .lp-nav-links a:hover { background: #164251; }
+.public-landing .lp-revised-hero { min-height: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .85fr); gap: 2.5rem; padding-block: 3.25rem; align-items: center; }
+.public-landing .lp-revised-hero h1 { font-size: clamp(2rem, 3.3vw, 3rem); line-height: 1.15; max-width: 24ch; text-wrap: balance; }
+.lp-hero-points { padding-left: 1.2rem; margin-block: 1.25rem; color: #dff8fb; }
+.lp-hero-points li { margin-block: .35rem; }
+.lp-guide-link { display: inline-block; margin-top: 1.1rem; color: #d8fbff; text-underline-offset: .25em; }
+.public-landing .lp-operation-diagram { margin: 0; min-width: 0; padding: 1.5rem; border: 1px solid #438290; border-radius: 1.5rem; background: radial-gradient(at top right, #176270, #0b2434 75%); }
+.lp-operation-diagram ol { list-style: none; padding: 0; margin: 0; display: grid; gap: .65rem; }
+.lp-operation-diagram li { display: grid; grid-template-columns: 2.3rem 1fr; column-gap: .5rem; padding: .65rem .85rem; border: 1px solid #438290; border-radius: .75rem; background: #08233f; }
+.lp-operation-diagram li > span { grid-row: span 2; align-self: center; color: #86f2ea; font-weight: 800; }
+.public-landing .lp-operation-diagram p { font-size: .9rem; margin: 0; }
+.lp-operation-diagram figcaption { margin-top: .8rem; color: #c9e5e8; font-size: .8rem; }
+.public-landing .lp-success-case { grid-template-columns: minmax(0, 1fr) 150px; }
+.public-landing .lp-success-case img { max-width: 150px; }
+.lp-note-copy { color: #c9e5e8; font-size: .95rem; }
+.lp-case-media { grid-column: 1 / -1; }
+.public-landing .lp-use-cases { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem 2rem; align-items: center; }
+.lp-use-cases > a { justify-self: start; }
+.public-landing .lp-compact-guide { max-width: 1180px; }
+.public-landing .lp-compact-guide .lp-form { max-width: 780px; padding: 1.75rem; }
+.public-landing .lp-card { padding: 1.25rem; }
+.public-landing .lp-card p { margin-block: .3rem; }
+.public-landing .lp-plan-card ul { margin-block: .6rem; padding-left: 1.2rem; }
+.public-landing .lp-plan-card h2 { font-size: 1.45rem; }
+.public-landing .lp-price { margin-block: .25rem; }
+.public-landing .lp-price-context { margin-top: 0; font-size: .9rem; }
+.lp-comparison { margin-block: 1.5rem 2rem; }
+.lp-comparison-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border: 1px solid #438290; border-radius: .75rem; overflow: hidden; background: #438290; }
+.lp-comparison-item { padding: 1rem; background: #0b2c3d; min-width: 0; }
+.lp-comparison-item h3 { margin: 0 0 .7rem; color: #86f2ea; }
+.lp-comparison-item dl { margin: 0; }
+.lp-comparison-item dl > div { margin-top: .5rem; }
+.lp-comparison-item dt { font-size: .8rem; color: #c9e5e8; }
+.lp-comparison-item dd { margin: 0; font-weight: 700; }
+.lp-terms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+.lp-terms h3 { margin-bottom: .3rem; }
+.public-landing .lp-info-hero { padding-block: 2.5rem 1.5rem; }
+.public-landing .lp-info-hero h1 { font-size: clamp(2rem, 3.6vw, 3rem); }
+.public-landing #funcionamiento, .public-landing #guia-solicitud { scroll-margin-top: 10rem; }
+.public-landing .lp-faq summary { min-height: 44px; }
+.public-landing .lp-faq summary:focus-visible { outline: 3px solid #86f2ea; outline-offset: -4px; }
+.public-landing .lp-faq details p + p { padding-top: 0; }
+.public-landing .lp-modal-close { width: 44px; min-height: 44px; background: #08233f; color: #fff; border: 2px solid #86f2ea; font-size: 1.7rem; line-height: 1; }
+.public-landing .lp-modal { padding-top: 3.75rem; }
+.public-landing .lp-privacy { display: flex !important; align-items: flex-start; gap: .65rem; line-height: 1.5; }
+.public-landing .lp-privacy input[type="checkbox"] { width: 1.15rem; height: 1.15rem; min-width: 1.15rem; flex: 0 0 1.15rem; margin: .2rem 0 0; padding: 0; }
+.public-landing .lp-field-hint { margin: 0; font-size: .9rem; }
+.public-landing .lp-form small { text-transform: none; letter-spacing: normal; font-weight: 500; color: #c9e5e8; }
+.public-landing .error { color: #ffb4ab; }
+.public-landing .success { color: #86f2ea; }
+.public-landing .public-contact { max-width: 920px; }
+.public-landing .public-contact > p { max-width: 70ch; }
+@media (max-width: 900px) {
+  .public-landing .lp-revised-hero { grid-template-columns: 1fr; gap: 1.5rem; padding-block: 2.25rem; }
+  .public-landing .lp-operation-diagram ol { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .public-landing .lp-operation-diagram li { display: block; }
+  .lp-operation-diagram strong { display: block; }
+  .public-landing .lp-nav { flex-wrap: wrap; }
+  .public-landing .lp-nav .btn { width: auto; }
+  .public-landing .lp-nav-links { justify-content: center; }
+}
+@media (max-width: 600px) {
+  .public-landing .lp-revised-hero h1 { font-size: 2rem; }
+  .public-landing .lp-operation-diagram ol { grid-template-columns: 1fr; }
+  .public-landing .lp-operation-diagram li { display: grid; }
+  .public-landing .lp-success-case { grid-template-columns: 1fr; gap: .75rem; }
+  .public-landing .lp-success-case img { max-width: 100px; }
+  .public-landing .lp-use-cases, .lp-comparison-grid, .lp-terms { grid-template-columns: 1fr; }
+  .lp-comparison-item dl { display: grid; grid-template-columns: 1fr 1fr; gap: .25rem .75rem; }
+  .lp-comparison-item dl > div:first-child { grid-column: 1 / -1; }
+  .public-landing .lp-nav-links { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .public-landing .lp-nav-links a { min-height: 44px; text-align: center; }
+  .public-landing .actions { align-items: stretch; }
+  .public-landing .actions .btn { text-align: center; }
+  .public-landing .lp-modal { padding: 3.75rem 1.25rem 1.25rem; }
+}

@@ -29,16 +29,16 @@ export default function PublicContact() {
       setStatus('sent'); setName(''); setEmail(''); setMessage(''); setPrivacy(false);
     } catch { setStatus('error'); } finally { inFlight.current = false; }
   };
-  return <main className="public-landing"><PublicNav /><section className="lp-section public-contact"><h1>Contacto</h1><p>Cuéntanos qué necesitas. Nuestro equipo comercial responderá a tu correo.</p>
+  return <main className="public-landing"><PublicNav /><section className="lp-section public-contact"><h1>Cuéntanos cómo es tu instalación</h1><p>Cuéntanos cuántas cámaras tienes y cómo trabaja tu equipo. Te orientaremos sobre la configuración y los siguientes pasos para estudiar tu instalación.</p>
     <form ref={form} className="lp-form" noValidate onSubmit={submit} aria-busy={status === 'sending'}>
       <label htmlFor="contact-name">Nombre</label><input id="contact-name" name="fullName" required minLength={2} maxLength={200} autoComplete="name" value={fullName} disabled={status === 'sending'} onChange={(e) => setName(e.target.value)} aria-invalid={!!errors.fullName} aria-describedby="contact-name-help" />
       <small id="contact-name-help">{errors.fullName ?? 'Entre 2 y 200 caracteres.'}</small>
       <label htmlFor="contact-email">Correo electrónico</label><input id="contact-email" name="email" type="email" required maxLength={320} autoComplete="email" value={email} disabled={status === 'sending'} onChange={(e) => setEmail(e.target.value)} aria-invalid={!!errors.email} aria-describedby="contact-email-help" />
       <small id="contact-email-help">{errors.email ?? 'Lo utilizaremos para responderte.'}</small>
-      <label htmlFor="contact-message">Mensaje</label><textarea id="contact-message" name="message" required minLength={10} maxLength={2000} rows={6} value={message} disabled={status === 'sending'} onChange={(e) => setMessage(e.target.value)} aria-invalid={!!errors.message} aria-describedby="contact-message-help" />
+      <label htmlFor="contact-message">Mensaje</label><p className="lp-field-hint" id="contact-message-context">Puedes indicar el número de cámaras, su superficie aproximada y cuántas personas las utilizan. No necesitas conocer los detalles técnicos.</p><textarea id="contact-message" name="message" required minLength={10} maxLength={2000} rows={6} value={message} disabled={status === 'sending'} onChange={(e) => setMessage(e.target.value)} aria-invalid={!!errors.message} aria-describedby="contact-message-context contact-message-help" />
       <small id="contact-message-help">{errors.message ?? 'Entre 10 y 2000 caracteres.'}</small>
       <label className="lp-honeypot" aria-hidden="true">Web<input tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} /></label>
-      <label className="lp-privacy" htmlFor="contact-privacy"><input id="contact-privacy" name="privacyAccepted" type="checkbox" required checked={privacyAccepted} disabled={status === 'sending'} onChange={(e) => setPrivacy(e.target.checked)} aria-invalid={!!errors.privacyAccepted} aria-describedby="contact-privacy-help" /> He leído y acepto la <a href="/privacidad">política de privacidad</a>.</label>
+      <label className="lp-privacy" htmlFor="contact-privacy"><input id="contact-privacy" name="privacyAccepted" type="checkbox" required checked={privacyAccepted} disabled={status === 'sending'} onChange={(e) => setPrivacy(e.target.checked)} aria-invalid={!!errors.privacyAccepted} aria-describedby="contact-privacy-help" /><span>He leído y acepto la <a href="/privacidad">política de privacidad</a>.</span></label>
       <small id="contact-privacy-help">{errors.privacyAccepted}</small>
       {Object.keys(errors).length > 0 && <p role="alert">Revisa los campos indicados antes de enviar.</p>}
       <button type="submit" disabled={status === 'sending' || status === 'sent'}>{status === 'sending' ? 'Enviando...' : 'Enviar mensaje'}</button>

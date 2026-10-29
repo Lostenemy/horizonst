@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const { renderToStaticMarkup } = createRequire(new URL('../web/package.json', import.meta.url))('react-dom/server') as typeof import('react-dom/server');
 import { readFile } from 'node:fs/promises';
 import { AnnualServiceTerms, annualServiceTerms, enterpriseTerms } from '../web/src/components/AnnualServiceTerms.js';
 import { PublicPlanCards, PublicHome, PublicInfoFaqs } from '../web/src/pages/PublicLanding.js';
@@ -35,7 +37,7 @@ assert.equal(quoteStatusLabels.in_review, 'En revisión');
 assert.equal(quoteStatusLabels.sent, 'Propuesta enviada');
 for (const code of ['submitted', 'in_review', 'sent'] as const) assert.equal(displayLabel(code), quoteStatusLabels[code]);
 
-const publicContent = JSON.stringify([PublicHome(), PublicInfoFaqs(), cards, terms]);
+const publicContent = renderToStaticMarkup(PublicHome()) + renderToStaticMarkup(PublicInfoFaqs()) + cards + terms;
 assert.match(publicContent, /aproximadamente 400 m²/);
 assert.match(publicContent, /10 trabajadores distintos/);
 assert.match(publicContent, /no un resultado medido ni una garantía de seguridad/);

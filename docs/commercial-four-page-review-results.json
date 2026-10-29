@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-29",
+  "status": "ready_for_local_review_not_published",
+  "branch": "codex/commercial-four-page-review",
+  "baseCommit": "1546eb4c0572033411329fa6aa6aed0c0656bb70",
+  "runtime": "Node 22.23.4",
+  "platform": "Windows",
+  "suite": {
+    "command": "node infrastructure/testing/store-lifecycle-suites.cjs",
+    "workspace": "C:/Users/User/AppData/Local/Temp/horizonst-store-lifecycle-gxNQyq",
+    "evidence": "C:/Users/User/AppData/Local/Temp/horizonst-store-lifecycle-evidence-0JkeM9",
+    "typecheckExitCode": 0,
+    "backendBuildExitCode": 0,
+    "frontendBuildExitCode": 0,
+    "storeModulesPassed": 47,
+    "failedModules": 0,
+    "omittedModules": 0,
+    "lifecycle": { "processes": 3, "passed": 24, "failed": 0, "skipped": 0 },
+    "scope": "Store only, isolated fixtures. Not a real email, database or physical-system validation."
+  },
+  "browser": {
+    "tool": "Playwright CLI, local Chrome",
+    "evidence": "output/playwright/commercial-review-20261029/browser-checks-final-v2.log",
+    "passed": 87,
+    "failed": 0,
+    "viewportWidths": [320, 390, 768, 1366, 1440],
+    "pageViewportCombinations": 20,
+    "screenshots": 12,
+    "screenshotsDirectory": "output/playwright/commercial-review-20261029",
+    "reviewedVisually": "Four pages desktop/mobile, modal desktop/mobile, contact invalid/error. Horneo logo source also inspected.",
+    "network": "All browser requests intercepted; static files from loopback only; API fixtures fulfilled in browser.",
+    "fictitiousAnnualPricesCents": [61500, 82500, 125000],
+    "simulatedContactPosts": 2,
+    "realContactPosts": 0,
+    "guidePosts": 0,
+    "prereservationPosts": 0,
+    "javascriptErrors": 0
+  },
+  "previousFailuresPreserved": [
+    "horizonst-store-lifecycle-evidence-FLvPPP: test package resolution react-dom",
+    "horizonst-store-lifecycle-evidence-odk8FC: test package resolution react",
+    "horizonst-store-lifecycle-evidence-mf6rTd: old textual title expectation",
+    "CLI long argument rejected before execution; replaced by --filename"
+  ],
+  "pending": [
+    "Real end-to-end submissions only in a separately authorized isolated test environment",
+    "Other browsers, physical devices and assistive-technology testing",
+    "Authorized Horneo testimonial and possible real video",
+    "Reviewed new designer resources",
+    "Team confirmation of stock, rollout dates, binding commercial details and specific installation/maintenance/alert-channel requirements"
+  ],
+  "safety": {
+    "backendSourceChanged": false,
+    "pricesConditionsOrCalculationRulesChanged": false,
+    "credentialsOrEnvRead": false,
+    "dependenciesOrLockfilesChanged": false,
+    "sharedServicesOrAtlasAccessed": false,
+    "realEmailOrHardwareActions": false,
+    "pushMergePublicationDeployment": false,
+    "preexistingFilesPreserved": true,
+    "browserTabsClosed": false
+  }
+}
