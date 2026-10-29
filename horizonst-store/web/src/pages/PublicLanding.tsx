@@ -36,29 +36,31 @@ export const buildPublicPlanCards = (plans: SaasPlan[]) => {
 
 export function PublicPlanCards({ plans, loading, error, campaign, onPrereserve }: { plans: SaasPlan[]; loading: boolean; error: boolean; campaign?: PrereservationCampaign | null; onPrereserve?: (code: PrereservationCode, trigger: HTMLButtonElement) => void }) {
   if (loading) return <p className="lp-note" role="status">Cargando precios de los planes...</p>;
-  if (error) return <p className="lp-note error" role="alert">No se pudieron cargar los precios. Solicita presupuesto y te ayudaremos.</p>;
+  if (error && plans.length === 0) return <p className="lp-note error" role="alert">No se pudieron cargar los precios. Solicita presupuesto y te ayudaremos.</p>;
 
   const cards = buildPublicPlanCards(plans);
   if (cards.length === 0) return <p className="lp-note">No hay planes disponibles en este momento. Solicita presupuesto para recibir orientación.</p>;
 
   return <>
+    {error && <p className="lp-note error" role="alert">No se pudieron actualizar los precios. Se muestran los últimos datos cargados como referencia. La acción de prerreserva no está disponible hasta recuperar la consulta; puedes contactar con el equipo comercial.</p>}
     <section className="lp-comparison" aria-labelledby="comparison-title">
       <h2 id="comparison-title">Compara capacidad y cuota</h2>
-      <p>Cuotas de aplicación y capacidades totales. El hardware se presenta por separado.</p>
       <div className="lp-comparison-grid">{cards.map((card) => <div key={card.code} className="lp-comparison-item">
-        <h3>{card.name}</h3><dl><div><dt>Cuota anual de aplicación</dt><dd>{card.price}</dd></div>
+        <h3>{card.name}</h3><p className="lp-price-context">Cuota anual de aplicación</p><p className="lp-price">{card.price}</p>
+        <dl>
           <div><dt>Dispositivos personales</dt><dd>{card.maxTags ?? 'Consultar'}</dd></div>
           <div><dt>Puntos de comunicación</dt><dd>{card.maxGateways ?? 'Consultar'}</dd></div></dl>
+        {onPrereserve && campaign?.active
+          ? <button className="lp-plan-action" type="button" aria-disabled={error || undefined} onClick={(event) => { if (!error) onPrereserve(card.code, event.currentTarget); }}>Prerreservar con 5 % de descuento</button>
+          : <a className="btn lp-plan-action" href="/contacto">Consultar condiciones actuales</a>}
       </div>)}</div>
+      <div className="lp-service-essential"><p>{annualServiceTerms.included}</p>
+        <p>Hardware no incluido. {annualServiceTerms.excluded}</p><p>{annualServiceTerms.renewal}</p>
+        <p className="lp-enterprise-note">Enterprise es un plan completo e independiente. No requiere Professional.</p></div>
+      <details className="lp-service-details"><summary>Detalle del servicio y condiciones</summary>
+        <p>{annualServiceTerms.support}</p><p>{enterpriseTerms}</p>
+      </details>
     </section>
-    <div className="lp-grid three">{cards.map((card) => <article className="lp-card lp-plan-card" key={card.code}>
-      <h2>{card.name}</h2><p className="lp-price">{card.price}</p><p className="lp-price-context">Cuota anual de aplicación. Hardware e instalación no incluidos.</p>
-      <p>{card.description}</p><p>Capacidad total: {card.maxTags ?? 'Consultar'} dispositivos personales · {card.maxGateways ?? 'Consultar'} puntos de comunicación.</p>
-      {onPrereserve && campaign?.active ? <button type="button" onClick={(event) => onPrereserve(card.code, event.currentTarget)}>Prerreservar con 5 % de descuento</button> : <a className="btn" href="/contacto">Consultar condiciones actuales</a>}
-    </article>)}</div>
-    <div className="lp-terms"><section><h3>Incluye</h3><p>{annualServiceTerms.included}</p><p>{annualServiceTerms.support}</p></section>
-      <section><h3>No incluye</h3><p>{annualServiceTerms.excluded}</p></section></div>
-    <p className="lp-note">{annualServiceTerms.renewal}</p><p className="lp-note">{enterpriseTerms}</p>
     {cards.length < publicPlanCodes.length && <p className="lp-note">Algunas opciones no están disponibles en este momento. Contacta con nosotros para recibir orientación.</p>}
   </>;
 }
@@ -237,10 +239,13 @@ export function PublicPlans() {
   const openPrereservation = (code: PrereservationCode, trigger: HTMLButtonElement) => { setModalTrigger(trigger); setSelectedCode(code); };
   const closePrereservation = useCallback(() => setSelectedCode(null), []);
   return <main className="public-landing"><PublicNav /><section className="lp-section lp-plans-page"><p className="eyebrow">Planes</p><h1>Planes de la aplicación HorizonST</h1>
-    {campaign && <p>{campaign.active ? 'Oferta de prerreserva disponible hasta el' : 'La campaña de prerreserva finalizó el'} {prereservationEndLabel(campaign.endAt)} (inclusive, Europe/Madrid).</p>}
+    {campaign && <p>{campaign.active ? 'Oferta de prerreserva disponible hasta el' : 'La campaña de prerreserva finalizó el'} {prereservationEndLabel(campaign.endAt)}, incluido. Fecha de referencia: hora peninsular española.</p>}
     <PublicPlanCards plans={plans} loading={loading} error={error} campaign={campaign} onPrereserve={openPrereservation} />
-    <h2 className="lp-subheading">Hardware para la instalación</h2><p>La aplicación y el hardware son conceptos distintos. Estas son las opciones publicadas de hardware; la propuesta concreta la combinación adecuada y los servicios adicionales. Las superficies son orientativas, no una garantía de cobertura.</p>
-    <div className="lp-grid three">{hardwarePacks.map((pack) => <article className="lp-card lp-plan-card" key={pack.name}><h2>{pack.name}</h2><p><strong>{coverageLabel(pack.coverageSquareMeters)}</strong></p><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><p>Hardware de pago único. Precio y condiciones en la tienda B2B; aplicación de cuota anual aparte.</p><a className="btn" href={customerAccessUrl()}>Tienda B2B</a></article>)}</div>
+    <h2 className="lp-subheading">Hardware para la instalación</h2><p>Hardware de pago único; aplicación de cuota anual aparte. Estas opciones publicadas requieren un estudio de la instalación: la cobertura es orientativa y no está garantizada. La propuesta concreta la combinación y los servicios adicionales; los nombres de las opciones no vinculan por sí solos un paquete a la capacidad de la aplicación.</p>
+    <div className="lp-hardware-options">{hardwarePacks.map((pack) => <details className="lp-hardware-option" key={pack.name}>
+      <summary><strong>{pack.name}</strong><span>{coverageLabel(pack.coverageSquareMeters)}</span></summary>
+      <div><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><a className="btn" href={customerAccessUrl()}>Tienda B2B</a></div>
+    </details>)}</div>
     <p><a href="/contacto">Consultar la configuración de mi instalación</a></p>
     </section>{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={closePrereservation} />}<PublicFooter /></main>;
 }

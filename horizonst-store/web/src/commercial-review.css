@@ -60,6 +60,25 @@
 .public-landing .success { color: #86f2ea; }
 .public-landing .public-contact { max-width: 920px; }
 .public-landing .public-contact > p { max-width: 70ch; }
+/* Plans-only polish: a single decision surface and persistent native disclosures. */
+.lp-plans-page .lp-comparison-item { display: flex; flex-direction: column; gap: .4rem; }
+.lp-plans-page .lp-comparison-item h3 { margin-bottom: 0; }
+.lp-plans-page .lp-comparison-item p { margin: 0; }
+.lp-plans-page .lp-comparison-item .lp-price { font-size: 1.2rem; line-height: 1.45; }
+.lp-plans-page .lp-comparison-item dl { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-block: .2rem .6rem; }
+.lp-plans-page .lp-comparison-item dt { font-size: .9rem; }
+.lp-plans-page .lp-plan-action { margin-top: auto; min-height: 44px; font-size: .9rem; text-align: center; }
+.lp-plans-page .lp-plan-action[aria-disabled="true"] { opacity: .7; cursor: not-allowed; }
+.lp-plans-page .lp-enterprise-note { font-size: .9rem; color: #c9e5e8; }
+.lp-plans-page .lp-service-essential { margin-block: 1rem; font-size: .95rem; }
+.lp-plans-page .lp-service-essential p { margin-block: .35rem; }
+.lp-plans-page .lp-service-details, .lp-plans-page .lp-hardware-option { border: 1px solid #438290; border-radius: .75rem; background: #0b2c3d; }
+.lp-plans-page .lp-service-details summary, .lp-plans-page .lp-hardware-option summary { padding: .85rem 1rem; cursor: pointer; min-height: 44px; font-weight: 700; }
+.lp-plans-page summary:focus-visible { outline: 3px solid #86f2ea; outline-offset: -4px; border-radius: .75rem; }
+.lp-plans-page .lp-service-details > p, .lp-plans-page .lp-hardware-option > div { margin: 0; padding: 0 1rem 1rem; }
+.lp-plans-page .lp-hardware-options { display: grid; gap: .65rem; }
+.lp-plans-page .lp-hardware-option summary span { display: inline-block; margin-left: 1rem; font-size: .95rem; font-weight: 500; color: #c9e5e8; }
+.lp-plans-page .lp-hardware-option ul { margin-top: 0; padding-left: 1.25rem; }
 @media (max-width: 900px) {
   .public-landing .lp-revised-hero { grid-template-columns: 1fr; gap: 1.5rem; padding-block: 2.25rem; }
   .public-landing .lp-operation-diagram ol { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -78,6 +97,8 @@
   .public-landing .lp-use-cases, .lp-comparison-grid, .lp-terms { grid-template-columns: 1fr; }
   .lp-comparison-item dl { display: grid; grid-template-columns: 1fr 1fr; gap: .25rem .75rem; }
   .lp-comparison-item dl > div:first-child { grid-column: 1 / -1; }
+  .lp-plans-page .lp-comparison-item dl > div:first-child { grid-column: auto; }
+  .lp-plans-page .lp-hardware-option summary span { display: block; margin-left: 1.25rem; }
   .public-landing .lp-nav-links { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .public-landing .lp-nav-links a { min-height: 44px; text-align: center; }
   .public-landing .actions { align-items: stretch; }
