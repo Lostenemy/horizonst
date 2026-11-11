@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-03",
+  "branch": "codex/commercial-v3-collaborations",
+  "base": "ae33b10b1cf566a0df3e7d867f2f19969e6f9f15",
+  "status": "local_preview_for_review",
+  "confirmedBlocks": [2, 3, 4, 6],
+  "homeRetainsConceptualDiagram": true,
+  "measurement": [
+    { "width": 390, "path": "/", "before": 8607, "after": 4009, "reductionPercent": 53.4, "heroIdentical": true },
+    { "width": 1440, "path": "/", "before": 5779, "after": 2519, "reductionPercent": 56.4, "heroIdentical": true },
+    { "width": 390, "path": "/info-faqs", "before": 4402, "after": 8473 },
+    { "width": 1440, "path": "/info-faqs", "before": 3303, "after": 6299 }
+  ],
+  "validation": {
+    "runtime": "Node 22.23.4 / Windows",
+    "backendTypecheck": 0, "frontendTypecheck": 0, "backendBuild": 0, "frontendBuild": 0,
+    "storeModulesPassed": 51, "storeModulesFailed": 0, "storeModulesOmitted": 0,
+    "lifecyclePassed": 24, "lifecycleFailed": 0, "lifecycleSkipped": 0,
+    "browserBeforePassed": 8, "browserAfterPassed": 30, "browserAfterFailed": 0,
+    "attemptedWrites": 0, "javascriptErrors": 0,
+    "suites": "C:/Users/User/AppData/Local/Temp/horizonst-store-lifecycle-evidence-L1GMbP/summary.json",
+    "browserEvidence": "output/playwright/home-shortening-20261103/"
+  },
+  "deploymentAuthorized": false,
+  "pending": ["Approval for publication", "Authorized real mail validation", "Other browsers and assistive technologies"]
+}

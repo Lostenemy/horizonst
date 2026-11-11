@@ -26,7 +26,7 @@ assert.equal((partial.match(/class="lp-comparison-item"/g) ?? []).length, 1);
 assert.match(partial, /Contactar/); assert.match(partial, /Consultar/); assert.match(partial, /Algunas opciones/);
 assert.equal(buildPublicPlanCards([{ ...plans[0], is_active: false }]).length, 0);
 assert.match(render({ loading: true }), /role="status"/);
-assert.match(render({ error: true, plans: [] }), /role="alert"/);
+assert.equal(render({ error: true, plans: [] }), '', 'initial price failure no longer renders the removed alert box');
 assert.match(render({ error: true }), /últimos datos cargados como referencia/);
 assert.match(render({ plans: [] }), /No hay planes disponibles/);
 const campaign = { active: true, campaign: 'fixture', endAt: '2027-01-01T22:59:59.999Z', codes: ['starter', 'professional', 'enterprise'] as ('starter' | 'professional' | 'enterprise')[] };

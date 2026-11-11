@@ -1,4 +1,9 @@
-import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { PublicNav, PublicFooter } from '../components/PublicMarketingShell';
+import { CommercialSection } from './CommercialContent';
+import { commercialCopy } from '../lib/commercial-copy';
+export { PublicNav, PublicFooter, HorneoCase } from '../components/PublicMarketingShell';
+export { CommercialHome as PublicHome, CommercialInfo as PublicInfoFaqs } from './CommercialContent';
 import { api } from '../lib/api';
 import { canAutoPriceSaasPlan } from '../lib/commercialPricing';
 import { customerAccessUrl } from '../lib/domains';
@@ -36,7 +41,7 @@ export const buildPublicPlanCards = (plans: SaasPlan[]) => {
 
 export function PublicPlanCards({ plans, loading, error, campaign, onPrereserve }: { plans: SaasPlan[]; loading: boolean; error: boolean; campaign?: PrereservationCampaign | null; onPrereserve?: (code: PrereservationCode, trigger: HTMLButtonElement) => void }) {
   if (loading) return <p className="lp-note" role="status">Cargando precios de los planes...</p>;
-  if (error && plans.length === 0) return <p className="lp-note error" role="alert">No se pudieron cargar los precios. Solicita presupuesto y te ayudaremos.</p>;
+  if (error && plans.length === 0) return null;
 
   const cards = buildPublicPlanCards(plans);
   if (cards.length === 0) return <p className="lp-note">No hay planes disponibles en este momento. Solicita presupuesto para recibir orientación.</p>;
@@ -70,92 +75,6 @@ export const hardwarePacks = [
   { name: 'Professional', coverageSquareMeters: 1000, items: ['10 puntos de comunicación inalámbrica', '10 antenas y accesorios de instalación', '2 inyectores de alimentación PoE', '20 dispositivos personales inalámbricos con alarma'] },
   { name: 'Enterprise', coverageSquareMeters: 2000, items: ['20 puntos de comunicación inalámbrica', '20 antenas y accesorios de instalación', '4 inyectores de alimentación PoE', '40 dispositivos personales inalámbricos con alarma'] }
 ];
-
-export const faqItems = [
-  ['¿Cómo funciona HorizonST?', 'Un dispositivo personal se identifica a través de los puntos de comunicación de la instalación.', 'El panel privado organiza accesos, permanencias, alertas e incidencias para el equipo autorizado.'],
-  ['¿Cómo se definen los tiempos de permanencia?', 'Los define cada centro; no hay un tiempo universal.', 'Se establecen conforme a su evaluación de riesgos, procedimientos internos y organización del trabajo.'],
-  ['¿Qué ocurre cuando se genera una alerta?', 'El equipo responsable comprueba la situación conforme a su procedimiento.', 'HorizonST aporta información de contexto; no sustituye la intervención ni los procedimientos del centro.'],
-  ['¿Qué necesita la instalación?', 'Alimentación eléctrica y conexión a Internet.', 'La cobertura y la organización se evalúan antes de implantar. Las superficies orientativas no garantizan cobertura.'],
-  ['¿Se necesita realizar obras?', 'Debe evaluarse en cada instalación.', 'No se presupone la necesidad ni la ausencia de obras sin estudiar la cámara y su infraestructura.'],
-  ['¿Dónde se consultan los registros?', 'En el panel operativo privado de la instalación.', 'La tienda B2B gestiona catálogo y presupuestos, no los registros de la cámara. Para obtener acceso operativo, consulta al responsable de tu instalación.'],
-  ['¿Qué incluye la cuota anual?', 'Uso de la aplicación, actualizaciones y soporte básico de la aplicación.', 'El soporte básico cubre consultas por correo e incidencias de funcionamiento. No incluye instalación, mantenimiento de hardware ni otros servicios. La renovación requiere aceptación previa del cliente.'],
-  ['¿El hardware está incluido en la cuota?', 'No. El hardware es de pago único y la aplicación tiene una cuota anual.', 'La propuesta comercial concreta la configuración, los servicios y costes adicionales.'],
-  ['¿Necesito Professional antes de Enterprise?', 'No. Enterprise es un plan completo e independiente.', 'Puede contratarse desde cero o como ampliación de un plan existente; sus condiciones se acuerdan en la propuesta comercial.'],
-  ['¿Puede adaptarse a varias cámaras o centros?', 'La configuración se estudia según las cámaras y la organización.', 'Consulta los planes y solicita orientación para evaluar las necesidades de tu instalación.']
-];
-
-function OperationDiagram() {
-  return <figure className="lp-operation-diagram" aria-labelledby="operation-caption">
-    <p className="eyebrow">De la detección a la consulta</p>
-    <ol><li><span aria-hidden="true">01</span><strong>Accesos</strong><p>Identificación en la instalación</p></li>
-      <li><span aria-hidden="true">02</span><strong>Permanencias</strong><p>Seguimiento y alertas</p></li>
-      <li><span aria-hidden="true">03</span><strong>Historial</strong><p>Revisión por el equipo autorizado</p></li></ol>
-    <figcaption id="operation-caption">Esquema conceptual. No representa hardware ni una instalación real.</figcaption>
-  </figure>;
-}
-
-export function PublicNav() {
-  const pathname = typeof window === 'undefined' ? '/' : window.location.pathname;
-  return <nav className="lp-nav" aria-label="Navegación pública">
-    <a className="lp-brand" href="/">HorizonST</a>
-    <div className="lp-nav-links">{[['/', 'Inicio'], ['/planes', 'Planes'], ['/info-faqs', 'Cómo funciona'], ['/contacto', 'Contacto']].map(([href, label]) =>
-      <a key={href} href={href} aria-current={pathname === href ? 'page' : undefined}>{label}</a>)}</div>
-    <a className="btn secondary" href={customerAccessUrl()}>Tienda B2B</a>
-  </nav>;
-}
-
-export function PublicFooter() {
-  return <footer className="lp-footer"><p>HorizonST · Supervisión operativa para cámaras congeladoras</p><nav aria-label="Legal"><a href="/contacto">Contacto</a><a href="/aviso-legal">Aviso legal</a><a href="/privacidad">Privacidad</a></nav></footer>;
-}
-
-function GuideForm() {
-  const [email, setEmail] = useState(''); const [privacyAccepted, setPrivacyAccepted] = useState(false); const [website, setWebsite] = useState(''); const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
-  const submit = async (event: FormEvent) => { event.preventDefault(); setStatus('sending'); try { const response = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'appcc_guide', email, privacyAccepted, website }) }); if (!response.ok) throw new Error('guide_failed'); setStatus('sent'); setEmail(''); setPrivacyAccepted(false); setWebsite(''); } catch { setStatus('error'); } };
-  return <form id="guia-solicitud" className="lp-form" onSubmit={submit} data-lead-source="appcc_guide" aria-labelledby="guide-request-title">
-    <p className="eyebrow">Recurso gratuito</p><h2 id="guide-request-title">Guía 2026 para la seguridad en cámaras congeladoras</h2><p>Un documento práctico sobre accesos, permanencias, alertas e incidencias.</p>
-    <label>Email profesional<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-    <label className="lp-honeypot" aria-hidden="true">Web<input tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} /></label>
-    <label className="lp-privacy"><input required type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} /><span>He leído y acepto la <a href="/privacidad">política de privacidad</a>.</span></label>
-    <button type="submit" disabled={status === 'sending'}>{status === 'sending' ? 'Enviando...' : 'Recibir la guía por email'}</button>
-    {status === 'sent' && <p className="success" role="status" aria-live="polite">Revisa tu correo para acceder a la guía.</p>}{status === 'error' && <p className="error" role="alert">No se pudo enviar la guía. Inténtalo de nuevo más tarde.</p>}
-  </form>;
-}
-
-// Optional slot for future reviewed material; no testimonial/video or placeholder ships.
-export function HorneoCase({ approvedMedia }: { approvedMedia?: React.ReactNode } = {}) {
-  return <section className="lp-section lp-success-case" aria-labelledby="horneo-case-title">
-    <div><p className="eyebrow">Implantación</p><h2 id="horneo-case-title">Horneo: un caso real</h2>
-      <p>Horneo ya utiliza HorizonST en una cámara frigorífica de aproximadamente 400 m² para supervisar la actividad de 10 trabajadores distintos.</p>
-      <p className="lp-note-copy">Este caso describe una instalación, no un resultado medido ni una garantía de seguridad. Los procedimientos de trabajo y respuesta corresponden al centro.</p></div>
-    <img src="/images/casos-exito/horneo.png" alt="Logotipo de Horneo" width="320" height="320" loading="lazy" decoding="async" />
-    {approvedMedia && <div className="lp-case-media">{approvedMedia}</div>}
-  </section>;
-}
-
-export function PublicHome() {
-  return <main className="public-landing"><PublicNav />
-    <section className="lp-hero lp-revised-hero"><div className="lp-hero-copy"><p className="eyebrow">Supervisión en frío extremo</p>
-      <h1>Supervisa accesos y permanencias en tus cámaras congeladoras.</h1>
-      <ul className="lp-hero-points"><li>Controla los tiempos de permanencia.</li><li>Recibe alertas para comprobar la situación.</li><li>Consulta el historial de actividad e incidencias.</li></ul>
-      <div className="actions"><a className="btn" href="/contacto">Consultar mi instalación</a><a className="btn ghost" href="/info-faqs#funcionamiento">Ver cómo funciona</a></div>
-      <a className="lp-guide-link" href="#guia-solicitud">Recurso complementario: guía gratuita</a></div><OperationDiagram />
-    </section>
-    <HorneoCase />
-    <section className="lp-section" aria-labelledby="home-process-title"><p className="eyebrow">Cómo se organiza</p><h2 id="home-process-title">Detecciones, seguimiento y consulta.</h2>
-      <div className="lp-grid three"><article className="lp-card"><h3>Identifica la actividad</h3><p>Dispositivos personales y puntos de comunicación mediante tecnologías inalámbricas.</p></article>
-        <article className="lp-card"><h3>Comprueba las alertas</h3><p>El equipo responsable dispone de contexto para aplicar su procedimiento interno.</p></article>
-        <article className="lp-card"><h3>Revisa el historial</h3><p>Consulta sesiones e incidencias desde el panel privado de la instalación.</p></article></div>
-      <p className="lp-note-copy">Los tiempos, la intervención y los procedimientos los define cada centro. HorizonST no sustituye esa responsabilidad.</p>
-    </section>
-    <section className="lp-section lp-use-cases" aria-labelledby="sectors-title"><div><p className="eyebrow">Dónde se utiliza</p><h2 id="sectors-title">En operaciones con cámaras de frío.</h2>
-      <p>La configuración se estudia según las cámaras, los trabajadores y la organización del centro.</p></div>
-      <ul><li>Cámaras frigoríficas</li><li>Almacenes de producto congelado</li><li>Procesos de alimentación y almacenamiento especializado</li></ul>
-      <a className="btn secondary" href="/planes">Ver planes</a>
-    </section>
-    <section id="guia" className="lp-section lp-compact-guide" aria-labelledby="guide-request-title"><GuideForm /></section>
-    <section className="lp-section lp-final-cta"><h2>Estudiemos tu instalación.</h2><p>Cuéntanos cómo son tus cámaras y cómo trabaja tu equipo.</p><a className="btn" href="/contacto">Consultar mi instalación</a></section>
-    <PublicFooter /></main>;
-}
 
 function PrereservationAccessModal({ code, trigger, onClose }: { code: PrereservationCode; trigger: HTMLButtonElement | null; onClose: () => void }) {
   const [email, setEmail] = useState('');
@@ -218,9 +137,11 @@ export function PublicPlans() {
   const [campaign, setCampaign] = useState<PrereservationCampaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const requestedCode = new URLSearchParams(window.location.search).get('prerreserva');
+  const requestedCode = typeof window === 'undefined' || typeof document === 'undefined' || document.getElementById('root')?.dataset.prerendered === 'true' ? null : new URLSearchParams(window.location.search).get('prerreserva');
   const [selectedCode, setSelectedCode] = useState<PrereservationCode | null>(isPrereservationCode(requestedCode) ? requestedCode : null);
   const [modalTrigger, setModalTrigger] = useState<HTMLButtonElement | null>(null);
+
+  useEffect(() => { const code = new URLSearchParams(window.location.search).get('prerreserva'); if (isPrereservationCode(code)) setSelectedCode(code); }, []);
 
   useEffect(() => {
     let active = true;
@@ -238,7 +159,7 @@ export function PublicPlans() {
 
   const openPrereservation = (code: PrereservationCode, trigger: HTMLButtonElement) => { setModalTrigger(trigger); setSelectedCode(code); };
   const closePrereservation = useCallback(() => setSelectedCode(null), []);
-  return <main className="public-landing"><PublicNav /><section className="lp-section lp-plans-page"><p className="eyebrow">Planes</p><h1>Planes de la aplicación HorizonST</h1>
+  return <main className="public-landing"><PublicNav /><section className="lp-section lp-plans-page"><p className="eyebrow">Planes</p><h1>Un plan según las necesidades de tu instalación</h1><p>Conoce qué se contrata y consulta la configuración adecuada para tus cámaras y trabajadores.</p><a className="btn" href="/contacto?motivo=presupuesto">Solicitar presupuesto para mi instalación</a><div className="lp-grid three"><article className="lp-card"><h2>Hardware de pago único</h2><p>Adquieres los equipos necesarios para la configuración acordada.</p></article><article className="lp-card"><h2>Software con suscripción anual</h2><p>Contratas el uso de la aplicación mediante una cuota anual según el plan.</p></article><article className="lp-card"><h2>Instalación aparte</h2><p>La instalación se valora y presupuesta por separado según las necesidades del centro.</p></article></div>
     {campaign && <p>{campaign.active ? 'Oferta de prerreserva disponible hasta el' : 'La campaña de prerreserva finalizó el'} {prereservationEndLabel(campaign.endAt)}, incluido. Fecha de referencia: hora peninsular española.</p>}
     <PublicPlanCards plans={plans} loading={loading} error={error} campaign={campaign} onPrereserve={openPrereservation} />
     <h2 className="lp-subheading">Hardware para la instalación</h2><p>Hardware de pago único; aplicación de cuota anual aparte. Estas opciones publicadas requieren un estudio de la instalación: la cobertura es orientativa y no está garantizada. La propuesta concreta la combinación y los servicios adicionales; los nombres de las opciones no vinculan por sí solos un paquete a la capacidad de la aplicación.</p>
@@ -247,11 +168,5 @@ export function PublicPlans() {
       <div><ul>{pack.items.map((item) => <li key={item}>{item}</li>)}</ul><a className="btn" href={customerAccessUrl()}>Tienda B2B</a></div>
     </details>)}</div>
     <p><a href="/contacto">Consultar la configuración de mi instalación</a></p>
-    </section>{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={closePrereservation} />}<PublicFooter /></main>;
+    </section><CommercialSection section={commercialCopy['/planes'].sections[3]} index={30} /><CommercialSection section={commercialCopy['/planes'].sections[4]} index={31} />{selectedCode && <PrereservationAccessModal code={selectedCode} trigger={modalTrigger} onClose={closePrereservation} />}<PublicFooter /></main>;
 }
-
-export function PublicInfoFaqs() { return <main className="public-landing"><PublicNav /><section className="lp-info-hero"><p className="eyebrow">Funcionamiento y preguntas frecuentes</p><h1>Cómo funciona HorizonST</h1><p>De la detección en la cámara a la consulta del historial operativo.</p></section>
-  <section id="funcionamiento" className="lp-section"><h2>Un proceso claro, de la entrada al registro.</h2><ol className="lp-steps"><li><strong>Dispositivo personal.</strong><span>El trabajador lleva un dispositivo inalámbrico identificado en la instalación.</span></li><li><strong>Puntos de comunicación.</strong><span>La infraestructura de la cámara recoge detecciones y permite supervisar permanencias.</span></li><li><strong>Aviso al responsable.</strong><span>Las alertas aportan contexto al equipo autorizado para aplicar su procedimiento.</span></li><li><strong>Consulta del historial.</strong><span>El panel operativo organiza sesiones e incidencias para su revisión posterior.</span></li></ol><p>La instalación requiere alimentación eléctrica y conexión a Internet. La cobertura y la organización del centro se evalúan antes de implantar. Las dimensiones orientativas no garantizan cobertura; los tiempos y la respuesta los define cada operación.</p></section>
-  <section className="lp-section"><p className="eyebrow">Qué aporta</p><h2>Información para aplicar tu procedimiento.</h2><div className="lp-grid three"><article className="lp-card"><h3>Tiempos de permanencia</h3><p>Una referencia operativa para revisar la actividad en las cámaras.</p></article><article className="lp-card"><h3>Alertas con contexto</h3><p>Información para comprobar la situación y coordinar la respuesta del centro.</p></article><article className="lp-card"><h3>Actividad e incidencias</h3><p>Un historial organizado para la revisión posterior por el equipo autorizado.</p></article></div></section>
-  <section className="lp-section lp-faq"><p className="eyebrow">FAQ</p><h2>Preguntas frecuentes</h2><div>{faqItems.map(([question, answer, detail]) => <details key={question}><summary>{question}</summary><p>{answer}</p><p>{detail}</p></details>)}</div></section>
-  <section className="lp-section lp-final-cta"><p>¿Quieres conocer la solución adecuada para tu operación?</p><h2>Consulta tu instalación con nuestro equipo.</h2><div className="actions"><a className="btn" href="/contacto">Solicitar orientación</a><a className="btn ghost" href="/planes">Ver planes</a><a className="btn ghost" href={customerAccessUrl()}>Tienda B2B</a></div></section><PublicFooter /></main>; }

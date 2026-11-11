@@ -31,6 +31,8 @@ import { lifecycle } from './lifecycle.js';
 import { databaseLifecycle } from './db/pool.js';
 import { notificationJournal } from './modules/shared/notification-journal.js';
 import { notificationsRouter } from './modules/shared/notifications.routes.js';
+import { isPublicMarketingHost } from './resources/store-domains.js';
+import { indexableCommercialPaths } from './resources/public-pages.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../web/dist');
@@ -42,6 +44,7 @@ export const createServer = (staticRoot = webDist) => {
   const guidePath = path.join(staticRoot, 'recursos', 'guia-appcc-2026.pdf');
 
   app.use(helmet({ contentSecurityPolicy: false }));
+  app.use((req, res, next) => { if (['horizonst.com.es', 'www.horizonst.com.es'].includes(req.hostname.toLowerCase())) res.set('X-Robots-Tag', 'noindex, nofollow'); next(); });
   app.use(cors({ origin: env.corsOrigin, credentials: false }));
   app.use('/api/contact', contactRouter);
   app.use(express.json({ limit: '16kb' }));
@@ -73,8 +76,33 @@ export const createServer = (staticRoot = webDist) => {
     res.sendFile(guidePath, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="guia-appcc-2026-horizonst.pdf"' } }, (error) => error ? next(error) : undefined);
   });
   app.all('/recursos/*', (_req, res) => res.status(404).json({ error: 'Resource not found' }));
-  app.use(express.static(staticRoot));
-  app.get('*', (_req, res) => res.sendFile(path.join(staticRoot, 'index.html')));
+  app.get('/robots.txt', (req, res) => {
+    const production = ['horizonst.es', 'www.horizonst.es'].includes(req.hostname.toLowerCase());
+    res.type('text/plain').send(production ? 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /prerreserva/\nDisallow: /prerender/\nSitemap: https://horizonst.es/sitemap.xml\n' : 'User-agent: *\nDisallow: /\n');
+  });
+  app.get('/sitemap.xml', (req, res) => {
+    if (!isPublicMarketingHost(req.hostname)) return res.sendStatus(404);
+    const urls = indexableCommercialPaths.map(route => `<url><loc>https://horizonst.es${route}</loc></url>`).join('');
+    return res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
+  });
+  app.use('/prerender', (_req, res) => res.sendStatus(404));
+  app.use(express.static(staticRoot, { index: false }));
+  app.get('*', (req, res, next) => {
+    const hostname = req.hostname.toLowerCase();
+    if (isPublicMarketingHost(hostname)) {
+      if (indexableCommercialPaths.includes(req.path as typeof indexableCommercialPaths[number])) {
+        const environment = hostname.endsWith('.com.es') ? 'staging' : 'production';
+        const filename = req.path === '/' ? 'index.html' : `${req.path.slice(1)}.html`;
+        return res.sendFile(path.join(staticRoot, 'prerender', environment, filename), error => error ? next(error) : undefined);
+      }
+      if (/^\/prerreserva\/(starter|professional|enterprise)$/.test(req.path)) { res.set('X-Robots-Tag', 'noindex, nofollow'); return res.sendFile(path.join(staticRoot, 'index.html')); }
+      return res.sendStatus(404);
+    }
+    const storeRoutes = /^\/(?:|login|register|register-distributor|verify-email|forgot-password|reset-password|dashboard|account|catalog|saas-plans|cart|quotes|orders|aviso-legal|privacidad|prerreserva\/(?:starter|professional|enterprise)|distributor(?:\/(?:profile|documents|resources))?|admin(?:\/(?:distributors(?:\/[^/]+)?|distributor-resources|customers|prereservations(?:\/[^/]+)?|quotes(?:\/[^/]+)?|orders(?:\/[^/]+)?|audit|catalog\/(?:products|saas-plans)))?)\/?$/;
+    if (!storeRoutes.test(req.path)) return res.sendStatus(404);
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+    return res.sendFile(path.join(staticRoot, 'index.html'));
+  });
 
   app.use((error: any, _req: any, res: any, _next: any) => {
     if (error instanceof ZodError) return res.status(400).json({ error: 'Validation error', details: error.flatten() });

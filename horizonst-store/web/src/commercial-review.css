@@ -1,4 +1,51 @@
 /* Scoped to the commercial site; authenticated Store layout is unchanged. */
+.commercial-v3 .commercial-home-advantages { display: block; list-style: decimal outside; padding-left: 1.4rem; margin-block: 1.25rem; }
+.commercial-v3 .commercial-hero-video { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; height: auto; border-radius: 1rem; background: #07151d; }
+.commercial-v3 .commercial-hero-video:focus-visible { outline: 3px solid #86f2ea; outline-offset: 3px; }
+.commercial-v3 .commercial-home-advantages li { display: list-item; margin-block: .55rem; padding-left: .2rem; }
+.commercial-info .commercial-process { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 2rem; padding-left: 1.5rem; }
+.commercial-info .commercial-process li { padding-left: .3rem; }
+.commercial-info .commercial-process p { margin-block: .3rem; }
+.commercial-info .commercial-notices, .commercial-info .commercial-installation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; align-items: start; }
+.commercial-info .commercial-notices article { border-left: 4px solid #86f2ea; padding: .4rem 1.25rem; }
+.commercial-info .commercial-notices .commercial-sos-notice { border-color: #ffc875; }
+.commercial-info .commercial-notices h2 { font-size: 1.4rem; }
+.commercial-info .commercial-installation li { margin-block: .5rem; }
+.commercial-app-controls { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.commercial-app-preview button { font: inherit; color: #d8fbff; background: #164251; border: 1px solid #86f2ea; border-radius: .5rem; padding: .6rem .9rem; cursor: pointer; }
+.commercial-app-preview button[aria-pressed="true"] { color: #08233f; background: #86f2ea; }
+.commercial-app-preview button:focus-visible, .commercial-app-image:focus-visible { outline: 3px solid #86f2ea; outline-offset: 3px; }
+.commercial-app-preview figure { margin: 0 0 1rem; }
+.commercial-app-image { overflow-x: auto; border-radius: .5rem; background: #fff; }
+.commercial-app-image img { display: block; width: 100%; height: auto; }
+.commercial-app-image.expanded img { width: max(100%, 1000px); max-width: none; }
+.commercial-info #normativa { scroll-margin-top: 15rem; }
+.commercial-v3 .commercial-image-unavailable { padding: 1rem; border: 1px solid #438290; border-radius: .75rem; }
+@media (max-width: 640px) {
+  .commercial-info .commercial-process, .commercial-info .commercial-notices, .commercial-info .commercial-installation { grid-template-columns: minmax(0, 1fr); }
+  .commercial-info #funcionamiento { scroll-margin-top: 15rem; }
+}
+.commercial-v3 .commercial-visual, .commercial-v3 .commercial-operation { margin: 0; min-width: 0; }
+.commercial-v3 .commercial-visual img { border-radius: 1rem; }
+.commercial-v3 figcaption { font-size: .8rem; line-height: 1.5; color: #c9e5e8; margin-top: .6rem; }
+.commercial-v3 .commercial-operation { margin-block: 1.5rem; }
+.commercial-v3 .commercial-contexts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; padding-block: 0; }
+.commercial-v3 .commercial-contact-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .6fr); gap: 2rem; align-items: start; }
+.commercial-v3 .commercial-field { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: .45rem; }
+.commercial-v3 .lp-form { min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); box-sizing: border-box; }
+.commercial-v3 .lp-form button { width: fit-content; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.commercial-v3 input, .commercial-v3 select, .commercial-v3 textarea { min-width: 0; max-width: 100%; }
+.commercial-v3 select { padding: .8rem; border: 1px solid #438290; border-radius: .5rem; background: #08233f; color: #fff; font: inherit; width: 100%; }
+.commercial-v3 input:focus-visible, .commercial-v3 select:focus-visible, .commercial-v3 textarea:focus-visible, .commercial-v3 a:focus-visible { outline: 3px solid #86f2ea; outline-offset: 3px; }
+.commercial-v3 .actions:empty { display: none; }
+.commercial-v3 .commercial-items li { margin-block: .75rem; }
+.commercial-v3 .lp-grid:empty { display: none; }
+.commercial-v3 .lp-revised-hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 900px) {
+  .commercial-v3 .commercial-contact-grid, .commercial-v3 .lp-revised-hero { grid-template-columns: 1fr; }
+  .commercial-v3 .commercial-contact-grid > figure { max-width: 600px; }
+}
+@media (max-width: 640px) { .commercial-v3 .commercial-contexts { grid-template-columns: 1fr; } }
 .public-landing { line-height: 1.6; }
 .public-landing a:not(.btn) { color: #d8fbff; text-underline-offset: .2em; }
 .public-landing .lp-section { padding-block: clamp(2rem, 4.5vw, 3.75rem); }

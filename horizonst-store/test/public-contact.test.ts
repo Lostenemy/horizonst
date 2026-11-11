@@ -174,4 +174,38 @@ await check('mail HTML escapes supplied content and preserves body newlines', ()
   const mail = buildPublicContactEmail({ ...valid, fullName: '<img src=x>', message: '<script>bad</script>\nOtra línea.' });
   assert.doesNotMatch(mail.html, /<script>|<img/); assert.match(mail.html, /&lt;script&gt;/); assert.match(mail.html, /<br>Otra línea/);
 });
+await check('structured consultation validates profile and sends its context without account or required message', async () => {
+  let captured: ContactInput | undefined;
+  const consultation = { ...valid, message: '', companyName: 'Empresa ficticia', purpose: 'colaboracion', profile: 'asesorias-prl' };
+  await withApi(async (post, store) => {
+    assert.equal((await post(consultation)).status, 200);
+    assert.equal(captured?.profile, 'asesorias-prl');
+    const mail = buildPublicContactEmail(captured!);
+    assert.equal(mail.to, 'comercial@horizonst.es');
+    assert.match(mail.text, /Empresa ficticia/); assert.match(mail.text, /asesorias-prl/);
+    assert.doesNotMatch(JSON.stringify(store.values), /Empresa ficticia|asesorias-prl|colaboracion/);
+  }, async input => { captured = input; });
+  for (const override of [{ profile: 'admin' }, { purpose: 'arbitrary' }, { companyName: 'x' },
+    { companyName: 'Bad\r\nBcc: injected@example.test' }, { profile: 'empresa' }]) {
+    await withApi(async post => { assert.equal((await post({ ...consultation, ...override })).status, 400); }, async () => assert.fail('no delivery'));
+  }
+});
+await check('consultation context participates in duplicate prevention and is escaped', async () => {
+  let deliveries = 0;
+  await withApi(async post => {
+    const input = { ...valid, companyName: 'Empresa <ficticia>', profile: 'instaladores', purpose: 'colaboracion' };
+    assert.equal((await post(input)).status, 200);
+    assert.equal((await post(input)).status, 200);
+    assert.equal(deliveries, 1);
+    assert.equal((await post({ ...input, profile: 'ingenierias-frio' })).status, 200);
+    assert.equal(deliveries, 2);
+  }, async input => { deliveries++; assert.doesNotMatch(buildPublicContactEmail(input).html, /<ficticia>/); });
+});
+await check('company is optional in installation, quote and collaboration consultations', async () => {
+  for (const [purpose, profile] of [['instalacion', 'gerencia'], ['presupuesto', 'operaciones'], ['colaboracion', 'instaladores']]) {
+    for (const companyName of [undefined, '']) {
+      await withApi(async post => { assert.equal((await post({ ...valid, companyName, purpose, profile, message: '' })).status, 200); });
+    }
+  }
+});
 console.log(`Public contact: ${passed} checks passed, 0 failed, 0 skipped (SMTP and DB simulated)`);

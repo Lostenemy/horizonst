@@ -9,6 +9,7 @@ import { requiredDistributorDocuments } from '../../resources/distributor-requir
 import { PRERESERVATION_END_LABEL } from '../prereservation/prereservation.service.js';
 import { domainEnvironment } from '../../resources/store-domains.js';
 import { corporateEmail, corporateMailFooter } from './email-template.js';
+import type { ContactContext } from '../../resources/contact-context.js';
 
 type SmtpResponse = { code: number; message: string };
 type SmtpSocket = Socket | TLSSocket;
@@ -259,13 +260,14 @@ async function sendMail({ to, subject, text, html, attachments, replyTo }: MailC
   }
 }
 
-export function buildPublicContactEmail(input: { fullName: string; email: string; message: string }): MailContent {
+export function buildPublicContactEmail(input: { fullName: string; email: string; message: string } & ContactContext): MailContent {
+  const context = input.purpose ? [...(input.companyName ? [`Empresa: ${input.companyName}`] : []), `Motivo: ${input.purpose}`, `Perfil: ${input.profile}`] : [];
   return { to: 'comercial@horizonst.es', replyTo: input.email, subject: 'Nuevo mensaje de contacto HorizonST',
-    text: `Nombre: ${input.fullName}\nCorreo: ${input.email}\n\n${input.message}`,
-    html: `<h1>Contacto HorizonST</h1><p>Nombre: ${escapeHtml(input.fullName)}</p><p>Correo: ${escapeHtml(input.email)}</p><p>${escapeHtml(input.message).replace(/\n/g, '<br>')}</p>` };
+    text: `Nombre: ${input.fullName}\nCorreo: ${input.email}\n${context.join('\n')}\n${input.message}`,
+    html: `<h1>Contacto HorizonST</h1><p>Nombre: ${escapeHtml(input.fullName)}</p><p>Correo: ${escapeHtml(input.email)}</p>${context.map(line => `<p>${escapeHtml(line)}</p>`).join('')}<p>${escapeHtml(input.message).replace(/\n/g, '<br>')}</p>` };
 }
 
-export async function sendPublicContactEmail(input: { fullName: string; email: string; message: string }, deliver = sendMail) {
+export async function sendPublicContactEmail(input: { fullName: string; email: string; message: string } & ContactContext, deliver = sendMail) {
   if (!env.mail.enabled) throw new Error('contact_mail_disabled');
   await deliver(buildPublicContactEmail(input));
 }

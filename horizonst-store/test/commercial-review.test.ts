@@ -10,19 +10,20 @@ const home = renderToStaticMarkup(React.createElement(PublicHome));
 const info = renderToStaticMarkup(React.createElement(PublicInfoFaqs));
 const contact = renderToStaticMarkup(React.createElement(PublicContact));
 const caseOnly = renderToStaticMarkup(React.createElement(HorneoCase));
-assert.match(home, /Supervisa accesos y permanencias en tus cámaras congeladoras\./);
-assert.ok(home.indexOf('lp-success-case') < home.indexOf('home-process-title'), 'Horneo is immediately after the hero');
-assert.match(caseOnly, /Horneo: un caso real/);
+assert.match(home, /Horizon Smartracking controla automáticamente la permanencia y los descansos en tus cámaras congeladoras\./);
+assert.ok(home.indexOf('lp-success-case') > home.indexOf('commercial-operation'), 'case follows the retained conceptual diagram');
+assert.match(caseOnly, /Caso de éxito<\/h2><h3>Horneo/);
 assert.doesNotMatch(caseOnly, /lp-case-media|<video|<blockquote|próximamente|pendiente/i);
-assert.match(home, /href="\/contacto">Consultar mi instalación/);
+assert.match(home, /href="\/contacto\?motivo=instalacion">Consultar mi instalación/);
 assert.match(home, /href="\/info-faqs#funcionamiento">Ver cómo funciona/);
-assert.ok(info.indexOf('id="funcionamiento"') < info.indexOf('Qué aporta'));
-assert.equal((info.match(/<details/g) ?? []).length, 10);
+assert.ok(info.indexOf('id="funcionamiento"') < info.indexOf('Preguntas frecuentes'));
+assert.equal((info.match(/<details/g) ?? []).length, 7);
 assert.equal((home.match(/aria-current="page"/g) ?? []).length, 1);
-assert.match(contact, /Cuéntanos cómo es tu instalación/);
-assert.match(contact, /No necesitas conocer los detalles técnicos/);
-assert.match(contact, /aria-describedby="contact-message-context contact-message-help"/);
-assert.doesNotMatch(contact, /name="(?:phone|company)"|24 horas|48 horas/i);
+assert.match(contact, /Hablemos de tu instalación o de una colaboración/);
+assert.match(contact, /Puedes contactar sin crear una cuenta/);
+assert.match(contact, /aria-describedby="contact-message-help"/);
+assert.doesNotMatch(contact, /name="phone"|24 horas|48 horas/i);
+assert.doesNotMatch(contact.match(/<input[^>]*name="companyName"[^>]*>/)?.[0] ?? '', /required/, 'company remains optional by explicit user decision');
 const plans = renderToStaticMarkup(React.createElement(PublicPlanCards, {
   plans: [{ id: 'fixture', code: 'starter', name: 'Starter', description: 'Función exclusiva no verificada', annual_price_cents: 61500,
     tax_rate: 21, max_tags: 13, max_gateways: 7, is_active: true, is_enterprise: false }], loading: false, error: false
@@ -38,8 +39,7 @@ assert.match(source, /onClose=\{closePrereservation\}/, 'modal callback identity
 assert.match(source, /useCallback\(\(\) => setSelectedCode\(null\), \[\]\)/);
 assert.match(source, /event.key === 'Escape'/);
 assert.match(source, /trigger\?\.focus\(\)/);
-assert.match(source, /source: 'appcc_guide'/);
-assert.match(source, /privacyAccepted, website/);
+assert.doesNotMatch(home, /guia-solicitud|Recibir la guía por email/, 'no guide delivery promise without independent evidence');
 const css = await readFile(new URL('../web/src/commercial-review.css', import.meta.url), 'utf8');
 assert.match(css, /\.lp-modal-close[^}]*color: #fff/);
 assert.match(css, /input\[type="checkbox"\]/);

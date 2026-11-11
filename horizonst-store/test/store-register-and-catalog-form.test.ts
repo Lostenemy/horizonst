@@ -40,7 +40,7 @@ assert.match(products, /if \(id\) await patchJson\(`\/api\/admin\/products\/\$\{
 assert.match(products, /else await postJson\('\/api\/admin\/products', payload\)/, 'creating a product uses POST without an id');
 
 const landing = await readFile(new URL('../web/src/pages/PublicLanding.tsx', import.meta.url), 'utf8');
-assert.match(landing, /Planes de la aplicación HorizonST/);
+assert.match(landing, /Un plan según las necesidades de tu instalación/);
 assert.match(landing, /Hardware para la instalación/);
 
 const server = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');

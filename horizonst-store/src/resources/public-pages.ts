@@ -1,0 +1,1 @@
+export const indexableCommercialPaths = ['/', '/planes', '/info-faqs', '/contacto', '/colaboraciones', '/colaboraciones/instaladores', '/colaboraciones/asesorias-prl', '/colaboraciones/ingenierias-frio', '/aviso-legal', '/privacidad'] as const;

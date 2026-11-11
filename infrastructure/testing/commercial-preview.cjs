@@ -6,7 +6,7 @@ const path = require('node:path');
 const root = fs.realpathSync(process.argv[2] || '');
 if (!fs.statSync(path.join(root, 'index.html')).isFile()) throw new Error('Built frontend required');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png',
-  '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+  '.webp': 'image/webp', '.avif': 'image/avif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.mp4': 'video/mp4' };
 const server = http.createServer((req, res) => {
   if (req.method !== 'GET') { res.writeHead(405); res.end('Preview does not accept submissions'); return; }
   let pathname;
@@ -22,6 +22,14 @@ const server = http.createServer((req, res) => {
     file = fs.realpathSync(file);
     if (!file.startsWith(root + path.sep)) throw new Error('Outside preview');
     const content = fs.readFileSync(file);
+    if (path.extname(file) === '.mp4' && req.headers.range) {
+      const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range);
+      const start = range ? Number(range[1]) : -1;
+      const end = range && range[2] ? Math.min(Number(range[2]), content.length - 1) : content.length - 1;
+      if (!range || start >= content.length || end < start) { res.writeHead(416, { 'Content-Range': `bytes */${content.length}` }); res.end(); return; }
+      res.writeHead(206, { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${start}-${end}/${content.length}`, 'Content-Length': end - start + 1, 'Cache-Control': 'no-store' });
+      res.end(content.subarray(start, end + 1)); return;
+    }
     res.writeHead(200, { 'Content-Type': mime[path.extname(file)] + '; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(content);
   } catch { res.writeHead(404); res.end(); }

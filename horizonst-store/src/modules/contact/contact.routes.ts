@@ -5,16 +5,35 @@ import { env } from '../../config/env.js';
 import { pool } from '../../db/pool.js';
 import { createAuthRateLimit } from '../auth/rate-limit.js';
 import { sendPublicContactEmail } from '../shared/mail.js';
+import { consultationProfiles, consultationPurposes, collaborationProfiles } from '../../resources/contact-context.js';
+import type { ContactContext } from '../../resources/contact-context.js';
 
 const noHeaderControls = (value: string) => !/[\r\n\u0000]/.test(value);
 export const contactSchema = z.object({
   fullName: z.string().refine(noHeaderControls).pipe(z.string().trim().min(2).max(200)),
   email: z.string().refine(noHeaderControls).pipe(z.string().trim().email().max(320)),
-  message: z.string().trim().min(10).max(2000).refine((value) => !value.includes('\u0000')),
+  message: z.string().trim().max(2000).refine((value) => !value.includes('\u0000')).default(''),
+  companyName: z.string().refine(noHeaderControls).pipe(z.string().trim().max(200).refine(value => value.length === 0 || value.length >= 2)).optional(),
+  profile: z.enum(consultationProfiles).optional(),
+  purpose: z.enum(consultationPurposes).optional(),
   privacyAccepted: z.literal(true),
   website: z.string().max(200).optional()
-}).strict();
-export type ContactInput = { fullName: string; email: string; message: string; privacyAccepted: true; website?: string };
+}).strict().superRefine((input, ctx) => {
+  const contextual = input.companyName !== undefined || input.profile !== undefined || input.purpose !== undefined;
+  if (contextual) {
+    for (const field of ['profile', 'purpose'] as const) {
+      if (!input[field]) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: 'Required consultation context' });
+    }
+    if (input.purpose === 'colaboracion' && !collaborationProfiles.includes(input.profile as any)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['profile'], message: 'Invalid collaboration profile' });
+    }
+  }
+  // Preserve the legacy contact contract while allowing an optional message on the new structured form.
+  if ((!contextual || input.message.length > 0) && input.message.length < 10) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['message'], message: 'Message must contain at least 10 characters' });
+  }
+});
+export type ContactInput = { fullName: string; email: string; message: string; privacyAccepted: true; website?: string } & ContactContext;
 type Store = { query: (sql: string, values?: any[]) => Promise<any> };
 
 export function createContactRouter(dependencies: { store?: Store; deliver?: (input: ContactInput) => Promise<void>; enabled?: () => boolean } = {}) {
@@ -33,7 +52,10 @@ export function createContactRouter(dependencies: { store?: Store; deliver?: (in
     if (!enabled()) return res.status(503).json({ error: 'contact_temporarily_unavailable' });
     // El registro comparte la primitiva atómica existente, con namespace HMAC separado.
     // attempts=1: envío en curso/resultado incierto; 2: SMTP aceptó; 3: fallo de envío.
-    const key = createHmac('sha256', env.auth.jwtSecret).update('contact-delivery:' + JSON.stringify([input.fullName, input.email, input.message])).digest('hex');
+    const identity = [input.fullName, input.email, input.message];
+    // Preserve old duplicate keys; include validated context only for structured consultations.
+    if (input.purpose) identity.push(input.companyName ?? '', input.profile!, input.purpose);
+    const key = createHmac('sha256', env.auth.jwtSecret).update('contact-delivery:' + JSON.stringify(identity)).digest('hex');
     let smtpAccepted = false;
     let ownsClaim = false;
     try {

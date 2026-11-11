@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-04",
+  "branch": "codex/commercial-v3-collaborations",
+  "base": "9a3bcef5db63382610c5b16951582203701901d7",
+  "status": "local_preview_for_review",
+  "stagingRead": {
+    "origin": "https://horizonst.com.es", "method": "GET only", "authenticated": false,
+    "paths": ["/", "/info-faqs"], "status": [200, 200],
+    "assets": ["/assets/index-GFE_LGlJ.js", "/assets/index-CyBo_TbJ.css"],
+    "imageResponses": 7, "imageErrorsObserved": 0, "historicalMissingImageCause": "not established"
+  },
+  "validation": {
+    "runtime": "Node 22.23.4 / Windows", "cli": "cached Playwright CLI 0.1.22",
+    "backendTypecheck": 0, "frontendTypecheck": 0, "backendBuild": 0, "frontendBuild": 0,
+    "storeModulesPassed": 52, "storeModulesFailed": 0, "storeModulesOmitted": 0,
+    "lifecyclePassed": 24, "lifecycleFailed": 0, "lifecycleSkipped": 0,
+    "browserPassed": 71, "browserFailed": 0, "viewports": [320, 390, 768, 1440],
+    "attemptedWrites": 0, "javascriptErrors": 0, "normalInfoImages": 2, "retainedFaq": 7,
+    "imageFailureChecks": ["AVIF error recovers via WebP", "both formats fail with visible alternative", "bounded two requests on total failure"],
+    "suites": "C:/Users/User/AppData/Local/Temp/horizonst-store-lifecycle-evidence-H3NxUp/summary.json",
+    "workspace": "C:/Users/User/AppData/Local/Temp/horizonst-store-lifecycle-bvYoAs",
+    "browserEvidence": "output/playwright/smartracking-20261104/local-final.log"
+  },
+  "deploymentAuthorized": false,
+  "pending": ["Approval to publish", "Real email validation", "Other browsers and assistive technologies", "Evidence if historical missing image recurs"]
+}

@@ -41,7 +41,7 @@ const publicContent = renderToStaticMarkup(PublicHome()) + renderToStaticMarkup(
 assert.match(publicContent, /aproximadamente 400 m²/);
 assert.match(publicContent, /10 trabajadores distintos/);
 assert.match(publicContent, /no un resultado medido ni una garantía de seguridad/);
-assert.match(publicContent, /requiere alimentación eléctrica y conexión a Internet/);
+assert.match(publicContent, /Se necesita alimentación eléctrica y conexión a Internet/);
 assert.doesNotMatch(publicContent, /inspectora|inspección de trabajo|homologación|certificación|aval institucional|aprobación institucional|organismo/i);
 for (const page of ['Catalog', 'Cart', 'Quotes', 'PublicPrereservation', 'admin/AdminQuoteDetail']) {
   const source = await readFile(new URL(`../web/src/pages/${page}.tsx`, import.meta.url), 'utf8');

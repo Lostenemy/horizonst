@@ -30,6 +30,8 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import PublicLegal from './pages/PublicLegal';
 import PublicContact from './pages/PublicContact';
+import { PublicCollaborations } from './pages/CommercialContent';
+import { commercialCopy, type CommercialPath } from './lib/commercial-copy';
 import { PublicHome, PublicInfoFaqs, PublicPlans } from './pages/PublicLanding';
 import PublicPrereservation from './pages/PublicPrereservation';
 import Quotes from './pages/Quotes';
@@ -38,18 +40,27 @@ import Register from './pages/Register';
 import RegisterDistributor from './pages/RegisterDistributor';
 import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
-import { isPublicMarketingHost, publicMarketingPage, publicPrereservationCode } from './lib/domains';
+import { isPublicMarketingHost, publicMarketingPage, publicPrereservationCode, type CollaborationPath } from './lib/domains';
 
 export default function App() {
   const location = useLocation();
   const publicSite = isPublicMarketingHost(window.location.hostname);
-  useEffect(() => { document.title = pageTitle(location.pathname, publicSite); }, [location.pathname, publicSite]);
+  useEffect(() => {
+    const copy = publicSite ? commercialCopy[location.pathname as CommercialPath] : undefined;
+    document.title = copy?.seo ?? pageTitle(location.pathname, publicSite);
+    const previous = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const previousContent = previous?.content;
+    const meta = previous ?? document.createElement('meta');
+    if (copy) { meta.name = 'description'; meta.content = copy.description; if (!previous) document.head.append(meta); }
+    return () => { if (copy) { if (previous) previous.content = previousContent ?? ''; else meta.remove(); } };
+  }, [location.pathname, publicSite]);
   if (isPublicMarketingHost(window.location.hostname)) {
     const page = publicMarketingPage(window.location.pathname);
     if (page === 'legal-notice' || page === 'privacy') return <PublicLegal page={page} />;
     if (page === 'plans') return <PublicPlans />;
     if (page === 'contact') return <PublicContact />;
     if (page === 'info-faqs') return <PublicInfoFaqs />;
+    if (page === 'collaborations') return <PublicCollaborations path={window.location.pathname as CollaborationPath} />;
     if (page === 'prereservation') return <PublicPrereservation code={publicPrereservationCode(window.location.pathname)!} />;
     if (page === 'home') return <PublicHome />;
     return <main className="public-not-found"><h1>Página no encontrada</h1><a href="/">Volver al inicio</a></main>;

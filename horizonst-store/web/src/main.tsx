@@ -8,7 +8,8 @@ import './commercial-layout.css';
 import './resource-center.css';
 import './commercial-review.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root')!;
+const app = (
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
@@ -17,3 +18,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+if (root.dataset.prerendered === 'true') ReactDOM.hydrateRoot(root, app);
+else ReactDOM.createRoot(root).render(app);
