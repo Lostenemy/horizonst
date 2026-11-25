@@ -50,7 +50,7 @@ let gateways = [];
 let owners = [];
 let companies = [];
 let selectedGateway = null;
-let b5FilterObserved = false;
+let b5FilterObserved = null;
 let b5Capture = null;
 const b5CaptureDevice = document.getElementById('gatewayB5CaptureDevice');
 const b5CaptureStatus = document.getElementById('gatewayB5CaptureStatus');
@@ -277,12 +277,11 @@ const hasVerifiedMkgw3V2 = (gateway) => (
 const refreshFirmwareControls = (gateway) => {
   const v2 = hasVerifiedMkgw3V2(gateway);
   document.getElementById('gatewayFirmwareControlStatus').textContent = v2
-    ? 'Identidad MKGW3 V2 verificada. La configuración B5 permanece bloqueada porque la secuencia anterior sobrescribe otros valores.'
+    ? 'Identidad MKGW3 V2 verificada. Consulta 2053 antes de solicitar un cambio en el filtro B5.'
     : 'Intervalo, modo de escaneo y configuración B5 deshabilitados: consulta la identidad o registra una evidencia válida de firmware MKGW3 V2.';
-  // La secuencia heredada sobrescribe otros filtros y el intervalo: no ofrecerla como cambio conservador.
-  document.getElementById('gatewayConfigureB5').disabled = true;
+  document.getElementById('gatewayConfigureB5').disabled = !v2 || !b5FilterObserved || b5FilterObserved.data.double_press === 1;
   document.getElementById('gatewayConfigureB5').title = !v2 ? 'Requiere identidad MKGW3 V2 verificada.'
-    : !b5FilterObserved ? 'Consulta primero el filtro BXP-Button (2053).' : 'Bloqueada: la secuencia anterior sobrescribe otros filtros y el intervalo.';
+    : !b5FilterObserved ? 'Consulta primero el filtro BXP-Button (2053).' : b5FilterObserved.data.double_press === 1 ? 'La lectura observada ya indica doble pulsación activa.' : '';
   for (const operation of ['report-interval', 'scan-mode']) {
     bluetoothPanel.querySelector(`[data-ble-command="${operation}"]`).disabled = !v2;
   }
@@ -551,7 +550,7 @@ const renderReportedIdentity = (gateway) => {
 
 const selectGateway = async (gateway) => {
   selectedGateway = gateway;
-  b5FilterObserved = false;
+  b5FilterObserved = null;
   b5Capture = null;
   b5CaptureRefresh.disabled = true;
   b5CaptureStatus.textContent = '';
@@ -703,7 +702,12 @@ for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
       const result = await apiPost(`/gateways/${gateway.id}/read-configuration/${readType}`, {});
       if (selectedGateway?.id !== gateway.id) return;
       if (readType === 'bxp_button_filter' && selectedGateway?.id === gateway.id && result.status === 'response_observed') {
-        b5FilterObserved = true;
+        const expected = ['abnormal_inactivity', 'double_press', 'long_press', 'single_press', 'switch_value'];
+        const data = result.data;
+        b5FilterObserved = data && Object.keys(data).sort().join(',') === expected.join(',') &&
+          expected.every(key => data[key] === 0 || data[key] === 1) &&
+          typeof result.readId === 'string' && /^[0-9a-f-]{36}$/i.test(result.readId)
+          ? { readId: result.readId, data: { ...data }, gatewayId: gateway.id, receivedAt: Date.now() } : null;
         refreshFirmwareControls(gateway);
       }
       feedback.textContent = result.status === 'response_observed'
@@ -780,16 +784,28 @@ document.getElementById('gatewayApplyRssi').addEventListener('click', async () =
 });
 
 document.getElementById('gatewayConfigureB5').addEventListener('click', async () => {
-  if (!selectedGateway || !await confirmAction({ title: 'Configurar doble pulsación B5', message: `Se enviarán cuatro comandos BLE a ${selectedGateway.mac_address}. ¿Continuar?`, confirmText: 'Configurar' })) return;
+  const gateway = selectedGateway;
+  const observation = b5FilterObserved;
+  if (!gateway || !observation || observation.gatewayId !== gateway.id || Date.now() - observation.receivedAt > 60000) {
+    b5FilterObserved = null;
+    if (gateway) refreshFirmwareControls(gateway);
+    technicalFeedback.textContent = 'La lectura 2053 ha caducado o no está disponible. Consulta de nuevo.';
+    return;
+  }
+  const data = observation.data;
+  if (!await confirmAction({ title: 'Activar doble pulsación en el filtro',
+    message: `Gateway ${gateway.mac_address}: solo se enviará 1053 con double_press=1 y los otros valores observados: switch_value=${data.switch_value}, single_press=${data.single_press}, long_press=${data.long_press}, abnormal_inactivity=${data.abnormal_inactivity}. ${data.switch_value === 0 ? 'El filtro seguirá desactivado. ' : ''}La lectura no tiene correlación inequívoca y otro cambio podría haberla dejado obsoleta. No demuestra recepción de SOS.`,
+    confirmText: 'Solicitar cambio' }) || selectedGateway?.id !== gateway.id || b5FilterObserved !== observation) return;
+  b5FilterObserved = null;
+  refreshFirmwareControls(gateway);
   try {
-    technicalFeedback.textContent = 'Esperando confirmación de los cuatro comandos…';
-    const result = await apiPost(`/gateways/${selectedGateway.id}/configure-emergency-button`, {});
-    technicalFeedback.textContent = result.ok
-      ? 'B5 configurado correctamente: cuatro comandos confirmados.'
-      : `Configuración incompleta: ${(result.results || []).map((item) => `${item.msgId}: ${item.status}${item.resultCode == null ? '' : ` (${item.resultCode})`}`).join(' · ')}`;
+    technicalFeedback.textContent = 'Solicitando el cambio 1053…';
+    const result = await apiPost(`/gateways/${gateway.id}/b5-double-press-filter`, { readId: observation.readId });
+    if (selectedGateway?.id !== gateway.id) return;
+    technicalFeedback.textContent = result.message;
     await refreshTechnicalHistory();
   } catch (error) {
-    technicalFeedback.textContent = `No se pudo configurar B5: ${error.message}`;
+    if (selectedGateway?.id === gateway.id) technicalFeedback.textContent = `Resultado no confirmado: ${error.message}. Revisa el historial y consulta de nuevo antes de cualquier otro intento.`;
   }
 });
 

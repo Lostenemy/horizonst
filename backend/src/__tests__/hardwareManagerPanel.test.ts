@@ -13,9 +13,10 @@ test('technical gateway panel uses existing central command endpoints and never 
   assert.match(html, /gatewayAuditTable/);
   assert.match(html, /gatewayDevicesTable/);
   assert.match(ui, /last_gateway_id/);
-  assert.match(ui, /confirmAction\(\{ title: 'Configurar doble pulsación B5'/);
+  assert.match(ui, /confirmAction\(\{ title: 'Activar doble pulsación en el filtro'/);
   assert.match(ui, /confirmAction\(\{ title: 'Solicitar filtro físico BLE'/);
-  assert.match(ui, /\/configure-emergency-button/);
+  assert.match(ui, /\/b5-double-press-filter/);
+  assert.doesNotMatch(ui, /\/configure-emergency-button/);
   assert.match(ui, /\/apply-rssi/);
   assert.match(html, /gatewayRecordFirmware/);
   assert.match(html, /gatewayReadIdentity/);

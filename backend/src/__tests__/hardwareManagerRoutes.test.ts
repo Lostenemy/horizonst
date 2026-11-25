@@ -82,13 +82,21 @@ test('diagnostic captures require superadmin and same company; capture does not 
 
 function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned = false, inactive = false, gatewayMac = '2805a55efb68') {
   const idempotencyKeys = new Set<string>();
+  let filterObservationUsed = false;
   const observations = { published: [] as Array<{ topic: string; payload: any }>, persisted: [] as string[],
     auditPayloads: [] as string[], auditQueries: 0, readQueries: 0, observedQueries: 0,
-    snapshotQueries: 0, commandInserts: 0, readInserts: 0 };
+    snapshotQueries: 0, commandInserts: 0, readInserts: 0,
+    filterReadEnabled: true, filterData: { switch_value: 1, single_press: 1, double_press: 0, long_press: 1, abnormal_inactivity: 0 } };
   (pool as any).connect = async () => ({
     query: async (sql: string, params: unknown[] = []) => {
       if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
       if (sql.includes('pg_advisory_unlock')) return { rows: [{ pg_advisory_unlock: true }] };
+      if (sql.includes('SELECT r.response_payload FROM hardware_gateway_reads')) return { rows: observations.filterReadEnabled && params[0] === '22222222-2222-4222-8222-222222222222' && params[3] === 2
+        ? [{ response_payload: { msg_id: 2053, device_info: { mac: gatewayMac }, data: observations.filterData } }] : [] };
+      if (sql.includes('INSERT INTO hardware_b5_filter_observation_uses')) {
+        if (filterObservationUsed) return { rows: [] };
+        filterObservationUsed = true; return { rows: [{ read_id: params[0] }] };
+      }
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
       if (sql.includes('UPDATE gateways SET') && sql.includes('reported_device_name')) return { rows: [{ id: 41 }] };
       if (sql.includes('SELECT id, company_id FROM gateways')) return { rows: [{ id: 41, company_id: COMPANY_A }] };
@@ -256,6 +264,49 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
 
 const commandPath = '/api/gateways/41/bluetooth/scan';
 const validCommand = { method: 'POST', body: JSON.stringify({ scan_switch: 1 }) };
+
+test('2053 observation permits one isolated 1053 preserving four fields, with scope and replay protection', async () => {
+  const state = fakeDatabase(true);
+  const path = '/api/gateways/41/b5-double-press-filter';
+  const request = { method: 'POST', body: JSON.stringify({ readId: '22222222-2222-4222-8222-222222222222' }) };
+  assert.equal((await api(path, 1, 'hardware_readonly', request)).status, 403);
+  assert.equal((await api(path, 3, 'hardware_technician', request)).status, 404);
+  const response = await api(path, 2, 'hardware_technician', request);
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.published.map(item => item.payload), [{ msg_id: 1053, device_info: { mac: '2805A55EFB68' },
+    data: { switch_value: 1, single_press: 1, double_press: 1, long_press: 1, abnormal_inactivity: 0 } }]);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+  assert.equal(state.published.length, 1);
+});
+
+test('1053 requires a recent valid own observation and never resends after an uncertain publication', async () => {
+  const state = fakeDatabase(true);
+  const path = '/api/gateways/41/b5-double-press-filter';
+  const request = { method: 'POST', body: JSON.stringify({ readId: '22222222-2222-4222-8222-222222222222' }) };
+  state.filterReadEnabled = false;
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+  state.filterReadEnabled = true;
+  state.filterData.double_press = 7;
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+  state.filterData.double_press = 1;
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 200);
+  assert.equal(state.published.length, 0);
+  state.filterData.double_press = 0;
+  (mqttService as any).publishMqttJson = async () => { throw new Error('simulated publication failure'); };
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 502);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+});
+
+test('1053 after historical timeout returns ambiguous and keeps observation consumed', async () => {
+  const state = fakeDatabase(true, true);
+  const path = '/api/gateways/41/b5-double-press-filter';
+  const request = { method: 'POST', body: JSON.stringify({ readId: '22222222-2222-4222-8222-222222222222' }) };
+  const response = await api(path, 2, 'hardware_technician', request);
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).status, 'ambiguous');
+  assert.deepEqual(state.published.map(item => item.payload.msg_id), [1053]);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+});
 
 test('HTTP 2030 accepts fictional identity equality but excludes passwd from HTTP, persistence, audit and logs', async () => {
   const previous=process.env.GATEWAY_MQTT_OBSERVATION_ENABLED;const identity='a1b2c3d4e5f6';

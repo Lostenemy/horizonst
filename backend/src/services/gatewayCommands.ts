@@ -5,6 +5,7 @@ import { normalizeGatewayMac } from '../utils/mac';
 import { publishMqttJson } from './mqttService';
 import { HardwareGatewayAck, waitForHardwareGatewayAck } from './gatewayAck';
 import { redactHardwarePayload } from './hardwarePayloadRedaction';
+import { parseGatewayConfigurationReport } from './gatewayObservedReads';
 
 export interface GatewayCommandPayload extends Record<string, unknown> {
   msg_id: number;
@@ -49,6 +50,7 @@ export interface GatewayMqttConfigurationSequenceResult {
 }
 
 export class GatewayCommandBusyError extends Error {}
+export class GatewayButtonObservationError extends Error {}
 
 export async function expireStaleGatewayCommands(gatewayId?: number): Promise<number> {
   const values: unknown[] = [];
@@ -469,6 +471,57 @@ export async function executeManagedGatewayCommand(params: {
   } finally {
     try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { /* connection cleanup releases the lock */ }
     lockClient.release();
+  }
+}
+
+/** A 2053 observation is not uniquely correlated; this only prevents stale local reuse. */
+export async function enableB5DoublePressFromObservation(params: {
+  gatewayId: number; companyId: string; gatewayMac: string; readId: string;
+  actor: GatewayCommandActor; requestId?: string; timeoutMs: number;
+  deps?: Parameters<typeof executeCommand>[0]['deps'];
+}): Promise<GatewayCommandResult | { status: 'already_enabled' }> {
+  const gatewayMac = normalizeGatewayMac(params.gatewayMac);
+  if (!gatewayMac || params.actor.type !== 'user' || !params.actor.userId) throw new GatewayButtonObservationError('Invalid observation scope');
+  const lockClient = await pool.connect();
+  let locked = false;
+  try {
+    await expireStaleGatewayCommands(params.gatewayId);
+    await acquireGatewayLock(lockClient, params.gatewayId);
+    locked = true;
+    const read = await lockClient.query<{ response_payload: unknown }>(
+      `SELECT r.response_payload FROM hardware_gateway_reads r
+       JOIN gateways g ON g.id = r.gateway_id AND g.company_id = r.company_id AND g.active = TRUE
+       WHERE r.id = $1 AND r.gateway_id = $2 AND r.company_id = $3 AND r.actor_user_id = $4
+         AND regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g') = $5
+         AND r.msg_id = 2053 AND r.read_type = 'bxp_button_filter' AND r.status = 'response_observed'
+         AND r.response_observed_at BETWEEN NOW() - INTERVAL '60 seconds' AND NOW()
+         AND EXISTS (SELECT 1 FROM hardware_gateway_observed_settings s
+           WHERE s.gateway_id = r.gateway_id AND s.company_id = r.company_id AND s.read_type = r.read_type
+             AND s.observed_at = r.response_observed_at AND s.observed_value = r.response_payload->'data')
+         AND NOT EXISTS (SELECT 1 FROM hardware_gateway_reads newer
+           WHERE newer.gateway_id = r.gateway_id AND newer.read_type = r.read_type
+             AND newer.id <> r.id AND newer.created_at >= r.created_at)`,
+      [params.readId, params.gatewayId, params.companyId, params.actor.userId, gatewayMac]
+    );
+    const report = read.rows[0] && parseGatewayConfigurationReport(`gw/${gatewayMac}/publish`, read.rows[0].response_payload);
+    if (!report || report.readType !== 'bxp_button_filter') throw new GatewayButtonObservationError('A recent valid 2053 observation is required');
+    const values = report.data as Record<string, number>;
+    if (values.double_press === 1) return { status: 'already_enabled' };
+    const reserved = await lockClient.query(
+      `INSERT INTO hardware_b5_filter_observation_uses(read_id) VALUES($1)
+       ON CONFLICT (read_id) DO NOTHING RETURNING read_id`, [params.readId]
+    );
+    if (!reserved.rows.length) throw new GatewayButtonObservationError('Observation already used');
+    const command: GatewayCommandPayload = { msg_id: 1053, device_info: { mac: gatewayMac.toUpperCase() },
+      data: { ...values, double_press: 1 } };
+    return await executeCommand({ ...params, commandType: 'b5_double_press_filter', command,
+      ackMsgIds: [1053], idempotencyKey: params.requestId ? `${params.requestId}:1053` : undefined });
+  } finally {
+    let destroy = false;
+    if (locked) {
+      try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { destroy = true; }
+    }
+    lockClient.release(destroy || undefined);
   }
 }
 

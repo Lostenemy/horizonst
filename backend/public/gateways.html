@@ -58,8 +58,8 @@
           <p id="gatewayRssiSaved" role="status"></p>
           <p>No es la señal recibida del tag ni el umbral local de presencia de Horneo. El registro central y un ACK no son una lectura del filtro físico actual; no hay lectura RSSI disponible en este panel.</p>
           <button type="button" id="gatewayApplyRssi">Solicitar filtro físico (1042)</button>
-          <button type="button" id="gatewayConfigureB5">Configurar doble pulsación B5</button>
-          <p>Acción bloqueada: la secuencia anterior sobrescribe otros filtros y el intervalo de reporte. Consultar 2053 no demuestra que sea seguro modificarlos ni confirma la recepción de SOS.</p>
+          <button type="button" id="gatewayConfigureB5">Activar doble pulsación en el filtro (1053)</button>
+          <p>Requiere consultar primero el filtro 2053. Solo se solicita el cambio de double_press y se conservan los otros cuatro valores observados; no configura otros filtros ni demuestra la recepción de SOS.</p>
           <button type="button" id="gatewayReadIdentity">Consultar identidad de la gateway</button>
           <button type="button" id="gatewayReadBleConnections">Consultar dispositivos BLE conectados (2201)</button>
           <button type="button" id="gatewayRecordFirmware">Registrar modelo y firmware verificados</button>

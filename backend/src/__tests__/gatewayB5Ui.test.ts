@@ -11,7 +11,8 @@ test('B5 panel separates read, proposal, diagnostic capture and warns of non-cor
   assert.match(html, /Intervalo de reporte BLE propuesto en segundos/);
   assert.match(html, /no confirma una pulsación ni un SOS/);
   assert.match(html, /no envía comandos/);
-  assert.match(js, /getElementById\('gatewayConfigureB5'\)\.disabled = true/);
+  assert.match(js, /!v2 \|\| !b5FilterObserved/);
+  assert.match(js, /b5-double-press-filter/);
   assert.match(js, /result\.status === 'response_observed'/);
   assert.match(js, /b5CaptureRefresh\.disabled = true/);
   assert.match(js, /selectedGateway\?\.id !== gateway\.id/);

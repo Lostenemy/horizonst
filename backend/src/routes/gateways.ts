@@ -15,6 +15,8 @@ import {
   configureGatewayRssi,
   executeGatewayMqttConfigurationSequence,
   executeManagedGatewayCommand,
+  enableB5DoublePressFromObservation,
+  GatewayButtonObservationError,
   GatewayCommandBusyError
 } from '../services/gatewayCommands';
 import { buildBluetoothGatewayCommand, isBluetoothOperation } from '../services/gatewayBluetoothCommands';
@@ -479,6 +481,33 @@ router.post('/:gatewayId/read-ble-connected-devices', authenticate, authorizeHar
     }
     console.error('Failed to read observed BLE connected devices', error);
     return res.status(500).json({ message: 'Failed to read observed BLE connected devices' });
+  }
+});
+
+router.post('/:gatewayId/b5-double-press-filter', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  if (!Number.isSafeInteger(gatewayId) || gatewayId <= 0 || !req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+      || Object.keys(req.body).join(',') !== 'readId' || typeof req.body.readId !== 'string' || !validateUuid(req.body.readId)) {
+    return res.status(400).json({ message: 'A valid observation identifier is required' });
+  }
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const result = await enableB5DoublePressFromObservation({ gatewayId, companyId: gateway.company_id,
+      gatewayMac: gateway.mac_address, readId: req.body.readId, actor: { type: 'user', userId: req.user!.id },
+      requestId: req.requestId, timeoutMs: commandTimeoutMs() });
+    await appendTechnicalAudit({ actorUserId: req.user!.id, action: 'gateway.b5.double_press_filter',
+      entityType: 'gateway', entityId: gatewayId, companyId: gateway.company_id, requestId: req.requestId,
+      result: result.status === 'success' || result.status === 'already_enabled' ? 'unverified' : 'failure',
+      after: { readId: req.body.readId, status: result.status } });
+    return res.status(result.status === 'timeout' ? 504 : result.status === 'error' ? 502 : result.status === 'ambiguous' ? 202 : 200)
+      .json({ ...result, message: result.status === 'already_enabled' ? 'La observación ya indicaba doble pulsación activa; no se envió ningún comando.'
+        : 'Solo se solicitó 1053; un ACK no confirma el estado actual ni la recepción de SOS.' });
+  } catch (error) {
+    if (error instanceof GatewayButtonObservationError) return res.status(409).json({ message: 'La lectura 2053 ya no es utilizable; consulta de nuevo.' });
+    if (error instanceof GatewayCommandBusyError || (error as any)?.code === '23505') return res.status(409).json({ message: 'La gateway tiene otra operación activa.' });
+    console.error('Failed to configure B5 button filter');
+    return res.status(500).json({ message: 'No se pudo solicitar el cambio del filtro B5.' });
   }
 });
 
