@@ -396,3 +396,6 @@ footer {
   font-size: 1rem;
   color: var(--text-color);
 }
+/* Disabled technical actions must remain distinguishable without relying on color alone. */
+#gatewayTechnicalPanel button:disabled { opacity: .55; cursor: not-allowed; text-decoration: line-through; }
+#gatewayBluetoothPanel [role="status"] { display: block; margin-block: .4rem; }

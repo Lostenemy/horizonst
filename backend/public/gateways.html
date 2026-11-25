@@ -59,14 +59,18 @@
           <p>No es la señal recibida del tag ni el umbral local de presencia de Horneo. El registro central y un ACK no son una lectura del filtro físico actual; no hay lectura RSSI disponible en este panel.</p>
           <button type="button" id="gatewayApplyRssi">Solicitar filtro físico (1042)</button>
           <button type="button" id="gatewayConfigureB5">Configurar doble pulsación B5</button>
+          <p>Acción bloqueada: la secuencia anterior sobrescribe otros filtros y el intervalo de reporte. Consultar 2053 no demuestra que sea seguro modificarlos ni confirma la recepción de SOS.</p>
           <button type="button" id="gatewayReadIdentity">Consultar identidad de la gateway</button>
           <button type="button" id="gatewayReadBleConnections">Consultar dispositivos BLE conectados (2201)</button>
           <button type="button" id="gatewayRecordFirmware">Registrar modelo y firmware verificados</button>
           <button type="button" id="gatewayClearFirmware">Marcar firmware como desconocido</button>
+          <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>
         </div>
         <div id="gatewayBluetoothPanel" hidden>
           <h3>Bluetooth · Escaneo y filtros</h3>
           <p>Cada cambio requiere confirmación de la gateway. Un RSSI incorrecto o apagar el escaneo puede interrumpir la presencia.</p>
+          <p>Consultar solicita datos sin cambiar la configuración. Aplicar cambia la configuración. Reiniciar afecta la conexión de la gateway.</p>
+          <p id="gatewayFirmwareControlStatus" role="status"></p>
           <div class="form-grid">
             <label>Escaneo
               <select data-ble-input="scan"><option value="1">Activado</option><option value="0">Apagado</option></select>
@@ -87,10 +91,17 @@
               <select data-ble-input="phy"><option value="0">1M V4.2</option><option value="1">1M V5.0</option><option value="2">1M V4.2/V5.0</option><option value="3">Coded PHY V5.0</option><option value="4">Todos V2.X</option></select>
               <button type="button" data-ble-command="phy">Aplicar</button>
             </label>
-            <label>Intervalo de reporte BLE (0 = tiempo real)
+            <label>Intervalo de reporte BLE propuesto en segundos (0 = tiempo real; no es una lectura actual)
               <input data-ble-input="report-interval" type="number" min="0" max="86400" step="1" value="0" />
               <button type="button" data-ble-command="report-interval">Aplicar</button>
+              <button type="button" data-config-read="ble_report_interval">Consultar intervalo (2063)</button>
+              <span id="gatewayIntervalFeedback" role="status" aria-live="polite"></span>
             </label>
+            <div>
+              <strong>Filtro BXP-Button</strong>
+              <button type="button" data-config-read="bxp_button_filter">Consultar filtro completo (2053)</button>
+              <span id="gatewayButtonFilterFeedback" role="status" aria-live="polite"></span>
+            </div>
             <label>Modo de escaneo
               <select data-ble-input="scan-mode"><option value="0">Activo</option><option value="1">Pasivo</option></select>
               <button type="button" data-ble-command="scan-mode">Aplicar</button>
@@ -183,7 +194,16 @@
             <thead><tr><th>Fecha</th><th>Paso</th><th>Actor</th><th>Destino</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
           </table></div>
         </section>
-        <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>
+        <section id="gatewayB5Diagnostic" hidden>
+          <h3>Captura diagnóstica B5</h3>
+          <p>Solo observación temporal en memoria durante cinco minutos; no envía comandos. La variación del contador no confirma una pulsación ni un SOS. Reinicios, pérdidas y mensajes fuera de orden pueden hacer ambiguo el resultado.</p>
+          <label for="gatewayB5CaptureDevice">B5 de la compañía</label>
+          <select id="gatewayB5CaptureDevice"></select>
+          <button type="button" id="gatewayB5CaptureStart">Iniciar captura</button>
+          <button type="button" id="gatewayB5CaptureRefresh" disabled>Actualizar captura</button>
+          <p id="gatewayB5CaptureStatus" role="status" aria-live="polite"></p>
+          <div class="table-wrapper"><table id="gatewayB5CaptureTable"><thead><tr><th>Recepción</th><th>Tipo de trama</th><th>Estado alarma</th><th>Subestado</th><th>Contador</th><th>Comparación</th></tr></thead><tbody></tbody></table></div>
+        </section>
         <h3>Identidad reportada automáticamente</h3>
         <p>Datos observados en una respuesta MQTT 2002 válida; separados del registro manual.</p>
         <dl id="gatewayReportedIdentity"></dl>

@@ -25,6 +25,8 @@ const reports = {
   ble_scan_switch: { msg_id: 2040, device_info: { mac: '2805a55efb68' }, data: { scan_switch: 1 } },
   filter_relation: { msg_id: 2041, device_info: { mac: '2805a55efb68' }, data: { relation: 3 } },
   duplicate_rule: { msg_id: 2057, device_info: { mac: '2805a55efb68' }, data: { rule: 0 } },
+  ble_report_interval: { msg_id: 2063, device_info: { mac: '2805a55efb68' }, data: { interval: 30 } },
+  bxp_button_filter: { msg_id: 2053, device_info: { mac: '2805a55efb68' }, data: { switch_value: 1, single_press: 1, double_press: 1, long_press: 0, abnormal_inactivity: 0 } },
   ble_connected_devices: { msg_id: 2201, device_info: { mac: '2805a55efb68' }, data: {
     ble_conn_list: [{ mac: 'fd9d4f8ae226', type: 2 }, { mac: 'f074bff07dc9', type: 7 }]
   } }
@@ -261,6 +263,7 @@ test('the observed schemas and requests are exact and are not ACKs', () => {
   const expectedIds: Record<GatewayConfigurationReadType, number> = {
     mqtt_configuration: 2030,
     led_state: 2011, ble_scan_switch: 2040, filter_relation: 2041, duplicate_rule: 2057,
+    ble_report_interval: 2063, bxp_button_filter: 2053,
     ble_connected_devices: 2201
   };
   for (const [readType, report] of Object.entries(reports) as Array<[GatewayConfigurationReadType, any]>) {
@@ -284,6 +287,19 @@ test('2201 accepts ordered non-empty and empty snapshots with raw integer type c
 
 test('strict parsing rejects contradictory MAC, wrong topic, extra/missing keys, types and ranges', () => {
   const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+  for (const value of [-1, 86401, 1.5, '30']) {
+    const invalid = clone(reports.ble_report_interval) as any;
+    invalid.data.interval = value;
+    assert.equal(parseGatewayConfigurationReport(TOPIC, invalid), null);
+  }
+  for (const key of Object.keys(reports.bxp_button_filter.data)) {
+    const missing = clone(reports.bxp_button_filter) as any;
+    delete missing.data[key];
+    assert.equal(parseGatewayConfigurationReport(TOPIC, missing), null);
+    const invalid = clone(reports.bxp_button_filter) as any;
+    invalid.data[key] = 2;
+    assert.equal(parseGatewayConfigurationReport(TOPIC, invalid), null);
+  }
   let value: any = clone(reports.led_state); value.device_info.mac = 'ffffffffffff';
   assert.equal(parseGatewayConfigurationReport(TOPIC, value), null);
   assert.equal(parseGatewayConfigurationReport(`${TOPIC}/extra`, reports.led_state), null);

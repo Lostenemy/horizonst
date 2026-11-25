@@ -14,6 +14,8 @@ export type GatewayConfigurationReadType =
   | 'ble_scan_switch'
   | 'filter_relation'
   | 'duplicate_rule'
+  | 'ble_report_interval'
+  | 'bxp_button_filter'
   | 'ble_connected_devices';
 
 export type GatewayConnectedDevice = { mac: string; type: number };
@@ -40,6 +42,8 @@ const READ_DEFINITIONS: readonly ReadDefinition[] = [
   { msgId: 2040, readType: 'ble_scan_switch', ranges: { scan_switch: [0, 1] } },
   { msgId: 2041, readType: 'filter_relation', ranges: { relation: [0, 8] } },
   { msgId: 2057, readType: 'duplicate_rule', ranges: { rule: [0, 3] } },
+  { msgId: 2063, readType: 'ble_report_interval', ranges: { interval: [0, 86400] } },
+  { msgId: 2053, readType: 'bxp_button_filter', ranges: { switch_value: [0, 1], single_press: [0, 1], double_press: [0, 1], long_press: [0, 1], abnormal_inactivity: [0, 1] } },
   { msgId: 2201, readType: 'ble_connected_devices', snapshot: true }
 ];
 const definitionByMsgId = new Map(READ_DEFINITIONS.map((item) => [item.msgId, item]));

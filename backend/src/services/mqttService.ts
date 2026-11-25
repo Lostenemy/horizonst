@@ -8,6 +8,7 @@ import { ProcessedDeviceRecord } from '../types';
 import { handleHardwareGatewayAck } from './gatewayAck';
 import { handleGatewayIdentityReport } from './gatewayIdentity';
 import { handleGatewayConfigurationReport } from './gatewayObservedReads';
+import { recordB5DiagnosticMessage } from './b5DiagnosticCapture';
 
 let client: MqttClient | null = null;
 let mqttConnected = false;
@@ -80,6 +81,9 @@ export const processMqttMessage = async (
   packet: Pick<IPublishPacket, 'qos' | 'retain'> = { qos: 0, retain: false }
 ): Promise<void> => {
   const payloadText = messageBuffer.toString();
+  if (topic.startsWith('gw/') && payloadText.includes('3070')) {
+    try { recordB5DiagnosticMessage(topic, JSON.parse(payloadText)); } catch { /* Captura diagnóstica nunca interrumpe MQTT. */ }
+  }
   // Sensitive 2030 reports are consumed exclusively by the whitelisting reader.
   // They must never reach generic ACK, MK4 capture or broadcast paths.
   let sensitiveReport = false;

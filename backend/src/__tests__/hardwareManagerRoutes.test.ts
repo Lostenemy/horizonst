@@ -8,6 +8,7 @@ import { handleGatewayIdentityReport, resetGatewayIdentityWaitersForTests } from
 import { handleGatewayConfigurationReport, resetGatewayConfigurationWaitersForTests } from '../services/gatewayObservedReads';
 import { credentialVersion, signToken } from '../utils/jwt';
 import { buildHorizonstMqttPreset } from '../services/gatewayMqttConfiguration';
+import { recordB5DiagnosticMessage } from '../services/b5DiagnosticCapture';
 
 const COMPANY_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const COMPANY_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -57,6 +58,27 @@ const api = (path: string, id?: number, role?: Parameters<typeof signToken>[0]['
       ...(init.headers ?? {})
     }
   });
+
+test('diagnostic captures require superadmin and same company; capture does not publish', async () => {
+  const state = fakeDatabase();
+  const path = '/api/gateways/41/b5-diagnostic-captures';
+  const request = { method: 'POST', body: JSON.stringify({ deviceId: 22 }) };
+  assert.equal((await api(path, 1, 'hardware_readonly', request)).status, 403);
+  assert.equal((await api(path, 3, 'hardware_technician', request)).status, 403);
+  assert.equal((await api(path, 5, 'hardware_superadmin', { method: 'POST', body: JSON.stringify({ deviceId: 23 }) })).status, 404);
+  const created = await api(path, 5, 'hardware_superadmin', request);
+  assert.equal(created.status, 201);
+  const result = await created.json() as { id: string };
+  recordB5DiagnosticMessage('gw/2805a55efb68/publish', { msg_id: 3070, device_info: { mac: '2805a55efb68' },
+    data: [{ mac: 'bbbbbbbbbbbb', type: 'bxp-button', frame_type: 1, alarm_status: 1, trigger_count: 5, passwd: 'fictional-only-secret' }] });
+  const observed = await api(`${path}/${result.id}?deviceId=22`, 5, 'hardware_superadmin');
+  assert.equal(observed.status, 200);
+  const body = await observed.text();
+  assert.match(body, /primera observación/);
+  assert.doesNotMatch(body, /fictional-only-secret|bbbbbbbbbbbb/);
+  assert.equal((await api(`${path}/${result.id}?deviceId=22`, 3, 'hardware_technician')).status, 403);
+  assert.equal(state.published.length, 0);
+});
 
 function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned = false, inactive = false, gatewayMac = '2805a55efb68') {
   const idempotencyKeys = new Set<string>();
@@ -111,6 +133,8 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
     if (sql.includes('company_user_memberships')) {
       return { rows: [{ company_id: Number(params[0]) === 3 ? COMPANY_B : COMPANY_A }] };
     }
+    if (sql.startsWith('SELECT ble_mac FROM devices')) return { rows: params[0] === 22 && params[1] === COMPANY_A ? [{ ble_mac: 'BBBBBBBBBBBB' }] : [] };
+    if (sql.startsWith('SELECT 1 FROM devices WHERE')) return { rows: params[0] === 22 && params[1] === COMPANY_A ? [{ '?column?': 1 }] : [] };
     if (sql.includes('FROM gateways g') && sql.includes('WHERE g.id = $1') && !sql.includes('hardware_gateway_reads')) {
       const scopedCompanies = params[1];
       const allowed = Number(params[0]) === 41 && !(inactive && sql.includes('g.active = TRUE')) && (sql.includes('g.company_id = ANY')
@@ -206,7 +230,8 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
     }
     const configurationReports: Record<number, Record<string, number>> = {
       2011: { net_led: 1, sys_led: 1, server_led: 1 }, 2040: { scan_switch: 1 },
-      2041: { relation: 3 }, 2057: { rule: 0 }
+      2041: { relation: 3 }, 2057: { rule: 0 }, 2063: { interval: 30 },
+      2053: { switch_value: 1, single_press: 1, double_press: 1, long_press: 0, abnormal_inactivity: 0 }
     };
     if (configurationReports[payload.msg_id]) {
       await handleGatewayConfigurationReport('gw/2805a55efb68/publish', JSON.stringify({
@@ -851,9 +876,10 @@ test('identity history is readable only inside the caller hardware scope', async
   assert.equal(foreign.readQueries, 0);
 });
 
-test('configuration reads are technician-only, company-scoped and publish the four exact requests', async () => {
+test('configuration reads are technician-only, company-scoped and publish exact requests', async () => {
   const definitions = [
-    ['led_state', 2011], ['ble_scan_switch', 2040], ['filter_relation', 2041], ['duplicate_rule', 2057]
+    ['led_state', 2011], ['ble_scan_switch', 2040], ['filter_relation', 2041], ['duplicate_rule', 2057],
+    ['ble_report_interval', 2063], ['bxp_button_filter', 2053]
   ] as const;
   for (const [readType, msgId] of definitions) {
     const path = `/api/gateways/41/read-configuration/${readType}`;

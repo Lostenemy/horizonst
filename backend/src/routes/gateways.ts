@@ -30,6 +30,7 @@ import {
 } from '../services/gatewayObservedReads';
 import { buildGatewayMqttConfiguration, buildHorizonstMqttPreset, GatewayMqttPresetUnavailableError } from '../services/gatewayMqttConfiguration';
 import { storedPublicMqttObservation } from '../services/gatewayMqttObservationIngress';
+import { getB5DiagnosticCapture, startB5DiagnosticCapture } from '../services/b5DiagnosticCapture';
 import {
   GatewayOnboardingConflictError,
   onboardGateway,
@@ -212,6 +213,39 @@ router.get('/:gatewayId/reads', authenticate, async (req: AuthenticatedRequest, 
     console.error('Failed to list gateway reads', error);
     return res.status(500).json({ message: 'Failed to list gateway reads' });
   }
+});
+
+router.post('/:gatewayId/b5-diagnostic-captures', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  const deviceId = Number(req.body?.deviceId);
+  if (!Number.isSafeInteger(gatewayId) || gatewayId <= 0 || !Number.isSafeInteger(deviceId) || deviceId <= 0 || Object.keys(req.body ?? {}).join(',') !== 'deviceId') return res.status(400).json({ message: 'Invalid capture request' });
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    const found = await pool.query("SELECT ble_mac FROM devices WHERE id=$1 AND company_id=$2 AND active=TRUE AND status='active' AND device_type=$3", [deviceId, gateway.company_id, 'b5']);
+    const tagMac = normalizeInventoryMac(found.rows[0]?.ble_mac, 'device')?.toLowerCase();
+    const gatewayMac = normalizeInventoryMac(gateway.mac_address, 'gateway');
+    if (!tagMac || !gatewayMac) return res.status(404).json({ message: 'Device not found' });
+    const capture = startB5DiagnosticCapture({ actor: req.user!.id, gatewayId, companyId: gateway.company_id, gatewayMac, deviceId, tagMac });
+    return res.status(201).json(capture);
+  } catch { return res.status(503).json({ message: 'Capture unavailable' }); }
+});
+
+router.get('/:gatewayId/b5-diagnostic-captures/:captureId', authenticate, authorizeHardware('superadmin'), async (req: AuthenticatedRequest, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const gatewayId = Number(req.params.gatewayId);
+  const deviceId = Number(req.query.deviceId);
+  if (!Number.isSafeInteger(gatewayId) || gatewayId <= 0 || !Number.isSafeInteger(deviceId) || deviceId <= 0 || !validateUuid(req.params.captureId)) return res.status(400).json({ message: 'Invalid capture request' });
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Capture not found' });
+    const found = await pool.query("SELECT ble_mac FROM devices WHERE id=$1 AND company_id=$2 AND active=TRUE AND status='active' AND device_type=$3", [deviceId, gateway.company_id, 'b5']);
+    const tagMac = normalizeInventoryMac(found.rows[0]?.ble_mac, 'device')?.toLowerCase();
+    const gatewayMac = normalizeInventoryMac(gateway.mac_address, 'gateway');
+    if (!tagMac || !gatewayMac) return res.status(404).json({ message: 'Capture not found' });
+    const capture = getB5DiagnosticCapture(req.params.captureId, req.user!.id, gatewayId, gateway.company_id, deviceId, Date.now(), { tagMac, gatewayMac });
+    return capture ? res.json(capture) : res.status(404).json({ message: 'Capture not found' });
+  } catch { return res.status(503).json({ message: 'Capture unavailable' }); }
 });
 
 router.get('/:gatewayId/observed-settings', authenticate, async (req: AuthenticatedRequest, res) => {

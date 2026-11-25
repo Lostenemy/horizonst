@@ -50,6 +50,11 @@ let gateways = [];
 let owners = [];
 let companies = [];
 let selectedGateway = null;
+let b5FilterObserved = false;
+let b5Capture = null;
+const b5CaptureDevice = document.getElementById('gatewayB5CaptureDevice');
+const b5CaptureStatus = document.getElementById('gatewayB5CaptureStatus');
+const b5CaptureRefresh = document.getElementById('gatewayB5CaptureRefresh');
 
 const mqttIntegerFields = [
   'security_type', 'port', 'qos', 'clean_session', 'keepalive', 'lwt_en', 'lwt_qos', 'lwt_retain'
@@ -271,7 +276,13 @@ const hasVerifiedMkgw3V2 = (gateway) => (
 
 const refreshFirmwareControls = (gateway) => {
   const v2 = hasVerifiedMkgw3V2(gateway);
-  document.getElementById('gatewayConfigureB5').disabled = !v2;
+  document.getElementById('gatewayFirmwareControlStatus').textContent = v2
+    ? 'Identidad MKGW3 V2 verificada. La configuración B5 permanece bloqueada porque la secuencia anterior sobrescribe otros valores.'
+    : 'Intervalo, modo de escaneo y configuración B5 deshabilitados: consulta la identidad o registra una evidencia válida de firmware MKGW3 V2.';
+  // La secuencia heredada sobrescribe otros filtros y el intervalo: no ofrecerla como cambio conservador.
+  document.getElementById('gatewayConfigureB5').disabled = true;
+  document.getElementById('gatewayConfigureB5').title = !v2 ? 'Requiere identidad MKGW3 V2 verificada.'
+    : !b5FilterObserved ? 'Consulta primero el filtro BXP-Button (2053).' : 'Bloqueada: la secuencia anterior sobrescribe otros filtros y el intervalo.';
   for (const operation of ['report-interval', 'scan-mode']) {
     bluetoothPanel.querySelector(`[data-ble-command="${operation}"]`).disabled = !v2;
   }
@@ -540,6 +551,24 @@ const renderReportedIdentity = (gateway) => {
 
 const selectGateway = async (gateway) => {
   selectedGateway = gateway;
+  b5FilterObserved = false;
+  b5Capture = null;
+  b5CaptureRefresh.disabled = true;
+  b5CaptureStatus.textContent = '';
+  document.querySelector('#gatewayB5CaptureTable tbody').replaceChildren();
+  b5CaptureDevice.replaceChildren();
+  document.getElementById('gatewayB5Diagnostic').hidden = !isAdmin || !gateway.active || !gateway.company_id;
+  if (!document.getElementById('gatewayB5Diagnostic').hidden) {
+    try {
+      const devices = await apiGet('/devices');
+      if (selectedGateway?.id !== gateway.id) return;
+      for (const device of devices.filter(item => item.company_id === gateway.company_id && item.active && item.device_type === 'b5')) {
+        const option = document.createElement('option'); option.value = String(device.id);
+        option.textContent = device.name || `B5 ${device.id}`; b5CaptureDevice.append(option);
+      }
+      if (!b5CaptureDevice.options.length) b5CaptureStatus.textContent = 'No hay dispositivos B5 activos disponibles en esta compañía.';
+    } catch { b5CaptureStatus.textContent = 'No se pudo cargar la lista de dispositivos.'; }
+  }
   technicalPanel.hidden = false;
   technicalTitle.textContent = gateway.name || gateway.mac_address;
   technicalSummary.textContent = `MAC ${gateway.mac_address} · ${gateway.company_name || 'Sin compañía'} · ${gateway.broker_prepared ? 'Preparada en el broker' : 'Cuenta del broker no verificada'} · conexión no verificada · ${gateway.place_name || 'Sin ubicación'} · ${gateway.active ? 'Activa' : 'Inactiva'} · registro manual: ${gateway.product_model || 'modelo desconocido'} ${gateway.firmware_version || 'firmware desconocido'}${gateway.firmware_evidence ? ` · evidencia ${gateway.firmware_evidence}` : ''}`;
@@ -560,6 +589,39 @@ const selectGateway = async (gateway) => {
   await Promise.all([mqttPanel.hidden ? Promise.resolve() : applyMqttPreset(), refreshTechnicalHistory(), refreshGatewayDevices(gateway.id)]);
   if (!document.getElementById('gatewayMqttObservationPanel').hidden && selectedGateway?.id === gateway.id) await loadMqttObservation(gateway,true,true);
 };
+
+document.getElementById('gatewayB5CaptureStart').addEventListener('click', async () => {
+  const gateway = selectedGateway;
+  const deviceId = Number(b5CaptureDevice.value);
+  if (!gateway || !Number.isSafeInteger(deviceId) || deviceId <= 0) { b5CaptureStatus.textContent = 'Selecciona un B5 disponible.'; return; }
+  const start = document.getElementById('gatewayB5CaptureStart');
+  if (start.disabled) return;
+  start.disabled = true;
+  try {
+    const capture = await apiPost(`/gateways/${gateway.id}/b5-diagnostic-captures`, { deviceId });
+    if (selectedGateway?.id !== gateway.id) return;
+    b5Capture = { ...capture, deviceId, gatewayId: gateway.id };
+    b5CaptureRefresh.disabled = false;
+    b5CaptureStatus.textContent = `Captura activa hasta ${new Date(capture.expiresAt).toLocaleTimeString('es-ES')}. Actualiza para ver observaciones.`;
+    document.querySelector('#gatewayB5CaptureTable tbody').replaceChildren();
+  } catch { if (selectedGateway?.id === gateway.id) b5CaptureStatus.textContent = 'No se pudo iniciar la captura; revisa permisos y compañía.'; }
+  finally { start.disabled = false; }
+});
+b5CaptureDevice.addEventListener('change', () => { b5Capture = null; b5CaptureRefresh.disabled = true; b5CaptureStatus.textContent = 'Selecciona Iniciar captura para el dispositivo elegido.'; });
+b5CaptureRefresh.addEventListener('click', async () => {
+  const capture = b5Capture;
+  if (!capture || selectedGateway?.id !== capture.gatewayId) return;
+  try {
+    const result = await apiGet(`/gateways/${capture.gatewayId}/b5-diagnostic-captures/${encodeURIComponent(capture.id)}?deviceId=${capture.deviceId}`);
+    if (b5Capture !== capture) return;
+    renderHistory(document.querySelector('#gatewayB5CaptureTable tbody'), result.items, [
+      item => new Date(item.receivedAt).toLocaleString('es-ES'), item => item.frameType ?? 'No disponible',
+      item => item.alarmStatus ?? 'No disponible', item => item.subAlarmStatus ?? 'No disponible',
+      item => item.triggerCount ?? 'No disponible', item => item.comparison
+    ]);
+    b5CaptureStatus.textContent = `${result.items.length} observaciones. El contador diferente no demuestra una pulsación.`;
+  } catch { b5CaptureStatus.textContent = 'Captura caducada o no disponible; inicia otra si es necesario.'; b5CaptureRefresh.disabled = true; }
+});
 
 firmwareRecordButton.addEventListener('click', async () => {
   if (!selectedGateway || !canEditHardware) return;
@@ -621,20 +683,34 @@ bleConnectionsReadButton.addEventListener('click', async () => {
 });
 
 for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
+  const nearbyStatus = document.createElement('span');
+  nearbyStatus.setAttribute('role', 'status');
+  nearbyStatus.setAttribute('aria-live', 'polite');
+  button.insertAdjacentElement('afterend', nearbyStatus);
   button.addEventListener('click', async () => {
     if (!selectedGateway || !canEditHardware) return;
     const readType = button.dataset.configRead;
+    const gateway = selectedGateway;
+    const feedback = readType === 'ble_report_interval' ? document.getElementById('gatewayIntervalFeedback')
+      : readType === 'bxp_button_filter' ? document.getElementById('gatewayButtonFilterFeedback') : nearbyStatus;
     if (!await confirmAction({
       title: 'Consultar configuración observada',
       message: `Solicitar ${readType} a ${selectedGateway.mac_address}? La respuesta se registrará como observada, no como ACK correlacionado.`,
       confirmText: 'Consultar'
-    })) return;
+    }) || selectedGateway?.id !== gateway.id) return;
     try {
-      technicalFeedback.textContent = `Esperando respuesta para ${readType}…`;
-      const result = await apiPost(`/gateways/${selectedGateway.id}/read-configuration/${readType}`, {});
-      technicalFeedback.textContent = result.message;
+      feedback.textContent = `Esperando respuesta para ${readType}…`;
+      const result = await apiPost(`/gateways/${gateway.id}/read-configuration/${readType}`, {});
+      if (selectedGateway?.id !== gateway.id) return;
+      if (readType === 'bxp_button_filter' && selectedGateway?.id === gateway.id && result.status === 'response_observed') {
+        b5FilterObserved = true;
+        refreshFirmwareControls(gateway);
+      }
+      feedback.textContent = result.status === 'response_observed'
+        ? `Respuesta observada: ${JSON.stringify(result.data)}. La fecha aparece en Configuración observada; no hay correlación inequívoca.`
+        : result.message;
     } catch (error) {
-      technicalFeedback.textContent = `Lectura ${readType} no confirmada: ${error.message}`;
+      feedback.textContent = `Lectura ${readType} no confirmada: ${error.message}`;
     }
     await refreshTechnicalHistory();
   });
@@ -776,29 +852,36 @@ const bluetoothFields = {
 };
 
 for (const button of bluetoothPanel.querySelectorAll('[data-ble-command]')) {
+  const nearbyStatus = document.createElement('span');
+  nearbyStatus.setAttribute('role', 'status');
+  nearbyStatus.setAttribute('aria-live', 'polite');
+  button.insertAdjacentElement('afterend', nearbyStatus);
   button.addEventListener('click', async () => {
     const operation = button.dataset.bleCommand;
+    const gateway = selectedGateway;
+    const feedback = operation === 'report-interval' ? document.getElementById('gatewayIntervalFeedback') : nearbyStatus;
     const input = bluetoothPanel.querySelector(`[data-ble-input="${operation}"]`);
     const value = Number(input.value);
-    if (!selectedGateway || !Number.isInteger(value) || (operation === 'report-interval' && (value < 0 || value > 86400))) {
-      technicalFeedback.textContent = 'Valor Bluetooth no válido.';
+    if (!gateway || !Number.isInteger(value) || (operation === 'report-interval' && (value < 0 || value > 86400))) {
+      feedback.textContent = 'Valor Bluetooth no válido.';
       return;
     }
     const confirmed = await confirmAction({
       title: 'Aplicar configuración Bluetooth',
-      message: `Enviar ${operation}=${value} a ${selectedGateway.mac_address}? Algunos cambios pueden afectar la presencia.`,
+      message: `Enviar ${operation}=${value} a ${gateway.mac_address}? Algunos cambios pueden afectar la presencia.`,
       confirmText: 'Aplicar'
     });
-    if (!confirmed) return;
+    if (!confirmed || selectedGateway?.id !== gateway.id) return;
     try {
-      technicalFeedback.textContent = 'Esperando confirmación de la gateway…';
-      const result = await apiPost(`/gateways/${selectedGateway.id}/bluetooth/${operation}`, { [bluetoothFields[operation]]: value });
-      technicalFeedback.textContent = result.status === 'success'
+      feedback.textContent = 'Esperando confirmación de la gateway…';
+      const result = await apiPost(`/gateways/${gateway.id}/bluetooth/${operation}`, { [bluetoothFields[operation]]: value });
+      if (selectedGateway?.id !== gateway.id) return;
+      feedback.textContent = result.status === 'success'
         ? `${operation} confirmado por la gateway.`
         : `${operation} no confirmado: ${result.resultMessage || result.status}`;
       await refreshTechnicalHistory();
     } catch (error) {
-      technicalFeedback.textContent = `No se pudo aplicar ${operation}: ${error.message}`;
+      feedback.textContent = `No se pudo aplicar ${operation}: ${error.message}`;
     }
   });
 }
