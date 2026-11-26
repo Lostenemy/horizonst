@@ -41,4 +41,21 @@ test('checkbox changes send the complete reviewed group once', async () => {
   assert.equal(requests.length, 1);
   assert.equal(JSON.stringify(requests[0].body.values), '{"timestamp":1,"adv_data":0}');
   assert.equal(requests[0].body.readId, 'fictional-read');
+  assert.equal(requests[0].body.uiContract, '20261126-2');
+});
+
+test('new HTML versions resources and incompatible old HTML stops before initialization', () => {
+  const html = readFileSync(path.resolve('public/gateways.html'), 'utf8');
+  assert.match(html, /gatewayUiContract[^>]*content="20261126-2"/);
+  assert.match(html, /styles\.css\?v=20261126-2/);
+  assert.match(html, /gateways\.js\?v=20261126-2/);
+  const source = readFileSync(path.resolve('public/js/gateways.js'), 'utf8');
+  const start = source.indexOf('if (document.getElementById(\'gatewayUiContract\')');
+  const end = source.indexOf('const { user,', start);
+  assert.ok(start >= 0 && end > start);
+  const warnings: any[] = [];
+  const document = { getElementById: () => null, createElement: () => ({ setAttribute() {}, textContent: '' }), body: { prepend: (message: unknown) => warnings.push(message) } };
+  assert.throws(() => vm.runInNewContext(source.slice(start, end), { document }), /contract mismatch/);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0].textContent, /Recarga/);
 });

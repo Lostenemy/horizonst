@@ -27,6 +27,7 @@ const publicPreset = (environment: 'staging' | 'production' = 'production') => {
 async function fixture(observationEnabled = false) {
   const nodes = new Map<string, Element>();
   const get = (id: string) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id)!; };
+  (get('gatewayUiContract') as any).content = '20261126-2';
   const calls: string[] = []; const posts: any[] = []; const reads: any[] = []; const confirmations: any[] = [];
   let presetFetch = async (): Promise<any> => publicPreset();
   let confirm = async () => true;

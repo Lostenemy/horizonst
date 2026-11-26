@@ -278,11 +278,13 @@ const validCommand = { method: 'POST', body: JSON.stringify({ scan_switch: 1 }) 
 test('format changes preserve all other observed fields and enforce permissions and one-time use', async () => {
   const state = fakeDatabase(true);
   const path = '/api/gateways/41/ble-report-format';
-  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', field: 'bxp_button_switch', value: 1 };
+  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', uiContract: '20261126-2', values: { ...state.parsingData, bxp_button_switch: 1 } };
   const request = { method: 'POST', body: JSON.stringify(body) };
   assert.equal((await api(path, 1, 'hardware_readonly', request)).status, 403);
   assert.equal((await api(path, 3, 'hardware_technician', request)).status, 404);
   assert.equal((await api(path, 2, 'hardware_technician', { method: 'POST', body: JSON.stringify({ ...body, field: 'mk_pir_switch' }) })).status, 400);
+  assert.equal((await api(path, 2, 'hardware_technician', { method: 'POST', body: JSON.stringify({ readId: body.readId, readType: body.readType, field: 'bxp_button_switch', value: 1 }) })).status, 409);
+  assert.equal(state.published.length, 0);
   state.formatFirmwareValid = false;
   assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
   assert.equal(state.published.length, 0);
@@ -297,7 +299,7 @@ test('full checkbox values are validated, authorized and sent together', async (
   const state = fakeDatabase(true);
   const path = '/api/gateways/41/ble-report-format';
   const values = { ...state.parsingData, bxp_button_switch: 1, mk_pir_switch: 1 };
-  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', values };
+  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', uiContract: '20261126-2', values };
   const request = { method: 'POST', body: JSON.stringify(body) };
   assert.equal((await api(path, 1, 'hardware_readonly', request)).status, 403);
   assert.equal((await api(path, 3, 'hardware_technician', request)).status, 404);
@@ -324,7 +326,7 @@ test('2059 and 2065 are scoped V2 reads and never configure the gateway', async 
 test('1059 changes one field only and refuses old or malformed observations', async () => {
   const state = fakeDatabase(true);
   const path = '/api/gateways/41/ble-report-format';
-  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_report_fields', field: 'timestamp', value: 0 };
+  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_report_fields', uiContract: '20261126-2', values: { timestamp: 0, adv_data: 1 } };
   const request = { method: 'POST', body: JSON.stringify(body) };
   state.filterReadEnabled = false;
   assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
@@ -337,7 +339,7 @@ test('1059 changes one field only and refuses old or malformed observations', as
 test('format ACK after historical timeout remains ambiguous and cannot reuse the observation', async () => {
   const state = fakeDatabase(true, true);
   const path = '/api/gateways/41/ble-report-format';
-  const request = { method: 'POST', body: JSON.stringify({ readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', field: 'bxp_button_switch', value: 1 }) };
+  const request = { method: 'POST', body: JSON.stringify({ readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', uiContract: '20261126-2', values: { ...state.parsingData, bxp_button_switch: 1 } }) };
   const response = await api(path, 2, 'hardware_technician', request);
   assert.equal(response.status, 202);
   assert.equal((await response.json()).status, 'ambiguous');

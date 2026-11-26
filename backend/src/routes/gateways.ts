@@ -492,17 +492,17 @@ router.post('/:gatewayId/read-ble-connected-devices', authenticate, authorizeHar
 router.post('/:gatewayId/ble-report-format', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
   const gatewayId = Number(req.params.gatewayId);
   const body = req.body;
+  if (body && typeof body === 'object' && !Array.isArray(body) && body.uiContract !== '20261126-2') {
+    return res.status(409).json({ message: 'Esta pantalla está desactualizada. Recarga la página antes de cambiar el formato BLE.' });
+  }
   const formatKeys = body?.readType === 'ble_report_fields' ? ['timestamp', 'adv_data'] : ['iBeacon_switch', 'eddystone_uid_switch', 'eddystone_tlm_switch', 'eddystone_url_switch', 'bxp_acc_switch', 'bxp_th_switch', 'bxp_devinfo_switch', 'bxp_button_switch', 'bxp_tag&sensor_switch', 'mk_pir_switch', 'mk_tof_switch', 'nanobeacon_info_switch'];
   const fullValues = body?.values && typeof body.values === 'object' && !Array.isArray(body.values)
     && Object.keys(body.values).sort().join(',') === [...formatKeys].sort().join(',')
     && formatKeys.every(key => body.values[key] === 0 || body.values[key] === 1);
-  const legacy = body && Object.keys(body).sort().join(',') === 'field,readId,readType,value'
-    && ['timestamp', 'adv_data', 'bxp_button_switch'].includes(body.field) && [0, 1].includes(body.value)
-    && (body.readType === 'ble_report_fields' ? ['timestamp', 'adv_data'].includes(body.field) : body.field === 'bxp_button_switch');
   if (!Number.isSafeInteger(gatewayId) || gatewayId <= 0 || !body || typeof body !== 'object' || Array.isArray(body)
       || typeof body.readId !== 'string' || !validateUuid(body.readId)
       || !['ble_report_fields', 'ble_parsing_options'].includes(body.readType)
-      || !(legacy || (Object.keys(body).sort().join(',') === 'readId,readType,values' && fullValues))) {
+      || !(Object.keys(body).sort().join(',') === 'readId,readType,uiContract,values' && fullValues)) {
     return res.status(400).json({ message: 'Invalid BLE format request' });
   }
   try {
@@ -510,11 +510,11 @@ router.post('/:gatewayId/ble-report-format', authenticate, authorizeHardware('te
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
     if (!hasVerifiedMkgw3V2(gateway)) return res.status(409).json({ message: 'Verified MKGW3 V2 firmware is required' });
     const result = await updateGatewayBleFormatFromObservation({ gatewayId, companyId: gateway.company_id,
-      gatewayMac: gateway.mac_address, readId: body.readId, readType: body.readType, ...(legacy ? { field: body.field, value: body.value } : { values: body.values }),
+      gatewayMac: gateway.mac_address, readId: body.readId, readType: body.readType, values: body.values,
       actor: { type: 'user', userId: req.user!.id }, requestId: req.requestId, timeoutMs: commandTimeoutMs() });
     await appendTechnicalAudit({ actorUserId: req.user!.id, action: 'gateway.ble.report_format', entityType: 'gateway', entityId: gatewayId,
       companyId: gateway.company_id, requestId: req.requestId, result: result.status === 'success' || result.status === 'already_set' ? 'unverified' : 'failure',
-      after: { readId: body.readId, field: body.field, value: body.value, values: body.values, status: result.status } });
+      after: { readId: body.readId, values: body.values, status: result.status } });
     const message = result.status === 'already_set' ? 'La observación ya contiene el valor solicitado; no se envió ningún comando.'
       : result.status === 'ambiguous' ? 'ACK ambiguo: no se puede atribuir con seguridad. Revisa el historial y consulta de nuevo; no se reintentará automáticamente.'
         : result.status === 'timeout' ? 'No llegó una respuesta dentro del plazo. El resultado es incierto; revisa el historial y consulta de nuevo.'

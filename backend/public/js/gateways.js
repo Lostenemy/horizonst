@@ -2,6 +2,14 @@ import { apiGet, apiPost, apiPut, apiDelete } from './api.js';
 import { initAuthPage, openFormModal, confirmAction } from './ui.js';
 import { createLoadState, createMetadataLoader } from './load-state.js';
 
+if (document.getElementById('gatewayUiContract')?.content !== '20261126-2') {
+  const warning = document.createElement('p');
+  warning.setAttribute('role', 'alert');
+  warning.textContent = 'Esta pantalla está desactualizada. Recarga la página antes de operar la gateway.';
+  document.body.prepend(warning);
+  throw new Error('Gateway UI contract mismatch');
+}
+
 const { user, isAdmin, isHardwareTechnician } = initAuthPage();
 const canEditHardware = isAdmin || isHardwareTechnician;
 if (!user) {
@@ -787,7 +795,7 @@ for (const button of formatButtons) button.addEventListener('click', async () =>
     if (!confirmed || selectedGateway?.id !== gateway.id || formatObservations[readType] !== observation) return;
     delete formatObservations[readType];
     formatStatus.textContent = 'Solicitando cambio; espera el resultado…';
-    const result = await apiPost(`/gateways/${gateway.id}/ble-report-format`, { readId: observation.readId, readType, values });
+    const result = await apiPost(`/gateways/${gateway.id}/ble-report-format`, { readId: observation.readId, readType, values, uiContract: '20261126-2' });
     if (selectedGateway?.id === gateway.id) { formatStatus.textContent = result.message; await refreshTechnicalHistory(); }
   } catch (error) {
     if (selectedGateway?.id === gateway.id) formatStatus.textContent = `Resultado no confirmado: ${error.message}. Revisa el historial y consulta de nuevo antes de otro intento.`;

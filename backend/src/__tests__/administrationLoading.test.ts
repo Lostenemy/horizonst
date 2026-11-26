@@ -39,6 +39,7 @@ async function fixture(page: string, role = 'ADMIN', failure?: string, failureSt
   const nodes = new Map<string, Element>();
   const calls: string[] = [];
   const get = (key: string) => { if (!nodes.has(key)) nodes.set(key, new Element()); return nodes.get(key)!; };
+  (get('gatewayUiContract') as any).content = '20261126-2';
   let failing = failure;
   const data: Record<string, unknown> = {
     '/devices': [{ id: 1, name: 'Fixture', ble_mac: 'ABCDEF000001', active: true }],
