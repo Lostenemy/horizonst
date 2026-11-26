@@ -254,7 +254,7 @@ test('MQTT timeout keeps prior observation dated and blocks blind repeats on reo
   await f.open();
   assert.match(f.get('gatewayMqttReadStatus').textContent, /Timeout/);
   assert.match(f.get('gatewayMqttObservedAt').textContent, /Última recepción guardada/);
-  assert.equal(f.get('gatewayMqttRefreshObservation').disabled, true);
+  assert.equal(f.get('gatewayMqttRefreshObservation').disabled, false);
   await f.open(); assert.equal(f.reads.length, 1);
   assert.doesNotMatch(f.get('gatewayMqttReadStatus').textContent, /fictional secret/);
 });
@@ -314,7 +314,7 @@ test('generic historical rejection allows opening reads without confirmation and
   const click=f.get('gatewayMqttRefreshObservation').listeners.click();
   f.get('gatewayMqttRefreshObservation').listeners.click();
   assert.equal(f.confirmations.length,1);assert.equal(f.reads.length,2);
-  assert.match(f.confirmations[0].message,/Gateway #17.*publicará un único 2030.*revisado/);
+  assert.match(f.confirmations[0].message,/Gateway #17.*2030.*respuesta tardía/);
   assert.equal(f.confirmations[0].confirmText,'Publicar una lectura 2030');
   confirm(false);await click;assert.equal(f.reads.length,2);
   f.setConfirm(async()=>true);
@@ -324,7 +324,7 @@ test('generic historical rejection allows opening reads without confirmation and
     return {status:'response_observed'};
   });
   await f.get('gatewayMqttRefreshObservation').listeners.click();
-  assert.equal(f.reads.length,3);assert.equal(JSON.stringify(f.reads[2].body),'{}');
+  assert.equal(f.reads.length,3);assert.equal(JSON.stringify(f.reads[2].body),'{"confirmRecovery":true}');
   assert.equal(f.posts.length,0);assert.equal(f.get('gatewayMqttObservedValue').children.length,30);
   assert.match(f.get('gatewayMqttReadStatus').textContent,/guardada/);assert.equal(f.field('passwd').value,'');
 });
@@ -356,15 +356,15 @@ test('changing or reopening gateway while confirmation is pending cancels the re
   }
 });
 
-test('uncertain manual recovery remains blocked by server and cannot be repeated by reopening', async()=>{
+test('a busy server blocks manual recovery and opening does not retry automatically', async()=>{
   const f=await fixture(true);
   f.setObservation(async()=>({source:'observed',correlation:'unverified',enabled:true,observation:null,
     errorCode:'mqtt_observation_invalid_response'} as any));
   f.setRead(async()=>{throw Object.assign(new Error('safe busy'),{status:409});});
   await f.open();await f.get('gatewayMqttRefreshObservation').listeners.click();
-  assert.equal(f.reads.length,1);assert.equal(f.get('gatewayMqttRefreshObservation').disabled,true);
-  await f.open();f.get('gatewayMqttRefreshObservation').listeners.click();
-  assert.equal(f.reads.length,1);
+  assert.equal(f.reads.length,2);assert.equal(f.get('gatewayMqttRefreshObservation').disabled,false);
+  await f.open();
+  assert.equal(f.reads.length,2);
 });
 
 test('failing availability check during manual recovery never publishes or re-enables the unavailable read', async()=>{

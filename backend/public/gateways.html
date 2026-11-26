@@ -124,11 +124,10 @@
           <p>Consulta los valores antes de proponer cambios. El ACK no acredita el estado actual. Desactivar datos de anuncio puede impedir diagnósticos; cambios externos o respuestas tardías pueden dejar obsoleta la lectura.</p>
           <div><button type="button" data-config-read="ble_report_fields">Consultar datos reportados (2059)</button></div>
           <div><button type="button" data-config-read="ble_parsing_options">Consultar interpretación por tipo (2065)</button></div>
-          <label for="gatewayBleFormatField">Campo que se propone cambiar</label>
-          <select id="gatewayBleFormatField"><option value="bxp_button_switch">Interpretación BXP-Button (1065)</option><option value="timestamp">Fecha y hora reportadas (1059)</option><option value="adv_data">Datos de anuncio crudos (1059)</option></select>
-          <label for="gatewayBleFormatValue">Valor propuesto</label>
-          <select id="gatewayBleFormatValue"><option value="1">Activar</option><option value="0">Desactivar</option></select>
-          <button type="button" id="gatewayBleFormatApply" disabled>Revisar y solicitar cambio</button>
+          <fieldset id="gatewayBleReportFields" disabled><legend>Datos reportados (1059)</legend><p>Consulta 2059 para cargar los valores observados.</p></fieldset>
+          <button type="button" data-format-apply="ble_report_fields" disabled>Revisar y solicitar datos reportados</button>
+          <fieldset id="gatewayBleParsingOptions" disabled><legend>Interpretación por tipo (1065)</legend><p>Consulta 2065 para cargar los valores observados.</p></fieldset>
+          <button type="button" data-format-apply="ble_parsing_options" disabled>Revisar y solicitar interpretación</button>
           <p id="gatewayBleFormatStatus" role="status" aria-live="polite">Consulta primero la configuración correspondiente.</p>
         </div>
         </section>

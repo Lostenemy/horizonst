@@ -435,8 +435,8 @@ export async function executeGatewayConfigurationRead(params: {
     if (definition.msgId === 2030) {
       const prior = await queryUntil(managed,
         `SELECT 1 FROM hardware_gateway_reads WHERE gateway_id = $1 AND msg_id = 2030
-         AND status IN ('timed_out', 'pending', 'published', 'publish_error') LIMIT 1`,
-        [params.gatewayId], operationDeadline, 'mqtt_uncertain_history');
+         AND (status IN ('pending', 'published', 'publish_error') OR (status = 'timed_out' AND NOT $2::boolean)) LIMIT 1`,
+        [params.gatewayId, params.confirmRecovery === true], operationDeadline, 'mqtt_uncertain_history');
       if (prior.rows.length) throw new GatewayIdentityBusyError('A previous MQTT read has uncertain completion; automatic repetition is blocked');
     } else {
       await queryUntil(managed,

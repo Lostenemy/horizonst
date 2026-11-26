@@ -17,7 +17,7 @@ test('technical tabs support clicks, arrow keys and one visible panel without co
   const document = { querySelectorAll: (selector: string) => selector.startsWith('.gateway-tabs') ? tabs : panels };
   const js = readFileSync(path.resolve('public/js/gateways.js'), 'utf8');
   const start = js.indexOf('const gatewayTabs =');
-  const end = js.indexOf('const formatType =', start);
+  const end = js.indexOf('const updateFormatAvailability =', start);
   assert(start >= 0 && end > start);
   vm.runInNewContext(js.slice(start, end), { document });
   tabs[1].listeners.click({});

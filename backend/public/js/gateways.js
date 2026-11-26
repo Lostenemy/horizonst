@@ -52,9 +52,8 @@ let companies = [];
 let selectedGateway = null;
 let formatObservations = {};
 let formatSubmitting = false;
-const formatField = document.getElementById('gatewayBleFormatField');
-const formatValue = document.getElementById('gatewayBleFormatValue');
-const formatApply = document.getElementById('gatewayBleFormatApply');
+const formatGroups = { ble_report_fields: document.getElementById('gatewayBleReportFields'), ble_parsing_options: document.getElementById('gatewayBleParsingOptions') };
+const formatButtons = [...document.querySelectorAll('[data-format-apply]')];
 const formatStatus = document.getElementById('gatewayBleFormatStatus');
 const gatewayTabs = [...document.querySelectorAll('.gateway-tabs [role="tab"]')];
 const gatewayTabPanels = [...document.querySelectorAll('[data-gateway-tab-panel]')];
@@ -70,12 +69,24 @@ gatewayTabs.forEach((tab, index) => {
     if (next >= 0) { event.preventDefault(); selectGatewayTab(gatewayTabs[next], true); }
   });
 });
-const formatType = () => formatField.value === 'bxp_button_switch' ? 'ble_parsing_options' : 'ble_report_fields';
 const updateFormatAvailability = (showReason = true) => {
-  const observation = formatObservations[formatType()];
-  const ready = Boolean(selectedGateway && hasVerifiedMkgw3V2(selectedGateway) && observation && observation.gatewayId === selectedGateway.id && Date.now() - observation.receivedAt <= 60000);
-  formatApply.disabled = formatSubmitting || !ready;
-  if (!ready && !formatSubmitting && showReason === true) formatStatus.textContent = 'Consulta primero la configuración correspondiente en esta gateway; la lectura caduca a los 60 segundos.';
+  for (const button of formatButtons) {
+    const type = button.dataset.formatApply, observation = formatObservations[type];
+    const ready = Boolean(selectedGateway && hasVerifiedMkgw3V2(selectedGateway) && observation && observation.gatewayId === selectedGateway.id && Date.now() - observation.receivedAt <= 60000);
+    button.disabled = formatSubmitting || !ready;
+    formatGroups[type].disabled = formatSubmitting || !ready;
+  }
+  if (!Object.keys(formatObservations).length && !formatSubmitting && showReason === true) formatStatus.textContent = 'Consulta primero la configuración correspondiente; la lectura caduca a los 60 segundos.';
+};
+const renderFormatObservation = (type, data) => {
+  const labels = { timestamp: 'Fecha y hora', adv_data: 'Datos de anuncio crudos', iBeacon_switch: 'iBeacon', eddystone_uid_switch: 'Eddystone UID', eddystone_tlm_switch: 'Eddystone TLM', eddystone_url_switch: 'Eddystone URL', bxp_acc_switch: 'BXP acelerómetro', bxp_th_switch: 'BXP temperatura y humedad', bxp_devinfo_switch: 'BXP información de dispositivo', bxp_button_switch: 'BXP Button', 'bxp_tag&sensor_switch': 'BXP tag y sensor', mk_pir_switch: 'MK PIR', mk_tof_switch: 'MK ToF', nanobeacon_info_switch: 'Nanobeacon' };
+  const group = formatGroups[type];
+  group.querySelectorAll('label, p').forEach(node => node.remove());
+  for (const [key, value] of Object.entries(data)) {
+    const label = document.createElement('label'), checkbox = document.createElement('input');
+    checkbox.type = 'checkbox'; checkbox.name = key; checkbox.checked = value === 1;
+    label.append(checkbox, document.createTextNode(` ${labels[key] ?? key}`)); group.appendChild(label);
+  }
 };
 let b5FilterObserved = null;
 let b5Capture = null;
@@ -127,7 +138,7 @@ const renderMqttObservation = (saved, gateway) => {
   }
 };
 
-const loadMqttObservation = async (gateway, requestRead = true, populateForm = false) => {
+const loadMqttObservation = async (gateway, requestRead = true, populateForm = false, confirmRecovery = false) => {
   const generation = ++mqttObservationGeneration;
   const current = () => selectedGateway?.id === gateway.id && generation === mqttObservationGeneration;
   const draft = mqttFieldNames.map(name => mqttForm.elements.namedItem(name).value).join('\u0000');
@@ -154,14 +165,14 @@ const loadMqttObservation = async (gateway, requestRead = true, populateForm = f
       if (!requestRead) return;
     } else renderMqttObservation(saved, gateway);
     if (!requestRead) return;
-    if (mqttReadBlocked.has(gateway.id)) {
+    if (mqttReadBlocked.has(gateway.id) && !confirmRecovery) {
       mqttReadStatus.textContent = 'Lectura anterior de resultado incierto; repetición bloqueada. Revisión técnica necesaria.';
       return;
     }
     let pending = mqttReadPending.get(gateway.id);
     mqttReadStatus.textContent = 'Lectura 2030 en curso; sin reintentos automáticos. Los valores visibles son la última observación guardada.';
     if (!pending) {
-      pending = apiPost(`/gateways/${gateway.id}/read-configuration/mqtt_configuration`, {});
+      pending = apiPost(`/gateways/${gateway.id}/read-configuration/mqtt_configuration`, confirmRecovery ? { confirmRecovery: true } : {});
       mqttReadPending.set(gateway.id, pending);
       pending.finally(() => { if (mqttReadPending.get(gateway.id) === pending) mqttReadPending.delete(gateway.id); }).catch(() => {});
     }
@@ -196,25 +207,25 @@ const loadMqttObservation = async (gateway, requestRead = true, populateForm = f
     mqttRefreshObservation.dataset.available = String(available);
     mqttRefreshObservation.textContent = 'Actualizar observación MQTT explícitamente';
     mqttRefreshObservation.disabled = !available || mqttReadPending.has(gateway.id)
-      || mqttReadConfirming.has(gateway.id) || mqttReadBlocked.has(gateway.id);
+      || mqttReadConfirming.has(gateway.id);
   } }
 };
 mqttRefreshObservation.addEventListener('click', async () => {
   if (!selectedGateway || mqttRefreshObservation.disabled) return;
   const gateway = selectedGateway;
   const generation = mqttObservationGeneration;
-  if (mqttReadConfirming.has(gateway.id) || mqttReadPending.has(gateway.id) || mqttReadBlocked.has(gateway.id)) return;
+  if (mqttReadConfirming.has(gateway.id) || mqttReadPending.has(gateway.id)) return;
   mqttReadConfirming.add(gateway.id); mqttRefreshObservation.disabled = true;
   try {
     const confirmed = await confirmAction({title:'Confirmar lectura MQTT 2030',
-      message:`Gateway #${gateway.id}. Esta acción publicará un único 2030 para consultar su configuración MQTT. Confirma que has revisado/corregido la configuración o credencial. Una respuesta no demuestra frescura ni conexión al broker.`,
+      message:`Gateway #${gateway.id}. Se enviará un 2030. Tras un timeout anterior una respuesta tardía podría pertenecer al intento previo: no se garantiza correlación, frescura ni conexión al broker.`,
       confirmText:'Publicar una lectura 2030'});
     if (!confirmed || selectedGateway?.id !== gateway.id || generation !== mqttObservationGeneration) return;
-    await loadMqttObservation(gateway);
+    await loadMqttObservation(gateway, true, false, true);
   } finally {
     mqttReadConfirming.delete(gateway.id);
     if (selectedGateway?.id === gateway.id) mqttRefreshObservation.disabled = mqttRefreshObservation.dataset.available !== 'true'
-      || mqttReadPending.has(gateway.id) || mqttReadBlocked.has(gateway.id);
+      || mqttReadPending.has(gateway.id);
   }
 });
 
@@ -579,6 +590,7 @@ const selectGateway = async (gateway) => {
   selectedGateway = gateway;
   technicalPanel.hidden = true;
   formatObservations = {};
+  for (const group of Object.values(formatGroups)) group.querySelectorAll('label').forEach(node => node.remove());
   if (gatewayTabs.length) selectGatewayTab(gatewayTabs[0]);
   updateFormatAvailability();
   b5FilterObserved = null;
@@ -748,6 +760,7 @@ for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
         const data = result.data;
         if (data && Object.keys(data).sort().join(',') === [...fields].sort().join(',') && fields.every(key => data[key] === 0 || data[key] === 1) && typeof result.readId === 'string' && /^[0-9a-f-]{36}$/i.test(result.readId)) {
           formatObservations[readType] = { readId: result.readId, data: { ...data }, gatewayId: gateway.id, receivedAt: Date.now() };
+          renderFormatObservation(readType, data);
         } else delete formatObservations[readType];
         updateFormatAvailability();
         if (formatObservations[readType]) formatStatus.textContent = `Observación ${readType}: ${JSON.stringify(data)}. Revisa el campo y el valor propuestos.`;
@@ -762,21 +775,19 @@ for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
   });
 }
 
-formatField.addEventListener('change', () => updateFormatAvailability());
-formatValue.addEventListener('change', () => updateFormatAvailability());
-formatApply.addEventListener('click', async () => {
-  const gateway = selectedGateway, readType = formatType(), observation = formatObservations[readType];
-  const field = formatField.value, value = Number(formatValue.value);
-  if (formatSubmitting || !gateway || !observation || observation.gatewayId !== gateway.id || Date.now() - observation.receivedAt > 60000 || ![0, 1].includes(value)) { updateFormatAvailability(); return; }
+for (const button of formatButtons) button.addEventListener('click', async () => {
+  const gateway = selectedGateway, readType = button.dataset.formatApply, observation = formatObservations[readType];
+  if (formatSubmitting || !gateway || !observation || observation.gatewayId !== gateway.id || Date.now() - observation.receivedAt > 60000) { updateFormatAvailability(); return; }
+  const values = Object.fromEntries([...formatGroups[readType].querySelectorAll('input[type="checkbox"]')].map(input => [input.name, input.checked ? 1 : 0]));
   formatSubmitting = true;
   updateFormatAvailability();
   try {
     const confirmed = await confirmAction({ title: 'Confirmar cambio de formato BLE',
-      message: `Gateway ${gateway.mac_address}. Se propone ${field}=${value}; se conservarán los demás valores observados: ${JSON.stringify(observation.data)}. La lectura no se correlaciona inequívocamente y un cambio externo puede dejarla obsoleta. Desactivar datos puede afectar detecciones y diagnóstico.`, confirmText: 'Solicitar cambio' });
+      message: `Gateway ${gateway.mac_address}. Valores solicitados: ${JSON.stringify(values)}. La lectura no se correlaciona inequívocamente y un cambio externo puede dejarla obsoleta. Desactivar datos puede afectar detecciones y diagnóstico.`, confirmText: 'Solicitar cambio' });
     if (!confirmed || selectedGateway?.id !== gateway.id || formatObservations[readType] !== observation) return;
     delete formatObservations[readType];
     formatStatus.textContent = 'Solicitando cambio; espera el resultado…';
-    const result = await apiPost(`/gateways/${gateway.id}/ble-report-format`, { readId: observation.readId, readType, field, value });
+    const result = await apiPost(`/gateways/${gateway.id}/ble-report-format`, { readId: observation.readId, readType, values });
     if (selectedGateway?.id === gateway.id) { formatStatus.textContent = result.message; await refreshTechnicalHistory(); }
   } catch (error) {
     if (selectedGateway?.id === gateway.id) formatStatus.textContent = `Resultado no confirmado: ${error.message}. Revisa el historial y consulta de nuevo antes de otro intento.`;

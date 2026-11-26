@@ -293,6 +293,21 @@ test('format changes preserve all other observed fields and enforce permissions 
   assert.equal(state.published.length, 1);
 });
 
+test('full checkbox values are validated, authorized and sent together', async () => {
+  const state = fakeDatabase(true);
+  const path = '/api/gateways/41/ble-report-format';
+  const values = { ...state.parsingData, bxp_button_switch: 1, mk_pir_switch: 1 };
+  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', values };
+  const request = { method: 'POST', body: JSON.stringify(body) };
+  assert.equal((await api(path, 1, 'hardware_readonly', request)).status, 403);
+  assert.equal((await api(path, 3, 'hardware_technician', request)).status, 404);
+  assert.equal((await api(path, 2, 'hardware_technician', { method: 'POST', body: JSON.stringify({ ...body, values: { ...values, unexpected: 1 } }) })).status, 400);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 200);
+  assert.deepEqual(state.published[0].payload.data, values);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+  assert.equal(state.published.length, 1);
+});
+
 test('2059 and 2065 are scoped V2 reads and never configure the gateway', async () => {
   for (const [readType, msgId] of [['ble_report_fields', 2059], ['ble_parsing_options', 2065]] as const) {
     const path = `/api/gateways/41/read-configuration/${readType}`;

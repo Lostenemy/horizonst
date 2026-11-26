@@ -49,6 +49,7 @@ const deferred = () => {
 
 function mockDatabase(options: {
   priorUncertain?: boolean;
+  priorTimedOut?: boolean;
   priorRejected?: boolean;
   busy?: boolean;
   gatewayExists?: boolean;
@@ -82,7 +83,7 @@ function mockDatabase(options: {
         }
         if (sql.includes('INSERT INTO hardware_gateway_observed_settings')) return { rows: [], rowCount: 1 };
         if (sql.includes('INSERT INTO hardware_gateway_mqtt_observations')) return { rows: [], rowCount: 1 };
-        if (sql.includes('SELECT 1 FROM hardware_gateway_reads')) return { rows: options.priorUncertain ? [{ exists: 1 }] : [] };
+        if (sql.includes('SELECT 1 FROM hardware_gateway_reads')) return { rows: options.priorUncertain || (options.priorTimedOut && params[1] !== true) ? [{ exists: 1 }] : [] };
         if (sql.includes('SELECT status FROM hardware_gateway_reads')) return { rows: options.priorRejected ? [{status:'invalid_response'}] : [] };
         if (sql.includes('INSERT INTO hardware_gateway_ble_snapshots')) {
           options.snapshotStarted?.();
@@ -119,6 +120,21 @@ const execute = (readType: GatewayConfigurationReadType, publish: (topic: string
 const MQTT_SECRET = 'fictional-mqtt-secret-2030-do-not-retain';
 const mqttReport = () => ({ msg_id: 2030, device_info: { mac: '2805a55efb68' },
   data: { ...buildHorizonstMqttPreset('2805a55efb68', 'production'), passwd: MQTT_SECRET } });
+
+test('2030 timeout requires explicit manual retry and retains unverified correlation', async () => {
+  process.env.GATEWAY_MQTT_OBSERVATION_ENABLED = 'true';
+  const operations = mockDatabase({ priorTimedOut: true });
+  let publications = 0;
+  const params = { gatewayId: 41, companyId: COMPANY_A, gatewayMac: '2805a55efb68', readType: 'mqtt_configuration' as const,
+    actorUserId: 2, timeoutMs: 150, deps: { publish: async () => { publications++; await handleGatewayConfigurationReport('gw/2805a55efb68/publish', JSON.stringify(mqttReport())); } } };
+  await assert.rejects(executeGatewayConfigurationRead(params), GatewayIdentityBusyError);
+  assert.equal(publications, 0);
+  const result = await executeGatewayConfigurationRead({ ...params, confirmRecovery: true });
+  assert.equal(publications, 1);
+  assert.equal(result.status, 'response_observed');
+  assert.ok(operations.some(op => op.sql.includes('SELECT 1 FROM hardware_gateway_reads') && op.params[1] === true));
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(MQTT_SECRET));
+});
 
 test('rejected 2030 history permits a fresh read without confirmation and preserves all historical rows', async () => {
   process.env.GATEWAY_MQTT_OBSERVATION_ENABLED='true';

@@ -531,14 +531,15 @@ export async function enableB5DoublePressFromObservation(params: {
 
 export async function updateGatewayBleFormatFromObservation(params: {
   gatewayId: number; companyId: string; gatewayMac: string; readId: string;
-  readType: 'ble_report_fields' | 'ble_parsing_options'; field: 'timestamp' | 'adv_data' | 'bxp_button_switch'; value: 0 | 1;
+  readType: 'ble_report_fields' | 'ble_parsing_options'; field?: 'timestamp' | 'adv_data' | 'bxp_button_switch'; value?: 0 | 1; values?: Record<string, number>;
   actor: GatewayCommandActor; requestId?: string; timeoutMs: number;
   deps?: Parameters<typeof executeCommand>[0]['deps'];
 }): Promise<GatewayCommandResult | { status: 'already_set' }> {
   const gatewayMac = normalizeGatewayMac(params.gatewayMac);
-  const validPair = params.readType === 'ble_report_fields' ? ['timestamp', 'adv_data'].includes(params.field)
-    : params.readType === 'ble_parsing_options' && params.field === 'bxp_button_switch';
-  if (!gatewayMac || params.actor.type !== 'user' || !params.actor.userId || !validPair || ![0, 1].includes(params.value)) throw new GatewayFormatObservationError('Invalid format request');
+  const keys = params.readType === 'ble_report_fields' ? ['timestamp', 'adv_data'] : ['iBeacon_switch', 'eddystone_uid_switch', 'eddystone_tlm_switch', 'eddystone_url_switch', 'bxp_acc_switch', 'bxp_th_switch', 'bxp_devinfo_switch', 'bxp_button_switch', 'bxp_tag&sensor_switch', 'mk_pir_switch', 'mk_tof_switch', 'nanobeacon_info_switch'];
+  const legacyValid = params.field && (params.readType === 'ble_report_fields' ? ['timestamp', 'adv_data'].includes(params.field) : params.field === 'bxp_button_switch') && (params.value === 0 || params.value === 1);
+  const fullValid = params.values && Object.keys(params.values).sort().join(',') === [...keys].sort().join(',') && keys.every(k => params.values![k] === 0 || params.values![k] === 1);
+  if (!gatewayMac || params.actor.type !== 'user' || !params.actor.userId || (!legacyValid && !fullValid)) throw new GatewayFormatObservationError('Invalid format request');
   const readMsgId = params.readType === 'ble_report_fields' ? 2059 : 2065;
   const writeMsgId = readMsgId - 1000;
   const lockClient = await pool.connect();
@@ -567,13 +568,14 @@ export async function updateGatewayBleFormatFromObservation(params: {
     const report = read.rows[0] && parseGatewayConfigurationReport(`gw/${gatewayMac}/publish`, read.rows[0].response_payload);
     if (!read.rows[0] || !hasVerifiedMkgw3V2(read.rows[0]) || !report || report.readType !== params.readType) throw new GatewayFormatObservationError('A recent valid observation and verified firmware are required');
     const values = report.data as Record<string, number>;
-    if (values[params.field] === params.value) return { status: 'already_set' };
+    const requested = params.values ?? { ...values, [params.field!]: params.value! };
+    if (keys.every(key => values[key] === requested[key])) return { status: 'already_set' };
     const reserved = await lockClient.query(
       `INSERT INTO hardware_gateway_format_observation_uses(read_id) VALUES($1)
        ON CONFLICT (read_id) DO NOTHING RETURNING read_id`, [params.readId]);
     if (!reserved.rows.length) throw new GatewayFormatObservationError('Observation already used');
-    const command: GatewayCommandPayload = { msg_id: writeMsgId, device_info: { mac: gatewayMac.toUpperCase() }, data: { ...values, [params.field]: params.value } };
-    return await executeCommand({ ...params, commandType: `ble_format_${params.field}`, command,
+    const command: GatewayCommandPayload = { msg_id: writeMsgId, device_info: { mac: gatewayMac.toUpperCase() }, data: requested };
+    return await executeCommand({ ...params, commandType: `ble_format_${params.field ?? params.readType}`, command,
       ackMsgIds: [writeMsgId], idempotencyKey: params.requestId ? `${params.requestId}:${writeMsgId}` : undefined });
   } finally {
     let destroy = false;
