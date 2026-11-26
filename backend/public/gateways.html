@@ -52,6 +52,14 @@
       <section class="card" id="gatewayTechnicalPanel" hidden>
         <h2 id="gatewayTechnicalTitle">Gestión técnica</h2>
         <p id="gatewayTechnicalSummary"></p>
+        <div class="gateway-tabs" role="tablist" aria-label="Utilidades de la gateway">
+          <button type="button" role="tab" id="gatewayTabGeneral" aria-selected="true" tabindex="0">General</button>
+          <button type="button" role="tab" id="gatewayTabBle" aria-selected="false" tabindex="-1">Bluetooth y formato</button>
+          <button type="button" role="tab" id="gatewayTabMqtt" aria-selected="false" tabindex="-1">MQTT</button>
+          <button type="button" role="tab" id="gatewayTabCapture" aria-selected="false" tabindex="-1">Diagnóstico B5</button>
+          <button type="button" role="tab" id="gatewayTabHistory" aria-selected="false" tabindex="-1">Historial y observaciones</button>
+        </div>
+        <section role="tabpanel" aria-labelledby="gatewayTabGeneral" data-gateway-tab-panel="gatewayTabGeneral">
         <div class="actions" id="gatewayTechnicalActions" hidden>
           <label for="gatewayRssi">Filtro RSSI físico propuesto (dBm)</label>
           <input id="gatewayRssi" type="number" min="-127" max="0" step="1" />
@@ -66,6 +74,8 @@
           <button type="button" id="gatewayClearFirmware">Marcar firmware como desconocido</button>
           <p id="gatewayTechnicalFeedback" role="status" aria-live="polite"></p>
         </div>
+        </section>
+        <section role="tabpanel" aria-labelledby="gatewayTabBle" data-gateway-tab-panel="gatewayTabBle" hidden>
         <div id="gatewayBluetoothPanel" hidden>
           <h3>Bluetooth · Escaneo y filtros</h3>
           <p>Cada cambio requiere confirmación de la gateway. Un RSSI incorrecto o apagar el escaneo puede interrumpir la presencia.</p>
@@ -110,7 +120,19 @@
               <button type="button" data-config-read="led_state">Consultar LEDs (2011)</button>
             </label>
           </div>
+          <h3>Formato e interpretación BLE</h3>
+          <p>Consulta los valores antes de proponer cambios. El ACK no acredita el estado actual. Desactivar datos de anuncio puede impedir diagnósticos; cambios externos o respuestas tardías pueden dejar obsoleta la lectura.</p>
+          <div><button type="button" data-config-read="ble_report_fields">Consultar datos reportados (2059)</button></div>
+          <div><button type="button" data-config-read="ble_parsing_options">Consultar interpretación por tipo (2065)</button></div>
+          <label for="gatewayBleFormatField">Campo que se propone cambiar</label>
+          <select id="gatewayBleFormatField"><option value="bxp_button_switch">Interpretación BXP-Button (1065)</option><option value="timestamp">Fecha y hora reportadas (1059)</option><option value="adv_data">Datos de anuncio crudos (1059)</option></select>
+          <label for="gatewayBleFormatValue">Valor propuesto</label>
+          <select id="gatewayBleFormatValue"><option value="1">Activar</option><option value="0">Desactivar</option></select>
+          <button type="button" id="gatewayBleFormatApply" disabled>Revisar y solicitar cambio</button>
+          <p id="gatewayBleFormatStatus" role="status" aria-live="polite">Consulta primero la configuración correspondiente.</p>
         </div>
+        </section>
+        <section role="tabpanel" aria-labelledby="gatewayTabMqtt" data-gateway-tab-panel="gatewayTabMqtt" hidden>
         <section id="gatewayMqttObservationPanel" hidden>
           <h3>Configuración MQTT observada</h3>
           <p>2030: fecha de recepción, no prueba de frescura, correlación ni conexión al broker. El campo passwd se excluye. Al abrir, una respuesta válida inicia el borrador editable sin contraseña ni aplicación de cambios.</p>
@@ -194,6 +216,9 @@
             <thead><tr><th>Fecha</th><th>Paso</th><th>Actor</th><th>Destino</th><th>Estado</th><th>Resultado</th></tr></thead><tbody></tbody>
           </table></div>
         </section>
+        </section>
+        <section role="tabpanel" aria-labelledby="gatewayTabCapture" data-gateway-tab-panel="gatewayTabCapture" hidden>
+        <p id="gatewayB5DiagnosticUnavailable" hidden>La captura requiere una gateway activa con compañía y permisos de superadministración.</p>
         <section id="gatewayB5Diagnostic" hidden>
           <h3>Captura diagnóstica B5</h3>
           <p>Solo observación temporal en memoria durante cinco minutos; no envía comandos. La variación del contador no confirma una pulsación ni un SOS. Reinicios, pérdidas y mensajes fuera de orden pueden hacer ambiguo el resultado.</p>
@@ -204,6 +229,8 @@
           <p id="gatewayB5CaptureStatus" role="status" aria-live="polite"></p>
           <div class="table-wrapper"><table id="gatewayB5CaptureTable"><thead><tr><th>Recepción</th><th>Tipo de trama</th><th>Estado alarma</th><th>Subestado</th><th>Contador</th><th>Comparación</th></tr></thead><tbody></tbody></table></div>
         </section>
+        </section>
+        <section role="tabpanel" aria-labelledby="gatewayTabHistory" data-gateway-tab-panel="gatewayTabHistory" hidden tabindex="0">
         <h3>Identidad reportada automáticamente</h3>
         <p>Datos observados en una respuesta MQTT 2002 válida; separados del registro manual.</p>
         <dl id="gatewayReportedIdentity"></dl>
@@ -236,6 +263,7 @@
         <div class="table-wrapper"><table id="gatewayDevicesTable">
           <thead><tr><th>Nombre</th><th>MAC</th><th>Tipo</th><th>Última detección</th></tr></thead><tbody></tbody>
         </table></div>
+        </section>
       </section>
     </main>
     <footer>&copy; <span id="year"></span> HorizonST</footer>

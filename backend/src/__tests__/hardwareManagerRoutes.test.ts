@@ -83,19 +83,28 @@ test('diagnostic captures require superadmin and same company; capture does not 
 function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned = false, inactive = false, gatewayMac = '2805a55efb68') {
   const idempotencyKeys = new Set<string>();
   let filterObservationUsed = false;
+  let formatObservationUsed = false;
   const observations = { published: [] as Array<{ topic: string; payload: any }>, persisted: [] as string[],
     auditPayloads: [] as string[], auditQueries: 0, readQueries: 0, observedQueries: 0,
     snapshotQueries: 0, commandInserts: 0, readInserts: 0,
-    filterReadEnabled: true, filterData: { switch_value: 1, single_press: 1, double_press: 0, long_press: 1, abnormal_inactivity: 0 } };
+    filterReadEnabled: true, filterData: { switch_value: 1, single_press: 1, double_press: 0, long_press: 1, abnormal_inactivity: 0 },
+    formatFirmwareValid: true, reportData: { timestamp: 1, adv_data: 1 },
+    parsingData: { iBeacon_switch: 1, eddystone_uid_switch: 0, eddystone_tlm_switch: 1, eddystone_url_switch: 0, bxp_acc_switch: 1, bxp_th_switch: 0, bxp_devinfo_switch: 1, bxp_button_switch: 0, 'bxp_tag&sensor_switch': 1, mk_pir_switch: 0, mk_tof_switch: 1, nanobeacon_info_switch: 0 } };
   (pool as any).connect = async () => ({
     query: async (sql: string, params: unknown[] = []) => {
       if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
       if (sql.includes('pg_advisory_unlock')) return { rows: [{ pg_advisory_unlock: true }] };
-      if (sql.includes('SELECT r.response_payload FROM hardware_gateway_reads')) return { rows: observations.filterReadEnabled && params[0] === '22222222-2222-4222-8222-222222222222' && params[3] === 2
-        ? [{ response_payload: { msg_id: 2053, device_info: { mac: gatewayMac }, data: observations.filterData } }] : [] };
+      if (sql.includes('FROM hardware_gateway_reads r') && sql.includes('r.actor_user_id')) return { rows: observations.filterReadEnabled && params[0] === '22222222-2222-4222-8222-222222222222' && params[3] === 2
+        ? [{ product_model: verifiedFirmware && observations.formatFirmwareValid ? 'MKGW3' : null, firmware_version: verifiedFirmware && observations.formatFirmwareValid ? 'V2.4' : null,
+          firmware_evidence: verifiedFirmware && observations.formatFirmwareValid ? 'inspection:ticket-12345678' : null,
+          response_payload: { msg_id: params[5] ?? 2053, device_info: { mac: gatewayMac }, data: params[5] === 2059 ? observations.reportData : params[5] === 2065 ? observations.parsingData : observations.filterData } }] : [] };
       if (sql.includes('INSERT INTO hardware_b5_filter_observation_uses')) {
         if (filterObservationUsed) return { rows: [] };
         filterObservationUsed = true; return { rows: [{ read_id: params[0] }] };
+      }
+      if (sql.includes('INSERT INTO hardware_gateway_format_observation_uses')) {
+        if (formatObservationUsed) return { rows: [] };
+        formatObservationUsed = true; return { rows: [{ read_id: params[0] }] };
       }
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
       if (sql.includes('UPDATE gateways SET') && sql.includes('reported_device_name')) return { rows: [{ id: 41 }] };
@@ -239,7 +248,8 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
     const configurationReports: Record<number, Record<string, number>> = {
       2011: { net_led: 1, sys_led: 1, server_led: 1 }, 2040: { scan_switch: 1 },
       2041: { relation: 3 }, 2057: { rule: 0 }, 2063: { interval: 30 },
-      2053: { switch_value: 1, single_press: 1, double_press: 1, long_press: 0, abnormal_inactivity: 0 }
+      2053: { switch_value: 1, single_press: 1, double_press: 1, long_press: 0, abnormal_inactivity: 0 },
+      2059: observations.reportData, 2065: observations.parsingData
     };
     if (configurationReports[payload.msg_id]) {
       await handleGatewayConfigurationReport('gw/2805a55efb68/publish', JSON.stringify({
@@ -264,6 +274,61 @@ function fakeDatabase(verifiedFirmware = false, priorTimeout = false, unassigned
 
 const commandPath = '/api/gateways/41/bluetooth/scan';
 const validCommand = { method: 'POST', body: JSON.stringify({ scan_switch: 1 }) };
+
+test('format changes preserve all other observed fields and enforce permissions and one-time use', async () => {
+  const state = fakeDatabase(true);
+  const path = '/api/gateways/41/ble-report-format';
+  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', field: 'bxp_button_switch', value: 1 };
+  const request = { method: 'POST', body: JSON.stringify(body) };
+  assert.equal((await api(path, 1, 'hardware_readonly', request)).status, 403);
+  assert.equal((await api(path, 3, 'hardware_technician', request)).status, 404);
+  assert.equal((await api(path, 2, 'hardware_technician', { method: 'POST', body: JSON.stringify({ ...body, field: 'mk_pir_switch' }) })).status, 400);
+  state.formatFirmwareValid = false;
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+  assert.equal(state.published.length, 0);
+  state.formatFirmwareValid = true;
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 200);
+  assert.deepEqual(state.published.map(item => item.payload), [{ msg_id: 1065, device_info: { mac: '2805A55EFB68' }, data: { ...state.parsingData, bxp_button_switch: 1 } }]);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+  assert.equal(state.published.length, 1);
+});
+
+test('2059 and 2065 are scoped V2 reads and never configure the gateway', async () => {
+  for (const [readType, msgId] of [['ble_report_fields', 2059], ['ble_parsing_options', 2065]] as const) {
+    const path = `/api/gateways/41/read-configuration/${readType}`;
+    const request = { method: 'POST', body: '{}' };
+    const blocked = fakeDatabase(false);
+    assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+    assert.equal(blocked.published.length, 0);
+    const allowed = fakeDatabase(true);
+    assert.equal((await api(path, 2, 'hardware_technician', request)).status, 200);
+    assert.deepEqual(allowed.published.map(item => item.payload.msg_id), [msgId]);
+  }
+});
+
+test('1059 changes one field only and refuses old or malformed observations', async () => {
+  const state = fakeDatabase(true);
+  const path = '/api/gateways/41/ble-report-format';
+  const body = { readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_report_fields', field: 'timestamp', value: 0 };
+  const request = { method: 'POST', body: JSON.stringify(body) };
+  state.filterReadEnabled = false;
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+  state.filterReadEnabled = true;
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 200);
+  assert.deepEqual(state.published.map(item => item.payload), [{ msg_id: 1059, device_info: { mac: '2805A55EFB68' }, data: { timestamp: 0, adv_data: 1 } }]);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+});
+
+test('format ACK after historical timeout remains ambiguous and cannot reuse the observation', async () => {
+  const state = fakeDatabase(true, true);
+  const path = '/api/gateways/41/ble-report-format';
+  const request = { method: 'POST', body: JSON.stringify({ readId: '22222222-2222-4222-8222-222222222222', readType: 'ble_parsing_options', field: 'bxp_button_switch', value: 1 }) };
+  const response = await api(path, 2, 'hardware_technician', request);
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).status, 'ambiguous');
+  assert.deepEqual(state.published.map(item => item.payload.msg_id), [1065]);
+  assert.equal((await api(path, 2, 'hardware_technician', request)).status, 409);
+});
 
 test('2053 observation permits one isolated 1053 preserving four fields, with scope and replay protection', async () => {
   const state = fakeDatabase(true);

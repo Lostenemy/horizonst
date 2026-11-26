@@ -27,6 +27,8 @@ const reports = {
   duplicate_rule: { msg_id: 2057, device_info: { mac: '2805a55efb68' }, data: { rule: 0 } },
   ble_report_interval: { msg_id: 2063, device_info: { mac: '2805a55efb68' }, data: { interval: 30 } },
   bxp_button_filter: { msg_id: 2053, device_info: { mac: '2805a55efb68' }, data: { switch_value: 1, single_press: 1, double_press: 1, long_press: 0, abnormal_inactivity: 0 } },
+  ble_report_fields: { msg_id: 2059, device_info: { mac: '2805a55efb68' }, data: { timestamp: 1, adv_data: 1 } },
+  ble_parsing_options: { msg_id: 2065, device_info: { mac: '2805a55efb68' }, data: { iBeacon_switch: 1, eddystone_uid_switch: 0, eddystone_tlm_switch: 1, eddystone_url_switch: 0, bxp_acc_switch: 1, bxp_th_switch: 0, bxp_devinfo_switch: 1, bxp_button_switch: 0, 'bxp_tag&sensor_switch': 1, mk_pir_switch: 0, mk_tof_switch: 1, nanobeacon_info_switch: 0 } },
   ble_connected_devices: { msg_id: 2201, device_info: { mac: '2805a55efb68' }, data: {
     ble_conn_list: [{ mac: 'fd9d4f8ae226', type: 2 }, { mac: 'f074bff07dc9', type: 7 }]
   } }
@@ -264,6 +266,7 @@ test('the observed schemas and requests are exact and are not ACKs', () => {
     mqtt_configuration: 2030,
     led_state: 2011, ble_scan_switch: 2040, filter_relation: 2041, duplicate_rule: 2057,
     ble_report_interval: 2063, bxp_button_filter: 2053,
+    ble_report_fields: 2059, ble_parsing_options: 2065,
     ble_connected_devices: 2201
   };
   for (const [readType, report] of Object.entries(reports) as Array<[GatewayConfigurationReadType, any]>) {
@@ -272,6 +275,17 @@ test('the observed schemas and requests are exact and are not ACKs', () => {
     });
     assert.deepEqual(parseGatewayConfigurationReport(TOPIC, report)?.data, report.data);
     assert.equal(normalizeHardwareGatewayAck(TOPIC, report), null);
+  }
+});
+
+test('malformed format responses never persist unexpected payload fields', async () => {
+  for (const readType of ['ble_report_fields', 'ble_parsing_options'] as const) {
+    const operations = mockDatabase();
+    const result = await execute(readType, async () => {
+      await handleGatewayConfigurationReport(TOPIC, JSON.stringify({ ...reports[readType], data: { ...reports[readType].data, unexpected: 'synthetic-secret-value' } }));
+    });
+    assert.equal(result.status, 'invalid_response');
+    assert.doesNotMatch(JSON.stringify(operations), /synthetic-secret-value/);
   }
 });
 
@@ -299,6 +313,20 @@ test('strict parsing rejects contradictory MAC, wrong topic, extra/missing keys,
     const invalid = clone(reports.bxp_button_filter) as any;
     invalid.data[key] = 2;
     assert.equal(parseGatewayConfigurationReport(TOPIC, invalid), null);
+  }
+  for (const name of ['ble_report_fields', 'ble_parsing_options'] as const) {
+    const mismatch = clone(reports[name]) as any; mismatch.device_info.mac = 'eeeeeeeeeeee';
+    assert.equal(parseGatewayConfigurationReport(TOPIC, mismatch), null);
+    const wrongId = clone(reports[name]) as any; wrongId.msg_id = String(wrongId.msg_id);
+    assert.equal(parseGatewayConfigurationReport(TOPIC, wrongId), null);
+    for (const key of Object.keys(reports[name].data)) {
+      const missing = clone(reports[name]) as any; delete missing.data[key];
+      assert.equal(parseGatewayConfigurationReport(TOPIC, missing), null);
+      const invalid = clone(reports[name]) as any; invalid.data[key] = true;
+      assert.equal(parseGatewayConfigurationReport(TOPIC, invalid), null);
+    }
+    const extra = clone(reports[name]) as any; extra.data.extra = 1;
+    assert.equal(parseGatewayConfigurationReport(TOPIC, extra), null);
   }
   let value: any = clone(reports.led_state); value.device_info.mac = 'ffffffffffff';
   assert.equal(parseGatewayConfigurationReport(TOPIC, value), null);

@@ -17,6 +17,8 @@ import {
   executeManagedGatewayCommand,
   enableB5DoublePressFromObservation,
   GatewayButtonObservationError,
+  updateGatewayBleFormatFromObservation,
+  GatewayFormatObservationError,
   GatewayCommandBusyError
 } from '../services/gatewayCommands';
 import { buildBluetoothGatewayCommand, isBluetoothOperation } from '../services/gatewayBluetoothCommands';
@@ -374,6 +376,9 @@ router.post('/:gatewayId/read-configuration/:readType', authenticate, authorizeH
   try {
     const gateway = await gatewayForCommand(req, gatewayId);
     if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    if (['ble_report_fields', 'ble_parsing_options'].includes(readType) && !hasVerifiedMkgw3V2(gateway)) {
+      return res.status(409).json({ message: 'Verified MKGW3 V2 firmware is required for this read' });
+    }
     if (readType === 'mqtt_configuration' && process.env.GATEWAY_MQTT_OBSERVATION_ENABLED !== 'true') {
       return res.status(503).json({ message: 'MQTT observation disabled until all consumers and migration are validated' });
     }
@@ -481,6 +486,40 @@ router.post('/:gatewayId/read-ble-connected-devices', authenticate, authorizeHar
     }
     console.error('Failed to read observed BLE connected devices', error);
     return res.status(500).json({ message: 'Failed to read observed BLE connected devices' });
+  }
+});
+
+router.post('/:gatewayId/ble-report-format', authenticate, authorizeHardware('technician'), async (req: AuthenticatedRequest, res) => {
+  const gatewayId = Number(req.params.gatewayId);
+  const body = req.body;
+  if (!Number.isSafeInteger(gatewayId) || gatewayId <= 0 || !body || typeof body !== 'object' || Array.isArray(body)
+      || Object.keys(body).sort().join(',') !== 'field,readId,readType,value' || typeof body.readId !== 'string' || !validateUuid(body.readId)
+      || !['ble_report_fields', 'ble_parsing_options'].includes(body.readType)
+      || !['timestamp', 'adv_data', 'bxp_button_switch'].includes(body.field) || ![0, 1].includes(body.value)
+      || (body.readType === 'ble_report_fields' ? !['timestamp', 'adv_data'].includes(body.field) : body.field !== 'bxp_button_switch')) {
+    return res.status(400).json({ message: 'Invalid BLE format request' });
+  }
+  try {
+    const gateway = await gatewayForCommand(req, gatewayId);
+    if (!gateway) return res.status(404).json({ message: 'Gateway not found' });
+    if (!hasVerifiedMkgw3V2(gateway)) return res.status(409).json({ message: 'Verified MKGW3 V2 firmware is required' });
+    const result = await updateGatewayBleFormatFromObservation({ gatewayId, companyId: gateway.company_id,
+      gatewayMac: gateway.mac_address, readId: body.readId, readType: body.readType, field: body.field, value: body.value,
+      actor: { type: 'user', userId: req.user!.id }, requestId: req.requestId, timeoutMs: commandTimeoutMs() });
+    await appendTechnicalAudit({ actorUserId: req.user!.id, action: 'gateway.ble.report_format', entityType: 'gateway', entityId: gatewayId,
+      companyId: gateway.company_id, requestId: req.requestId, result: result.status === 'success' || result.status === 'already_set' ? 'unverified' : 'failure',
+      after: { readId: body.readId, field: body.field, value: body.value, status: result.status } });
+    const message = result.status === 'already_set' ? 'La observación ya contiene el valor solicitado; no se envió ningún comando.'
+      : result.status === 'ambiguous' ? 'ACK ambiguo: no se puede atribuir con seguridad. Revisa el historial y consulta de nuevo; no se reintentará automáticamente.'
+        : result.status === 'timeout' ? 'No llegó una respuesta dentro del plazo. El resultado es incierto; revisa el historial y consulta de nuevo.'
+          : result.status === 'error' ? 'La solicitud no se confirmó; revisa el historial antes de continuar.'
+            : 'ACK recibido. No demuestra el valor actual; consulta de nuevo.';
+    return res.status(result.status === 'timeout' ? 504 : result.status === 'error' ? 502 : result.status === 'ambiguous' ? 202 : 200).json({ ...result, message });
+  } catch (error) {
+    if (error instanceof GatewayFormatObservationError) return res.status(409).json({ message: 'La lectura ya no es utilizable; consulta de nuevo.' });
+    if (error instanceof GatewayCommandBusyError || (error as any)?.code === '23505') return res.status(409).json({ message: 'La gateway tiene otra operación activa.' });
+    console.error('Failed to request BLE format change');
+    return res.status(500).json({ message: 'No se pudo solicitar el cambio.' });
   }
 });
 

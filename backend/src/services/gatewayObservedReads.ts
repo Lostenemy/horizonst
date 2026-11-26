@@ -16,6 +16,8 @@ export type GatewayConfigurationReadType =
   | 'duplicate_rule'
   | 'ble_report_interval'
   | 'bxp_button_filter'
+  | 'ble_report_fields'
+  | 'ble_parsing_options'
   | 'ble_connected_devices';
 
 export type GatewayConnectedDevice = { mac: string; type: number };
@@ -44,6 +46,8 @@ const READ_DEFINITIONS: readonly ReadDefinition[] = [
   { msgId: 2057, readType: 'duplicate_rule', ranges: { rule: [0, 3] } },
   { msgId: 2063, readType: 'ble_report_interval', ranges: { interval: [0, 86400] } },
   { msgId: 2053, readType: 'bxp_button_filter', ranges: { switch_value: [0, 1], single_press: [0, 1], double_press: [0, 1], long_press: [0, 1], abnormal_inactivity: [0, 1] } },
+  { msgId: 2059, readType: 'ble_report_fields', ranges: { timestamp: [0, 1], adv_data: [0, 1] } },
+  { msgId: 2065, readType: 'ble_parsing_options', ranges: { iBeacon_switch: [0, 1], eddystone_uid_switch: [0, 1], eddystone_tlm_switch: [0, 1], eddystone_url_switch: [0, 1], bxp_acc_switch: [0, 1], bxp_th_switch: [0, 1], bxp_devinfo_switch: [0, 1], bxp_button_switch: [0, 1], 'bxp_tag&sensor_switch': [0, 1], mk_pir_switch: [0, 1], mk_tof_switch: [0, 1], nanobeacon_info_switch: [0, 1] } },
   { msgId: 2201, readType: 'ble_connected_devices', snapshot: true }
 ];
 const definitionByMsgId = new Map(READ_DEFINITIONS.map((item) => [item.msgId, item]));
@@ -186,20 +190,20 @@ const inspectGatewayConfigurationReport = (topic: string, payload: unknown): Rep
   if ('result_code' in root) return null;
   const definition = definitionByMsgId.get(Number(root.msg_id));
   if (!definition) return null;
-  if (definition.msgId === 2030 && root.msg_id !== 2030) return null;
+  if ([2030, 2059, 2065].includes(definition.msgId) && root.msg_id !== definition.msgId) return null;
   const topicMac = normalizeGatewayMac(topicMatch[1]);
   if (!topicMac) return null;
   const invalid = (errorCode?: MqttObservationErrorCode): ReportInspection => ({ kind: 'invalid', topicMac, definition,
     ...(definition.msgId === 2030 ? { errorCode: errorCode ?? 'mqtt_observation_invalid_response' } : {}),
-    payload: definition.msgId === 2030 ? { msg_id: 2030 } : root });
+    payload: [2030, 2059, 2065].includes(definition.msgId) ? { msg_id: definition.msgId } : root });
   if (Object.keys(root).sort().join(',') !== 'data,device_info,msg_id'
       || !root.device_info || typeof root.device_info !== 'object' || Array.isArray(root.device_info)
       || Object.keys(root.device_info).join(',') !== 'mac') return invalid();
   const rawMac = (root.device_info as Record<string, unknown>).mac;
   const payloadMac = normalizeGatewayMac(rawMac);
   // A contradictory identity cannot complete even an invalid-response waiter.
-  if (payloadMac !== topicMac) return definition.msgId === 2030 ? null : invalid();
-  if (definition.msgId === 2030 && (typeof rawMac !== 'string' || !/^[0-9a-f]{12}$/i.test(rawMac))) return null;
+  if (payloadMac !== topicMac) return [2030, 2059, 2065].includes(definition.msgId) ? null : invalid();
+  if ([2030, 2059, 2065].includes(definition.msgId) && (typeof rawMac !== 'string' || !/^[0-9a-f]{12}$/i.test(rawMac))) return null;
   const mqttInspection = definition.msgId === 2030 ? inspectPublicMqttObservation(topicMac, root.data) : null;
   if (mqttInspection && !mqttInspection.ok) return invalid(mqttInspection.errorCode);
   const data = mqttInspection?.ok ? mqttInspection.value : definition.snapshot

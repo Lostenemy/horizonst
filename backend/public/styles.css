@@ -399,3 +399,7 @@ footer {
 /* Disabled technical actions must remain distinguishable without relying on color alone. */
 #gatewayTechnicalPanel button:disabled { opacity: .55; cursor: not-allowed; text-decoration: line-through; }
 #gatewayBluetoothPanel [role="status"] { display: block; margin-block: .4rem; }
+.gateway-tabs { display: flex; overflow-x: auto; gap: .25rem; padding-block: .5rem; }
+.gateway-tabs [role="tab"] { position: relative; flex: none; }
+.gateway-tabs [role="tab"][aria-selected="true"]::after { content: ''; position: absolute; inset: auto .5rem 0; border-block-end: 3px solid currentColor; }
+.gateway-tabs [role="tab"]:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }

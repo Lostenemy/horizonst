@@ -50,6 +50,33 @@ let gateways = [];
 let owners = [];
 let companies = [];
 let selectedGateway = null;
+let formatObservations = {};
+let formatSubmitting = false;
+const formatField = document.getElementById('gatewayBleFormatField');
+const formatValue = document.getElementById('gatewayBleFormatValue');
+const formatApply = document.getElementById('gatewayBleFormatApply');
+const formatStatus = document.getElementById('gatewayBleFormatStatus');
+const gatewayTabs = [...document.querySelectorAll('.gateway-tabs [role="tab"]')];
+const gatewayTabPanels = [...document.querySelectorAll('[data-gateway-tab-panel]')];
+const selectGatewayTab = (tab, focus = false) => {
+  for (const item of gatewayTabs) { const selected = item === tab; item.setAttribute('aria-selected', String(selected)); item.tabIndex = selected ? 0 : -1; }
+  for (const panel of gatewayTabPanels) panel.hidden = panel.dataset.gatewayTabPanel !== tab.id;
+  if (focus) tab.focus();
+};
+gatewayTabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => selectGatewayTab(tab));
+  tab.addEventListener('keydown', (event) => {
+    const next = event.key === 'ArrowRight' ? (index + 1) % gatewayTabs.length : event.key === 'ArrowLeft' ? (index + gatewayTabs.length - 1) % gatewayTabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? gatewayTabs.length - 1 : -1;
+    if (next >= 0) { event.preventDefault(); selectGatewayTab(gatewayTabs[next], true); }
+  });
+});
+const formatType = () => formatField.value === 'bxp_button_switch' ? 'ble_parsing_options' : 'ble_report_fields';
+const updateFormatAvailability = (showReason = true) => {
+  const observation = formatObservations[formatType()];
+  const ready = Boolean(selectedGateway && hasVerifiedMkgw3V2(selectedGateway) && observation && observation.gatewayId === selectedGateway.id && Date.now() - observation.receivedAt <= 60000);
+  formatApply.disabled = formatSubmitting || !ready;
+  if (!ready && !formatSubmitting && showReason === true) formatStatus.textContent = 'Consulta primero la configuración correspondiente en esta gateway; la lectura caduca a los 60 segundos.';
+};
 let b5FilterObserved = null;
 let b5Capture = null;
 const b5CaptureDevice = document.getElementById('gatewayB5CaptureDevice');
@@ -550,6 +577,10 @@ const renderReportedIdentity = (gateway) => {
 
 const selectGateway = async (gateway) => {
   selectedGateway = gateway;
+  technicalPanel.hidden = true;
+  formatObservations = {};
+  if (gatewayTabs.length) selectGatewayTab(gatewayTabs[0]);
+  updateFormatAvailability();
   b5FilterObserved = null;
   b5Capture = null;
   b5CaptureRefresh.disabled = true;
@@ -557,6 +588,7 @@ const selectGateway = async (gateway) => {
   document.querySelector('#gatewayB5CaptureTable tbody').replaceChildren();
   b5CaptureDevice.replaceChildren();
   document.getElementById('gatewayB5Diagnostic').hidden = !isAdmin || !gateway.active || !gateway.company_id;
+  document.getElementById('gatewayB5DiagnosticUnavailable').hidden = !document.getElementById('gatewayB5Diagnostic').hidden;
   if (!document.getElementById('gatewayB5Diagnostic').hidden) {
     try {
       const devices = await apiGet('/devices');
@@ -566,7 +598,7 @@ const selectGateway = async (gateway) => {
         option.textContent = device.name || `B5 ${device.id}`; b5CaptureDevice.append(option);
       }
       if (!b5CaptureDevice.options.length) b5CaptureStatus.textContent = 'No hay dispositivos B5 activos disponibles en esta compañía.';
-    } catch { b5CaptureStatus.textContent = 'No se pudo cargar la lista de dispositivos.'; }
+    } catch { if (selectedGateway?.id !== gateway.id) return; b5CaptureStatus.textContent = 'No se pudo cargar la lista de dispositivos.'; }
   }
   technicalPanel.hidden = false;
   technicalTitle.textContent = gateway.name || gateway.mac_address;
@@ -698,6 +730,7 @@ for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
       confirmText: 'Consultar'
     }) || selectedGateway?.id !== gateway.id) return;
     try {
+      if (['ble_report_fields', 'ble_parsing_options'].includes(readType)) { delete formatObservations[readType]; updateFormatAvailability(); }
       feedback.textContent = `Esperando respuesta para ${readType}…`;
       const result = await apiPost(`/gateways/${gateway.id}/read-configuration/${readType}`, {});
       if (selectedGateway?.id !== gateway.id) return;
@@ -710,6 +743,15 @@ for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
           ? { readId: result.readId, data: { ...data }, gatewayId: gateway.id, receivedAt: Date.now() } : null;
         refreshFirmwareControls(gateway);
       }
+      if (['ble_report_fields', 'ble_parsing_options'].includes(readType) && result.status === 'response_observed') {
+        const fields = readType === 'ble_report_fields' ? ['timestamp', 'adv_data'] : ['iBeacon_switch', 'eddystone_uid_switch', 'eddystone_tlm_switch', 'eddystone_url_switch', 'bxp_acc_switch', 'bxp_th_switch', 'bxp_devinfo_switch', 'bxp_button_switch', 'bxp_tag&sensor_switch', 'mk_pir_switch', 'mk_tof_switch', 'nanobeacon_info_switch'];
+        const data = result.data;
+        if (data && Object.keys(data).sort().join(',') === [...fields].sort().join(',') && fields.every(key => data[key] === 0 || data[key] === 1) && typeof result.readId === 'string' && /^[0-9a-f-]{36}$/i.test(result.readId)) {
+          formatObservations[readType] = { readId: result.readId, data: { ...data }, gatewayId: gateway.id, receivedAt: Date.now() };
+        } else delete formatObservations[readType];
+        updateFormatAvailability();
+        if (formatObservations[readType]) formatStatus.textContent = `Observación ${readType}: ${JSON.stringify(data)}. Revisa el campo y el valor propuestos.`;
+      }
       feedback.textContent = result.status === 'response_observed'
         ? `Respuesta observada: ${JSON.stringify(result.data)}. La fecha aparece en Configuración observada; no hay correlación inequívoca.`
         : result.message;
@@ -719,6 +761,27 @@ for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
     await refreshTechnicalHistory();
   });
 }
+
+formatField.addEventListener('change', () => updateFormatAvailability());
+formatValue.addEventListener('change', () => updateFormatAvailability());
+formatApply.addEventListener('click', async () => {
+  const gateway = selectedGateway, readType = formatType(), observation = formatObservations[readType];
+  const field = formatField.value, value = Number(formatValue.value);
+  if (formatSubmitting || !gateway || !observation || observation.gatewayId !== gateway.id || Date.now() - observation.receivedAt > 60000 || ![0, 1].includes(value)) { updateFormatAvailability(); return; }
+  formatSubmitting = true;
+  updateFormatAvailability();
+  try {
+    const confirmed = await confirmAction({ title: 'Confirmar cambio de formato BLE',
+      message: `Gateway ${gateway.mac_address}. Se propone ${field}=${value}; se conservarán los demás valores observados: ${JSON.stringify(observation.data)}. La lectura no se correlaciona inequívocamente y un cambio externo puede dejarla obsoleta. Desactivar datos puede afectar detecciones y diagnóstico.`, confirmText: 'Solicitar cambio' });
+    if (!confirmed || selectedGateway?.id !== gateway.id || formatObservations[readType] !== observation) return;
+    delete formatObservations[readType];
+    formatStatus.textContent = 'Solicitando cambio; espera el resultado…';
+    const result = await apiPost(`/gateways/${gateway.id}/ble-report-format`, { readId: observation.readId, readType, field, value });
+    if (selectedGateway?.id === gateway.id) { formatStatus.textContent = result.message; await refreshTechnicalHistory(); }
+  } catch (error) {
+    if (selectedGateway?.id === gateway.id) formatStatus.textContent = `Resultado no confirmado: ${error.message}. Revisa el historial y consulta de nuevo antes de otro intento.`;
+  } finally { formatSubmitting = false; updateFormatAvailability(false); }
+});
 
 firmwareClearButton.addEventListener('click', async () => {
   if (!selectedGateway || !canEditHardware) return;

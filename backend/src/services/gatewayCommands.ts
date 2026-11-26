@@ -6,6 +6,7 @@ import { publishMqttJson } from './mqttService';
 import { HardwareGatewayAck, waitForHardwareGatewayAck } from './gatewayAck';
 import { redactHardwarePayload } from './hardwarePayloadRedaction';
 import { parseGatewayConfigurationReport } from './gatewayObservedReads';
+import { hasVerifiedMkgw3V2 } from './gatewayCapabilities';
 
 export interface GatewayCommandPayload extends Record<string, unknown> {
   msg_id: number;
@@ -51,6 +52,7 @@ export interface GatewayMqttConfigurationSequenceResult {
 
 export class GatewayCommandBusyError extends Error {}
 export class GatewayButtonObservationError extends Error {}
+export class GatewayFormatObservationError extends Error {}
 
 export async function expireStaleGatewayCommands(gatewayId?: number): Promise<number> {
   const values: unknown[] = [];
@@ -497,10 +499,12 @@ export async function enableB5DoublePressFromObservation(params: {
          AND r.response_observed_at BETWEEN NOW() - INTERVAL '60 seconds' AND NOW()
          AND EXISTS (SELECT 1 FROM hardware_gateway_observed_settings s
            WHERE s.gateway_id = r.gateway_id AND s.company_id = r.company_id AND s.read_type = r.read_type
-             AND s.observed_at = r.response_observed_at AND s.observed_value = r.response_payload->'data')
+             AND s.observed_at BETWEEN r.created_at AND r.response_observed_at AND s.observed_value = r.response_payload->'data')
          AND NOT EXISTS (SELECT 1 FROM hardware_gateway_reads newer
            WHERE newer.gateway_id = r.gateway_id AND newer.read_type = r.read_type
-             AND newer.id <> r.id AND newer.created_at >= r.created_at)`,
+             AND newer.id <> r.id AND newer.created_at >= r.created_at)
+         AND NOT EXISTS (SELECT 1 FROM hardware_gateway_commands c
+           WHERE c.gateway_id = r.gateway_id AND c.msg_id = 1053 AND c.created_at >= r.created_at)`,
       [params.readId, params.gatewayId, params.companyId, params.actor.userId, gatewayMac]
     );
     const report = read.rows[0] && parseGatewayConfigurationReport(`gw/${gatewayMac}/publish`, read.rows[0].response_payload);
@@ -521,6 +525,59 @@ export async function enableB5DoublePressFromObservation(params: {
     if (locked) {
       try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { destroy = true; }
     }
+    lockClient.release(destroy || undefined);
+  }
+}
+
+export async function updateGatewayBleFormatFromObservation(params: {
+  gatewayId: number; companyId: string; gatewayMac: string; readId: string;
+  readType: 'ble_report_fields' | 'ble_parsing_options'; field: 'timestamp' | 'adv_data' | 'bxp_button_switch'; value: 0 | 1;
+  actor: GatewayCommandActor; requestId?: string; timeoutMs: number;
+  deps?: Parameters<typeof executeCommand>[0]['deps'];
+}): Promise<GatewayCommandResult | { status: 'already_set' }> {
+  const gatewayMac = normalizeGatewayMac(params.gatewayMac);
+  const validPair = params.readType === 'ble_report_fields' ? ['timestamp', 'adv_data'].includes(params.field)
+    : params.readType === 'ble_parsing_options' && params.field === 'bxp_button_switch';
+  if (!gatewayMac || params.actor.type !== 'user' || !params.actor.userId || !validPair || ![0, 1].includes(params.value)) throw new GatewayFormatObservationError('Invalid format request');
+  const readMsgId = params.readType === 'ble_report_fields' ? 2059 : 2065;
+  const writeMsgId = readMsgId - 1000;
+  const lockClient = await pool.connect();
+  let locked = false;
+  try {
+    await expireStaleGatewayCommands(params.gatewayId);
+    await acquireGatewayLock(lockClient, params.gatewayId);
+    locked = true;
+    const read = await lockClient.query<{ response_payload: unknown; product_model: string | null; firmware_version: string | null; firmware_evidence: string | null; reported_product_model: string | null; reported_firmware_version: string | null; identity_observed_at: Date | null }>(
+      `SELECT r.response_payload, g.product_model, g.firmware_version, g.firmware_evidence,
+              g.reported_product_model, g.reported_firmware_version, g.identity_observed_at FROM hardware_gateway_reads r
+       JOIN gateways g ON g.id=r.gateway_id AND g.company_id=r.company_id AND g.active=TRUE
+       WHERE r.id=$1 AND r.gateway_id=$2 AND r.company_id=$3 AND r.actor_user_id=$4
+         AND regexp_replace(lower(g.mac_address), '[^0-9a-f]', '', 'g')=$5
+         AND r.msg_id=$6 AND r.read_type=$7 AND r.status='response_observed'
+         AND r.response_observed_at BETWEEN NOW() - INTERVAL '60 seconds' AND NOW()
+         AND EXISTS (SELECT 1 FROM hardware_gateway_observed_settings s
+           WHERE s.gateway_id=r.gateway_id AND s.company_id=r.company_id AND s.read_type=r.read_type
+             AND s.observed_at BETWEEN r.created_at AND r.response_observed_at AND s.observed_value=r.response_payload->'data')
+         AND NOT EXISTS (SELECT 1 FROM hardware_gateway_reads newer
+           WHERE newer.gateway_id=r.gateway_id AND newer.read_type=r.read_type AND newer.id<>r.id AND newer.created_at>=r.created_at)
+         AND NOT EXISTS (SELECT 1 FROM hardware_gateway_commands c
+           WHERE c.gateway_id=r.gateway_id AND c.msg_id=$8 AND c.created_at>=r.created_at)`,
+      [params.readId, params.gatewayId, params.companyId, params.actor.userId, gatewayMac, readMsgId, params.readType, writeMsgId]
+    );
+    const report = read.rows[0] && parseGatewayConfigurationReport(`gw/${gatewayMac}/publish`, read.rows[0].response_payload);
+    if (!read.rows[0] || !hasVerifiedMkgw3V2(read.rows[0]) || !report || report.readType !== params.readType) throw new GatewayFormatObservationError('A recent valid observation and verified firmware are required');
+    const values = report.data as Record<string, number>;
+    if (values[params.field] === params.value) return { status: 'already_set' };
+    const reserved = await lockClient.query(
+      `INSERT INTO hardware_gateway_format_observation_uses(read_id) VALUES($1)
+       ON CONFLICT (read_id) DO NOTHING RETURNING read_id`, [params.readId]);
+    if (!reserved.rows.length) throw new GatewayFormatObservationError('Observation already used');
+    const command: GatewayCommandPayload = { msg_id: writeMsgId, device_info: { mac: gatewayMac.toUpperCase() }, data: { ...values, [params.field]: params.value } };
+    return await executeCommand({ ...params, commandType: `ble_format_${params.field}`, command,
+      ackMsgIds: [writeMsgId], idempotencyKey: params.requestId ? `${params.requestId}:${writeMsgId}` : undefined });
+  } finally {
+    let destroy = false;
+    if (locked) { try { await releaseGatewayLock(lockClient, params.gatewayId); } catch { destroy = true; } }
     lockClient.release(destroy || undefined);
   }
 }
