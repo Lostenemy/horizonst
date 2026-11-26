@@ -4,22 +4,26 @@ import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
 
-test('observed BLE values create checked and unchecked controls without publishing', () => {
+test('all observed BLE options render, including groups with every value zero', () => {
   const source = readFileSync(path.resolve('public/js/gateways.js'), 'utf8');
-  const start = source.indexOf('const renderFormatObservation =');
+  const start = source.indexOf('const formatOptionLabels =');
   const end = source.indexOf('let b5FilterObserved', start);
   assert.ok(start >= 0 && end > start);
   const controls: any[] = [];
   const group = { querySelectorAll: () => [], appendChild: (label: any) => controls.push(label) };
   const document = { createElement: (tag: string) => tag === 'input' ? {} : { children: [] as any[], append(...items: any[]) { this.children.push(...items); } },
     createTextNode: (text: string) => text };
-  vm.runInNewContext(source.slice(start, end) + '\nrenderFormatObservation("ble_parsing_options", {bxp_button_switch: 1, mk_pir_switch: 0});',
-    { document, formatGroups: { ble_parsing_options: group } });
-  assert.equal(controls.length, 2);
-  assert.equal(controls[0].children[0].name, 'bxp_button_switch');
-  assert.equal(controls[0].children[0].checked, true);
-  assert.equal(controls[1].children[0].name, 'mk_pir_switch');
-  assert.equal(controls[1].children[0].checked, false);
+  const context = vm.createContext({ document, formatGroups: { ble_report_fields: group, ble_parsing_options: group } });
+  vm.runInContext(source.slice(start, end), context);
+  vm.runInContext('renderFormatObservation("ble_report_fields", { timestamp: 1, adv_data: 0 })', context);
+  assert.deepEqual(controls.splice(0).map(label => [label.children[0].name, label.children[0].checked]), [['timestamp', true], ['adv_data', false]]);
+  vm.runInContext(`renderFormatObservation("ble_parsing_options", {
+    iBeacon_switch: 0, eddystone_uid_switch: 0, eddystone_tlm_switch: 0, eddystone_url_switch: 0,
+    bxp_acc_switch: 0, bxp_th_switch: 0, bxp_devinfo_switch: 0, bxp_button_switch: 0,
+    "bxp_tag&sensor_switch": 0, mk_pir_switch: 0, mk_tof_switch: 0, nanobeacon_info_switch: 0
+  })`, context);
+  assert.equal(controls.length, 12);
+  assert.ok(controls.every(label => label.className === 'gateway-format-option' && label.children[0].checked === false && !label.children[0].disabled));
 });
 
 test('checkbox changes send the complete reviewed group once', async () => {
@@ -47,8 +51,8 @@ test('checkbox changes send the complete reviewed group once', async () => {
 test('new HTML versions resources and incompatible old HTML stops before initialization', () => {
   const html = readFileSync(path.resolve('public/gateways.html'), 'utf8');
   assert.match(html, /gatewayUiContract[^>]*content="20261126-2"/);
-  assert.match(html, /styles\.css\?v=20261126-2/);
-  assert.match(html, /gateways\.js\?v=20261126-2/);
+  assert.match(html, /styles\.css\?v=20261126-3/);
+  assert.match(html, /gateways\.js\?v=20261126-3/);
   const source = readFileSync(path.resolve('public/js/gateways.js'), 'utf8');
   const start = source.indexOf('if (document.getElementById(\'gatewayUiContract\')');
   const end = source.indexOf('const { user,', start);

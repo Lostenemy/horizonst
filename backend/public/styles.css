@@ -403,3 +403,5 @@ footer {
 .gateway-tabs [role="tab"] { position: relative; flex: none; }
 .gateway-tabs [role="tab"][aria-selected="true"]::after { content: ''; position: absolute; inset: auto .5rem 0; border-block-end: 3px solid currentColor; }
 .gateway-tabs [role="tab"]:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+.gateway-format-option { display: flex; align-items: center; gap: .5rem; padding-block: .25rem; }
+.gateway-format-option input[type="checkbox"] { appearance: auto; inline-size: 1rem; block-size: 1rem; flex: none; margin: 0; padding: 0; }

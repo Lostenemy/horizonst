@@ -86,14 +86,25 @@ const updateFormatAvailability = (showReason = true) => {
   }
   if (!Object.keys(formatObservations).length && !formatSubmitting && showReason === true) formatStatus.textContent = 'Consulta primero la configuración correspondiente; la lectura caduca a los 60 segundos.';
 };
+const formatOptionLabels = {
+  ble_report_fields: { timestamp: 'Fecha y hora', adv_data: 'Datos de anuncio crudos' },
+  ble_parsing_options: {
+    iBeacon_switch: 'iBeacon', eddystone_uid_switch: 'Eddystone UID',
+    eddystone_tlm_switch: 'Eddystone TLM', eddystone_url_switch: 'Eddystone URL',
+    bxp_acc_switch: 'BXP acelerómetro', bxp_th_switch: 'BXP temperatura y humedad',
+    bxp_devinfo_switch: 'BXP información de dispositivo', bxp_button_switch: 'BXP Button',
+    'bxp_tag&sensor_switch': 'BXP tag y sensor', mk_pir_switch: 'MK PIR',
+    mk_tof_switch: 'MK ToF', nanobeacon_info_switch: 'Nanobeacon'
+  }
+};
 const renderFormatObservation = (type, data) => {
-  const labels = { timestamp: 'Fecha y hora', adv_data: 'Datos de anuncio crudos', iBeacon_switch: 'iBeacon', eddystone_uid_switch: 'Eddystone UID', eddystone_tlm_switch: 'Eddystone TLM', eddystone_url_switch: 'Eddystone URL', bxp_acc_switch: 'BXP acelerómetro', bxp_th_switch: 'BXP temperatura y humedad', bxp_devinfo_switch: 'BXP información de dispositivo', bxp_button_switch: 'BXP Button', 'bxp_tag&sensor_switch': 'BXP tag y sensor', mk_pir_switch: 'MK PIR', mk_tof_switch: 'MK ToF', nanobeacon_info_switch: 'Nanobeacon' };
   const group = formatGroups[type];
   group.querySelectorAll('label, p').forEach(node => node.remove());
-  for (const [key, value] of Object.entries(data)) {
+  for (const [key, text] of Object.entries(formatOptionLabels[type])) {
     const label = document.createElement('label'), checkbox = document.createElement('input');
-    checkbox.type = 'checkbox'; checkbox.name = key; checkbox.checked = value === 1;
-    label.append(checkbox, document.createTextNode(` ${labels[key] ?? key}`)); group.appendChild(label);
+    checkbox.type = 'checkbox'; checkbox.name = key; checkbox.checked = data[key] === 1;
+    label.className = 'gateway-format-option';
+    label.append(checkbox, document.createTextNode(text)); group.appendChild(label);
   }
 };
 let b5FilterObserved = null;
@@ -764,14 +775,14 @@ for (const button of bluetoothPanel.querySelectorAll('[data-config-read]')) {
         refreshFirmwareControls(gateway);
       }
       if (['ble_report_fields', 'ble_parsing_options'].includes(readType) && result.status === 'response_observed') {
-        const fields = readType === 'ble_report_fields' ? ['timestamp', 'adv_data'] : ['iBeacon_switch', 'eddystone_uid_switch', 'eddystone_tlm_switch', 'eddystone_url_switch', 'bxp_acc_switch', 'bxp_th_switch', 'bxp_devinfo_switch', 'bxp_button_switch', 'bxp_tag&sensor_switch', 'mk_pir_switch', 'mk_tof_switch', 'nanobeacon_info_switch'];
+        const fields = Object.keys(formatOptionLabels[readType]);
         const data = result.data;
         if (data && Object.keys(data).sort().join(',') === [...fields].sort().join(',') && fields.every(key => data[key] === 0 || data[key] === 1) && typeof result.readId === 'string' && /^[0-9a-f-]{36}$/i.test(result.readId)) {
           formatObservations[readType] = { readId: result.readId, data: { ...data }, gatewayId: gateway.id, receivedAt: Date.now() };
           renderFormatObservation(readType, data);
         } else delete formatObservations[readType];
         updateFormatAvailability();
-        if (formatObservations[readType]) formatStatus.textContent = `Observación ${readType}: ${JSON.stringify(data)}. Revisa el campo y el valor propuestos.`;
+        if (formatObservations[readType]) formatStatus.textContent = 'Casillas cargadas desde la respuesta observada. Marca las opciones que quieras activar y desmarca las que quieras desactivar.';
       }
       feedback.textContent = result.status === 'response_observed'
         ? `Respuesta observada: ${JSON.stringify(result.data)}. La fecha aparece en Configuración observada; no hay correlación inequívoca.`
